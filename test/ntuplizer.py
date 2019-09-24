@@ -1,10 +1,7 @@
 import ROOT
-import sys
+import sys, os
 import numpy as np
 from DataFormats.FWLite import Events, Handle
-
-filename = sys.argv[1]
-events = Events(filename)
 
 class HandleLabel:
     def __init__(self, dtype, label):
@@ -31,8 +28,8 @@ class EventDesc:
         self.pfblock.getByLabel(event)
 
 class Output:
-    def __init__(self):
-        self.tfile = ROOT.TFile(sys.argv[2], "RECREATE")
+    def __init__(self, outfile):
+        self.tfile = ROOT.TFile(outfile, "RECREATE")
         
         self.pftree = ROOT.TTree("pftree", "pftree")
         self.linktree = ROOT.TTree("linktree", "linktree")
@@ -211,12 +208,24 @@ class Output:
         self.linkdata_nelem[:] = 0
 
 if __name__ == "__main__":
+
+    filename = sys.argv[2]
+    outpath = sys.argv[1]
+    outfile = os.path.join(outpath, os.path.basename(filename))
+    events = Events(filename)
+    print("Reading input file {0}".format(filename))
+    print("Saving output to file {0}".format(outfile))
+
     evdesc = EventDesc()
-    output = Output()
+    output = Output(outfile)
+
+    num_events = events.size()
     
     # loop over events
     for iev, event in enumerate(events):
         eid = event.object().id()
+        if iev%10 == 0:
+            print("Event {0}/{1}".format(iev, num_events))
         eventId = (eid.run(), eid.luminosityBlock(), int(eid.event()))
     
         evdesc.get(event)

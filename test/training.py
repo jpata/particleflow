@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
 import setGPU
+
 import uproot
 import numpy as np
 import keras
 import glob
+import os
 import keras.backend as K
 import tensorflow as tf
 import datetime
@@ -10,11 +13,6 @@ import datetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-maxclusters = -1
-maxtracks = -1
-maxcands = -1
-image_bins = 256
 
 from keras.datasets import mnist
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
@@ -55,14 +53,88 @@ def to_image(iev, Xs_cluster, Xs_track, ys_cand):
     h_input = np.stack([h_cluster[0], h_track_inner[0], h_track_outer[0]], axis=-1)
     return h_input, h_cand[0]
 
+def build_generator(img_shape, gf):
+    """U-Net Generator"""
+
+    def conv2d(layer_input, filters, f_size=4, bn=True):
+        """Layers used during downsampling"""
+        d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
+        d = LeakyReLU(alpha=0.2)(d)
+        if bn:
+            d = BatchNormalization(momentum=0.8)(d)
+        return d
+
+    def deconv2d(layer_input, skip_input, filters, f_size=4, dropout_rate=0):
+        """Layers used during upsampling"""
+        u = UpSampling2D(size=2)(layer_input)
+        u = Conv2D(filters, kernel_size=f_size, strides=1, padding='same', activation='relu')(u)
+        if dropout_rate:
+            u = Dropout(dropout_rate)(u)
+        u = BatchNormalization(momentum=0.8)(u)
+        u = Concatenate()([u, skip_input])
+        return u
+
+    # Image input
+    d0 = Input(shape=img_shape)
+
+    # Downsampling
+    d1 = conv2d(d0, gf, bn=False)
+    d2 = conv2d(d1, gf*2)
+    d3 = conv2d(d2, gf*4)
+    d4 = conv2d(d3, gf*8)
+    d5 = conv2d(d4, gf*8)
+    d6 = conv2d(d5, gf*8)
+    #d7 = conv2d(d6, gf*8)
+
+    # Upsampling
+    #u1 = deconv2d(d7, d6, gf*8)
+    u2 = deconv2d(d6, d5, gf*8)
+    u3 = deconv2d(u2, d4, gf*8)
+    u4 = deconv2d(u3, d3, gf*4)
+    u5 = deconv2d(u4, d2, gf*2)
+    u6 = deconv2d(u5, d1, gf)
+
+    u7 = UpSampling2D(size=2)(u6)
+    output_img = Conv2D(1, kernel_size=4, strides=1, padding='same', activation='relu')(u7)
+
+    return Model(d0, output_img)
+
+def build_discriminator(img_shape, img_shape_out, df):
+
+    def d_layer(layer_input, filters, f_size=4, bn=True):
+        """Discriminator layer"""
+        d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
+        d = LeakyReLU(alpha=0.2)(d)
+        if bn:
+            d = BatchNormalization(momentum=0.8)(d)
+        return d
+
+    img_A = Input(shape=img_shape)
+    img_B = Input(shape=img_shape_out)
+
+    # Concatenate image and conditioning image by channels to produce input
+    combined_imgs = Concatenate(axis=-1)([img_A, img_B])
+
+    d1 = d_layer(combined_imgs, df, bn=False)
+    d2 = d_layer(d1, df*2)
+    d3 = d_layer(d2, df*4)
+    d4 = d_layer(d3, df*8)
+
+    validity = Conv2D(1, kernel_size=4, strides=1, padding='same')(d4)
+
+    return Model([img_A, img_B], validity)
+
 class Pix2Pix():
-    def __init__(self):
+    def __init__(self, output_dir, image_bins, input_channels, output_channels):
+
+        self.output_dir = output_dir
+
         # Input shape
         self.img_rows = image_bins
         self.img_cols = image_bins
-        self.channels = 3
+        self.channels = input_channels
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.img_shape_out = (self.img_rows, self.img_cols, 1)
+        self.img_shape_out = (self.img_rows, self.img_cols, output_channels)
 
         # Calculate output shape of D (PatchGAN)
         patch = int(self.img_rows / 2**4)
@@ -75,102 +147,31 @@ class Pix2Pix():
         optimizer = Adam(0.0002, 0.5)
 
         # Build and compile the discriminator
-        self.discriminator = self.build_discriminator()
+        self.discriminator = build_discriminator(self.img_shape, self.img_shape_out, self.df)
         self.discriminator.compile(loss='mse',
             optimizer=optimizer,
             metrics=['accuracy'])
 
         # Build the generator
-        self.generator = self.build_generator()
+        self.generator = build_generator(self.img_shape, self.gf)
 
-        ## Input images and their conditioning images
-        #img_in = Input(shape=self.img_shape)
-        #img_out = Input(shape=self.img_shape_out)
+        # Input images and their conditioning images
+        img_in = Input(shape=self.img_shape)
+        img_out = Input(shape=self.img_shape_out)
 
-        ## By conditioning on B generate a fake version of A
-        #fake_out = self.generator(img_in)
+        # By conditioning on B generate a fake version of A
+        fake_out = self.generator(img_in)
 
         ## For the combined model we will only train the generator
-        #self.discriminator.trainable = False
+        self.discriminator.trainable = False
 
         ## Discriminators determines validity of translated images / condition pairs
-        #valid = self.discriminator([img_in, img_out])
+        valid = self.discriminator([img_in, img_out])
 
-        #self.combined = Model(inputs=[img_in, img_out], outputs=[valid, fake_out])
-        #self.combined.compile(loss=['mse', 'mae'],
-        #                      loss_weights=[1, 100],
-        #                      optimizer=optimizer)
-
-    def build_generator(self):
-        """U-Net Generator"""
-
-        def conv2d(layer_input, filters, f_size=4, bn=True):
-            """Layers used during downsampling"""
-            d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
-            d = LeakyReLU(alpha=0.2)(d)
-            if bn:
-                d = BatchNormalization(momentum=0.8)(d)
-            return d
-
-        def deconv2d(layer_input, skip_input, filters, f_size=4, dropout_rate=0):
-            """Layers used during upsampling"""
-            u = UpSampling2D(size=2)(layer_input)
-            u = Conv2D(filters, kernel_size=f_size, strides=1, padding='same', activation='relu')(u)
-            if dropout_rate:
-                u = Dropout(dropout_rate)(u)
-            u = BatchNormalization(momentum=0.8)(u)
-            u = Concatenate()([u, skip_input])
-            return u
-
-        # Image input
-        d0 = Input(shape=self.img_shape)
-
-        # Downsampling
-        d1 = conv2d(d0, self.gf, bn=False)
-        d2 = conv2d(d1, self.gf*2)
-        d3 = conv2d(d2, self.gf*4)
-        d4 = conv2d(d3, self.gf*8)
-        d5 = conv2d(d4, self.gf*8)
-        d6 = conv2d(d5, self.gf*8)
-        #d7 = conv2d(d6, self.gf*8)
-
-        # Upsampling
-        #u1 = deconv2d(d7, d6, self.gf*8)
-        u2 = deconv2d(d6, d5, self.gf*8)
-        u3 = deconv2d(u2, d4, self.gf*8)
-        u4 = deconv2d(u3, d3, self.gf*4)
-        u5 = deconv2d(u4, d2, self.gf*2)
-        u6 = deconv2d(u5, d1, self.gf)
-
-        u7 = UpSampling2D(size=2)(u6)
-        output_img = Conv2D(1, kernel_size=4, strides=1, padding='same', activation='relu')(u7)
-
-        return Model(d0, output_img)
-
-    def build_discriminator(self):
-
-        def d_layer(layer_input, filters, f_size=4, bn=True):
-            """Discriminator layer"""
-            d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
-            d = LeakyReLU(alpha=0.2)(d)
-            if bn:
-                d = BatchNormalization(momentum=0.8)(d)
-            return d
-
-        img_A = Input(shape=self.img_shape)
-        img_B = Input(shape=self.img_shape_out)
-
-        # Concatenate image and conditioning image by channels to produce input
-        combined_imgs = Concatenate(axis=-1)([img_A, img_B])
-
-        d1 = d_layer(combined_imgs, self.df, bn=False)
-        d2 = d_layer(d1, self.df*2)
-        d3 = d_layer(d2, self.df*4)
-        d4 = d_layer(d3, self.df*8)
-
-        validity = Conv2D(1, kernel_size=4, strides=1, padding='same')(d4)
-
-        return Model([img_A, img_B], validity)
+        self.combined = Model(inputs=[img_in, img_out], outputs=[valid, fake_out])
+        self.combined.compile(loss=['mse', 'mae'],
+                              loss_weights=[1, 100],
+                              optimizer=optimizer)
 
     def train(self, data_images_in, data_images_out, epochs, batch_size=1, sample_interval=1):
 
@@ -215,19 +216,27 @@ class Pix2Pix():
             losses_d += [d_loss]
             losses_g += [g_loss]
             if epoch % sample_interval == 0:
-                model.generator.save('model_g_{0}.h5'.format(epoch))
-                model.discriminator.save('model_d_{0}.h5'.format(epoch))
+                model.generator.save('{0}/model_g_{1}.h5'.format(self.output_dir, epoch))
+                model.discriminator.save('{0}/model_d_{1}.h5'.format(self.output_dir, epoch))
                 pred = model.generator.predict(data_images_in[:10])
-                with open("pred_{0}.npz".format(epoch), "wb") as fi:
+                with open("{0}/pred_{1}.npz".format(self.output_dir, epoch), "wb") as fi:
                     np.savez(fi, pred=pred)
 
         return losses_d, losses_g
 
-class EMDModel:
-    def __init__(self):
-        self.base_model = Pix2Pix()
+class RegressionModel:
+    def __init__(self, output_dir, image_bins, input_channels, output_channels):
+        self.output_dir = output_dir
+        self.img_rows = image_bins
+        self.img_cols = image_bins
+        self.channels = input_channels
+        self.img_shape = (self.img_rows, self.img_cols, self.channels)
+        self.img_shape_out = (self.img_rows, self.img_cols, output_channels)
+        self.gf = 32
+        
+        self.generator = build_generator(self.img_shape, self.gf)
         optimizer = Adam(0.0002, 0.5)
-        self.base_model.generator.compile(
+        self.generator.compile(
             loss='mse',
             optimizer=optimizer,
             metrics=['accuracy'])
@@ -240,17 +249,17 @@ class EMDModel:
 
         for epoch in range(epochs):
             for batch_i, (imgs_in, imgs_out) in enumerate(myGenerator(batch_size, data_images_in, data_images_out)):
-                loss = self.base_model.generator.train_on_batch(imgs_in, imgs_out)
+                loss = self.generator.train_on_batch(imgs_in, imgs_out)
                 losses += [loss]
 
             elapsed_time = datetime.datetime.now() - start_time
             if epoch % sample_interval == 0:
-                self.base_model.generator.save('model_g_{0}.h5'.format(epoch))
-                pred = self.base_model.generator.predict(data_images_in[:10])
-                with open("pred_{0}.npz".format(epoch), "wb") as fi:
+                self.generator.save('{0}/model_g_{1}.h5'.format(self.output_dir, epoch))
+                pred = self.generator.predict(data_images_in[:10])
+                with open("{0}/pred_{1}.npz".format(self.output_dir, epoch), "wb") as fi:
                     np.savez(fi, pred=pred)
 
-            val_loss = self.base_model.generator.evaluate(data_images_in_val, data_images_out_val, batch_size=100, verbose=False)
+            val_loss = self.generator.evaluate(data_images_in_val, data_images_out_val, batch_size=100, verbose=False)
 
             print("[Epoch %d/%d] [loss: %f] [val loss: %f]  time: %s" % (epoch, epochs,
                 loss[0], val_loss[0],
@@ -334,8 +343,8 @@ def emd_loss(p, p_hat, r=2, scope=None):
         emd = tf.pow(emd, 1 / r)
         return tf.reduce_mean(emd)
 
-def load_data(filename_pattern):
-    print("loading data")
+def load_data(filename_pattern, maxclusters, maxtracks, maxcands):
+    print("loading data from ROOT files: {0}".format(filename_pattern))
     Xs_cluster = []
     Xs_track = []
     ys_cand = []
@@ -394,7 +403,8 @@ def load_data(filename_pattern):
     #Xs_cluster = Xs_cluster.reshape(Xs_cluster.shape[0], maxclusters, 4, 1)
     #Xs_track = Xs_track.reshape(Xs_track.shape[0], maxtracks, 5, 1)
     #ys_cand = ys_cand.reshape(ys_cand.shape[0], maxcands, 3)
-    
+   
+    #convert lists of particles to images 
     data_images_in = []
     data_images_out = []
     for i in range(len(Xs_cluster)):
@@ -416,18 +426,39 @@ def normalize_and_reshape(arr):
     arr /= s
     return arr, m, s
 
-if __name__ == "__main__":
-    #data_images_in, data_images_out = load_data("out_*.root")
-    #with open("data.npz", "wb") as fi:
-    #    np.savez(fi, data_images_in=data_images_in, data_images_out=data_images_out)
+def unique_folder():
+    mydir = os.path.join(os.getcwd(), "out", datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+    os.makedirs(mydir)
+    return mydir
 
-    model = EMDModel()
-    with open("data.npz", "rb") as fi:
+if __name__ == "__main__":
+
+    input_rootfiles_pattern = "./data/TTbar/*.root"
+
+    maxclusters = -1
+    maxtracks = -1
+    maxcands = -1
+
+    image_bins = 256
+    input_channels = 3 #(calo cluster, inner track, outer track)
+    output_channels = 1 #(candidates)
+
+    #create preprocessed cache if it doesn't exist
+    cache_filename = "data/cache.npz"
+    if not os.path.isfile(cache_filename):
+        data_images_in, data_images_out = load_data(input_rootfiles_pattern, maxclusters, maxtracks, maxcands)
+        with open(cache_filename, "wb") as fi:
+            np.savez(fi, data_images_in=data_images_in, data_images_out=data_images_out)
+
+    mydir = unique_folder()
+    model = RegressionModel(mydir, image_bins, input_channels, output_channels)
+    with open(cache_filename, "rb") as fi:
         data = np.load(fi)
         data_images_in = data["data_images_in"] 
         data_images_out = data["data_images_out"] 
-   
+        
+        ntrain = 8000 
         model.train(
-            data_images_in[:8000], data_images_out[:8000],
-            data_images_in[8000:], data_images_out[8000:],
+            data_images_in[:ntrain], data_images_out[:ntrain],
+            data_images_in[ntrain:], data_images_out[ntrain:],
             epochs=50, batch_size=50)
