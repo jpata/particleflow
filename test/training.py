@@ -9,6 +9,7 @@ import os
 import keras.backend as K
 import tensorflow as tf
 import datetime
+import json
 
 import matplotlib
 matplotlib.use("Agg")
@@ -22,7 +23,7 @@ from keras.layers.convolutional import UpSampling2D, Conv2D
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 
-def to_image(iev, Xs_cluster, Xs_track, ys_cand):
+def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
     bins = [np.linspace(-5, 5, image_bins + 1), np.linspace(-5, 5, image_bins + 1)]
     h_cluster = np.histogram2d(
         Xs_cluster[iev][:, 1],
@@ -64,7 +65,7 @@ def build_generator(img_shape, gf):
             d = BatchNormalization(momentum=0.8)(d)
         return d
 
-    def deconv2d(layer_input, skip_input, filters, f_size=4, dropout_rate=0):
+    def deconv2d(layer_input, skip_input, filters, f_size=4, dropout_rate=0.2):
         """Layers used during upsampling"""
         u = UpSampling2D(size=2)(layer_input)
         u = Conv2D(filters, kernel_size=f_size, strides=1, padding='same', activation='relu')(u)
@@ -97,7 +98,9 @@ def build_generator(img_shape, gf):
     u7 = UpSampling2D(size=2)(u6)
     output_img = Conv2D(1, kernel_size=4, strides=1, padding='same', activation='relu')(u7)
 
-    return Model(d0, output_img)
+    model = Model(d0, output_img)
+    model.summary()
+    return model
 
 def build_discriminator(img_shape, img_shape_out, df):
 
@@ -124,6 +127,7 @@ def build_discriminator(img_shape, img_shape_out, df):
 
     return Model([img_A, img_B], validity)
 
+#https://github.com/eriklindernoren/Keras-GAN/blob/master/pix2pix/pix2pix.py
 class Pix2Pix():
     def __init__(self, output_dir, image_bins, input_channels, output_channels):
 
@@ -215,6 +219,10 @@ class Pix2Pix():
 
             losses_d += [d_loss]
             losses_g += [g_loss]
+
+            with open("{0}/losses.json".format(self.output_dir), "w") as fi:
+                json.dump({"loss_discriminator": losses_d, "loss_generator": losses_g}, fi, indent=2)
+
             if epoch % sample_interval == 0:
                 model.generator.save('{0}/model_g_{1}.h5'.format(self.output_dir, epoch))
                 model.discriminator.save('{0}/model_d_{1}.h5'.format(self.output_dir, epoch))
@@ -246,11 +254,12 @@ class RegressionModel:
         start_time = datetime.datetime.now()
 
         losses = []
+        val_losses = []
 
         for epoch in range(epochs):
             for batch_i, (imgs_in, imgs_out) in enumerate(myGenerator(batch_size, data_images_in, data_images_out)):
                 loss = self.generator.train_on_batch(imgs_in, imgs_out)
-                losses += [loss]
+            losses += [float(loss[0])]
 
             elapsed_time = datetime.datetime.now() - start_time
             if epoch % sample_interval == 0:
@@ -260,6 +269,10 @@ class RegressionModel:
                     np.savez(fi, pred=pred)
 
             val_loss = self.generator.evaluate(data_images_in_val, data_images_out_val, batch_size=100, verbose=False)
+            val_losses += [float(val_loss[0])]
+
+            with open("{0}/losses.json".format(self.output_dir), "w") as fi:
+                json.dump({"loss_training": losses, "loss_testing": val_losses}, fi, indent=2)
 
             print("[Epoch %d/%d] [loss: %f] [val loss: %f]  time: %s" % (epoch, epochs,
                 loss[0], val_loss[0],
@@ -343,7 +356,7 @@ def emd_loss(p, p_hat, r=2, scope=None):
         emd = tf.pow(emd, 1 / r)
         return tf.reduce_mean(emd)
 
-def load_data(filename_pattern, maxclusters, maxtracks, maxcands):
+def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
     print("loading data from ROOT files: {0}".format(filename_pattern))
     Xs_cluster = []
     Xs_track = []
@@ -407,8 +420,9 @@ def load_data(filename_pattern, maxclusters, maxtracks, maxcands):
     #convert lists of particles to images 
     data_images_in = []
     data_images_out = []
+
     for i in range(len(Xs_cluster)):
-        h_in, h_out = to_image(i, Xs_cluster, Xs_track, ys_cand)
+        h_in, h_out = to_image(i, Xs_cluster, Xs_track, ys_cand, image_bins)
         data_images_in += [h_in]
         data_images_out += [h_out]
 
@@ -446,7 +460,7 @@ if __name__ == "__main__":
     #create preprocessed cache if it doesn't exist
     cache_filename = "data/cache.npz"
     if not os.path.isfile(cache_filename):
-        data_images_in, data_images_out = load_data(input_rootfiles_pattern, maxclusters, maxtracks, maxcands)
+        data_images_in, data_images_out = load_data(input_rootfiles_pattern, image_bins, maxclusters, maxtracks, maxcands)
         with open(cache_filename, "wb") as fi:
             np.savez(fi, data_images_in=data_images_in, data_images_out=data_images_out)
 

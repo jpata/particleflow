@@ -1,3 +1,17 @@
+
+Setting up the code
+```bash
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+scramv1 project CMSSW CMSSW_11_0_0_pre7
+cd CMSSW_11_0_0_pre7/src
+eval `scramv1 runtime -sh`
+git cms-init
+mkdir workspace
+git clone https://github.com/jpata/particleflow.git workspace/particleflow 
+
+```
+
+Running the code
 ```bash
 #Run the crab jobs
 cd test
