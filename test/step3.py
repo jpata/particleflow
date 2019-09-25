@@ -28,7 +28,7 @@ process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(-1),
+    input = cms.untracked.int32(10),
     output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
 )
 
@@ -220,7 +220,7 @@ clusters = [
   'keep recoPFClusters_particleFlowClusterHF_*_*',
   'keep recoPFClusters_particleFlowClusterPS_*_*',
   'keep recoTracks_*_*_*',
-  'keep recoPFTracks_*_*_*',
+  'keep recoPFRecTracks_*_*_*',
   'keep recoTrackExtras_*_*_*',
   'keep TrackingRecHitsOwned_generalTracks_*_*',
   'keep recoGenParticles_prunedGenParticles_*_*',

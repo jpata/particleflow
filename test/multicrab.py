@@ -11,9 +11,9 @@ def submit(config):
         fi.write(config.pythonise_())
 
 samples = [
-    ("/RelValQCD_FlatPt_15_3000HS_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "QCD"),
-    ("/RelValNuGun/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "NuGun"),
-    ("/RelValTTbarLepton_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "TTbarLepton"),
+#    ("/RelValQCD_FlatPt_15_3000HS_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "QCD"),
+#    ("/RelValNuGun/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "NuGun"),
+#    ("/RelValTTbarLepton_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "TTbarLepton"),
     ("/RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "TTbar"),
 ]
 

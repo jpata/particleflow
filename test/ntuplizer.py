@@ -19,7 +19,7 @@ class EventDesc:
         self.genparticle = HandleLabel("std::vector<reco::GenParticle>", "prunedGenParticles")
         self.pfblock = HandleLabel("std::vector<reco::PFBlock>", "particleFlowBlock")
         self.pfcand = HandleLabel("std::vector<reco::PFCandidate>", "particleFlow")
-        self.tracks = HandleLabel("std::vector<reco::Track>", "generalTracks")
+        self.tracks = HandleLabel("std::vector<reco::PFRecTrack>", "pfTrack")
 
     def get(self, event):
         self.genparticle.getByLabel(event) 
@@ -291,6 +291,9 @@ if __name__ == "__main__":
 
             npfcands += 1
 
+        pftracks = evdesc.tracks.product()
+        ddd = {t.trackRef().get(): t for t in pftracks}
+
         output.npfcands[0] = npfcands
         #save blocks
         nblocks = 0
@@ -325,15 +328,30 @@ if __name__ == "__main__":
                         nclusters += 1
                 elif (tp == ROOT.reco.PFBlockElement.TRACK):
                    c = el.trackRef().get()
+
+                   matched_pftrack = None
+                   for pftrack in pftracks:
+                       if pftrack.trackRef() == el.trackRef():
+                           assert(pftrack.trackRef().get().outerEta() == el.trackRef().outerEta())
+                           matched_pftrack = pftrack
+                           break 
+                   if not matched_pftrack is None:
+                       atECAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ECALShowerMax)  
+                       atHCAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.HCALEntrance)  
+                       if atHCAL.isValid():
+                           output.tracks_outer_eta[ntracks] = atHCAL.positionREP().eta()
+                           output.tracks_outer_phi[ntracks] = atHCAL.positionREP().phi()
+                       if atECAL.isValid():
+                           output.tracks_inner_eta[ntracks] = atECAL.positionREP().eta()
+                           output.tracks_inner_phi[ntracks] = atECAL.positionREP().eta()
+                   else:
+                       print("could not find PFTrack matching to track")
+
                    output.tracks_qoverp[ntracks] = c.qoverp()
                    output.tracks_lambda[ntracks] = getattr(c, "lambda")() #lambda is a reserved word in python, so we need to use a proxy
                    output.tracks_phi[ntracks] = c.phi()
                    output.tracks_dxy[ntracks] = c.dxy()
                    output.tracks_dsz[ntracks] = c.dsz()
-                   output.tracks_outer_eta[ntracks] = c.outerPosition().eta()
-                   output.tracks_outer_phi[ntracks] = c.outerPosition().phi()
-                   output.tracks_inner_eta[ntracks] = c.innerPosition().eta()
-                   output.tracks_inner_phi[ntracks] = c.innerPosition().phi()
                    output.tracks_iblock[ntracks] = iblock
                    output.tracks_ielem[ntracks] = ielem
                    ntracks += 1

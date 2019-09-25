@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-import setGPU
 
 import uproot
 import numpy as np
-import keras
 import glob
 import os
-import keras.backend as K
-import tensorflow as tf
 import datetime
 import json
 
@@ -15,13 +11,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from keras.datasets import mnist
-from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
-from keras.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
-from keras.optimizers import Adam
+import sklearn
+import sklearn.feature_extraction
+import skimage
+
+def normalize(arr):
+    m = arr==0
+    am = np.ma.array(arr, mask=m)
+    
+    mean = am.mean()
+    am = am - mean
+    std = am.std()
+    am = am / std
+    
+    return am.data
 
 def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
     bins = [np.linspace(-5, 5, image_bins + 1), np.linspace(-5, 5, image_bins + 1)]
@@ -52,7 +55,47 @@ def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
     )
     
     h_input = np.stack([h_cluster[0], h_track_inner[0], h_track_outer[0]], axis=-1)
+    
     return h_input, h_cand[0]
+
+def to_patches(img_in, img_out):
+    channels = 3
+    patch_size = 8
+    patch_step = 6
+    patch_minpt = 1
+
+    patches_in = skimage.util.view_as_windows(img_in, (patch_size, patch_size, channels), patch_step)
+    patches_in = patches_in.reshape((patches_in.shape[0]*patches_in.shape[1], patch_size, patch_size, channels))
+    
+    patches_out = skimage.util.view_as_windows(img_out, (patch_size, patch_size), patch_step)
+    patches_out = patches_out.reshape((patches_out.shape[0]*patches_out.shape[1], patch_size, patch_size))
+
+    selpatch = patches_out.sum(axis=(1,2)) > patch_minpt
+
+    return patches_in[selpatch], patches_out[selpatch]
+
+def build_dense(image_size):
+    
+    def layer(din, n_units, do_dropout=True):
+        d = Dense(n_units)(din)
+        d = LeakyReLU(alpha=0.2)(d)
+        if do_dropout:
+            d = Dropout(0.2)(d)
+        return d
+     
+    inp = Input(shape=(image_size, image_size, 3))
+    d = Flatten()(inp)
+    d = layer(d, 256)
+    d = layer(d, 128)
+    d = layer(d, 64)
+    d = layer(d, 32, do_dropout=False)
+    d = layer(d, 16, do_dropout=False)
+
+    out = Dense(image_size*image_size, activation="relu")(d)
+    out = Reshape((image_size, image_size, 1))(out)
+    m = Model(inp, out)
+    m.summary()
+    return m
 
 def build_generator(img_shape, gf):
     """U-Net Generator"""
@@ -363,8 +406,12 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
     ys_cand = []
         
     for fn in glob.glob(filename_pattern):
-        fi = uproot.open(fn)
-        tree = fi.get("pftree")
+        try:
+            fi = uproot.open(fn)
+            tree = fi.get("pftree")
+        except Exception as e:
+            print("Could not open file {0}".format(fn))
+            continue
         data = tree.arrays(tree.keys())
         data = {str(k, 'ascii'): v for k, v in data.items()}
         for iev in range(len(tree)):
@@ -380,7 +427,7 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
                 ], axis=1)
             ]
             Xs_track += [np.stack([
-                1.0/data["tracks_qoverp"][iev][:maxtracks],
+                np.abs(1.0/data["tracks_qoverp"][iev][:maxtracks]),
                 data["tracks_inner_eta"][iev][:maxtracks],
                 data["tracks_inner_phi"][iev][:maxtracks],
                 data["tracks_outer_eta"][iev][:maxtracks],
@@ -394,6 +441,7 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
                 charge[:maxcands]
                 ], axis=1)
             ]
+    print("Loaded {0} events".format(len(Xs_cluster)))
 
     #zero pad 
     #for i in range(len(Xs_cluster)):
@@ -420,17 +468,23 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
     #convert lists of particles to images 
     data_images_in = []
     data_images_out = []
-
+    print("Creating images")
     for i in range(len(Xs_cluster)):
         h_in, h_out = to_image(i, Xs_cluster, Xs_track, ys_cand, image_bins)
-        data_images_in += [h_in]
-        data_images_out += [h_out]
+        p_in, p_out = to_patches(h_in, h_out)
+        data_images_in += [p_in]
+        data_images_out += [p_out]
+        if i%10 == 0:
+            print("converted {0}/{1}".format(i, len(Xs_cluster)))
+    print("Generated data for {0} images".format(len(data_images_in)))
 
-    data_images_in = np.stack(data_images_in, axis=0)
-    data_images_out = np.stack(data_images_out, axis=0)
+    data_images_in = np.vstack(data_images_in)
+    data_images_out = np.vstack(data_images_out)
+    print("Stacked patches {0}".format(len(data_images_in)))
     data_images_out = data_images_out.reshape((data_images_out.shape[0], data_images_out.shape[1], data_images_out.shape[2], 1))
-
-    return data_images_in, data_images_out
+    shuf = np.random.permutation(range(len(data_images_in)))
+    
+    return data_images_in[shuf], data_images_out[shuf]
 
 def normalize_and_reshape(arr):
     arr = arr.reshape((arr.shape[0], arr.shape[1]*arr.shape[2]))
@@ -446,6 +500,18 @@ def unique_folder():
     return mydir
 
 if __name__ == "__main__":
+    import setGPU
+    import keras.backend as K
+    import tensorflow as tf
+    import keras
+    from keras.datasets import mnist
+    from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
+    from keras.layers import BatchNormalization, Activation, ZeroPadding2D
+    from keras.layers.advanced_activations import LeakyReLU
+    from keras.layers.convolutional import UpSampling2D, Conv2D
+    from keras.models import Sequential, Model
+    from keras.optimizers import Adam
+
 
     input_rootfiles_pattern = "./data/TTbar/*.root"
 
@@ -457,22 +523,30 @@ if __name__ == "__main__":
     input_channels = 3 #(calo cluster, inner track, outer track)
     output_channels = 1 #(candidates)
 
-    #create preprocessed cache if it doesn't exist
-    cache_filename = "data/cache.npz"
-    if not os.path.isfile(cache_filename):
-        data_images_in, data_images_out = load_data(input_rootfiles_pattern, image_bins, maxclusters, maxtracks, maxcands)
-        with open(cache_filename, "wb") as fi:
-            np.savez(fi, data_images_in=data_images_in, data_images_out=data_images_out)
-
+  
+   
+    data_images_in = [] 
+    data_images_out = [] 
+    for cache_filename in glob.glob("./data/TTbar/*.npz"): 
+        with open(cache_filename, "rb") as fi:
+            data = np.load(fi)
+            data_images_in += [data["data_images_in"]] 
+            data_images_out += [data["data_images_out"]]
+    data_images_in = np.vstack(data_images_in)
+    data_images_out = np.vstack(data_images_out)
+ 
     mydir = unique_folder()
-    model = RegressionModel(mydir, image_bins, input_channels, output_channels)
-    with open(cache_filename, "rb") as fi:
-        data = np.load(fi)
-        data_images_in = data["data_images_in"] 
-        data_images_out = data["data_images_out"] 
-        
-        ntrain = 8000 
-        model.train(
-            data_images_in[:ntrain], data_images_out[:ntrain],
-            data_images_in[ntrain:], data_images_out[ntrain:],
-            epochs=50, batch_size=50)
+    model = build_dense(8)
+    model.compile(loss="mse", optimizer=Adam(0.0005))
+    #model = RegressionModel(mydir, image_bins, input_channels, output_channels)
+    ntrain = int(0.8*len(data_images_in))
+    model.fit(
+        data_images_in[:ntrain],
+        data_images_out[:ntrain],
+        validation_data=(data_images_in[ntrain:], data_images_out[ntrain:]),
+        batch_size=4096, epochs=100)
+    model.save("{0}/model.h5".format(mydir))
+    #model.train(
+    #    data_images_in[:ntrain], data_images_out[:ntrain],
+    #    data_images_in[ntrain:], data_images_out[ntrain:],
+    #    epochs=50, batch_size=50)
