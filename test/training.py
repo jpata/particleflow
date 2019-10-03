@@ -34,16 +34,19 @@ def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
         weights=Xs_cluster[iev][:, 0],
         bins=bins
     )
+
+    inner_valid = (Xs_track[iev][:, 1] != 0) & (Xs_track[iev][:, 2] != 0)
     h_track_inner = np.histogram2d(
-        Xs_track[iev][:, 1],
-        Xs_track[iev][:, 2],
-        weights=Xs_track[iev][:, 0],
+        Xs_track[iev][inner_valid, 1],
+        Xs_track[iev][inner_valid, 2],
+        weights=Xs_track[iev][inner_valid, 0],
         bins=bins
     )
+    outer_valid = (Xs_track[iev][:, 3] != 0) & (Xs_track[iev][:, 4] != 0)
     h_track_outer = np.histogram2d(
-        Xs_track[iev][:, 3],
-        Xs_track[iev][:, 4],
-        weights=Xs_track[iev][:, 0],
+        Xs_track[iev][outer_valid, 3],
+        Xs_track[iev][outer_valid, 4],
+        weights=Xs_track[iev][outer_valid, 0],
         bins=bins
     )
     
