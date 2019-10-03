@@ -39,6 +39,11 @@ class Output:
         self.maxclusters = 5000
         self.clusters_iblock = np.zeros(self.maxclusters, dtype=np.uint32)
         self.clusters_ielem = np.zeros(self.maxclusters, dtype=np.uint32)
+        self.clusters_ipfcand0 = np.zeros(self.maxclusters, dtype=np.uint32)
+        self.clusters_ipfcand1 = np.zeros(self.maxclusters, dtype=np.uint32)
+        self.clusters_ipfcand2 = np.zeros(self.maxclusters, dtype=np.uint32)
+        self.clusters_ipfcand3 = np.zeros(self.maxclusters, dtype=np.uint32)
+        self.clusters_npfcands = np.zeros(self.maxclusters, dtype=np.uint32)
         self.clusters_layer = np.zeros(self.maxclusters, dtype=np.int32)
         self.clusters_depth = np.zeros(self.maxclusters, dtype=np.int32)
         self.clusters_type = np.zeros(self.maxclusters, dtype=np.int32)
@@ -52,6 +57,11 @@ class Output:
         self.pftree.Branch("nclusters", self.nclusters, "nclusters/i")
         self.pftree.Branch("clusters_iblock", self.clusters_iblock, "clusters_iblock[nclusters]/i")
         self.pftree.Branch("clusters_ielem", self.clusters_ielem, "clusters_ielem[nclusters]/i")
+        self.pftree.Branch("clusters_ipfcand0", self.clusters_ipfcand0, "clusters_ipfcand0[nclusters]/i")
+        self.pftree.Branch("clusters_ipfcand1", self.clusters_ipfcand1, "clusters_ipfcand1[nclusters]/i")
+        self.pftree.Branch("clusters_ipfcand2", self.clusters_ipfcand2, "clusters_ipfcand2[nclusters]/i")
+        self.pftree.Branch("clusters_ipfcand3", self.clusters_ipfcand3, "clusters_ipfcand3[nclusters]/i")
+        self.pftree.Branch("clusters_npfcands", self.clusters_npfcands, "clusters_npfcands[nclusters]/i")
         self.pftree.Branch("clusters_layer", self.clusters_layer, "clusters_layer[nclusters]/I")
         self.pftree.Branch("clusters_depth", self.clusters_depth, "clusters_depth[nclusters]/I")
         self.pftree.Branch("clusters_type", self.clusters_type, "clusters_type[nclusters]/I")
@@ -86,9 +96,15 @@ class Output:
         self.maxtracks = 5000
         self.tracks_iblock = np.zeros(self.maxtracks, dtype=np.uint32)
         self.tracks_ielem = np.zeros(self.maxtracks, dtype=np.uint32)
+        self.tracks_ipfcand0 = np.zeros(self.maxtracks, dtype=np.uint32)
+        self.tracks_ipfcand1 = np.zeros(self.maxtracks, dtype=np.uint32)
+        self.tracks_ipfcand2 = np.zeros(self.maxtracks, dtype=np.uint32)
+        self.tracks_ipfcand3 = np.zeros(self.maxtracks, dtype=np.uint32)
+        self.tracks_npfcands = np.zeros(self.maxtracks, dtype=np.uint32)
         self.tracks_qoverp = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_lambda = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_phi = np.zeros(self.maxtracks, dtype=np.float32)
+        self.tracks_eta = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_dxy = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_dsz = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_inner_eta = np.zeros(self.maxtracks, dtype=np.float32)
@@ -101,9 +117,15 @@ class Output:
         self.pftree.Branch("ntracks", self.ntracks, "ntracks/i")
         self.pftree.Branch("tracks_iblock", self.tracks_iblock, "tracks_iblock[ntracks]/i")
         self.pftree.Branch("tracks_ielem", self.tracks_ielem, "tracks_ielem[ntracks]/i")
+        self.pftree.Branch("tracks_ipfcand0", self.tracks_ipfcand0, "tracks_ipfcand0[ntracks]/i")
+        self.pftree.Branch("tracks_ipfcand1", self.tracks_ipfcand1, "tracks_ipfcand1[ntracks]/i")
+        self.pftree.Branch("tracks_ipfcand2", self.tracks_ipfcand2, "tracks_ipfcand2[ntracks]/i")
+        self.pftree.Branch("tracks_ipfcand3", self.tracks_ipfcand3, "tracks_ipfcand3[ntracks]/i")
+        self.pftree.Branch("tracks_npfcands", self.tracks_npfcands, "tracks_npfcands[ntracks]/i")
         self.pftree.Branch("tracks_qoverp", self.tracks_qoverp, "tracks_qoverp[ntracks]/F")
         self.pftree.Branch("tracks_lambda", self.tracks_lambda, "tracks_lambda[ntracks]/F")
         self.pftree.Branch("tracks_phi", self.tracks_phi, "tracks_phi[ntracks]/F")
+        self.pftree.Branch("tracks_eta", self.tracks_eta, "tracks_eta[ntracks]/F")
         self.pftree.Branch("tracks_dxy", self.tracks_dxy, "tracks_dxy[ntracks]/F")
         self.pftree.Branch("tracks_dsz", self.tracks_dsz, "tracks_dsz[ntracks]/F")
         self.pftree.Branch("tracks_outer_eta", self.tracks_outer_eta, "tracks_outer_eta[ntracks]/F")
@@ -113,15 +135,19 @@ class Output:
        
         #http://cmsdoxygen.web.cern.ch/cmsdoxygen/CMSSW_10_6_2/doc/html/dc/d55/classreco_1_1PFCandidate.html 
         self.npfcands = np.zeros(1, dtype=np.uint32)
-        self.maxpfcands = 2000
+        self.maxpfcands = 5000
         self.pfcands_pt = np.zeros(self.maxpfcands, dtype=np.float32)
         self.pfcands_eta = np.zeros(self.maxpfcands, dtype=np.float32)
         self.pfcands_phi = np.zeros(self.maxpfcands, dtype=np.float32)
         self.pfcands_charge = np.zeros(self.maxpfcands, dtype=np.float32)
         self.pfcands_energy = np.zeros(self.maxpfcands, dtype=np.float32)
         self.pfcands_pdgid = np.zeros(self.maxpfcands, dtype=np.int32)
+        self.pfcands_nelem = np.zeros(self.maxpfcands, dtype=np.int32)
+        self.pfcands_ielem0 = np.zeros(self.maxpfcands, dtype=np.int32)
+        self.pfcands_ielem1 = np.zeros(self.maxpfcands, dtype=np.int32)
+        self.pfcands_ielem2 = np.zeros(self.maxpfcands, dtype=np.int32)
+        self.pfcands_ielem3 = np.zeros(self.maxpfcands, dtype=np.int32)
         self.pfcands_iblock = np.zeros(self.maxpfcands, dtype=np.int32)
-        self.pfcands_ielem = np.zeros(self.maxpfcands, dtype=np.int32)
         
         self.pftree.Branch("npfcands", self.npfcands, "npfcands/i")
         self.pftree.Branch("pfcands_pt", self.pfcands_pt, "pfcands_pt[npfcands]/F")
@@ -130,8 +156,12 @@ class Output:
         self.pftree.Branch("pfcands_charge", self.pfcands_charge, "pfcands_charge[npfcands]/F")
         self.pftree.Branch("pfcands_energy", self.pfcands_energy, "pfcands_energy[npfcands]/F")
         self.pftree.Branch("pfcands_pdgid", self.pfcands_pdgid, "pfcands_pdgid[npfcands]/I")
+        self.pftree.Branch("pfcands_nelem", self.pfcands_nelem, "pfcands_nelem[npfcands]/I")
+        self.pftree.Branch("pfcands_ielem0", self.pfcands_ielem0, "pfcands_ielem0[npfcands]/I")
+        self.pftree.Branch("pfcands_ielem1", self.pfcands_ielem1, "pfcands_ielem0[npfcands]/I")
+        self.pftree.Branch("pfcands_ielem2", self.pfcands_ielem2, "pfcands_ielem0[npfcands]/I")
+        self.pftree.Branch("pfcands_ielem3", self.pfcands_ielem3, "pfcands_ielem0[npfcands]/I")
         self.pftree.Branch("pfcands_iblock", self.pfcands_iblock, "pfcands_iblock[npfcands]/I")
-        self.pftree.Branch("pfcands_ielem", self.pfcands_ielem, "pfcands_ielem[npfcands]/I")
        
         self.maxlinkdata = 50000
         self.nlinkdata = np.zeros(1, dtype=np.uint32)
@@ -157,6 +187,11 @@ class Output:
         self.nclusters[0] = 0        
         self.clusters_iblock[:] = 0
         self.clusters_ielem[:] = 0
+        self.clusters_ipfcand0[:] = 0
+        self.clusters_ipfcand1[:] = 0
+        self.clusters_ipfcand2[:] = 0
+        self.clusters_ipfcand3[:] = 0
+        self.clusters_npfcands[:] = 0
         self.clusters_layer[:] = 0
         self.clusters_depth[:] = 0
         self.clusters_type[:] = 0
@@ -179,9 +214,15 @@ class Output:
         self.ntracks[0] = 0
         self.tracks_iblock[:] = 0
         self.tracks_ielem[:] = 0
+        self.tracks_ipfcand0[:] = 0
+        self.tracks_ipfcand1[:] = 0
+        self.tracks_ipfcand2[:] = 0
+        self.tracks_ipfcand3[:] = 0
+        self.tracks_npfcands[:] = 0
         self.tracks_qoverp[:] = 0
         self.tracks_lambda[:] = 0
         self.tracks_phi[:] = 0
+        self.tracks_eta[:] = 0
         self.tracks_dxy[:] = 0
         self.tracks_dsz[:] = 0
         self.tracks_outer_eta[:] = 0
@@ -196,8 +237,12 @@ class Output:
         self.pfcands_charge[:] = 0
         self.pfcands_energy[:] = 0
         self.pfcands_pdgid[:] = 0
+        self.pfcands_nelem[:] = 0
+        self.pfcands_ielem0[:] = 0
+        self.pfcands_ielem1[:] = 0
+        self.pfcands_ielem2[:] = 0
+        self.pfcands_ielem3[:] = 0
         self.pfcands_iblock[:] = 0
-        self.pfcands_ielem[:] = 0
         
         self.nlinkdata[0] = 0
         self.linkdata_k[:] = 0
@@ -223,6 +268,8 @@ if __name__ == "__main__":
     
     # loop over events
     for iev, event in enumerate(events):
+        if iev > 10:
+            break
         eid = event.object().id()
         if iev%10 == 0:
             print("Event {0}/{1}".format(iev, num_events))
@@ -255,10 +302,9 @@ if __name__ == "__main__":
         
         npfcands = 0
         pfcand_to_block_element = {}
-        
+       
+        #for each PF candidate, create (block, elindex) 
         for c in sorted(pfcand, key=lambda x: x.pt(), reverse=True):
-            if c.pt() < 1:
-                continue
             pfcands_to_analyze += [c]
             pfcand_to_block_element[npfcands] = []
             for el in c.elementsInBlocks():
@@ -276,23 +322,34 @@ if __name__ == "__main__":
  
         #now save PF candidates
         npfcands = 0
-        for c in pfcands_to_analyze:
+        blidx_ielem_to_pfcand = {}
+        for ipfcand, c in enumerate(pfcands_to_analyze):
             output.pfcands_pt[npfcands] = c.pt()
             output.pfcands_eta[npfcands] = c.eta()
             output.pfcands_phi[npfcands] = c.phi()
 	    output.pfcands_charge[npfcands] = c.charge()
 	    output.pfcands_energy[npfcands] = c.energy()
             output.pfcands_pdgid[npfcands] = c.pdgId()
-            #take only the first block/element pair
+            output.pfcands_nelem[npfcands] = len(pfcand_to_block_element[npfcands])
+            #fill the map of element -> pfcandidate 
             if len(pfcand_to_block_element[npfcands]) > 0:
-                blidx, iel = pfcand_to_block_element[npfcands][0]
-                output.pfcands_iblock[npfcands] = blidx_to_iblock[blidx]
-                output.pfcands_ielem[npfcands] = int(iel)
-
+                blidx_ = -1
+                for ipf_block_elem in range(len(pfcand_to_block_element[npfcands])):
+                    blidx, iel = pfcand_to_block_element[npfcands][ipf_block_elem]
+                    if ipf_block_elem == 0:
+                        blidx_ = blidx
+                    else:
+                        assert(blidx == blidx_)
+                    if ipf_block_elem < 4:
+                        getattr(output, "pfcands_ielem{0}".format(ipf_block_elem))[npfcands] = iel
+                    k = (int(blidx), int(iel))
+                    if not k in blidx_ielem_to_pfcand:
+                        blidx_ielem_to_pfcand[k] = []
+                    blidx_ielem_to_pfcand[k] += [ipfcand]
+                output.pfcands_iblock[npfcands] = blidx_ 
             npfcands += 1
-
         pftracks = evdesc.tracks.product()
-        ddd = {t.trackRef().get(): t for t in pftracks}
+        pftracks_dict = {t.trackRef().qoverp(): t for t in pftracks}
 
         output.npfcands[0] = npfcands
         #save blocks
@@ -303,14 +360,29 @@ if __name__ == "__main__":
         for iblock, bl in enumerate(blocks):
             for ielem, el in enumerate(bl.elements()):
                 tp = el.type()
+                matched_pfcands = blidx_ielem_to_pfcand.get((int(iblock), int(ielem)), [])
+                ipfcand0 = 0
+                ipfcand1 = 0
+                ipfcand2 = 0
+                ipfcand3 = 0
+         
+                if len(matched_pfcands) > 0:
+                    ipfcand0 = matched_pfcands[0]
+                if len(matched_pfcands) > 1:
+                    ipfcand1 = matched_pfcands[1]
+                if len(matched_pfcands) > 2:
+                    ipfcand2 = matched_pfcands[2]
+                if len(matched_pfcands) > 3:
+                    ipfcand3 = matched_pfcands[3]
+ 
                 if (tp == ROOT.reco.PFBlockElement.ECAL or
-                   tp == ROOT.reco.PFBlockElement.PS1 or
-                   tp == ROOT.reco.PFBlockElement.PS2 or
-                   tp == ROOT.reco.PFBlockElement.HCAL or
-                   tp == ROOT.reco.PFBlockElement.GSF or
-                   tp == ROOT.reco.PFBlockElement.HO or
-                   tp == ROOT.reco.PFBlockElement.HFHAD or
-                   tp == ROOT.reco.PFBlockElement.HFEM):
+                    tp == ROOT.reco.PFBlockElement.PS1 or
+                    tp == ROOT.reco.PFBlockElement.PS2 or
+                    tp == ROOT.reco.PFBlockElement.HCAL or
+                    tp == ROOT.reco.PFBlockElement.GSF or
+                    tp == ROOT.reco.PFBlockElement.HO or
+                    tp == ROOT.reco.PFBlockElement.HFHAD or
+                    tp == ROOT.reco.PFBlockElement.HFEM):
                     clref = el.clusterRef()
                     if clref.isNonnull():
                         cl = clref.get()
@@ -325,36 +397,95 @@ if __name__ == "__main__":
                         output.clusters_type[nclusters] = int(tp)
                         output.clusters_iblock[nclusters] = iblock
                         output.clusters_ielem[nclusters] = ielem
+                        output.clusters_ipfcand0[nclusters] = ipfcand0
+                        output.clusters_ipfcand1[nclusters] = ipfcand1
+                        output.clusters_ipfcand2[nclusters] = ipfcand2
+                        output.clusters_ipfcand3[nclusters] = ipfcand3
+                        output.clusters_npfcands[nclusters] = len(matched_pfcands)
                         nclusters += 1
                 elif (tp == ROOT.reco.PFBlockElement.TRACK):
-                   c = el.trackRef().get()
+                    c = el.trackRef().get()
+                    matched_pftrack = el.trackRefPF().get()
 
-                   matched_pftrack = None
-                   for pftrack in pftracks:
-                       if pftrack.trackRef() == el.trackRef():
-                           assert(pftrack.trackRef().get().outerEta() == el.trackRef().outerEta())
-                           matched_pftrack = pftrack
-                           break 
-                   if not matched_pftrack is None:
-                       atECAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ECALShowerMax)  
-                       atHCAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.HCALEntrance)  
-                       if atHCAL.isValid():
-                           output.tracks_outer_eta[ntracks] = atHCAL.positionREP().eta()
-                           output.tracks_outer_phi[ntracks] = atHCAL.positionREP().phi()
-                       if atECAL.isValid():
-                           output.tracks_inner_eta[ntracks] = atECAL.positionREP().eta()
-                           output.tracks_inner_phi[ntracks] = atECAL.positionREP().eta()
-                   else:
-                       print("could not find PFTrack matching to track")
+                    #matched_pftrack = pftracks_dict.get(el.trackRef().qoverp(), None)
+                    if not matched_pftrack is None:
+                        assert(matched_pftrack.trackRef().qoverp() == el.trackRef().qoverp())
+                        assert(matched_pftrack.trackRef() == el.trackRef())
+                        atECAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ECALShowerMax)  
+                        atHCAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.HCALEntrance)  
+                        if atHCAL.isValid():
+                            output.tracks_outer_eta[ntracks] = atHCAL.positionREP().eta()
+                            output.tracks_outer_phi[ntracks] = atHCAL.positionREP().phi()
+                        if atECAL.isValid():
+                            output.tracks_inner_eta[ntracks] = atECAL.positionREP().eta()
+                            output.tracks_inner_phi[ntracks] = atECAL.positionREP().phi()
+                        output.tracks_eta[ntracks] = c.momentum().eta()
+                        output.tracks_phi[ntracks] = c.momentum().phi()
 
-                   output.tracks_qoverp[ntracks] = c.qoverp()
-                   output.tracks_lambda[ntracks] = getattr(c, "lambda")() #lambda is a reserved word in python, so we need to use a proxy
-                   output.tracks_phi[ntracks] = c.phi()
-                   output.tracks_dxy[ntracks] = c.dxy()
-                   output.tracks_dsz[ntracks] = c.dsz()
-                   output.tracks_iblock[ntracks] = iblock
-                   output.tracks_ielem[ntracks] = ielem
-                   ntracks += 1
+                    output.tracks_qoverp[ntracks] = c.qoverp()
+                    output.tracks_lambda[ntracks] = getattr(c, "lambda")() #lambda is a reserved word in python, so we need to use a proxy
+                    output.tracks_dxy[ntracks] = c.dxy()
+                    output.tracks_dsz[ntracks] = c.dsz()
+                    output.tracks_iblock[ntracks] = iblock
+                    output.tracks_ielem[ntracks] = ielem
+                    output.tracks_ipfcand0[ntracks] = ipfcand0
+                    output.tracks_ipfcand1[ntracks] = ipfcand1
+                    output.tracks_ipfcand2[ntracks] = ipfcand2
+                    output.tracks_ipfcand3[ntracks] = ipfcand3
+                    output.tracks_npfcands[ntracks] = len(matched_pfcands)
+                    ntracks += 1
+                elif (tp == ROOT.reco.PFBlockElement.BREM):
+                    matched_pftrack = el.trackPF()
+                    momentum = matched_pftrack.innermostMeasurement().momentum()
+                    atECAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ECALShowerMax)  
+                    atHCAL = matched_pftrack.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.HCALEntrance)  
+                    if atHCAL.isValid():
+                        output.tracks_outer_eta[ntracks] = atHCAL.positionREP().eta()
+                        output.tracks_outer_phi[ntracks] = atHCAL.positionREP().phi()
+                    if atECAL.isValid():
+                        output.tracks_inner_eta[ntracks] = atECAL.positionREP().eta()
+                        output.tracks_inner_phi[ntracks] = atECAL.positionREP().phi()
+                    output.tracks_eta[ntracks] = momentum.eta()
+                    output.tracks_phi[ntracks] = momentum.phi()
+
+                    p = momentum.P()
+                    output.tracks_qoverp[ntracks] = 0
+                    if p > 0:
+                        output.tracks_qoverp[ntracks] = matched_pftrack.charge() / p
+                    output.tracks_dxy[ntracks] = 0
+                    output.tracks_dsz[ntracks] = 0
+                    output.tracks_iblock[ntracks] = iblock
+                    output.tracks_ielem[ntracks] = ielem
+                    output.tracks_ipfcand0[ntracks] = ipfcand0
+                    output.tracks_ipfcand1[ntracks] = ipfcand1
+                    output.tracks_ipfcand2[ntracks] = ipfcand2
+                    output.tracks_ipfcand3[ntracks] = ipfcand3
+                    output.tracks_npfcands[ntracks] = len(matched_pfcands)
+                    ntracks += 1
+                elif (tp == ROOT.reco.PFBlockElement.SC):
+                    scref = el.superClusterRef()
+                    if scref.isNonnull():
+                        cl = scref.get()
+                        output.clusters_layer[nclusters] = 0
+                        output.clusters_depth[nclusters] = 0
+                        output.clusters_energy[nclusters] = cl.energy()
+                        output.clusters_x[nclusters] = cl.x()
+                        output.clusters_y[nclusters] = cl.y()
+                        output.clusters_z[nclusters] = cl.z()
+                        output.clusters_eta[nclusters] = cl.eta()
+                        output.clusters_phi[nclusters] = cl.phi()
+                        output.clusters_type[nclusters] = int(tp)
+                        output.clusters_iblock[nclusters] = iblock
+                        output.clusters_ielem[nclusters] = ielem
+                        output.clusters_ipfcand0[nclusters] = ipfcand0
+                        output.clusters_ipfcand1[nclusters] = ipfcand1
+                        output.clusters_ipfcand2[nclusters] = ipfcand2
+                        output.clusters_ipfcand3[nclusters] = ipfcand3
+                        output.clusters_npfcands[nclusters] = len(matched_pfcands)
+
+                else:
+                    print("unknown type: {0}".format(tp))
+                    
 
             #save links for each block
             linkdata = {int(kv.first): (kv.second.distance, ord(kv.second.test)) for kv in bl.linkData()}
