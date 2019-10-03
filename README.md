@@ -1,4 +1,4 @@
-Notes on moderninzing CMS particle flow: PFBlockAlgo and PFAlgo.
+Notes on moderninzing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
 
 ## Presentations
 
