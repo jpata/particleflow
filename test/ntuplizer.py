@@ -32,7 +32,8 @@ class Output:
         self.tfile = ROOT.TFile(outfile, "RECREATE")
         
         self.pftree = ROOT.TTree("pftree", "pftree")
-        self.linktree = ROOT.TTree("linktree", "linktree")
+        self.linktree = ROOT.TTree("linktree", "linktree for elements in block")
+        self.linktree_elemtocand = ROOT.TTree("linktree_elemtocand", "element to candidate link data")
 
         #http://cmsdoxygen.web.cern.ch/cmsdoxygen/CMSSW_10_6_2/doc/html/d6/dd4/classreco_1_1PFCluster.html
         self.nclusters = np.zeros(1, dtype=np.uint32)
@@ -111,8 +112,6 @@ class Output:
         self.tracks_inner_phi = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_outer_eta = np.zeros(self.maxtracks, dtype=np.float32)
         self.tracks_outer_phi = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tracks_inner_eta = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tracks_inner_phi = np.zeros(self.maxtracks, dtype=np.float32)
         
         self.pftree.Branch("ntracks", self.ntracks, "ntracks/i")
         self.pftree.Branch("tracks_iblock", self.tracks_iblock, "tracks_iblock[ntracks]/i")
@@ -178,7 +177,19 @@ class Output:
         self.linktree.Branch("linkdata_iev", self.linkdata_iev, "linkdata_iev[nlinkdata]/i")
         self.linktree.Branch("linkdata_iblock", self.linkdata_iblock, "linkdata_iblock[nlinkdata]/i")
         self.linktree.Branch("linkdata_nelem", self.linkdata_nelem, "linkdata_nelem[nlinkdata]/i")
-
+        
+        self.maxlinkdata_elemtocand = 50000
+        self.nlinkdata_elemtocand = np.zeros(1, dtype=np.uint32)
+        self.linkdata_elemtocand_iev = np.zeros(self.maxlinkdata_elemtocand, dtype=np.uint32)
+        self.linkdata_elemtocand_iblock = np.zeros(self.maxlinkdata_elemtocand, dtype=np.uint32)
+        self.linkdata_elemtocand_ielem = np.zeros(self.maxlinkdata_elemtocand, dtype=np.uint32)
+        self.linkdata_elemtocand_icand = np.zeros(self.maxlinkdata_elemtocand, dtype=np.uint32)
+        self.linktree_elemtocand.Branch("nlinkdata_elemtocand", self.nlinkdata_elemtocand, "nlinkdata_elemtocand/i")
+        self.linktree_elemtocand.Branch("linkdata_elemtocand_iev", self.linkdata_elemtocand_iev, "linkdata_elemtocand_iev[nlinkdata_elemtocand]/i")
+        self.linktree_elemtocand.Branch("linkdata_elemtocand_iblock", self.linkdata_elemtocand_iblock, "linkdata_elemtocand_iblock[nlinkdata_elemtocand]/i")
+        self.linktree_elemtocand.Branch("linkdata_elemtocand_ielem", self.linkdata_elemtocand_ielem, "linkdata_elemtocand_ielem[nlinkdata_elemtocand]/i")
+        self.linktree_elemtocand.Branch("linkdata_elemtocand_icand", self.linkdata_elemtocand_icand, "linkdata_elemtocand_icand[nlinkdata_elemtocand]/i")
+    
     def close(self):
         self.tfile.Write()
         self.tfile.Close()
@@ -251,6 +262,12 @@ class Output:
         self.linkdata_iev[:] = 0
         self.linkdata_iblock[:] = 0
         self.linkdata_nelem[:] = 0
+        
+        self.nlinkdata_elemtocand[0] = 0
+        self.linkdata_elemtocand_iev[:] = 0
+        self.linkdata_elemtocand_iblock[:] = 0
+        self.linkdata_elemtocand_ielem[:] = 0
+        self.linkdata_elemtocand_icand[:] = 0
 
 if __name__ == "__main__":
 
@@ -323,7 +340,8 @@ if __name__ == "__main__":
         #now save PF candidates
         npfcands = 0
         blidx_ielem_to_pfcand = {}
-        for ipfcand, c in enumerate(pfcands_to_analyze):
+        pfcand_elem_pairs = []
+        for c in pfcands_to_analyze:
             output.pfcands_pt[npfcands] = c.pt()
             output.pfcands_eta[npfcands] = c.eta()
             output.pfcands_phi[npfcands] = c.phi()
@@ -343,20 +361,24 @@ if __name__ == "__main__":
                     if ipf_block_elem < 4:
                         getattr(output, "pfcands_ielem{0}".format(ipf_block_elem))[npfcands] = iel
                     k = (int(blidx), int(iel))
+                    pfcand_elem_pairs += [(int(blidx), int(iel), npfcands)]
                     if not k in blidx_ielem_to_pfcand:
                         blidx_ielem_to_pfcand[k] = []
-                    blidx_ielem_to_pfcand[k] += [ipfcand]
+                    blidx_ielem_to_pfcand[k] += [npfcands]
                 output.pfcands_iblock[npfcands] = blidx_ 
             npfcands += 1
+        
         pftracks = evdesc.tracks.product()
         pftracks_dict = {t.trackRef().qoverp(): t for t in pftracks}
 
         output.npfcands[0] = npfcands
-        #save blocks
         nblocks = 0
         nclusters = 0
         ntracks = 0
         nlinkdata = 0
+        nlinkdata_elemtocand = 0
+
+        #save blocks
         for iblock, bl in enumerate(blocks):
             for ielem, el in enumerate(bl.elements()):
                 tp = el.type()
@@ -497,13 +519,23 @@ if __name__ == "__main__":
                 output.linkdata_iblock[nlinkdata] = iblock
                 output.linkdata_nelem[nlinkdata] = len(bl.elements())
                 nlinkdata += 1
+        #end of block loop
+    
+        for iblock, ielem, icand in sorted(pfcand_elem_pairs):
+            output.linkdata_elemtocand_iev[nlinkdata_elemtocand] = iev
+            output.linkdata_elemtocand_iblock[nlinkdata_elemtocand] = iblock
+            output.linkdata_elemtocand_ielem[nlinkdata_elemtocand] = ielem
+            output.linkdata_elemtocand_icand[nlinkdata_elemtocand] = icand
+            nlinkdata_elemtocand += 1
 
         output.nclusters[0] = nclusters
         output.ntracks[0] = ntracks
         output.nlinkdata[0] = nlinkdata
+        output.nlinkdata_elemtocand[0] = nlinkdata_elemtocand
 
         output.pftree.Fill()
         output.linktree.Fill()
+        output.linktree_elemtocand.Fill()
     pass 
     #end of event loop 
 
