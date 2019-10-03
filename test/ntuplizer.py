@@ -268,8 +268,8 @@ if __name__ == "__main__":
     
     # loop over events
     for iev, event in enumerate(events):
-        if iev > 10:
-            break
+        #if iev > 10:
+        #    break
         eid = event.object().id()
         if iev%10 == 0:
             print("Event {0}/{1}".format(iev, num_events))
