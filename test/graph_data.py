@@ -17,7 +17,7 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return ['step3_AOD_1.root']
+        return ['step3_AOD_ntuple.root']
 
     @property
     def processed_file_names(self):
@@ -61,6 +61,11 @@ class PFGraphDataset(Dataset):
                     data["clusters_energy"][iev][:self._maxclusters],
                     data["clusters_eta"][iev][:self._maxclusters],
                     data["clusters_phi"][iev][:self._maxclusters],
+                    data["clusters_npfcands"][iev][:self._maxclusters],
+                    data["clusters_ipfcand0"][iev][:self._maxclusters],
+                    data["clusters_ipfcand1"][iev][:self._maxclusters],
+                    data["clusters_ipfcand2"][iev][:self._maxclusters],
+                    data["clusters_ipfcand3"][iev][:self._maxclusters],
                 ], axis=1)
                            ]
                 Xs_track += [np.stack([
@@ -69,6 +74,11 @@ class PFGraphDataset(Dataset):
                     data["tracks_inner_phi"][iev][:self._maxtracks],
                     data["tracks_outer_eta"][iev][:self._maxtracks],
                     data["tracks_outer_phi"][iev][:self._maxtracks],
+                    data["tracks_npfcands"][iev][:self._maxtracks],
+                    data["tracks_ipfcand0"][iev][:self._maxtracks],
+                    data["tracks_ipfcand1"][iev][:self._maxtracks],
+                    data["tracks_ipfcand2"][iev][:self._maxtracks],
+                    data["tracks_ipfcand3"][iev][:self._maxtracks],
                 ], axis=1)
                          ]
                 ys_cand += [np.stack([
@@ -97,23 +107,23 @@ class PFGraphDataset(Dataset):
         Xs_track = np.stack(Xs_track, axis=0)
         ys_cand = np.stack(ys_cand, axis=0)
 
-        Xs_cluster = Xs_cluster.reshape(Xs_cluster.shape[0], self._maxclusters, 3)
-        Xs_track = Xs_track.reshape(Xs_track.shape[0], self._maxtracks, 5)
+        Xs_cluster = Xs_cluster.reshape(Xs_cluster.shape[0], self._maxclusters, 3+5)
+        Xs_track = Xs_track.reshape(Xs_track.shape[0], self._maxtracks, 5+5)
         ys_cand = ys_cand.reshape(ys_cand.shape[0], self._maxcands, 4)
 
         return Xs_cluster, Xs_track, ys_cand, real_maxclusters, real_maxtracks, real_maxcands
 
     def process(self):
 
-        def withinDeltaR(first, second, dr=0.2):
-            eta1 = first[:,1]
-            eta2 = second[:,1]
-            phi1 = first[:,2]
-            phi2 = second[:,2]
-            deta = np.abs(eta1 - eta2)
-            dphi = np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
-            dr2 = dr*dr
-            return ((deta**2 + dphi**2) < dr2)*1.
+        def checkForMatchingPFCand(first, second, pairs):
+            match = np.zeros(len(pairs))
+            for k, (i,j) in enumerate(pairs):
+                first_npfcands = int(first[i, -5])
+                second_npfcands = int(second[j, -5])
+                first_ipfcands = first[i, -4:-4+first_npfcands]
+                second_ipfcands = second[j, -4:-4+second_npfcands]
+                match[k] = any(np.isin(first_ipfcands, second_ipfcands))
+            return match
             
         feature_scale = np.array([1., 1., 1.])
         feature_scale_track = np.array([1., 1., 1., 1., 1.])
@@ -133,19 +143,21 @@ class PFGraphDataset(Dataset):
             edge_index_track = edge_index_track.t().contiguous()
             edge_index_cluster_track = torch.tensor(pairs_cluster_track, dtype=torch.long)
             edge_index_cluster_track = edge_index_cluster_track.t().contiguous()
-            x = torch.tensor(Xs_cluster[event]/feature_scale, dtype=torch.float)
-            x_track = torch.tensor(Xs_track[event]/feature_scale_track, dtype=torch.float)
+            x = torch.tensor(Xs_cluster[event,:,:-5]/feature_scale, dtype=torch.float)
+            x_track = torch.tensor(Xs_track[event,:,:-5]/feature_scale_track, dtype=torch.float)
 
             #y = torch.tensor(ys_cand, dtype=torch.float)
 
             row, col = edge_index
-            y = withinDeltaR(Xs_cluster[event][row], Xs_cluster[event][col])
+            y = checkForMatchingPFCand(Xs_cluster[event], Xs_cluster[event], pairs)
             y = torch.tensor(y, dtype=torch.float)
+
             row, col = edge_index_track
-            y_track = withinDeltaR(Xs_track[event][row], Xs_track[event][col])
+            y_track = checkForMatchingPFCand(Xs_track[event], Xs_track[event], pairs_track)
             y_track = torch.tensor(y_track, dtype=torch.float)
+
             row, col = edge_index_cluster_track
-            y_cluster_track = withinDeltaR(Xs_cluster[event][row], Xs_track[event][col])
+            y_cluster_track = checkForMatchingPFCand(Xs_cluster[event], Xs_track[event], pairs_cluster_track)
             y_cluster_track = torch.tensor(y_cluster_track, dtype=torch.float)
 
             data = Data(x=x, edge_index=edge_index, y=y)
@@ -170,5 +182,5 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=True,maxclusters=100,maxtracks=100,maxcands=100)
+    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=True,maxclusters=10,maxtracks=10,maxcands=10)
 
