@@ -8,7 +8,7 @@ from torch_geometric.data import Dataset, Data
 import itertools
 
 class PFGraphDataset(Dataset):
-    def __init__(self, root, transform=None, pre_transform=None, connect_all=True, maxclusters=100, maxtracks=100, maxcands=100):
+    def __init__(self, root, transform=None, pre_transform=None, connect_all=False, maxclusters=100, maxtracks=100, maxcands=100):
         self._connect_all = connect_all
         self._maxclusters = maxclusters
         self._maxtracks = maxtracks
@@ -124,6 +124,16 @@ class PFGraphDataset(Dataset):
                 second_ipfcands = second[j, -4:-4+second_npfcands]
                 match[k] = any(np.isin(first_ipfcands, second_ipfcands))
             return match
+
+        def withinDeltaR(first, second, dr=1.0):
+            eta1 = first[1]
+            eta2 = second[1]
+            phi1 = first[2]
+            phi2 = second[2]
+            deta = np.abs(eta1 - eta2)
+            dphi = np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
+            dr2 = dr*dr
+            return ((deta**2 + dphi**2) < dr2)
             
         feature_scale = np.array([1., 1., 1.])
         feature_scale_track = np.array([1., 1., 1., 1., 1.])
@@ -136,7 +146,9 @@ class PFGraphDataset(Dataset):
                 pairs_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxtracks[event])),range(int(real_maxtracks[event]))) if i!=j]
                 pairs_cluster_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxtracks[event])))]
             else:
-                pass
+                pairs = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxclusters[event]))) if (i!=j and withinDeltaR(Xs_cluster[event,i,:], Xs_cluster[event,j,:]))]
+                pairs_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxtracks[event])),range(int(real_maxtracks[event]))) if (i!=j and withinDeltaR(Xs_track[event,i,:], Xs_track[event,j,:]))]
+                pairs_cluster_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxtracks[event]))) if withinDeltaR(Xs_cluster[event,i,:], Xs_track[event,j,:])]
             edge_index = torch.tensor(pairs, dtype=torch.long)
             edge_index = edge_index.t().contiguous()
             edge_index_track = torch.tensor(pairs_track, dtype=torch.long)
@@ -148,15 +160,12 @@ class PFGraphDataset(Dataset):
 
             #y = torch.tensor(ys_cand, dtype=torch.float)
 
-            row, col = edge_index
             y = checkForMatchingPFCand(Xs_cluster[event], Xs_cluster[event], pairs)
             y = torch.tensor(y, dtype=torch.float)
 
-            row, col = edge_index_track
             y_track = checkForMatchingPFCand(Xs_track[event], Xs_track[event], pairs_track)
             y_track = torch.tensor(y_track, dtype=torch.float)
 
-            row, col = edge_index_cluster_track
             y_cluster_track = checkForMatchingPFCand(Xs_cluster[event], Xs_track[event], pairs_cluster_track)
             y_cluster_track = torch.tensor(y_cluster_track, dtype=torch.float)
 
@@ -182,5 +191,5 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=True,maxclusters=10,maxtracks=10,maxcands=10)
+    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,maxclusters=100,maxtracks=100,maxcands=100)
 

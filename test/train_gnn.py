@@ -45,7 +45,10 @@ def test(model,loader,total,batch_size):
         data = data.to(device)
         batch_target = data.y
         batch_output = model(data)
-        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target).item()
+        batch_weights_real = batch_target*1.
+        batch_weights_fake = (1 - batch_target)*torch.sum(batch_target)/torch.sum(1 - batch_target)
+        batch_weights = batch_weights_real + batch_weights_fake
+        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights).item()
         sum_loss += batch_loss_item
         matches = ((batch_output > 0.5) == (batch_target > 0.5))
         true_pos = ((batch_output > 0.5) & (batch_target > 0.5))
