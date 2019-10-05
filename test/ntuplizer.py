@@ -335,7 +335,7 @@ if __name__ == "__main__":
             blidx_to_iblock[k] = ibl
         
         #get list of blocks to save from all pfcandidates
-        blocks = [blocks[bl].get() for bl in sorted(blocks.keys())]
+        blocks = [(bl, blocks[bl].get()) for bl in sorted(blocks.keys())]
  
         #now save PF candidates
         npfcands = 0
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         nlinkdata_elemtocand = 0
 
         #save blocks
-        for iblock, bl in enumerate(blocks):
+        for iblock, bl in blocks:
             for ielem, el in enumerate(bl.elements()):
                 tp = el.type()
                 matched_pfcands = blidx_ielem_to_pfcand.get((int(iblock), int(ielem)), [])
@@ -504,7 +504,6 @@ if __name__ == "__main__":
                         output.clusters_ipfcand2[nclusters] = ipfcand2
                         output.clusters_ipfcand3[nclusters] = ipfcand3
                         output.clusters_npfcands[nclusters] = len(matched_pfcands)
-
                 else:
                     print("unknown type: {0}".format(tp))
                     
