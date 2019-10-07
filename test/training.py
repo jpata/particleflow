@@ -49,6 +49,13 @@ def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
         weights=Xs_track[iev][outer_valid, 0],
         bins=bins
     )
+    center_valid = (Xs_track[iev][:, 5] != 0) & (Xs_track[iev][:, 6] != 0)
+    h_track_center = np.histogram2d(
+        Xs_track[iev][center_valid, 5],
+        Xs_track[iev][center_valid, 6],
+        weights=Xs_track[iev][center_valid, 0],
+        bins=bins
+    )
     
     h_cand = np.histogram2d(
         ys_cand[iev][:, 1],
@@ -57,7 +64,7 @@ def to_image(iev, Xs_cluster, Xs_track, ys_cand, image_bins):
         bins=bins
     )
     
-    h_input = np.stack([h_cluster[0], h_track_inner[0], h_track_outer[0]], axis=-1)
+    h_input = np.stack([h_cluster[0], h_track_inner[0], h_track_outer[0], h_track_center[0]], axis=-1)
     
     return h_input, h_cand[0]
 
@@ -77,26 +84,58 @@ def to_patches(img_in, img_out):
 
     return patches_in[selpatch], patches_out[selpatch]
 
-def build_dense(image_size):
+def build_dense(image_size, image_channels):
     
-    def layer(din, n_units, do_dropout=True):
+    def layer(din, n_units, do_dropout=True, do_bn=True):
         d = Dense(n_units)(din)
         d = LeakyReLU(alpha=0.2)(d)
         if do_dropout:
             d = Dropout(0.2)(d)
+        if do_bn:
+            d = BatchNormalization()(d)
         return d
      
-    inp = Input(shape=(image_size, image_size, 3))
+    inp = Input(shape=(image_size, image_size, image_channels))
     d = Flatten()(inp)
-    d = layer(d, 256)
+    d = layer(d, 256, do_bn=False)
     d = layer(d, 128)
     d = layer(d, 64)
-    d = layer(d, 32, do_dropout=False)
-    d = layer(d, 16, do_dropout=False)
-
+    d = layer(d, 32)
+    d = layer(d, 16)
+    d = layer(d, 32)
+    d = layer(d, 64)
+    d = layer(d, 128)
+    d = layer(d, 256)
     out = Dense(image_size*image_size, activation="relu")(d)
     out = Reshape((image_size, image_size, 1))(out)
     m = Model(inp, out)
+    m.summary()
+    return m
+
+def build_dense_flat(clusters_shape, tracks_shape, out_shape):
+    print(clusters_shape, tracks_shape, out_shape) 
+    def layer(din, n_units, do_dropout=True, do_bn=True):
+        d = Dense(n_units)(din)
+        d = LeakyReLU(alpha=0.2)(d)
+        if do_dropout:
+            d = Dropout(0.4)(d)
+        if do_bn:
+            d = BatchNormalization()(d)
+        return d
+     
+    inp1 = Input(shape=clusters_shape)
+    d1 = Flatten()(inp1)
+    inp2 = Input(shape=tracks_shape)
+    d2 = Flatten()(inp2)
+    d = Concatenate()([d1, d2])
+    d = layer(d, 256, do_dropout=True, do_bn=True)
+    d = layer(d, 256, do_dropout=True, do_bn=True)
+    d = layer(d, 256, do_dropout=True, do_bn=True)
+    d = layer(d, 256, do_dropout=True, do_bn=True)
+    d = layer(d, 256, do_dropout=True, do_bn=False)
+    out = Dense(out_shape[0]*out_shape[1], activation="linear")(d)
+    out = Reshape(out_shape)(out)
+    m = Model([inp1, inp2], out)
     m.summary()
     return m
 
@@ -131,11 +170,11 @@ def build_generator(img_shape, gf):
     d4 = conv2d(d3, gf*8)
     d5 = conv2d(d4, gf*8)
     d6 = conv2d(d5, gf*8)
-    #d7 = conv2d(d6, gf*8)
+    d7 = conv2d(d6, gf*8)
 
     # Upsampling
-    #u1 = deconv2d(d7, d6, gf*8)
-    u2 = deconv2d(d6, d5, gf*8)
+    u1 = deconv2d(d7, d6, gf*8)
+    u2 = deconv2d(u1, d5, gf*8)
     u3 = deconv2d(u2, d4, gf*8)
     u4 = deconv2d(u3, d3, gf*4)
     u5 = deconv2d(u4, d2, gf*2)
@@ -191,10 +230,10 @@ class Pix2Pix():
         self.disc_patch = (patch, patch, 1)
 
         # Number of filters in the first layer of G and D
-        self.gf = 64
-        self.df = 64
+        self.gf = 16
+        self.df = 16
 
-        optimizer = Adam(0.0002, 0.5)
+        optimizer = Adam(0.0001, 0.5)
 
         # Build and compile the discriminator
         self.discriminator = build_discriminator(self.img_shape, self.img_shape_out, self.df)
@@ -223,7 +262,7 @@ class Pix2Pix():
                               loss_weights=[1, 100],
                               optimizer=optimizer)
 
-    def train(self, data_images_in, data_images_out, epochs, batch_size=1, sample_interval=1):
+    def train(self, data_images_in, data_images_out, epochs=100, batch_size=1, sample_interval=1):
 
         start_time = datetime.datetime.now()
 
@@ -286,16 +325,16 @@ class RegressionModel:
         self.channels = input_channels
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.img_shape_out = (self.img_rows, self.img_cols, output_channels)
-        self.gf = 32
+        self.gf = 16
         
         self.generator = build_generator(self.img_shape, self.gf)
-        optimizer = Adam(0.0002, 0.5)
+        optimizer = Adam(0.0001, 0.5)
         self.generator.compile(
             loss='mse',
             optimizer=optimizer,
             metrics=['accuracy'])
 
-    def train(self, data_images_in, data_images_out, data_images_in_val, data_images_out_val, epochs, batch_size=1, sample_interval=1):
+    def train(self, data_images_in, data_images_out, data_images_in_val, data_images_out_val, epochs=100, batch_size=1, sample_interval=1):
 
         start_time = datetime.datetime.now()
 
@@ -338,69 +377,68 @@ def myGenerator(batch_size, data_images_in, data_images_out):
             break
 
 # https://github.com/master/nima/blob/master/nima.py#L58
-
-def tril_indices(n, k=0):
-    """Return the indices for the lower-triangle of an (n, m) array.
-    Works similarly to `np.tril_indices`
-    Args:
-      n: the row dimension of the arrays for which the returned indices will
-        be valid.
-      k: optional diagonal offset (see `np.tril` for details).
-    Returns:
-      inds: The indices for the triangle. The returned tuple contains two arrays,
-        each with the indices along one dimension of the array.
-    """
-    m1 = tf.tile(tf.expand_dims(tf.range(n), axis=0), [n, 1])
-    m2 = tf.tile(tf.expand_dims(tf.range(n), axis=1), [1, n])
-    mask = (m1 - m2) >= -k
-    ix1 = tf.boolean_mask(m2, tf.transpose(mask))
-    ix2 = tf.boolean_mask(m1, tf.transpose(mask))
-    return ix1, ix2
-
-
-def ecdf(p):
-    """Estimate the cumulative distribution function.
-    The e.c.d.f. (empirical cumulative distribution function) F_n is a step
-    function with jump 1/n at each observation (possibly with multiple jumps
-    at one place if there are ties).
-    For observations x= (x_1, x_2, ... x_n), F_n is the fraction of
-    observations less or equal to t, i.e.,
-    F_n(t) = #{x_i <= t} / n = 1/n \sum^{N}_{i=1} Indicator(x_i <= t).
-    Args:
-      p: a 2-D `Tensor` of observations of shape [batch_size, num_classes].
-        Classes are assumed to be ordered.
-    Returns:
-      A 2-D `Tensor` of estimated ECDFs.
-    """
-    n = p.get_shape().as_list()[1]
-    indices = tril_indices(n)
-    indices = tf.transpose(tf.stack([indices[1], indices[0]]))
-    ones = tf.ones([n * (n + 1) / 2])
-    triang = tf.scatter_nd(indices, ones, [n, n])
-    return tf.matmul(p, triang)
-
-
-def emd_loss(p, p_hat, r=2, scope=None):
-    """Compute the Earth Mover's Distance loss.
-    Hou, Le, Chen-Ping Yu, and Dimitris Samaras. "Squared Earth Mover's
-    Distance-based Loss for Training Deep Neural Networks." arXiv preprint
-    arXiv:1611.05916 (2016).
-    Args:
-      p: a 2-D `Tensor` of the ground truth probability mass functions.
-      p_hat: a 2-D `Tensor` of the estimated p.m.f.-s
-      r: a constant for the r-norm.
-      scope: optional name scope.
-    `p` and `p_hat` are assumed to have equal mass as \sum^{N}_{i=1} p_i =
-    \sum^{N}_{i=1} p_hat_i
-    Returns:
-      A 0-D `Tensor` of r-normed EMD loss.
-    """
-    with tf.name_scope(scope, 'EmdLoss', [p, p_hat]):
-        ecdf_p = ecdf(p)
-        ecdf_p_hat = ecdf(p_hat)
-        emd = tf.reduce_mean(tf.pow(tf.abs(ecdf_p - ecdf_p_hat), r), axis=-1)
-        emd = tf.pow(emd, 1 / r)
-        return tf.reduce_mean(emd)
+#def tril_indices(n, k=0):
+#    """Return the indices for the lower-triangle of an (n, m) array.
+#    Works similarly to `np.tril_indices`
+#    Args:
+#      n: the row dimension of the arrays for which the returned indices will
+#        be valid.
+#      k: optional diagonal offset (see `np.tril` for details).
+#    Returns:
+#      inds: The indices for the triangle. The returned tuple contains two arrays,
+#        each with the indices along one dimension of the array.
+#    """
+#    m1 = tf.tile(tf.expand_dims(tf.range(n), axis=0), [n, 1])
+#    m2 = tf.tile(tf.expand_dims(tf.range(n), axis=1), [1, n])
+#    mask = (m1 - m2) >= -k
+#    ix1 = tf.boolean_mask(m2, tf.transpose(mask))
+#    ix2 = tf.boolean_mask(m1, tf.transpose(mask))
+#    return ix1, ix2
+#
+#
+#def ecdf(p):
+#    """Estimate the cumulative distribution function.
+#    The e.c.d.f. (empirical cumulative distribution function) F_n is a step
+#    function with jump 1/n at each observation (possibly with multiple jumps
+#    at one place if there are ties).
+#    For observations x= (x_1, x_2, ... x_n), F_n is the fraction of
+#    observations less or equal to t, i.e.,
+#    F_n(t) = #{x_i <= t} / n = 1/n \sum^{N}_{i=1} Indicator(x_i <= t).
+#    Args:
+#      p: a 2-D `Tensor` of observations of shape [batch_size, num_classes].
+#        Classes are assumed to be ordered.
+#    Returns:
+#      A 2-D `Tensor` of estimated ECDFs.
+#    """
+#    n = p.get_shape().as_list()[1]
+#    indices = tril_indices(n)
+#    indices = tf.transpose(tf.stack([indices[1], indices[0]]))
+#    ones = tf.ones([n * (n + 1) / 2])
+#    triang = tf.scatter_nd(indices, ones, [n, n])
+#    return tf.matmul(p, triang)
+#
+#
+#def emd_loss(p, p_hat, r=2, scope=None):
+#    """Compute the Earth Mover's Distance loss.
+#    Hou, Le, Chen-Ping Yu, and Dimitris Samaras. "Squared Earth Mover's
+#    Distance-based Loss for Training Deep Neural Networks." arXiv preprint
+#    arXiv:1611.05916 (2016).
+#    Args:
+#      p: a 2-D `Tensor` of the ground truth probability mass functions.
+#      p_hat: a 2-D `Tensor` of the estimated p.m.f.-s
+#      r: a constant for the r-norm.
+#      scope: optional name scope.
+#    `p` and `p_hat` are assumed to have equal mass as \sum^{N}_{i=1} p_i =
+#    \sum^{N}_{i=1} p_hat_i
+#    Returns:
+#      A 0-D `Tensor` of r-normed EMD loss.
+#    """
+#    with tf.name_scope(scope, 'EmdLoss', [p, p_hat]):
+#        ecdf_p = ecdf(p)
+#        ecdf_p_hat = ecdf(p_hat)
+#        emd = tf.reduce_mean(tf.pow(tf.abs(ecdf_p - ecdf_p_hat), r), axis=-1)
+#        emd = tf.pow(emd, 1 / r)
+#        return tf.reduce_mean(emd)
 
 def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
     print("loading data from ROOT files: {0}".format(filename_pattern))
@@ -435,6 +473,8 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
                 data["tracks_inner_phi"][iev][:maxtracks],
                 data["tracks_outer_eta"][iev][:maxtracks],
                 data["tracks_outer_phi"][iev][:maxtracks],
+                data["tracks_eta"][iev][:maxtracks],
+                data["tracks_phi"][iev][:maxtracks],
                 ], axis=1)
             ]
             ys_cand += [np.stack([
@@ -446,19 +486,43 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
             ]
     print("Loaded {0} events".format(len(Xs_cluster)))
 
-    #zero pad 
-    #for i in range(len(Xs_cluster)):
-    #    Xs_cluster[i] = np.pad(Xs_cluster[i], [(0, maxclusters - Xs_cluster[i].shape[0]), (0,0)], mode='constant')
-    #
-    #for i in range(len(Xs_track)):
-    #    Xs_track[i] = np.pad(Xs_track[i], [(0, maxtracks - Xs_track[i].shape[0]), (0,0)], mode='constant')
-    #
-    #for i in range(len(ys_cand)):
-    #    ys_cand[i] = np.pad(ys_cand[i], [(0,maxcands - ys_cand[i].shape[0]), (0,0)], mode='constant')
+    return Xs_cluster, Xs_track, ys_cand    
 
-    #Xs_cluster = np.stack(Xs_cluster, axis=0)
-    #Xs_track = np.stack(Xs_track, axis=0)
-    #ys_cand = np.stack(ys_cand, axis=0)
+def create_images(Xs_cluster, Xs_track, ys_cand, image_bins):
+    #convert lists of particles to images 
+    data_images_in = []
+    data_images_out = []
+    print("Creating images")
+    for i in range(len(Xs_cluster)):
+        h_in, h_out = to_image(i, Xs_cluster, Xs_track, ys_cand, image_bins)
+        h_out = h_out.reshape((h_out.shape[0], h_out.shape[1], 1))
+        #p_in, p_out = to_patches(h_in, h_out)
+        data_images_in += [h_in]
+        data_images_out += [h_out]
+        if i%10 == 0:
+            print("converted {0}/{1}".format(i, len(Xs_cluster)))
+    print("Generated data for {0} images".format(len(data_images_in)))
+
+    data_images_in = np.stack(data_images_in, axis=0)
+    data_images_out = np.stack(data_images_out, axis=0)
+    print("Stacked patches {0}".format(len(data_images_in)))
+    shuf = np.random.permutation(range(len(data_images_in)))
+    return data_images_in[shuf], data_images_out[shuf]
+
+def zeropad(Xs_cluster, Xs_track, ys_cand, maxclusters, maxtracks, maxcands):
+    #zero pad 
+    for i in range(len(Xs_cluster)):
+        Xs_cluster[i] = np.pad(Xs_cluster[i], [(0, maxclusters - Xs_cluster[i].shape[0]), (0,0)], mode='constant')
+    
+    for i in range(len(Xs_track)):
+        Xs_track[i] = np.pad(Xs_track[i], [(0, maxtracks - Xs_track[i].shape[0]), (0,0)], mode='constant')
+    
+    for i in range(len(ys_cand)):
+        ys_cand[i] = np.pad(ys_cand[i], [(0,maxcands - ys_cand[i].shape[0]), (0,0)], mode='constant')
+
+    Xs_cluster = np.stack(Xs_cluster, axis=0)
+    Xs_track = np.stack(Xs_track, axis=0)
+    ys_cand = np.stack(ys_cand, axis=0)
 
     #Xs_cluster, m1, s1 = normalize_and_reshape(Xs_cluster)
     #Xs_track, m2, s2 = normalize_and_reshape(Xs_track)
@@ -467,27 +531,7 @@ def load_data(filename_pattern, image_bins, maxclusters, maxtracks, maxcands):
     #Xs_cluster = Xs_cluster.reshape(Xs_cluster.shape[0], maxclusters, 4, 1)
     #Xs_track = Xs_track.reshape(Xs_track.shape[0], maxtracks, 5, 1)
     #ys_cand = ys_cand.reshape(ys_cand.shape[0], maxcands, 3)
-   
-    #convert lists of particles to images 
-    data_images_in = []
-    data_images_out = []
-    print("Creating images")
-    for i in range(len(Xs_cluster)):
-        h_in, h_out = to_image(i, Xs_cluster, Xs_track, ys_cand, image_bins)
-        p_in, p_out = to_patches(h_in, h_out)
-        data_images_in += [p_in]
-        data_images_out += [p_out]
-        if i%10 == 0:
-            print("converted {0}/{1}".format(i, len(Xs_cluster)))
-    print("Generated data for {0} images".format(len(data_images_in)))
-
-    data_images_in = np.vstack(data_images_in)
-    data_images_out = np.vstack(data_images_out)
-    print("Stacked patches {0}".format(len(data_images_in)))
-    data_images_out = data_images_out.reshape((data_images_out.shape[0], data_images_out.shape[1], data_images_out.shape[2], 1))
-    shuf = np.random.permutation(range(len(data_images_in)))
-    
-    return data_images_in[shuf], data_images_out[shuf]
+    return Xs_cluster, Xs_track, ys_cand
 
 def normalize_and_reshape(arr):
     arr = arr.reshape((arr.shape[0], arr.shape[1]*arr.shape[2]))
@@ -514,42 +558,95 @@ if __name__ == "__main__":
     from keras.layers.convolutional import UpSampling2D, Conv2D
     from keras.models import Sequential, Model
     from keras.optimizers import Adam
+    mydir = unique_folder()
 
-
-    input_rootfiles_pattern = "./data/TTbar/*.root"
-
-    maxclusters = -1
-    maxtracks = -1
-    maxcands = -1
-
-    image_bins = 256
-    input_channels = 3 #(calo cluster, inner track, outer track)
-    output_channels = 1 #(candidates)
-
-  
+#    maxclusters = -1
+#    maxtracks = -1
+#    maxcands = -1
+#
+#    image_bins = 256
+#    input_channels = 4 #(calo cluster, inner track, outer track, central track)
+#    output_channels = 1 #(candidates)
+#   
+#    data_images_in = [] 
+#    data_images_out = []
+#    filelist = [
+#        "./data/TTbar/step3_AOD_10.npz",
+#        "./data/TTbar/step3_AOD_11.npz",
+#        "./data/TTbar/step3_AOD_12.npz",
+#        "./data/TTbar/step3_AOD_13.npz"
+#    ] 
+#    for cache_filename in filelist: 
+#        with open(cache_filename, "rb") as fi:
+#            data = np.load(fi)
+#            data_images_in += [data["data_images_in"]] 
+#            data_images_out += [data["data_images_out"]]
+#    data_images_in = np.vstack(data_images_in)
+#    data_images_out = np.vstack(data_images_out)
+# 
+#    ntrain = int(0.8*len(data_images_in))
+#    #model = build_dense(image_bins, input_channels)
+#    #model.compile(loss="mse", optimizer=Adam(0.0001))
+#    #model.fit(
+#    #    data_images_in[:ntrain],
+#    #    data_images_out[:ntrain],
+#    #    validation_data=(data_images_in[ntrain:], data_images_out[ntrain:]),
+#    #    batch_size=10, epochs=100)
+#    #model.save("{0}/model.h5".format(mydir))
+#
+#    #model = Pix2Pix(mydir, image_bins, input_channels, output_channels)
+#    #model.train(
+#    #    data_images_in[:ntrain], data_images_out[:ntrain],
+#    #    epochs=50, batch_size=50)
+#    
+#    model = RegressionModel(mydir, image_bins, input_channels, output_channels)
+#    model.train(
+#        data_images_in[:ntrain], data_images_out[:ntrain],
+#        data_images_in[ntrain:], data_images_out[ntrain:],
+#        epochs=50, batch_size=50)
    
-    data_images_in = [] 
-    data_images_out = [] 
-    for cache_filename in glob.glob("./data/TTbar/*.npz"): 
+    Xs_cluster = [] 
+    Xs_track = [] 
+    ys_cand = [] 
+    filelist_train = [
+        "./data/TTbar/step3_AOD_10_flat.npz",
+        "./data/TTbar/step3_AOD_11_flat.npz",
+        "./data/TTbar/step3_AOD_12_flat.npz",
+        "./data/TTbar/step3_AOD_13_flat.npz",
+        "./data/TTbar/step3_AOD_14_flat.npz",
+        "./data/TTbar/step3_AOD_15_flat.npz",
+        "./data/TTbar/step3_AOD_16_flat.npz",
+        "./data/TTbar/step3_AOD_17_flat.npz",
+        "./data/TTbar/step3_AOD_18_flat.npz",
+        "./data/TTbar/step3_AOD_4_flat.npz",
+        "./data/TTbar/step3_AOD_5_flat.npz",
+        "./data/TTbar/step3_AOD_7_flat.npz",
+        "./data/TTbar/step3_AOD_8_flat.npz",
+        "./data/TTbar/step3_AOD_9_flat.npz",
+    ]
+    filelist_val = [
+        "./data/TTbar/step3_AOD_1_flat.npz",
+        "./data/TTbar/step3_AOD_2_flat.npz",
+        "./data/TTbar/step3_AOD_3_flat.npz",
+    ]
+    
+    for cache_filename in filelist_train: 
         with open(cache_filename, "rb") as fi:
             data = np.load(fi)
-            data_images_in += [data["data_images_in"]] 
-            data_images_out += [data["data_images_out"]]
-    data_images_in = np.vstack(data_images_in)
-    data_images_out = np.vstack(data_images_out)
+            Xs_cluster += [data["Xs_cluster"]] 
+            Xs_track += [data["Xs_track"]]
+            ys_cand += [data["ys_cand"]]
+    Xs_cluster = np.vstack(Xs_cluster)
+    Xs_track = np.vstack(Xs_track)
+    ys_cand = np.vstack(ys_cand)
+    Xs_track[np.isinf(Xs_track)] = 0.0
+    ntrain = int(0.8*len(Xs_cluster))
  
-    mydir = unique_folder()
-    model = build_dense(8)
-    model.compile(loss="mse", optimizer=Adam(0.0005))
-    #model = RegressionModel(mydir, image_bins, input_channels, output_channels)
-    ntrain = int(0.8*len(data_images_in))
+    model = build_dense_flat(Xs_cluster[0].shape, Xs_track[0].shape, ys_cand[0].shape)
+    model.compile(loss="mse", optimizer=Adam(0.0001))
+    print(model.summary())
     model.fit(
-        data_images_in[:ntrain],
-        data_images_out[:ntrain],
-        validation_data=(data_images_in[ntrain:], data_images_out[ntrain:]),
-        batch_size=4096, epochs=100)
-    model.save("{0}/model.h5".format(mydir))
-    #model.train(
-    #    data_images_in[:ntrain], data_images_out[:ntrain],
-    #    data_images_in[ntrain:], data_images_out[ntrain:],
-    #    epochs=50, batch_size=50)
+        [Xs_cluster[:ntrain], Xs_track[:ntrain]], ys_cand[:ntrain],
+        validation_data=[[Xs_cluster[ntrain:], Xs_track[ntrain:]], ys_cand[ntrain:]],
+        epochs=50, batch_size=10)
+    model.save("{0}/model_flat.h5".format(mydir))
