@@ -1,32 +1,29 @@
 
-import uproot
 import numpy as np
 import os
 import os.path as osp
 import torch
 from torch_geometric.data import Dataset, Data
 import itertools
+from glob import glob
 
 class PFGraphDataset(Dataset):
-    def __init__(self, root, transform=None, pre_transform=None, connect_all=False, maxclusters=100, maxtracks=100, maxcands=100):
+    def __init__(self, root, transform=None, pre_transform=None, connect_all=False, max_elements=1000, max_candidates=1000):
         self._connect_all = connect_all
-        self._maxclusters = maxclusters
-        self._maxtracks = maxtracks
-        self._maxcands = maxcands
+        self._max_elements = max_elements
+        self._max_candidates = max_candidates
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
 
     @property
     def raw_file_names(self):
-        return ['step3_AOD_ntuple.root']
+        raw_list = glob(self.raw_dir+'/*.npz')
+        print(raw_list)              
+        return [l.replace(self.raw_dir,'.') for l in raw_list]
 
     @property
     def processed_file_names(self):
         nevents = 0
-        for raw_file_name in self.raw_file_names:
-            fi = uproot.open(osp.join(self.raw_dir, raw_file_name))
-            tree = fi.get("pftree")
-            nevents += len(tree)
-        return ['data_{}.pt'.format(i) for i in range(nevents)]
+        return ['data_{}.pt'.format(i) for i in range(len(self.raw_file_names))]
 
     def __len__(self):
         return len(self.processed_file_names)
@@ -35,146 +32,45 @@ class PFGraphDataset(Dataset):
         # Download to `self.raw_dir`.
         pass
 
-    def load_data(self):
-        for raw_file_name in self.raw_file_names:
-            print("loading data from ROOT files: {0}".format(osp.join(self.raw_dir, raw_file_name)))
-        Xs_cluster = []
-        Xs_track = []
-        ys_cand = []
-        
-        for fn in self.raw_file_names:
-            try:
-                fi = uproot.open(osp.join(self.raw_dir, raw_file_name))
-                tree = fi.get("pftree")
-            except Exception as e:
-                print("Could not open file {0}".format(fn))
-                continue
-            data = tree.arrays(tree.keys())
-            data = {str(k, 'ascii'): v for k, v in data.items()}
-            for iev in range(len(tree)):
-                pt = data["pfcands_pt"][iev]
-                eta = data["pfcands_eta"][iev]
-                phi = data["pfcands_phi"][iev]
-                charge = data["pfcands_charge"][iev]
-    
-                Xs_cluster += [np.stack([
-                    data["clusters_energy"][iev][:self._maxclusters],
-                    data["clusters_eta"][iev][:self._maxclusters],
-                    data["clusters_phi"][iev][:self._maxclusters],
-                    data["clusters_npfcands"][iev][:self._maxclusters],
-                    data["clusters_ipfcand0"][iev][:self._maxclusters],
-                    data["clusters_ipfcand1"][iev][:self._maxclusters],
-                    data["clusters_ipfcand2"][iev][:self._maxclusters],
-                    data["clusters_ipfcand3"][iev][:self._maxclusters],
-                ], axis=1)
-                           ]
-                Xs_track += [np.stack([
-                    np.abs(1.0/data["tracks_qoverp"][iev][:self._maxtracks]),
-                    data["tracks_inner_eta"][iev][:self._maxtracks],
-                    data["tracks_inner_phi"][iev][:self._maxtracks],
-                    data["tracks_outer_eta"][iev][:self._maxtracks],
-                    data["tracks_outer_phi"][iev][:self._maxtracks],
-                    data["tracks_npfcands"][iev][:self._maxtracks],
-                    data["tracks_ipfcand0"][iev][:self._maxtracks],
-                    data["tracks_ipfcand1"][iev][:self._maxtracks],
-                    data["tracks_ipfcand2"][iev][:self._maxtracks],
-                    data["tracks_ipfcand3"][iev][:self._maxtracks],
-                ], axis=1)
-                         ]
-                ys_cand += [np.stack([
-                    pt[:self._maxcands],
-                    eta[:self._maxcands],
-                    phi[:self._maxcands],
-                    charge[:self._maxcands]
-                ], axis=1)
-                        ]
-        print("Loaded {0} events".format(len(Xs_cluster)))
-
-        #zero pad 
-        real_maxclusters = np.array([Xs_cluster[i].shape[0] for i in range(len(Xs_cluster))])
-        for i in range(len(Xs_cluster)):
-            Xs_cluster[i] = np.pad(Xs_cluster[i], [(0, self._maxclusters - Xs_cluster[i].shape[0]), (0,0)], mode='constant')
-        
-        real_maxtracks = np.array([Xs_track[i].shape[0] for i in range(len(Xs_cluster))])
-        for i in range(len(Xs_track)):
-            Xs_track[i] = np.pad(Xs_track[i], [(0, self._maxtracks - Xs_track[i].shape[0]), (0,0)], mode='constant')
-    
-        real_maxcands = np.array([ys_cand[i].shape[0] for i in range(len(ys_cand))])
-        for i in range(len(ys_cand)):
-            ys_cand[i] = np.pad(ys_cand[i], [(0, self._maxcands - ys_cand[i].shape[0]), (0,0)], mode='constant')
-        
-        Xs_cluster = np.stack(Xs_cluster, axis=0)
-        Xs_track = np.stack(Xs_track, axis=0)
-        ys_cand = np.stack(ys_cand, axis=0)
-
-        Xs_cluster = Xs_cluster.reshape(Xs_cluster.shape[0], self._maxclusters, 3+5)
-        Xs_track = Xs_track.reshape(Xs_track.shape[0], self._maxtracks, 5+5)
-        ys_cand = ys_cand.reshape(ys_cand.shape[0], self._maxcands, 4)
-
-        return Xs_cluster, Xs_track, ys_cand, real_maxclusters, real_maxtracks, real_maxcands
-
     def process(self):
 
-        def checkForMatchingPFCand(first, second, pairs):
-            match = np.zeros(len(pairs))
-            for k, (i,j) in enumerate(pairs):
-                first_npfcands = int(first[i, -5])
-                second_npfcands = int(second[j, -5])
-                first_ipfcands = first[i, -4:-4+first_npfcands]
-                second_ipfcands = second[j, -4:-4+second_npfcands]
-                match[k] = any(np.isin(first_ipfcands, second_ipfcands))
-            return match
-
         def withinDeltaR(first, second, dr=1.0):
-            eta1 = first[1]
-            eta2 = second[1]
-            phi1 = first[2]
-            phi2 = second[2]
+            eta1 = first[2]
+            eta2 = second[2]
+            phi1 = first[3]
+            phi2 = second[3]
             deta = np.abs(eta1 - eta2)
             dphi = np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
             dr2 = dr*dr
             return ((deta**2 + dphi**2) < dr2)
             
-        feature_scale = np.array([1., 1., 1.])
-        feature_scale_track = np.array([1., 1., 1., 1., 1.])
-
-        Xs_cluster, Xs_track, ys_cand, real_maxclusters, real_maxtracks, real_maxcands = self.load_data()
+        feature_scale = np.array([1., 1., 1., 1., 1., 1., 1., 1.])
         i = 0
-        for event in range(Xs_cluster.shape[0]):
+        for raw_file_name in self.raw_file_names:
+            print("loading data from files: {0}".format(osp.join(self.raw_dir, raw_file_name)))
+            try:
+                fi = np.load(osp.join(self.raw_dir, raw_file_name))
+            except Exception as e:
+                print("Could not open file {0}".format(osp.join(self.raw_dir, raw_file_name)))
+                continue
+            X_elements = fi['elements'][:self._max_elements]
+            X_element_block_id = fi['element_block_id'][:self._max_elements]
+            y_candidates = fi['candidates'][:self._max_candidates]
+            y_candidate_block_id = fi['candidate_block_id'][:self._max_candidates]
+            num_elements = X_elements.shape[0]
+            
             if self._connect_all:
-                pairs = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxclusters[event]))) if i!=j]
-                pairs_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxtracks[event])),range(int(real_maxtracks[event]))) if i!=j]
-                pairs_cluster_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxtracks[event])))]
+                pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if i!=j]
             else:
-                pairs = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxclusters[event]))) if (i!=j and withinDeltaR(Xs_cluster[event,i,:], Xs_cluster[event,j,:]))]
-                pairs_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxtracks[event])),range(int(real_maxtracks[event]))) if (i!=j and withinDeltaR(Xs_track[event,i,:], Xs_track[event,j,:]))]
-                pairs_cluster_track = [[i, j] for (i, j) in itertools.product(range(int(real_maxclusters[event])),range(int(real_maxtracks[event]))) if withinDeltaR(Xs_cluster[event,i,:], Xs_track[event,j,:])]
+                pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if (i!=j and withinDeltaR(X_elements[i,:], X_elements[j,:]))]
             edge_index = torch.tensor(pairs, dtype=torch.long)
             edge_index = edge_index.t().contiguous()
-            edge_index_track = torch.tensor(pairs_track, dtype=torch.long)
-            edge_index_track = edge_index_track.t().contiguous()
-            edge_index_cluster_track = torch.tensor(pairs_cluster_track, dtype=torch.long)
-            edge_index_cluster_track = edge_index_cluster_track.t().contiguous()
-            x = torch.tensor(Xs_cluster[event,:,:-5]/feature_scale, dtype=torch.float)
-            x_track = torch.tensor(Xs_track[event,:,:-5]/feature_scale_track, dtype=torch.float)
+            x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
 
-            #y = torch.tensor(ys_cand, dtype=torch.float)
-
-            y = checkForMatchingPFCand(Xs_cluster[event], Xs_cluster[event], pairs)
+            y = [X_element_block_id[i]==X_element_block_id[j] for (i,j) in pairs]
             y = torch.tensor(y, dtype=torch.float)
 
-            y_track = checkForMatchingPFCand(Xs_track[event], Xs_track[event], pairs_track)
-            y_track = torch.tensor(y_track, dtype=torch.float)
-
-            y_cluster_track = checkForMatchingPFCand(Xs_cluster[event], Xs_track[event], pairs_cluster_track)
-            y_cluster_track = torch.tensor(y_cluster_track, dtype=torch.float)
-
             data = Data(x=x, edge_index=edge_index, y=y)
-            data.x_track = x_track
-            data.edge_index_track = edge_index_track
-            data.edge_index_cluster_track = edge_index_cluster_track
-            data.y_track = y_track
-            data.y_cluster_track = y_cluster_track
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
@@ -191,5 +87,5 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,maxclusters=100,maxtracks=100,maxcands=100)
+    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,max_elements=100,max_candidates=100)
 
