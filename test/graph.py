@@ -179,14 +179,21 @@ if __name__ == "__main__":
 
     all_sgs = []
     for iev in range(len(data)):
+        #Create a graph of the elements and candidates
         pfgraph = create_graph_elements_candidates(data, data_elemtocand, iev)
+        
+        #Find disjoint subgraphs
         sgs, elem_to_newblock, cand_to_newblock = analyze_graph_subgraph_elements(pfgraph)
+        
+        #Create arrays from subgraphs
         elements, block_id, pfcands, cand_block_id = prepare_data(data, data_elemtocand, elem_to_newblock, cand_to_newblock, iev)
 
+        #save the all the elements, candidates and the miniblock id
         cache_filename = fn.replace(".root", "_ev{0}.npz".format(iev))
         with open(cache_filename, "wb") as fi:
             np.savez(fi, elements=elements, element_block_id=block_id, candidates=pfcands, candidate_block_id=cand_block_id)
-     
+    
+        #save the miniblocks separately (Xs - all miniblocks in event, ys - all candidates made from each block) 
         Xs, ys = get_unique_X_y(elements, block_id, pfcands, cand_block_id)
         cache_filename = fn.replace(".root", "_cl{0}.npz".format(iev))
         with open(cache_filename, "wb") as fi:
