@@ -53,7 +53,7 @@ make cache
 - October 9, 2019
   - /RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW
   - size: 9000 events
-  - code version: 912fb7e 
+  - code version: 712e6d6
   - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_13/pfvalidation/191004_163947/0000/step3_AOD*.root
   - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.root
   - npy: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.npz 
