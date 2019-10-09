@@ -6,9 +6,10 @@ import torch
 from torch_geometric.data import Dataset, Data
 import itertools
 from glob import glob
+import numba
 
 class PFGraphDataset(Dataset):
-    def __init__(self, root, transform=None, pre_transform=None, connect_all=False, max_elements=1000, max_candidates=1000):
+    def __init__(self, root, transform=None, pre_transform=None, connect_all=False, max_elements=None, max_candidates=None):
         self._connect_all = connect_all
         self._max_elements = max_elements
         self._max_candidates = max_candidates
@@ -17,12 +18,10 @@ class PFGraphDataset(Dataset):
     @property
     def raw_file_names(self):
         raw_list = glob(self.raw_dir+'/*.npz')
-        print(raw_list)              
         return [l.replace(self.raw_dir,'.') for l in raw_list]
 
     @property
     def processed_file_names(self):
-        nevents = 0
         return ['data_{}.pt'.format(i) for i in range(len(self.raw_file_names))]
 
     def __len__(self):
@@ -34,11 +33,12 @@ class PFGraphDataset(Dataset):
 
     def process(self):
 
-        def withinDeltaR(first, second, dr=1.0):
-            eta1 = first[2]
-            eta2 = second[2]
-            phi1 = first[3]
-            phi2 = second[3]
+        @numba.njit(parallel=True,fastmath=True)
+        def withinDeltaR(first, second, dr=0.4):
+            eta1 = first[:,2]
+            eta2 = second[:,2]
+            phi1 = first[:,3]
+            phi2 = second[:,3]
             deta = np.abs(eta1 - eta2)
             dphi = np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
             dr2 = dr*dr
@@ -59,10 +59,13 @@ class PFGraphDataset(Dataset):
             y_candidate_block_id = fi['candidate_block_id'][:self._max_candidates]
             num_elements = X_elements.shape[0]
             
-            if self._connect_all:
-                pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if i!=j]
-            else:
-                pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if (i!=j and withinDeltaR(X_elements[i,:], X_elements[j,:]))]
+            pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if i!=j]
+            if not self._connect_all:
+                pairs = np.array(pairs)
+                a, b = pairs.T
+                withinDR = withinDeltaR(X_elements[a,:], X_elements[b,:])
+                pairs = pairs[withinDR]
+                
             edge_index = torch.tensor(pairs, dtype=torch.long)
             edge_index = edge_index.t().contiguous()
             x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
@@ -87,5 +90,5 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,max_elements=100,max_candidates=100)
+    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,max_elements=None,max_candidates=None)
 

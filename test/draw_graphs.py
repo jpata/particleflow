@@ -20,22 +20,20 @@ def main(args):
     
     data = full_dataset.get(0)
 
-    features = ["clusters_energy",
-                "clusers_eta",
-                "clusters_phi"]
-    feature_scale = np.array([1., 1., 1.])
-    df = pd.DataFrame(data.x.cpu().detach().numpy()*feature_scale, columns=features)
+    features = ["eta",
+                "phi"]
 
-    mask = np.abs(df['clusters_energy'])>0
-    df = df[mask]
+    df = pd.DataFrame(data.x.cpu().detach().numpy()[:,2:4], columns=features)
+
     row, col = data.edge_index.cpu().detach().numpy()    
     y_truth = data.y.cpu().detach().numpy()
+    print(len(y_truth))
     print(sum(y_truth))
 
-    for x,y in [('clusers_eta', 'clusters_phi')]:
+    for x,y in [('eta', 'phi')]:
         plt.figure()       
         k = 0
-        for i, j in tqdm.tqdm(zip(row, col)):
+        for i, j in tqdm.tqdm(zip(row, col),total=len(y_truth)):
             seg_args = dict(c='b',alpha=0.1,zorder=1)
             plt.plot([df[x][i], df[x][j]],
                      [df[y][i], df[y][j]], '-', **seg_args)
