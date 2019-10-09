@@ -25,8 +25,13 @@ git clone https://github.com/jpata/particleflow.git workspace/particleflow
 ## Small standalone example
 ```bash
 cmsRun test/step3.py
+
 python3 test/ntuplizer.py ./data step3_AOD.root
 root -l ./data/step3_AOD.root
+
+python3 test/graph.py ./data/step3_AOD.root
+ls ./data/step3_AOD_*.npz
+
 ```
 
 ## Running on grid
@@ -36,7 +41,7 @@ cd test
 python multicrab.py
 cd ..
 
-#Make the ROOT ntuple
+#Make the ROOT ntuple (edit Makefile first)
 make ntuples
 
 #make the numpy cache
