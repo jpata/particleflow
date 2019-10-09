@@ -152,6 +152,27 @@ def prepare_data(data, data_elemtocand, elem_to_newblock, cand_to_newblock, iev)
     
     return X, y, cand_data, cand_block_id
 
+def get_unique_X_y(X, Xbl, y, ybl):
+    uniqs = np.unique(Xbl)
+    
+    Xs = []
+    ys = []
+    for bl in uniqs:
+        subX = X[Xbl==bl]
+        suby = y[ybl==bl]
+        
+        #choose only miniblocks with 3 elements to simplify the problem
+        if len(subX) >= 3:
+            continue
+            
+        subX = np.pad(subX, ((0, 3 - subX.shape[0]), (0,0)), mode="constant")
+        suby = np.pad(suby, ((0, 3 - suby.shape[0]), (0,0)), mode="constant")
+        
+        Xs += [subX]
+        ys += [suby]
+        
+    return Xs, ys
+
 if __name__ == "__main__":
     fn = sys.argv[1]
     data, data_elemtocand = load_file(fn)
@@ -161,9 +182,16 @@ if __name__ == "__main__":
         pfgraph = create_graph_elements_candidates(data, data_elemtocand, iev)
         sgs, elem_to_newblock, cand_to_newblock = analyze_graph_subgraph_elements(pfgraph)
         elements, block_id, pfcands, cand_block_id = prepare_data(data, data_elemtocand, elem_to_newblock, cand_to_newblock, iev)
+
         cache_filename = fn.replace(".root", "_ev{0}.npz".format(iev))
         with open(cache_filename, "wb") as fi:
             np.savez(fi, elements=elements, element_block_id=block_id, candidates=pfcands, candidate_block_id=cand_block_id)
+     
+        Xs, ys = get_unique_X_y(elements, block_id, pfcands, cand_block_id)
+        cache_filename = fn.replace(".root", "_cl{0}.npz".format(iev))
+        with open(cache_filename, "wb") as fi:
+            np.savez(fi, Xs=Xs, ys=ys)
+
         all_sgs += sgs
    
     block_sizes = Counter([len(sg) for sg in all_sgs])

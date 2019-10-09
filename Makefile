@@ -4,4 +4,4 @@ ntuples:
 	./test/run_ntuple.sh /mnt/hadoop/store/user/jpata/RelValTTbar_13/pfvalidation/191004_163947/0000/ ./data/TTbar
 
 cache:
-	\ls -1 ./data/TTbar/*.root | xargs -n 1 -P 8 singularity exec --nv -B /storage /storage/group/gpu/software/singularity/ibanks/edge.simg python3 test/cache.py	
+	\ls -1 ./data/TTbar/*.root | xargs -n 1 -P 8 singularity exec --nv -B /storage /storage/group/gpu/software/singularity/ibanks/edge.simg python3 test/graph.py	
