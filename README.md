@@ -50,15 +50,15 @@ make cache
 
 ## Datasets
 
-- October 7, 2019
+- October 9, 2019
   - /RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW
   - size: 9000 events
   - code version: 912fb7e 
   - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_13/pfvalidation/191004_163947/0000/step3_AOD*.root
-  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191007_162300/step3_AOD_*.root
-  - npy: /storage/user/jpata/particleflow/data/TTbar/191007_162300/step3_AOD_*.npz 
+  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.root
+  - npy: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.npz 
 
-## Contents of the output ntuple
+## Contents of the ROOT output ntuple
 
 The TTree `pftree` contains the elements, candidates and genparticles:
 - clusters ([PFRecCluster](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowReco/interface/PFCluster.h))
@@ -151,3 +151,7 @@ root [4] linktree_elemtocand->Scan("linkdata_elemtocand_iblock:linkdata_elemtoca
 *        0 *       13 *         1 *        25 *       120 *
 *        0 *       14 *         1 *        25 *       484 *
 ```
+
+## Contents of the numpy output ntuple
+
+TBD
