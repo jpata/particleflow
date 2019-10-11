@@ -67,8 +67,10 @@ if __name__ == "__main__":
     print("scaler_X", scaler_X.get_params())
     print("scaler_y", scaler_y.get_params())
 
-    enc_X = sklearn.preprocessing.OneHotEncoder(categories="auto", sparse=False)
-    enc_y = sklearn.preprocessing.OneHotEncoder(categories="auto", sparse=False)
+    cluster_types = np.unique(all_Xs_types.flatten())
+    pdgid_types = np.unique(all_ys_types.flatten())
+    enc_X = sklearn.preprocessing.OneHotEncoder(categories=3*[cluster_types], sparse=False)
+    enc_y = sklearn.preprocessing.OneHotEncoder(categories=3*[pdgid_types], sparse=False)
     enc_X.fit(all_Xs_types)
     enc_y.fit(all_ys_types)
    

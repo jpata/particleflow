@@ -194,7 +194,7 @@ if __name__ == "__main__":
     model2 = keras.models.load_model("data/regression.h5")
     with open("data/preprocessing.pkl", "rb") as fi:
         preproc = pickle.load(fi)
-    num_onehot_y = 22 #determined by enc_y in train_regression
+    num_onehot_y = 27 #determined by enc_y in train_regression
 
     for iev in range(500):
         fn = "data/TTbar/191009_155100/step3_AOD_2_ev{0}.npz".format(iev)
