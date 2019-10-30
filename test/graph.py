@@ -151,7 +151,8 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
 
     #Fill the distance matrix between all elements
     nelem = len(X1) + len(X2)
-    dist_matrix = scipy.sparse.dok_matrix((nelem, nelem), dtype=np.float32)
+    #dist_matrix = scipy.sparse.dok_matrix((nelem, nelem), dtype=np.float32)
+    dist_matrix = np.zeros((nelem, nelem))
     bls = data_elemtoelem["linkdata_iblock"][iev]
     el1 = data_elemtoelem["linkdata_ielem"][iev]
     el2 = data_elemtoelem["linkdata_jelem"][iev]
@@ -161,7 +162,7 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
     elem_ielem = np.hstack([data["clusters_ielem"][iev], data["tracks_ielem"][iev]])
 
     fill_dist_matrix(dist_matrix, elem_blk, elem_ielem, nelem, elem_to_elem)     
-
+    dist_matrix_sparse = scipy.sparse.dok_matrix(dist_matrix)
     X1p = np.pad(X1, ((0,0),(0, X2.shape[1] - X1.shape[1])), mode="constant")
     X = np.vstack([X1p, X2])
     y = np.concatenate([ys1, ys2])
@@ -181,7 +182,7 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         data["genparticles_phi"][iev],
     ]).T
     
-    return X, y, cand_data, cand_block_id, dist_matrix
+    return X, y, cand_data, cand_block_id, dist_matrix_sparse
 
 def get_unique_X_y(X, Xbl, y, ybl, maxn=3):
     uniqs = np.unique(Xbl)

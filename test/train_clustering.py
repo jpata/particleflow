@@ -10,6 +10,7 @@ import sklearn.metrics
 import sklearn.ensemble
 import scipy.sparse
 import keras
+import json
 
 @numba.njit
 def fill_target_matrix(mat, blids):
@@ -44,18 +45,27 @@ def fill_elem_pairs(elem_pairs_X, elem_pairs_y, elems, dm, target_matrix):
                 n += 1
     return n
 
+#Given an event file, creates a list of all the elements pairs that have a non-infinite distance as per PFAlgo
+#Will produce the X vector with [n_elem_pairs, 3], where the columns are (elem1_type, elem2_type, dist)
+#and an y vector (classification target) with [n_elem_pairs, 1], where the value is 0 or 1, depending
+#on if the elements are in the same miniblock according to PFAlgo
 def load_element_pairs(fn):
+
+    #Load the elements
     fi = open(fn, "rb")
     data = np.load(fi)
     els = data["elements"]
     els_blid = data["element_block_id"]
 
+    #Load the distance matrix
     fi = open(fn.replace("ev", "dist"), "rb")
     dm = scipy.sparse.load_npz(fi).todense()
     
+    #Create the matrix of elements thar are connected according to the miniblock id
     target_matrix = np.zeros((len(els_blid), len(els_blid)), dtype=np.int32)
     fill_target_matrix(target_matrix, els_blid)
 
+    #Fill the element pairs
     elem_pairs_X = np.zeros((20000,3), dtype=np.float32)
     elem_pairs_y = np.zeros((20000,1), dtype=np.float32)
     n = fill_elem_pairs(elem_pairs_X, elem_pairs_y, els, dm, target_matrix)
@@ -65,14 +75,17 @@ def load_element_pairs(fn):
     
     return elem_pairs_X, elem_pairs_y
 
-
 if __name__ == "__main__":
     all_elem_pairs_X = []
     all_elem_pairs_y = []
-    for i in range(500):
-        elem_pairs_X, elem_pairs_y = load_element_pairs("data/TTbar/191009_155100/step3_AOD_1_ev{0}.npz".format(i))
-        all_elem_pairs_X += [elem_pairs_X]
-        all_elem_pairs_y += [elem_pairs_y]
+    
+    for i in range(1,6):
+        for j in range(500):
+            fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
+            print("Loading {0}".format(fn))
+            elem_pairs_X, elem_pairs_y = load_element_pairs(fn)
+            all_elem_pairs_X += [elem_pairs_X]
+            all_elem_pairs_y += [elem_pairs_y]
         
     elem_pairs_X = np.vstack(all_elem_pairs_X)
     elem_pairs_y = np.vstack(all_elem_pairs_y)
@@ -109,9 +122,14 @@ if __name__ == "__main__":
     model.add(keras.layers.BatchNormalization())
     
     model.add(keras.layers.advanced_activations.LeakyReLU())
+    model.add(keras.layers.Dropout(dropout))
+    model.add(keras.layers.Dense(nunit))
+    model.add(keras.layers.BatchNormalization())
+    
+    model.add(keras.layers.advanced_activations.LeakyReLU())
     model.add(keras.layers.Dense(1, activation="sigmoid"))
     
-    opt = keras.optimizers.Adam(lr=1e-3)
+    opt = keras.optimizers.Adam(lr=1e-4)
     
     model.compile(loss="binary_crossentropy", optimizer=opt)
     model.summary()
@@ -128,4 +146,11 @@ if __name__ == "__main__":
 
     print(confusion)
 
+    training_info = {
+        "loss": ret.history["loss"],
+        "val_loss": ret.history["val_loss"]
+    }
+
+    with open("clustering.json", "w") as fi:
+        json.dump(training_info, fi)
     model.save("clustering.h5")

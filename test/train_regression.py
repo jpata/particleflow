@@ -11,7 +11,10 @@ import sklearn.ensemble
 import scipy.sparse
 import keras
 import pickle
+import json
 
+#Get miniblocks up to size blsize (discarding others)
+#Predict up to maxn candidates
 def get_unique_X_y(X, Xbl, y, ybl, blsize=3, maxn=3):
     uniqs = np.unique(Xbl)
 
@@ -36,14 +39,17 @@ if __name__ == "__main__":
     all_Xs = []
     all_ys = []
     
-    for fi in glob.glob("data/TTbar/step3_AOD_1_ev*.npz"):
-        fi = open(fi, "rb")
-        data = np.load(fi)
-        
-        Xs, ys = get_unique_X_y(data["elements"], data["element_block_id"], data["candidates"], data["candidate_block_id"])
+    for i in range(1,6):
+        for j in range(500):
+            fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
+            print("Loading {0}".format(fn))
+            fi = open(fn, "rb")
+            data = np.load(fi)
+            
+            Xs, ys = get_unique_X_y(data["elements"], data["element_block_id"], data["candidates"], data["candidate_block_id"])
     
-        all_Xs += [Xs]
-        all_ys += [ys]
+            all_Xs += [Xs]
+            all_ys += [ys]
         
     all_Xs = np.vstack(all_Xs)
     all_ys = np.vstack(all_ys)
@@ -87,7 +93,7 @@ if __name__ == "__main__":
 
     model = keras.models.Sequential()
 
-    nunit = 128
+    nunit = 512
     dropout = 0.2
     
     model.add(keras.layers.Dense(nunit, input_shape=(X.shape[1], )))
@@ -113,9 +119,22 @@ if __name__ == "__main__":
     model.add(keras.layers.BatchNormalization())
     
     model.add(keras.layers.advanced_activations.LeakyReLU())
+    model.add(keras.layers.Dropout(dropout))
+    model.add(keras.layers.Dense(nunit))
+    model.add(keras.layers.BatchNormalization())
+    
+    model.add(keras.layers.advanced_activations.LeakyReLU())
+    model.add(keras.layers.Dropout(dropout))
+    model.add(keras.layers.Dense(nunit))
+    model.add(keras.layers.BatchNormalization())
+    
+    model.add(keras.layers.advanced_activations.LeakyReLU())
+    model.add(keras.layers.Dropout(dropout))
+    model.add(keras.layers.Dense(nunit))
+    
     model.add(keras.layers.Dense(y.shape[1]))
     
-    opt = keras.optimizers.Adam(lr=1e-3)
+    opt = keras.optimizers.Adam(lr=1e-4)
     
     model.compile(loss="mse", optimizer=opt)
     model.summary()
@@ -124,9 +143,16 @@ if __name__ == "__main__":
     ret = model.fit(
         X[:ntrain], y[:ntrain],
         validation_data=(X[ntrain:], y[ntrain:]),
-        batch_size=1000, epochs=100
+        batch_size=1000, epochs=200
     )
     model.save("regression.h5")
+    
+    training_info = {
+        "loss": ret.history["loss"],
+        "val_loss": ret.history["val_loss"]
+    }
+    with open("regression.json", "w") as fi:
+        json.dump(training_info, fi)
 
     pp = model.predict(X, batch_size=10000)
     pred_types = enc_y.inverse_transform(pp[:, :num_onehot_y])
@@ -140,9 +166,6 @@ if __name__ == "__main__":
     msk_1true = np.zeros(len(X), dtype=np.bool)
     msk_1true[ncands_true==1] = 1
     
-    msk_1pred = np.zeros(len(X), dtype=np.bool)
-    msk_1pred[ncands==1] = 1
-    
     msk_2true = np.zeros(len(X), dtype=np.bool)
     msk_2true[ncands_true==2] = 1
     
@@ -152,6 +175,6 @@ if __name__ == "__main__":
     cmatrix_ncands = sklearn.metrics.confusion_matrix(ncands_true[msk_test], ncands[msk_test], labels=[0,1,2,3])
     print(cmatrix_ncands)
 
-    labels = np.unique(all_ys_types)
-    mat = sklearn.metrics.confusion_matrix(all_ys_types[msk_test & msk_1true, 0], pp_candids[msk_test & msk_1true, 0], labels=labels)
-    print(mat) 
+    #labels = np.unique(all_ys_types)
+    #mat = sklearn.metrics.confusion_matrix(all_ys_types[msk_test & msk_1true, 0], pp_candids[msk_test & msk_1true, 0], labels=labels)
+    #print(mat) 
