@@ -66,6 +66,7 @@ class DummyPFAlgo:
         ncands_true = []
         ncands_pred = []
 
+        #Check for each block how many candidates were produced (true & predicted)
         for ibl in np.unique(cands_true_blockid):
             msk1 = cands_true_blockid==ibl
             msk2 = cands_pred_blockid==ibl
@@ -129,7 +130,7 @@ class BaselineDNN(DummyPFAlgo):
         self.num_onehot_y = 27
 
     def predict_candidates(self, elements, element_block_id):
-        Xs, Xs_blid = get_unique(elements, element_block_id)
+        Xs, Xs_blid = get_unique(elements, element_block_id, np.unique(element_block_id))
         Xs2 = np.stack(Xs, axis=0)
         Xs_types = Xs2[:, :, 0]
         Xs_kin = Xs2[:, :, 1:]
@@ -148,6 +149,7 @@ class BaselineDNN(DummyPFAlgo):
         set_pred_to_zero(cand_momenta, ncand)
 
         pred_cands, pred_cand_blid = fill_cand_vector(cand_types, ncand, cand_momenta, Xs_blid)
+        print(pred_cands)
         return pred_cands, pred_cand_blid
 
     def predict_clusters(self, elements, distance_matrix):
@@ -204,12 +206,11 @@ def load_elements_candidates(fn):
 if __name__ == "__main__":
     m = BaselineDNN()
 
-    fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(1, 60)
+    fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(1, 0)
     els, els_blid, cands, cands_blid, dm = load_elements_candidates(fn)
     #els_blid_pred = m.predict_clusters(els, dm)
     #score_clustering = m.assess_clustering(dm, els_blid, els_blid_pred)
     cands_pred, cands_pred_blid = m.predict_candidates(els, els_blid)
-    print(cands_pred_blid)
     score_cands = m.assess_candidates(cands, cands_pred, cands_blid, cands_pred_blid)
     #print(score_clustering)
     print(score_cands)

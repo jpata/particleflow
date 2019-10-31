@@ -17,9 +17,7 @@ import keras
 import pickle
 import json
 
-def get_unique(X, Xbl, blsize=3):
-    uniqs = np.unique(Xbl)
-
+def get_unique(X, Xbl, uniqs, blsize=3):
     Xs = []
     Xs_blid = []
     for bl in uniqs:
@@ -37,8 +35,10 @@ def get_unique(X, Xbl, blsize=3):
 #Get miniblocks up to size blsize (discarding others)
 #Predict up to maxn candidates
 def get_unique_X_y(X, Xbl, y, ybl, max_blsize=3, max_candsize=3):
-    Xs, _ = get_unique(X, Xbl, max_blsize)
-    ys, _ = get_unique(y, ybl, max_candsize)
+    Xs, _ = get_unique(X, Xbl, np.unique(Xbl), max_blsize)
+
+    #must get according to Xbl
+    ys, _ = get_unique(y, ybl, np.unique(Xbl), max_candsize)
     return Xs, ys
 
 if __name__ == "__main__":
@@ -53,12 +53,13 @@ if __name__ == "__main__":
             data = np.load(fi)
             
             Xs, ys = get_unique_X_y(data["elements"], data["element_block_id"], data["candidates"], data["candidate_block_id"])
-    
-            all_Xs += [Xs]
-            all_ys += [ys]
-        
-    all_Xs = np.vstack(all_Xs)
-    all_ys = np.vstack(all_ys)
+
+            all_Xs += Xs
+            all_ys += ys
+
+    all_Xs = np.stack(all_Xs, axis=0)
+    all_ys = np.stack(all_ys, axis=0)
+    print(all_Xs.shape, all_ys.shape)
     
     shuf = np.random.permutation(range(len(all_Xs)))
     all_Xs = all_Xs[shuf]
@@ -99,7 +100,7 @@ if __name__ == "__main__":
 
     model = keras.models.Sequential()
 
-    nunit = 512
+    nunit = 128
     dropout = 0.2
     
     model.add(keras.layers.Dense(nunit, input_shape=(X.shape[1], )))
@@ -132,15 +133,10 @@ if __name__ == "__main__":
     model.add(keras.layers.advanced_activations.LeakyReLU())
     model.add(keras.layers.Dropout(dropout))
     model.add(keras.layers.Dense(nunit))
-    model.add(keras.layers.BatchNormalization())
-    
-    model.add(keras.layers.advanced_activations.LeakyReLU())
-    model.add(keras.layers.Dropout(dropout))
-    model.add(keras.layers.Dense(nunit))
     
     model.add(keras.layers.Dense(y.shape[1]))
     
-    opt = keras.optimizers.Adam(lr=1e-4)
+    opt = keras.optimizers.Adam(lr=1e-3)
     
     model.compile(loss="mse", optimizer=opt)
     model.summary()
