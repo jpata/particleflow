@@ -17,26 +17,28 @@ import keras
 import pickle
 import json
 
-#Get miniblocks up to size blsize (discarding others)
-#Predict up to maxn candidates
-def get_unique_X_y(X, Xbl, y, ybl, blsize=3, maxn=3):
+def get_unique(X, Xbl, blsize=3):
     uniqs = np.unique(Xbl)
 
     Xs = []
-    ys = []
+    Xs_blid = []
     for bl in uniqs:
         subX = X[Xbl==bl]
-        suby = y[ybl==bl][:maxn]
         
         if subX.shape[0] > blsize:
             continue
 
         subX = np.pad(subX, ((0, blsize - subX.shape[0]), (0,0)), mode="constant")
-        suby = np.pad(suby, ((0, maxn - suby.shape[0]), (0,0)), mode="constant")
 
         Xs += [subX]
-        ys += [suby]
+        Xs_blid += [bl]
+    return Xs, np.array(Xs_blid)
 
+#Get miniblocks up to size blsize (discarding others)
+#Predict up to maxn candidates
+def get_unique_X_y(X, Xbl, y, ybl, max_blsize=3, max_candsize=3):
+    Xs, _ = get_unique(X, Xbl, max_blsize)
+    ys, _ = get_unique(y, ybl, max_candsize)
     return Xs, ys
 
 if __name__ == "__main__":
