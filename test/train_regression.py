@@ -1,4 +1,8 @@
-import setGPU
+try:
+    import setGPU
+except:
+    print("Could not import setGPU, NVidia device not found")
+
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
@@ -39,8 +43,8 @@ if __name__ == "__main__":
     all_Xs = []
     all_ys = []
     
-    for i in range(1,6):
-        for j in range(500):
+    for i in range(1,2):
+        for j in range(50):
             fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
             fi = open(fn, "rb")
