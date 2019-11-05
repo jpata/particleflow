@@ -86,8 +86,8 @@ if __name__ == "__main__":
     all_elem_pairs_X = []
     all_elem_pairs_y = []
     
-    for i in range(1,2):
-        for j in range(50):
+    for i in range(1,6):
+        for j in range(500):
             fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
             elem_pairs_X, elem_pairs_y = load_element_pairs(fn)
@@ -107,11 +107,16 @@ if __name__ == "__main__":
     weights[elem_pairs_y[:, 0]==1] = 1.0/ns
     weights[elem_pairs_y[:, 0]==0] = 1.0/nb
 
-    nunit = 128
+    nunit = 256
     dropout = 0.2
     
     model = keras.models.Sequential()
     model.add(keras.layers.Dense(nunit, input_shape=(elem_pairs_X.shape[1], )))
+    
+    model.add(keras.layers.advanced_activations.LeakyReLU())
+    model.add(keras.layers.Dropout(dropout))
+    model.add(keras.layers.Dense(nunit))
+    model.add(keras.layers.BatchNormalization())
     
     model.add(keras.layers.advanced_activations.LeakyReLU())
     model.add(keras.layers.Dropout(dropout))
@@ -145,7 +150,7 @@ if __name__ == "__main__":
     ret = model.fit(
         elem_pairs_X[:ntrain], elem_pairs_y[:ntrain, 0], sample_weight=weights[:ntrain],
         validation_data=(elem_pairs_X[ntrain:], elem_pairs_y[ntrain:, 0], weights[ntrain:]),
-        batch_size=10000, epochs=50
+        batch_size=10000, epochs=100
     )
 
     pp = model.predict(elem_pairs_X, batch_size=10000)

@@ -21,13 +21,8 @@ def get_unique(X, Xbl, uniqs, blsize=3):
     Xs = []
     Xs_blid = []
     for bl in uniqs:
-        subX = X[Xbl==bl]
-        
-        if subX.shape[0] > blsize:
-            continue
-
+        subX = X[Xbl==bl][:blsize]
         subX = np.pad(subX, ((0, blsize - subX.shape[0]), (0,0)), mode="constant")
-
         Xs += [subX]
         Xs_blid += [bl]
     return Xs, np.array(Xs_blid)
@@ -35,18 +30,31 @@ def get_unique(X, Xbl, uniqs, blsize=3):
 #Get miniblocks up to size blsize (discarding others)
 #Predict up to maxn candidates
 def get_unique_X_y(X, Xbl, y, ybl, max_blsize=3, max_candsize=3):
-    Xs, _ = get_unique(X, Xbl, np.unique(Xbl), max_blsize)
+    uniqs = np.unique(Xbl)
+    Xs = []
+    ys = []
+    for bl in uniqs:
+        subX = X[Xbl==bl]
+        suby = y[ybl==bl]
+        
+        if subX.shape[0] > max_blsize:
+            continue
+        if suby.shape[0] > max_candsize:
+            continue
 
-    #must get according to Xbl
-    ys, _ = get_unique(y, ybl, np.unique(Xbl), max_candsize)
+        subX = np.pad(subX, ((0, max_blsize - subX.shape[0]), (0,0)), mode="constant")
+        suby = np.pad(suby, ((0, max_candsize - suby.shape[0]), (0,0)), mode="constant")
+
+        Xs += [subX]
+        ys += [suby]
     return Xs, ys
 
 if __name__ == "__main__":
     all_Xs = []
     all_ys = []
     
-    for i in range(1,2):
-        for j in range(50):
+    for i in range(1,6):
+        for j in range(500):
             fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
             fi = open(fn, "rb")
@@ -100,7 +108,7 @@ if __name__ == "__main__":
 
     model = keras.models.Sequential()
 
-    nunit = 128
+    nunit = 256
     dropout = 0.2
     
     model.add(keras.layers.Dense(nunit, input_shape=(X.shape[1], )))
@@ -130,10 +138,7 @@ if __name__ == "__main__":
     model.add(keras.layers.Dense(nunit))
     model.add(keras.layers.BatchNormalization())
     
-    model.add(keras.layers.advanced_activations.LeakyReLU())
-    model.add(keras.layers.Dropout(dropout))
-    model.add(keras.layers.Dense(nunit))
-    
+    model.add(keras.layers.advanced_activations.ELU())
     model.add(keras.layers.Dense(y.shape[1]))
     
     opt = keras.optimizers.Adam(lr=1e-3)
@@ -145,7 +150,7 @@ if __name__ == "__main__":
     ret = model.fit(
         X[:ntrain], y[:ntrain],
         validation_data=(X[ntrain:], y[ntrain:]),
-        batch_size=1000, epochs=200
+        batch_size=1000, epochs=100
     )
     model.save("regression.h5")
     
