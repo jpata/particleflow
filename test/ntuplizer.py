@@ -2,6 +2,16 @@ import ROOT
 import sys, os
 import numpy as np
 from DataFormats.FWLite import Events, Handle
+import numba
+
+#encode a 2d upper-triangular index (i,j) in a 1d vector as per CMSSW
+@numba.njit
+def get_index_triu_vector(i, j, vecsize):
+    k = j - i - 1
+    k += i*vecsize
+    missing = int(i*(i+1)/2)
+    k -= missing
+    return k
 
 class HandleLabel:
     def __init__(self, dtype, label):
@@ -164,19 +174,17 @@ class Output:
        
         self.maxlinkdata = 50000
         self.nlinkdata = np.zeros(1, dtype=np.uint32)
-        self.linkdata_k = np.zeros(self.maxlinkdata, dtype=np.uint32)
         self.linkdata_distance = np.zeros(self.maxlinkdata, dtype=np.float32) 
-        self.linkdata_test = np.zeros(self.maxlinkdata, dtype=np.int32)
         self.linkdata_iev = np.zeros(self.maxlinkdata, dtype=np.uint32)
         self.linkdata_iblock = np.zeros(self.maxlinkdata, dtype=np.uint32) 
-        self.linkdata_nelem = np.zeros(self.maxlinkdata, dtype=np.uint32) 
+        self.linkdata_ielem = np.zeros(self.maxlinkdata, dtype=np.uint32) 
+        self.linkdata_jelem = np.zeros(self.maxlinkdata, dtype=np.uint32) 
         self.linktree.Branch("nlinkdata", self.nlinkdata, "nlinkdata/i")
-        self.linktree.Branch("linkdata_k", self.linkdata_k, "linkdata_k[nlinkdata]/i")
         self.linktree.Branch("linkdata_distance", self.linkdata_distance, "linkdata_distance[nlinkdata]/F")
-        self.linktree.Branch("linkdata_test", self.linkdata_test, "linkdata_test[nlinkdata]/I")
         self.linktree.Branch("linkdata_iev", self.linkdata_iev, "linkdata_iev[nlinkdata]/i")
         self.linktree.Branch("linkdata_iblock", self.linkdata_iblock, "linkdata_iblock[nlinkdata]/i")
-        self.linktree.Branch("linkdata_nelem", self.linkdata_nelem, "linkdata_nelem[nlinkdata]/i")
+        self.linktree.Branch("linkdata_ielem", self.linkdata_ielem, "linkdata_ielem[nlinkdata]/i")
+        self.linktree.Branch("linkdata_jelem", self.linkdata_jelem, "linkdata_jelem[nlinkdata]/i")
         
         self.maxlinkdata_elemtocand = 50000
         self.nlinkdata_elemtocand = np.zeros(1, dtype=np.uint32)
@@ -256,12 +264,11 @@ class Output:
         self.pfcands_iblock[:] = 0
         
         self.nlinkdata[0] = 0
-        self.linkdata_k[:] = 0
         self.linkdata_distance[:] = 0
-        self.linkdata_test[:] = 0
         self.linkdata_iev[:] = 0
         self.linkdata_iblock[:] = 0
-        self.linkdata_nelem[:] = 0
+        self.linkdata_ielem[:] = 0
+        self.linkdata_jelem[:] = 0
         
         self.nlinkdata_elemtocand[0] = 0
         self.linkdata_elemtocand_iev[:] = 0
@@ -352,6 +359,7 @@ if __name__ == "__main__":
             #fill the map of element -> pfcandidate 
             if len(pfcand_to_block_element[npfcands]) > 0:
                 blidx_ = -1
+                print(list(pfcand_to_block_element[npfcands]))
                 for ipf_block_elem in range(len(pfcand_to_block_element[npfcands])):
                     blidx, iel = pfcand_to_block_element[npfcands][ipf_block_elem]
                     if ipf_block_elem == 0:
@@ -508,18 +516,27 @@ if __name__ == "__main__":
                     print("unknown type: {0}".format(tp))
                     
 
-            #save links for each block
+            #get link data for each block
             linkdata = {int(kv.first): (kv.second.distance, ord(kv.second.test)) for kv in bl.linkData()}
-            for k, (v0, v1) in linkdata.items():
-                output.linkdata_k[nlinkdata] = k
-                output.linkdata_distance[nlinkdata] = 1000.0*v0 
-                output.linkdata_test[nlinkdata] = v1 
+            vecsize = len(bl.elements())
+            #get all the pairs of indices of an upper-triangular matrix
+            inds_triu = np.triu_indices(n=vecsize, m=vecsize, k=1)
+            #encode the 2d indices into a 1d vector
+            inds_triu_encoded = {
+                get_index_triu_vector(i, j, vecsize): (i,j) for i, j in zip(inds_triu[0], inds_triu[1])
+            }
+            #unencode the 1d vector stored by PF into 2d indices and get the distance 
+            for k in linkdata.keys():
+                i, j = inds_triu_encoded[k]
                 output.linkdata_iev[nlinkdata] = iev
                 output.linkdata_iblock[nlinkdata] = iblock
-                output.linkdata_nelem[nlinkdata] = len(bl.elements())
+                output.linkdata_ielem[nlinkdata] = i
+                output.linkdata_jelem[nlinkdata] = j
+                output.linkdata_distance[nlinkdata] = linkdata[k][0]
                 nlinkdata += 1
         #end of block loop
-    
+   
+        #store the element to candidate links 
         for iblock, ielem, icand in sorted(pfcand_elem_pairs):
             output.linkdata_elemtocand_iev[nlinkdata_elemtocand] = iev
             output.linkdata_elemtocand_iblock[nlinkdata_elemtocand] = iblock
