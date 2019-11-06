@@ -2,6 +2,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 
 ## Presentations
 
+- Caltech ML meetings, 2019-10-31: https://indico.cern.ch/event/858644/contributions/3623446/attachments/1936711/3209684/2019_10_07_pf.pdf
 - Caltech ML meeting, 2019-09-19: https://indico.cern.ch/event/849944/contributions/3572113/attachments/1911520/3158764/2019_09_18_pf_ml.pdf
 - CMS PF group, 2019-09-10: https://indico.cern.ch/event/846887/contributions/3557300/attachments/1904664/3145310/2019_09_10_pf_refactoring.pdf
 - Caltech ML meeting, 2019-09-05: https://indico.cern.ch/event/845349/contributions/3554787/attachments/1902837/3141723/2019_09_05_pfalgo.pdf
@@ -50,15 +51,15 @@ make cache
 
 ## Datasets
 
-- October 7, 2019
+- October 9, 2019
   - /RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW
   - size: 9000 events
-  - code version: 912fb7e 
+  - code version: 712e6d6
   - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_13/pfvalidation/191004_163947/0000/step3_AOD*.root
-  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191007_162300/step3_AOD_*.root
-  - npy: /storage/user/jpata/particleflow/data/TTbar/191007_162300/step3_AOD_*.npz 
+  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.root
+  - npy: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.npz 
 
-## Contents of the output ntuple
+## Contents of the ROOT output ntuple
 
 The TTree `pftree` contains the elements, candidates and genparticles:
 - clusters ([PFRecCluster](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowReco/interface/PFCluster.h))
@@ -151,3 +152,7 @@ root [4] linktree_elemtocand->Scan("linkdata_elemtocand_iblock:linkdata_elemtoca
 *        0 *       13 *         1 *        25 *       120 *
 *        0 *       14 *         1 *        25 *       484 *
 ```
+
+## Contents of the numpy output ntuple
+
+TBD
