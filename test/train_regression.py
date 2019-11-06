@@ -1,8 +1,3 @@
-try:
-    import setGPU
-except:
-    print("Could not import setGPU, NVidia device not found")
-
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
@@ -13,7 +8,6 @@ import sklearn
 import sklearn.metrics
 import sklearn.ensemble
 import scipy.sparse
-import keras
 import pickle
 import json
 
@@ -50,6 +44,12 @@ def get_unique_X_y(X, Xbl, y, ybl, max_blsize=3, max_candsize=3):
     return Xs, ys
 
 if __name__ == "__main__":
+    try:
+        import setGPU
+    except:
+        print("Could not import setGPU, Nvidia device not found")
+    import keras
+
     all_Xs = []
     all_ys = []
     

@@ -1,8 +1,3 @@
-try:
-    import setGPU
-except:
-    print("Could not import setGPU, Nvidia device not found")
-
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
@@ -13,7 +8,6 @@ import sklearn
 import sklearn.metrics
 import sklearn.ensemble
 import scipy.sparse
-import keras
 import json
 
 @numba.njit
@@ -83,6 +77,12 @@ def load_element_pairs(fn):
     return elem_pairs_X, elem_pairs_y
 
 if __name__ == "__main__":
+    try:
+        import setGPU
+    except:
+        print("Could not import setGPU, Nvidia device not found")
+    import keras
+
     all_elem_pairs_X = []
     all_elem_pairs_y = []
     

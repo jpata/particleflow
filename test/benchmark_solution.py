@@ -1,7 +1,8 @@
+import sys, os
+
 import numpy as np
 import sklearn
 import sklearn.metrics
-import keras
 import scipy
 import numba
 import networkx
@@ -282,9 +283,9 @@ class DummyPFAlgo:
 #Simple feedforward-DNN based PF model
 class BaselineDNN(DummyPFAlgo):
     def __init__(self):
-        self.model_blocks = keras.models.load_model("clustering.h5")
-        self.model_regression = keras.models.load_model("regression.h5")
-        with open("preprocessing.pkl", "rb") as fi:
+        self.model_blocks = keras.models.load_model("data/clustering.h5")
+        self.model_regression = keras.models.load_model("data/regression.h5")
+        with open("data/preprocessing.pkl", "rb") as fi:
             self.preprocessing_reg = pickle.load(fi)
         self.num_onehot_y = 27
 
@@ -361,26 +362,31 @@ def load_elements_candidates(fn):
     return els, els_blid, cands, cands_blid, dm
 
 if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(-1)
+    import keras
+
     m = BaselineDNN()
     #m = DummyPFAlgo()
 
-    fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(1, 0)
-    els, els_blid, cands, cands_blid, dm = load_elements_candidates(fn)
+    fns = sys.argv[1:]
+    for fn in fns:
+        els, els_blid, cands, cands_blid, dm = load_elements_candidates(fn)
    
-    #Run the block algo
-    els_blid_pred = m.predict_blocks(els, dm)
-    score_blocks = m.assess_blocks(els_blid, els_blid_pred, dm)
+        #Run the block algo
+        els_blid_pred = m.predict_blocks(els, dm)
+        score_blocks = m.assess_blocks(els_blid, els_blid_pred, dm)
    
-    #Run candidate regression with the true blocks 
-    score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
+        #Run candidate regression with the true blocks 
+        score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
 
-    #Run candidate regression with the predicted blocks 
-    cands_pred = m.predict_candidates(els, els_blid_pred)
-    score_cands = m.assess_candidates(cands, cands_pred)
-    
-    ret = {
-        "blocks": score_blocks,
-        "cand_true_blocks": score_true_blocks,
-        "cand_pred_blocks": score_cands,
-    }
-    print(ret) 
+        #Run candidate regression with the predicted blocks 
+        cands_pred = m.predict_candidates(els, els_blid_pred)
+        score_cands = m.assess_candidates(cands, cands_pred)
+        
+        ret = {
+            "blocks": score_blocks,
+            "cand_true_blocks": score_true_blocks,
+            "cand_pred_blocks": score_cands,
+        }
+        with open(fn.replace(".npz", "_res.pkl"), "wb") as fi:
+            pickle.dump(ret, fi)
