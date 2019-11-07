@@ -195,6 +195,7 @@ class DummyPFAlgo:
     def predict_candidates(self, elements, elements_blockids, maxel=3):
         cands = []
         for ibl in np.unique(elements_blockids):
+            #print("predict_candidates", ibl)
             msk = elements_blockids==ibl
             els_in_block = elements[msk][:maxel]
             els_in_block = np.pad(els_in_block, ((0, maxel - els_in_block.shape[0]), (0,0)), mode="constant")
@@ -242,6 +243,7 @@ class DummyPFAlgo:
         cands_true_matched = []
         cands_pred_matched = []
         for ibl in np.unique(elements_blockids):
+            #print("predict_with_true_blocks", ibl)
             msk = elements_blockids==ibl
             els_in_block = elements[msk][:maxel]
             els_in_block = np.pad(els_in_block, ((0, maxel - els_in_block.shape[0]), (0,0)), mode="constant")
@@ -299,7 +301,7 @@ class BaselineDNN(DummyPFAlgo):
         transformed_kin = self.preprocessing_reg["scaler_X"].transform(Xs_kin)
         X = np.hstack([transformed_type, transformed_kin])
 
-        pred = self.model_regression.predict(X, batch_size=10000)
+        pred = self.model_regression.predict(X, batch_size=X.shape[0])
 
         cand_types = self.preprocessing_reg["enc_y"].inverse_transform(pred[:, :self.num_onehot_y])
         ncand = (cand_types!=0).sum(axis=1)
@@ -331,16 +333,19 @@ class BaselineDNN(DummyPFAlgo):
         elem_pairs_X[:, 3] = elements[i2, 1]
         elem_pairs_X[:, 4] = distance_matrix[i1, i2]
 
-        #Predict linkage proba for each element pair
-        pred = self.model_blocks.predict_proba(elem_pairs_X, batch_size=100000)
+        #Predict linkage proba for each element pair with a nonzero distance
+        good_inds = np.nonzero(elem_pairs_X[:, -1])
+        pred = self.model_blocks.predict_proba(elem_pairs_X[good_inds], batch_size=10000)
+        pred2 = np.zeros(elem_pairs_X.shape[0], dtype=np.float64)
+        pred2[good_inds] = pred[:, 0]
 
         #Create adjacency matrix from element pairs which had predicted value greater than a threshold
-        pred_matrix = vector_to_triu_matrix(pred[:, 0], nelem)
+        pred_matrix = vector_to_triu_matrix(pred2, nelem)
         pred_matrix[dm==0] = 0
-        pred_matrix[pred_matrix>=0.5] = 1
-        pred_matrix[pred_matrix<0.5] = 0
+        pred_matrix[pred_matrix>=0.9] = 1
+        pred_matrix[pred_matrix<0.9] = 0
 
-        #Find connected subgraphs based on adjacency matrix
+        #Find connected subgraphs based on adjacency matrix, set the label in the output vector
         g = networkx.from_numpy_matrix(pred_matrix)
         for isg, nodes in enumerate(networkx.connected_components(g)):
             for node in nodes:
@@ -364,13 +369,23 @@ def load_elements_candidates(fn):
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = str(-1)
     import keras
+    import tensorflow as tf
+    config = tf.compat.v1.ConfigProto(
+        intra_op_parallelism_threads=1,
+        inter_op_parallelism_threads=1)
+    from keras.backend.tensorflow_backend import set_session
+    tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config)) 
 
     m = BaselineDNN()
-    #m = DummyPFAlgo()
+    m0 = DummyPFAlgo()
 
     fns = sys.argv[1:]
     for fn in fns:
         els, els_blid, cands, cands_blid, dm = load_elements_candidates(fn)
+        
+        #Run the dummy block algo
+        els_blid_pred_dummy = m0.predict_blocks(els, dm)
+        score_blocks_dummy = m0.assess_blocks(els_blid, els_blid_pred_dummy, dm)
    
         #Run the block algo
         els_blid_pred = m.predict_blocks(els, dm)
@@ -385,6 +400,7 @@ if __name__ == "__main__":
         
         ret = {
             "blocks": score_blocks,
+            "blocks_dummy": score_blocks_dummy,
             "cand_true_blocks": score_true_blocks,
             "cand_pred_blocks": score_cands,
         }
