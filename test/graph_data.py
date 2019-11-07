@@ -1,4 +1,3 @@
-
 import numpy as np
 import os
 import os.path as osp
@@ -17,7 +16,7 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        raw_list = glob(self.raw_dir+'/*.npz')
+        raw_list = glob(self.raw_dir+'/*ev*.npz')
         return [l.replace(self.raw_dir,'.') for l in raw_list]
 
     @property
@@ -47,33 +46,42 @@ class PFGraphDataset(Dataset):
         feature_scale = np.array([1., 1., 1., 1., 1., 1., 1., 1.])
         i = 0
         for raw_file_name in self.raw_file_names:
-            print("loading data from files: {0}".format(osp.join(self.raw_dir, raw_file_name)))
+            dist_file_name = raw_file_name.replace('ev','dist')
+            print("loading data from files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
             try:
                 fi = np.load(osp.join(self.raw_dir, raw_file_name))
+                fi_dist = np.load(osp.join(self.raw_dir, dist_file_name))
             except Exception as e:
-                print("Could not open file {0}".format(osp.join(self.raw_dir, raw_file_name)))
+                print("Could not open files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
                 continue
             X_elements = fi['elements'][:self._max_elements]
             X_element_block_id = fi['element_block_id'][:self._max_elements]
             y_candidates = fi['candidates'][:self._max_candidates]
             y_candidate_block_id = fi['candidate_block_id'][:self._max_candidates]
             num_elements = X_elements.shape[0]
-            
-            pairs = [[i, j] for (i, j) in itertools.product(range(num_elements),range(num_elements)) if i!=j]
-            if not self._connect_all:
-                pairs = np.array(pairs)
-                a, b = pairs.T
-                withinDR = withinDeltaR(X_elements[a,:], X_elements[b,:])
-                pairs = pairs[withinDR]
-                
-            edge_index = torch.tensor(pairs, dtype=torch.long)
-            edge_index = edge_index.t().contiguous()
+
+            row_index = fi_dist['row']
+            col_index = fi_dist['col']
+            num_edges = row_index.shape[0]
+
+            edge_attr = fi_dist['data']
+            edge_attr = edge_attr.reshape((num_edges,1))
+            edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+
+            edge_index = np.zeros((2, 2*num_edges))
+            edge_index[0,:num_edges] = row_index
+            edge_index[1,:num_edges] = col_index
+            edge_index[0,num_edges:] = col_index
+            edge_index[1,num_edges:] = row_index
+
+            edge_index = torch.tensor(edge_index, dtype=torch.long)
+
             x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
 
-            y = [X_element_block_id[i]==X_element_block_id[j] for (i,j) in pairs]
+            y = [X_element_block_id[i]==X_element_block_id[j] for (i,j) in edge_index.t().contiguous()]
             y = torch.tensor(y, dtype=torch.float)
 
-            data = Data(x=x, edge_index=edge_index, y=y)
+            data = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr)
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
