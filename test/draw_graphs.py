@@ -16,7 +16,7 @@ print('using device %s'%device)
 
 def main(args): 
 
-    full_dataset = PFGraphDataset(root='graph_data/')
+    full_dataset = PFGraphDataset(root='/storage/user/jduarte/particleflow/graph_data/')
     
     data = full_dataset.get(0)
 

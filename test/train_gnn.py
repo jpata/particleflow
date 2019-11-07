@@ -105,7 +105,7 @@ def train(model, optimizer, epoch, loader, total, batch_size):
 
 def main(args): 
 
-    full_dataset = PFGraphDataset(root='graph_data/')
+    full_dataset = PFGraphDataset(root='/storage/user/jduarte/particleflow/graph_data/')
     
     data = full_dataset.get(0)
     input_dim = data.x.shape[1]
@@ -113,7 +113,7 @@ def main(args):
     tv_frac = 0.10
     tv_num = math.ceil(fulllen*tv_frac)
     splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
-    batch_size = 32
+    batch_size = 64
     n_epochs = 100
     lr = 0.01
     patience = 10
