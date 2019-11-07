@@ -6,7 +6,8 @@ import numpy as np
 import sys
 import scipy
 import numba
-print(numba.__version__)
+from numba import types
+from numba.typed import Dict
 
 def load_file(fn):
     fi = uproot.open(fn)
@@ -105,6 +106,7 @@ def assign_cand(iblocks, ielems, elem_to_newblock, _i):
     icands = elem_to_newblock.get((iblocks[_i], ielems[_i]), -1)
     return icands
 
+@numba.njit
 def fill_dist_matrix(dist_matrix, elem_blk, elem_ielem, nelem, elem_to_elem):
     for i in range(nelem):
         bl = elem_blk[i]
@@ -149,23 +151,32 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         elem_to_newblock, i)
     for i in range(len(data["tracks_phi"][iev]))])
 
+    #make the track array the same size as the clusters, concatenate
+    X1p = np.pad(X1, ((0,0),(0, X2.shape[1] - X1.shape[1])), mode="constant")
+    X = np.vstack([X1p, X2])
+    y = np.concatenate([ys1, ys2])
+
     #Fill the distance matrix between all elements
-    nelem = len(X1) + len(X2)
-    #dist_matrix = scipy.sparse.dok_matrix((nelem, nelem), dtype=np.float32)
+    nelem = len(X)
     dist_matrix = np.zeros((nelem, nelem))
     bls = data_elemtoelem["linkdata_iblock"][iev]
     el1 = data_elemtoelem["linkdata_ielem"][iev]
     el2 = data_elemtoelem["linkdata_jelem"][iev]
     dist = data_elemtoelem["linkdata_distance"][iev]
+
     elem_to_elem = {(bl, e1, e2): d for bl, e1, e2, d in zip(bls, el1, el2, dist)}
+    elem_to_elem_nd = Dict.empty(
+        key_type=types.Tuple([types.uint32, types.uint32, types.uint32]),
+        value_type=types.float64
+    )
+    for k, v in elem_to_elem.items():
+        elem_to_elem_nd[k] = v
+
     elem_blk = np.hstack([data["clusters_iblock"][iev], data["tracks_iblock"][iev]])
     elem_ielem = np.hstack([data["clusters_ielem"][iev], data["tracks_ielem"][iev]])
 
-    fill_dist_matrix(dist_matrix, elem_blk, elem_ielem, nelem, elem_to_elem)     
+    fill_dist_matrix(dist_matrix, elem_blk, elem_ielem, nelem, elem_to_elem_nd)
     dist_matrix_sparse = scipy.sparse.dok_matrix(dist_matrix)
-    X1p = np.pad(X1, ((0,0),(0, X2.shape[1] - X1.shape[1])), mode="constant")
-    X = np.vstack([X1p, X2])
-    y = np.concatenate([ys1, ys2])
         
     cand_data = np.vstack([
         data["pfcands_pdgid"][iev],
@@ -193,10 +204,14 @@ def get_unique_X_y(X, Xbl, y, ybl, maxn=3):
         subX = X[Xbl==bl]
         suby = y[ybl==bl]
         
-        #choose only miniblocks with 3 elements to simplify the problem
+        #choose only miniblocks with up to 3 elements to simplify the problem
+        if len(suby) > len(subX):
+            print("Odd event with more candidates than elements in block", len(suby), len(subX))
+
         if len(subX) > maxn:
             continue
-            
+        if len(suby) > maxn:
+            continue
         subX = np.pad(subX, ((0, maxn - subX.shape[0]), (0,0)), mode="constant")
         suby = np.pad(suby, ((0, maxn - suby.shape[0]), (0,0)), mode="constant")
         
@@ -223,21 +238,23 @@ if __name__ == "__main__":
         sgs, elem_to_newblock, cand_to_newblock = analyze_graph_subgraph_elements(pfgraph)
         
         #Create arrays from subgraphs
-        elements, block_id, pfcands, cand_block_id, dist_matrix = prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_to_newblock, iev)
+        elements, block_id, pfcands, cand_block_id, dist_matrix = prepare_data(
+            data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_to_newblock, iev)
 
         #save the all the elements, candidates and the miniblock id
         cache_filename = fn.replace(".root", "_ev{0}.npz".format(iev))
         with open(cache_filename, "wb") as fi:
             np.savez(fi, elements=elements, element_block_id=block_id, candidates=pfcands, candidate_block_id=cand_block_id)
+
         cache_filename = fn.replace(".root", "_dist{0}.npz".format(iev))
         with open(cache_filename, "wb") as fi:
             scipy.sparse.save_npz(fi, dist_matrix.tocoo())
     
-        #save the miniblocks separately (Xs - all miniblocks in event, ys - all candidates made from each block) 
-        Xs, ys = get_unique_X_y(elements, block_id, pfcands, cand_block_id)
-        cache_filename = fn.replace(".root", "_cl{0}.npz".format(iev))
-        with open(cache_filename, "wb") as fi:
-            np.savez(fi, Xs=Xs, ys=ys)
+        # #save the miniblocks separately (Xs - all miniblocks in event, ys - all candidates made from each block) 
+        # Xs, ys = get_unique_X_y(elements, block_id, pfcands, cand_block_id)
+        # cache_filename = fn.replace(".root", "_cl{0}.npz".format(iev))
+        # with open(cache_filename, "wb") as fi:
+        #     np.savez(fi, Xs=Xs, ys=ys)
 
         all_sgs += sgs
    
