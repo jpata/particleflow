@@ -26,40 +26,40 @@ def load_file(fn):
 
     return data, data_elemtocand, data_elemtoelem
 
+#Create a graph where the nodes are elements and candidates and edges are
+#whether or not a candidate was produced from a given set of elements
 def create_graph_elements_candidates(data, data_elemtocand, iev):
 
     pfgraph = nx.Graph()
     node_pos = {}
-    node_colors = {}
 
+    #Add nodes for calorimeter clusters
     for i in range(len(data["clusters_iblock"][iev])):
         ibl = data["clusters_iblock"][iev][i]
         iel = data["clusters_ielem"][iev][i]
         this = ("E", ibl, iel)
         node_pos[this] = data["clusters_eta"][iev][i], data["clusters_phi"][iev][i]
-        node_colors[this] = "green"
         pfgraph.add_node(this, type=data["clusters_type"][iev][i])
-        
+    
+    #Add nodes for tracks
     for i in range(len(data["tracks_iblock"][iev])):
         ibl = data["tracks_iblock"][iev][i]
         iel = data["tracks_ielem"][iev][i]
         this = ("E", ibl, iel)
-        #node_pos[this] = data["tracks_eta"][iev][i], data["tracks_phi"][iev][i]
-        #node_pos[this] = data["tracks_inner_eta"][iev][i], data["tracks_inner_phi"][iev][i]
         node_pos[this] = data["tracks_outer_eta"][iev][i], data["tracks_outer_phi"][iev][i]
         if node_pos[this][0] == 0 and node_pos[this][1] == 0:
             node_pos[this] = data["tracks_inner_eta"][iev][i], data["tracks_inner_phi"][iev][i]
         if node_pos[this][0] == 0 and node_pos[this][1] == 0:
             node_pos[this] = data["tracks_eta"][iev][i], data["tracks_phi"][iev][i]
-        node_colors[this] = "r"
         pfgraph.add_node(this, type=1)
-        
+    
+    #Add nodes for candidates 
     for i in range(len(data["pfcands_iblock"][iev])):
         this = ("C", i)
         node_pos[this] = data["pfcands_eta"][iev][i], data["pfcands_phi"][iev][i]
-        node_colors[this] = "black"
         pfgraph.add_node(this, type=-1)
-        
+    
+    #Add edges between elements and candidates based on PFAlgo 
     for i in range(len(data_elemtocand["linkdata_elemtocand_ielem"][iev])):
         ibl = data_elemtocand["linkdata_elemtocand_iblock"][iev][i]
         iel = data_elemtocand["linkdata_elemtocand_ielem"][iev][i]

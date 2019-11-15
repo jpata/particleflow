@@ -56,10 +56,10 @@ make cache
   - size: 9000 events
   - code version: 712e6d6
   - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_13/pfvalidation/191004_163947/0000/step3_AOD*.root
-  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.root
+  - flat ROOT: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.root or /eos/user/j/jpata/particleflow/TTbar/191009_155100/step3_AOD_*.root
   - npy: /storage/user/jpata/particleflow/data/TTbar/191009_155100/step3_AOD_*.npz 
 
-## Contents of the ROOT output ntuple
+## Contents of the flat ROOT output ntuple
 
 The TTree `pftree` contains the elements, candidates and genparticles:
 - clusters ([PFRecCluster](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowReco/interface/PFCluster.h))
@@ -70,6 +70,7 @@ The TTree `pftree` contains the elements, candidates and genparticles:
 - genparticles
 
 ```
+pftree->Print()
 *Br    0 :nclusters : nclusters/i                                            *
 *Br    1 :clusters_iblock : clusters_iblock[nclusters]/i                     *
 *Br    2 :clusters_ielem : clusters_ielem[nclusters]/i                       *
@@ -128,31 +129,37 @@ The TTree `pftree` contains the elements, candidates and genparticles:
 *Br   55 :pfcands_iblock : pfcands_iblock[npfcands]/I                        *
 ```
 
-We can use `PFCandidate::elementsInBlocks()` to associate candidates and clusters/tracks. The tuples `(iblock, ielem, icand)` define the element to candidate association, where the element is defined by a block and element index, whereas a candidate by the candidate index. 
-
-This is contained in the TTree `linktree_elemtocand`.
+Distance matrix between elements:
 ```
-root [4] linktree_elemtocand->Scan("linkdata_elemtocand_iblock:linkdata_elemtocand_ielem:linkdata_elemtocand_icand")
-***********************************************************
-*    Row   * Instance * linkdata_ * linkdata_ * linkdata_ *
-***********************************************************
-*        0 *        0 *         0 *         0 *      1836 *
-*        0 *        1 *         1 *        19 *       381 *
-*        0 *        2 *         1 *        19 *       827 *
-*        0 *        3 *         1 *        19 *       974 *
-*        0 *        4 *         1 *        20 *      2125 *
-*        0 *        5 *         1 *        21 *       814 *
-*        0 *        6 *         1 *        22 *       449 *
-*        0 *        7 *         1 *        23 *       365 *
-*        0 *        8 *         1 *        23 *       626 *
-*        0 *        9 *         1 *        23 *       709 *
-*        0 *       10 *         1 *        24 *       625 *
-*        0 *       11 *         1 *        24 *       637 *
-*        0 *       12 *         1 *        24 *       767 *
-*        0 *       13 *         1 *        25 *       120 *
-*        0 *       14 *         1 *        25 *       484 *
+root [2] linktree->Print()
+*Tree    :linktree  : linktree for elements in block                         *
+*Br    0 :nlinkdata : nlinkdata/i                                            *
+*Br    1 :linkdata_distance : linkdata_distance[nlinkdata]/F                 *
+*Br    2 :linkdata_iev : linkdata_iev[nlinkdata]/i                           *
+*Br    3 :linkdata_iblock : linkdata_iblock[nlinkdata]/i                     *
+*Br    4 :linkdata_ielem : linkdata_ielem[nlinkdata]/i                       *
+*Br    5 :linkdata_jelem : linkdata_jelem[nlinkdata]/i                       *
 ```
 
-## Contents of the numpy output ntuple
+Element to candidate association:
+```
+root [2] linkdata_elemtocand->Print()
+*Br    0 :nlinkdata_elemtocand : nlinkdata_elemtocand/i                      *
+*Br    1 :linkdata_elemtocand_iev :                                          *
+*Br    2 :linkdata_elemtocand_iblock :                                       *
+*Br    3 :linkdata_elemtocand_ielem :                                        *
+*Br    4 :linkdata_elemtocand_icand :                                        *
+```
+## Numpy training ntuples
 
-TBD
+Produced using
+
+```bash
+python3 test/graph.py step3_AOD_1.root
+```
+- step3_AOD_1_ev.npz: PF elements, candidates, and the block associations via a numerical ID
+  - elements: [Nelem, Nelem_feat] for the input PFElement data
+  - element_block_id=block_id: [Nelem, ] for the PFAlgo-based block id
+  - candidates: [Ncand, Ncand_feat] for the output PFCandidate data
+  - candidate_block_id: [Ncand, ] for the PFAlgo-based block id 
+- step3_AOD_1_dist.npz: sparse [Nelem, Nelem] distance matrix from PFBlockAlgo between the candidates
