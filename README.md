@@ -2,7 +2,8 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 
 ## Presentations
 
-- Caltech ML meetings, 2019-10-31: https://indico.cern.ch/event/858644/contributions/3623446/attachments/1936711/3209684/2019_10_07_pf.pdf
+- CMS PF group, 2019-11-08: https://indico.cern.ch/event/861409/contributions/3632204/attachments/1941376/3219105/2019_11_08.pdf
+- Caltech ML meeting, 2019-10-31: https://indico.cern.ch/event/858644/contributions/3623446/attachments/1936711/3209684/2019_10_07_pf.pdf
 - Caltech ML meeting, 2019-09-19: https://indico.cern.ch/event/849944/contributions/3572113/attachments/1911520/3158764/2019_09_18_pf_ml.pdf
 - CMS PF group, 2019-09-10: https://indico.cern.ch/event/846887/contributions/3557300/attachments/1904664/3145310/2019_09_10_pf_refactoring.pdf
 - Caltech ML meeting, 2019-09-05: https://indico.cern.ch/event/845349/contributions/3554787/attachments/1902837/3141723/2019_09_05_pfalgo.pdf
@@ -159,7 +160,7 @@ python3 test/graph.py step3_AOD_1.root
 ```
 - step3_AOD_1_ev.npz: PF elements, candidates, and the block associations via a numerical ID
   - elements: [Nelem, Nelem_feat] for the input PFElement data
-  - element_block_id=block_id: [Nelem, ] for the PFAlgo-based block id
+  - element_block_id: [Nelem, ] for the PFAlgo-based block id
   - candidates: [Ncand, Ncand_feat] for the output PFCandidate data
   - candidate_block_id: [Ncand, ] for the PFAlgo-based block id 
 - step3_AOD_1_dist.npz: sparse [Nelem, Nelem] distance matrix from PFBlockAlgo between the candidates
