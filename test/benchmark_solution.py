@@ -368,11 +368,13 @@ def load_elements_candidates(fn):
 
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = str(-1)
+
     import keras
     import tensorflow as tf
     config = tf.compat.v1.ConfigProto(
         intra_op_parallelism_threads=1,
         inter_op_parallelism_threads=1)
+    
     from keras.backend.tensorflow_backend import set_session
     tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config)) 
 
@@ -404,5 +406,10 @@ if __name__ == "__main__":
             "cand_true_blocks": score_true_blocks,
             "cand_pred_blocks": score_cands,
         }
-        with open(fn.replace(".npz", "_res.pkl"), "wb") as fi:
+        
+        print("score_blocks", score_blocks)
+
+        output_file = fn.replace(".npz", "_res.pkl")
+        with open(output_file, "wb") as fi:
+            print("saving output to {0}".format(output_file))
             pickle.dump(ret, fi)
