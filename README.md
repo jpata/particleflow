@@ -24,28 +24,38 @@ def compute_links(elements):
     link_matrix = np.array((Nelem, Nelem))
     link_matrix[:] = 0
     
-    distance_matrix = np.array((Nelem, Nelem))
-    distance_matrix[:] = 0.0
-    
     for ielem in range(Nelem):
         for jelem in range(Nelem):
-            if in_neighbourhood(ielem, jelem):
+            #test if two elements are close by
+            if in_neighbourhood(elements, ielem, jelem):
                 link_matrix[ielem, jelem] = 1
                 
     return link_matrix
 
+def in_neighbourhood(elements, ielem, jelem):
+    #This element-to-element neighborhood checking is done based on detector geometry
+    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> linkPrefilter
+    return True
+
+def distance(elements, ielem, jelem):
+    #This element-to-element distance checking is done based on detector geometry
+    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> testLink
+    return 0.0
+    
 def create_blocks(elements, link_matrix):
     #Each block is a list of elements, this is a list of blocks
     blocks = []
     
     #Elements and connections between the elements
-    graph
+    graph = Graph()
+    for ielem in range(Nelem):
+        graph.add_node(ielem)
     
     Nelem = len(elements)
     for ielem in range(Nelem):
         for jelem in range(Nelem):
             if link_matrix[ielem, jelem]:
-                dist = distance(elements[ielem], elements[jelem])
+                dist = distance(elements, ielem, jelem)
                 if dist > -0.5:
                     graph.add_edge(ielem, jelem)
     
@@ -55,6 +65,7 @@ def create_blocks(elements, link_matrix):
         for element in subgraph:
             this_block.append(element)
         blocks.append(this_block)
+
     return blocks   
 
 def create_candidates(block):
