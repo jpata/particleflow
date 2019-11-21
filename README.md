@@ -46,12 +46,14 @@ def create_blocks(elements, link_matrix):
     #Each block is a list of elements, this is a list of blocks
     blocks = []
     
+    Nelem = len(elements)
+
     #Elements and connections between the elements
     graph = Graph()
     for ielem in range(Nelem):
         graph.add_node(ielem)
     
-    Nelem = len(elements)
+    #Check the distance between all relevant element pairs
     for ielem in range(Nelem):
         for jelem in range(Nelem):
             if link_matrix[ielem, jelem]:
