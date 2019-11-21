@@ -1,6 +1,7 @@
 Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
 
 ## Standard CMS offline PF
+The following pseudocode illustrates how the standard offline PF works in CMS.
 
 ```python
 # Inputs and outputs of Particle Flow
@@ -11,11 +12,18 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 # link_matrix: whether or not two elements are linked by having a finite distance (sparse, Nelem x Nelem)
 
 def particle_flow(elements):
+
+    #based on https://github.com/cms-sw/cmssw/tree/master/RecoParticleFlow/PFProducer/plugins/linkers
     link_matrix = compute_links(elements)
+    
+    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc
     blocks = create_blocks(elements, link_matrix)
+    
+    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc
     candidates = []
     for block in blocks:
         candidates.append(create_candidates(block))
+    
     return candidates
     
 def compute_links(elements):
@@ -24,9 +32,9 @@ def compute_links(elements):
     link_matrix = np.array((Nelem, Nelem))
     link_matrix[:] = 0
     
+    #test if two elements are close by based on neighborhood implemented with KD-trees
     for ielem in range(Nelem):
         for jelem in range(Nelem):
-            #test if two elements are close by
             if in_neighbourhood(elements, ielem, jelem):
                 link_matrix[ielem, jelem] = 1
                 
