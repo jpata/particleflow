@@ -7,6 +7,7 @@ import scipy
 import numba
 import networkx
 import pickle
+from collections import Counter
 
 import sklearn.cluster
 from train_clustering import fill_elem_pairs, fill_target_matrix
@@ -97,13 +98,15 @@ class DummyPFAlgo:
     Returns: np.array with shape (Nelem), block label for each element
     """
     def predict_blocks(self, elements, distance_matrix):
-        dbscan = sklearn.cluster.DBSCAN(eps=0.28, min_samples=1, metric="precomputed")
+        dm2 = distance_matrix.copy()
+        dm2[dm2>0] = 1
+        g = networkx.from_numpy_matrix(dm2)
 
-        distance_matrix_copy = distance_matrix.copy()
-        distance_matrix_copy[distance_matrix_copy==0] = 999
+        block_id_aspf = np.zeros((len(elements), ), dtype=np.int32)
+        for ibl, conn in enumerate(networkx.connected_components(g)):
+            block_id_aspf[np.array(list(conn), dtype=np.int32)] = ibl
 
-        pred_blocks = dbscan.fit_predict(distance_matrix_copy)
-        return pred_blocks
+        return block_id_aspf
 
     """
     Given arrays of true and predicted particles, computes metrics
@@ -146,6 +149,9 @@ class DummyPFAlgo:
         num_blocks_pred = len(np.unique(pred_block_id))
         num_blocks_true = len(np.unique(true_block_id))
 
+        block_sizes_true = self.compute_block_sizes(true_block_id)
+        block_sizes_pred = self.compute_block_sizes(pred_block_id)
+
         #Compute clustering metrics based on scikit-learn
         m1 = sklearn.metrics.adjusted_rand_score(pred_block_id, true_block_id)
         m2 = sklearn.metrics.adjusted_mutual_info_score(pred_block_id, true_block_id)
@@ -156,11 +162,20 @@ class DummyPFAlgo:
         return {
             "num_blocks_true": num_blocks_true,
             "num_blocks_pred": num_blocks_pred,
+            "mean_block_size_true": np.mean(block_sizes_true),
+            "mean_block_size_pred": np.mean(block_sizes_pred),
+            "max_block_size_true": np.max(block_sizes_true),
+            "max_block_size_pred": np.max(block_sizes_pred),
+            "num_blocks_pred": num_blocks_pred,
             "adjusted_rand_score": m1,
             "adjusted_mutual_info_score": m2,
             "edge_precision": edge_prec,
             "edge_recall": edge_rec,
         }
+
+    def compute_block_sizes(self, block_ids):
+        counts = Counter(block_ids)
+        return list(counts.values())
 
     """
     Given the block ids of N elements, fill an NxN adjacency matrix for the elements.
@@ -408,6 +423,7 @@ if __name__ == "__main__":
         }
         
         print("score_blocks", score_blocks)
+        print("score_blocks_dummy", score_blocks_dummy)
 
         output_file = fn.replace(".npz", "_res.pkl")
         with open(output_file, "wb") as fi:
