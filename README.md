@@ -1,5 +1,73 @@
 Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
 
+## Standard CMS offline PF
+
+```python
+# Inputs and outputs of Particle Flow
+# elements: array of ECAL cluster, HCAL cluster, tracks etc, size Nelem
+# candidates: array of produced particle flow candidates (pions, kaons, photons etc)
+
+# Intermediate data structures
+# link_matrix: whether or not two elements are linked by having a finite distance (sparse, Nelem x Nelem)
+
+def particle_flow(elements):
+    link_matrix = compute_links(elements)
+    blocks = create_blocks(elements, link_matrix)
+    candidates = []
+    for block in blocks:
+        candidates.append(create_candidates(block))
+    return candidates
+    
+def compute_links(elements):
+    Nelem = len(elements)
+ 
+    link_matrix = np.array((Nelem, Nelem))
+    link_matrix[:] = 0
+    
+    distance_matrix = np.array((Nelem, Nelem))
+    distance_matrix[:] = 0.0
+    
+    for ielem in range(Nelem):
+        for jelem in range(Nelem):
+            if in_neighbourhood(ielem, jelem):
+                link_matrix[ielem, jelem] = 1
+                
+    return link_matrix
+
+def create_blocks(elements, link_matrix):
+    #Each block is a list of elements, this is a list of blocks
+    blocks = []
+    
+    #Elements and connections between the elements
+    graph
+    
+    Nelem = len(elements)
+    for ielem in range(Nelem):
+        for jelem in range(Nelem):
+            if link_matrix[ielem, jelem]:
+                dist = distance(elements[ielem], elements[jelem])
+                if dist > -0.5:
+                    graph.add_edge(ielem, jelem)
+    
+    #Find the sets of elements that are connected
+    for subgraph in find_subgraphs(graph):
+        this_block = []
+        for element in subgraph:
+            this_block.append(element)
+        blocks.append(this_block)
+    return blocks   
+
+def create_candidates(block):
+    #find all HCAL-ECAL-TRK triplets, produce pions
+    #find all HCAL-TRK pairs, produce kaons
+    #find all ECAL-TRK pairs, produce pions
+    #find all independent ECAL elements, produce photons
+    #etc etc
+    candidates = []
+    return candidates
+```
+
+
 ## Presentations
 
 - CMS PF group, 2019-11-08: https://indico.cern.ch/event/861409/contributions/3632204/attachments/1941376/3219105/2019_11_08.pdf
