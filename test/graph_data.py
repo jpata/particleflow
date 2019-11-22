@@ -13,11 +13,12 @@ class PFGraphDataset(Dataset):
         self._max_elements = max_elements
         self._max_candidates = max_candidates
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
+        self.raw_dir = "data/TTbar/191009_155100"
 
     @property
     def raw_file_names(self):
         raw_list = glob(self.raw_dir+'/*ev*.npz')
-        return [l.replace(self.raw_dir,'.') for l in raw_list]
+        return sorted([l.replace(self.raw_dir,'.') for l in raw_list])
 
     @property
     def processed_file_names(self):
@@ -99,4 +100,4 @@ class PFGraphDataset(Dataset):
 if __name__ == "__main__":
 
     pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,max_elements=None,max_candidates=None)
-
+    pfgraphdataset.process()

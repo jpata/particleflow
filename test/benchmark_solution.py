@@ -88,8 +88,8 @@ def get_matched_pairs(cands1, cands2, matched_inds):
 #Ultra simple PF model requiring no training, just to test the baseline
 class DummyPFAlgo:
     """
-    Assign an integer block label for each element. This dummy solution just uses DBScan
-    with a precomputed distance matrix.
+    Assign an integer block label for each element. This dummy solution just uses the same
+    big blocks as standard PF
 
     elements (np.array): (Nelem, Nfeat) array of all the elements
     distance_matrix (np.array): (Nelem, Nelem) array of the distances between all elements.
@@ -409,17 +409,17 @@ if __name__ == "__main__":
         score_blocks = m.assess_blocks(els_blid, els_blid_pred, dm)
    
         #Run candidate regression with the true blocks 
-        score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
+        #score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
 
         #Run candidate regression with the predicted blocks 
-        cands_pred = m.predict_candidates(els, els_blid_pred)
-        score_cands = m.assess_candidates(cands, cands_pred)
+        #cands_pred = m.predict_candidates(els, els_blid_pred)
+        #score_cands = m.assess_candidates(cands, cands_pred)
         
         ret = {
             "blocks": score_blocks,
             "blocks_dummy": score_blocks_dummy,
-            "cand_true_blocks": score_true_blocks,
-            "cand_pred_blocks": score_cands,
+            #"cand_true_blocks": score_true_blocks,
+            #"cand_pred_blocks": score_cands,
         }
         
         print("score_blocks", score_blocks)
