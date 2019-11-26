@@ -441,39 +441,58 @@ def find_nearest_higher(points, points_data):
         points_data[i, 2] = delta
         points_data[i, 3] = nearestHigher
 
-class GLUE(DummyPFAlgo):
+@numba.njit
+def fill_adj_matrix(adj_matrix, point_to_point_link, clid0, clid1, clid2, clid3):
+    #all track points are connected across the layers
+    for ip in range(len(point_to_point_link)):
+        adj_matrix[point_to_point_link[ip][0], point_to_point_link[ip][1]] = 1
+    
+    #create connections between elements in the same cluster
+    set_adj_matrix(adj_matrix, clid0)
+    set_adj_matrix(adj_matrix, clid1)
+    set_adj_matrix(adj_matrix, clid2)
+    set_adj_matrix(adj_matrix, clid3)
 
-    def __init__(self):
+    #set lower triangular part of adjacency matrix
+    for i in range(adj_matrix.shape[0]):
+        for j in range(i, adj_matrix.shape[0]):
+            adj_matrix[j][i] = adj_matrix[i][j]
+
+@numba.njit
+def clid_point_to_element(elements, point_to_elem, new_clid):
+    clid_elem = -1*np.ones((len(elements), ), dtype=np.int64)
+    for ip in range(len(point_to_elem)):
+        ie = point_to_elem[ip]
+        if clid_elem[ie] != -1 and new_clid[ip] != clid_elem[ie]:
+            print(new_clid[ip], clid_elem[ie])
+        clid_elem[ie] = new_clid[ip]
+    return clid_elem
+
+class CLUE(DummyPFAlgo):
+
+    def __init__(self, delta_ecal=0.05, delta_hcal=0.05, delta_hf=0.05):
+        self.delta_ecal = delta_ecal
+        self.delta_hcal = delta_hcal
+        self.delta_hf = delta_hf
         pass
     
     def predict_blocks(self, elements, distance_matrix):
         points_data, points_pos, point_to_point_link, point_to_elem = create_points(elements)
 
-        clid1 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==1, 0.1, 0.5, 0.05)
-        clid2 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==2, 0.1, 0.5, 0.05)
-        clid3 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==3, 1.0, 0.5, 0.1)
+        #Run the CLUE clustering in each layer
+        clid1 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==1, 0.1, 0.5, self.delta_ecal)
+        clid2 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==2, 0.1, 0.5, self.delta_hcal)
+        clid3 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==3, 1.0, 0.5, self.delta_hf)
 
+        #Assign each track point on the tracker surface to it's own cluster
         clid0 = -1*np.ones_like(clid1)
         clid0[points_data[:, 2]==0] = points_data[points_data[:, 2]==0, 0]
 
+        #Adjacency matrix for all points across the layers
         adj_matrix = np.zeros((len(points_data), len(points_data)), dtype=np.int32)
+        fill_adj_matrix(adj_matrix, point_to_point_link, clid0, clid1, clid2, clid3)
 
-        #all track points are connected
-        for ip in range(len(point_to_point_link)):
-            adj_matrix[point_to_point_link[ip][0], point_to_point_link[ip][1]] = 1
-       
-        #create connections between elements in the same cluster
-        set_adj_matrix(adj_matrix, clid0)
-        set_adj_matrix(adj_matrix, clid1)
-        set_adj_matrix(adj_matrix, clid2)
-        set_adj_matrix(adj_matrix, clid3)
-
-        #set lower triangular part of adjacency matrix
-        for i in range(adj_matrix.shape[0]):
-            for j in range(i, adj_matrix.shape[0]):
-                adj_matrix[j][i] = adj_matrix[i][j]
-
-        #Assign cluster id to points
+        #Assign cluster id to points based on the connected subgraphs from the adjacency matrix
         new_clid = -1*np.ones_like(clid0)
         icl = 0
         for sg in networkx.connected_components(networkx.from_numpy_matrix(adj_matrix)):
@@ -482,12 +501,7 @@ class GLUE(DummyPFAlgo):
             icl += 1
 
         #Assign cluster id to PF elements
-        clid_elem = -1*np.ones((len(elements), ), dtype=np.int64)
-        for ip in range(len(point_to_elem)):
-            ie = point_to_elem[ip]
-            if clid_elem[ie] != -1 and new_clid[ip] != clid_elem[ie]:
-                print(new_clid[ip], clid_elem[ie])
-            clid_elem[ie] = new_clid[ip]
+        clid_elem = clid_point_to_element(elements, point_to_elem, new_clid)
 
         return clid_elem
 
@@ -541,7 +555,7 @@ class GLUE(DummyPFAlgo):
     
         fill_local_density(points_pos[mask], points_data_clue, delta_crit=delta_crit)
         find_nearest_higher(points_pos[mask], points_data_clue)
-        clid = GLUE.assign_cluster_id(points_data_clue, rho_crit=rho_crit, delta_crit=delta_crit)
+        clid = CLUE.assign_cluster_id(points_data_clue, rho_crit=rho_crit, delta_crit=delta_crit)
         clid_all[np.where(mask)] = clid
     
         return clid_all
@@ -644,7 +658,7 @@ if __name__ == "__main__":
 
     m = BaselineDNN()
     m0 = DummyPFAlgo()
-    m1 = GLUE()
+    m1 = CLUE(0.008, 0.125, 0.16)
 
     fns = sys.argv[1:]
     for fn in fns:
