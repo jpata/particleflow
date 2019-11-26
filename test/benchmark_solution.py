@@ -154,7 +154,7 @@ class DummyPFAlgo:
 
         #Compute clustering metrics based on scikit-learn
         m1 = sklearn.metrics.adjusted_rand_score(pred_block_id, true_block_id)
-        m2 = sklearn.metrics.adjusted_mutual_info_score(pred_block_id, true_block_id, average_method='arithmetic')
+        #m2 = sklearn.metrics.adjusted_mutual_info_score(pred_block_id, true_block_id, average_method='arithmetic')
 
         #compute precision and recall between all elements that can be connected (distance > 0)
         edge_prec, edge_rec = self.assess_connectable_edges(distance_matrix, true_block_id, pred_block_id)
@@ -168,7 +168,7 @@ class DummyPFAlgo:
             "max_block_size_pred": np.max(block_sizes_pred),
             "num_blocks_pred": num_blocks_pred,
             "adjusted_rand_score": m1,
-            "adjusted_mutual_info_score": m2,
+            #"adjusted_mutual_info_score": m2,
             "edge_precision": edge_prec,
             "edge_recall": edge_rec,
         }
@@ -304,8 +304,6 @@ def set_adj_matrix(adj_matrix, clid):
             if clid[iel] != -1 and clid[jel] != -1:
                 if clid[iel] == clid[jel]:
                     adj_matrix[iel, jel] = 1
-                
-                
 
 """
 Given the PF elements, create a list of points, where each point is just one hit in a layer.
@@ -333,10 +331,15 @@ def create_points(elements):
         tp = elements[iel, 0]
 
         if tp == 1 or tp == 6:
+            ip_in_tracker = -1
+            ip_in_ecal = -1
+            ip_in_hcal = -1
+
             in_tracker = (elements[iel, 2]!=0) and (elements[iel, 3]!=0)
             in_ecal = (elements[iel, 4]!=0) and (elements[iel, 5]!=0)
             in_hcal = (elements[iel, 6]!=0) and (elements[iel, 7]!=0)
             if in_tracker:
+                ip_in_tracker = ip
                 points_data[ip, 0] = ip
                 points_data[ip, 1] = tp
                 points_data[ip, 2] = 0
@@ -346,6 +349,7 @@ def create_points(elements):
                 point_to_elem[ip] = iel
                 ip += 1
             if in_ecal:
+                ip_in_ecal = ip
                 points_data[ip, 0] = ip
                 points_data[ip, 1] = tp
                 points_data[ip, 2] = 1
@@ -353,20 +357,25 @@ def create_points(elements):
                 points_pos[ip, 1] = elements[iel, 5]
                 points_pos[ip, 2] = 1.0/abs(elements[iel, 1]) if elements[iel, 1] != 0 else 0.0
                 if in_tracker:
-                    point_to_point_link[ilink, 0] = ip-1
+                    point_to_point_link[ilink, 0] = ip_in_tracker
                     point_to_point_link[ilink, 1] = ip
                     ilink += 1
                 point_to_elem[ip] = iel
                 ip += 1
             if in_hcal:
+                ip_in_hcal = ip
                 points_data[ip, 0] = ip
                 points_data[ip, 1] = tp
                 points_data[ip, 2] = 2
                 points_pos[ip, 0] = elements[iel, 6]
                 points_pos[ip, 1] = elements[iel, 7]
                 points_pos[ip, 2] = 1.0/abs(elements[iel, 1]) if elements[iel, 1] != 0 else 0.0
+                if in_tracker:
+                    point_to_point_link[ilink, 0] = ip_in_tracker
+                    point_to_point_link[ilink, 1] = ip
+                    ilink += 1
                 if in_ecal:
-                    point_to_point_link[ilink, 0] = ip-1
+                    point_to_point_link[ilink, 0] = ip_in_ecal
                     point_to_point_link[ilink, 1] = ip
                     ilink += 1
                 point_to_elem[ip] = iel
@@ -402,14 +411,14 @@ def dist(points, i, j):
     return np.sqrt(dphi**2 + deta**2)
 
 @numba.njit
-def fill_local_density(points, points_data, dc=0.3):
+def fill_local_density(points, points_data, delta_crit=0.3):
     points_data[:, 0] = 0
     
     Np = len(points)
     for i in range(Np):
         for j in range(Np):
             d = dist(points, i, j)
-            if d < dc:
+            if d < delta_crit:
                 #weight multiplier
                 fact = 1.0 if i==j else 0.5
                 #density += weight * weight multiplier
@@ -449,45 +458,54 @@ class GLUE(DummyPFAlgo):
 
         adj_matrix = np.zeros((len(points_data), len(points_data)), dtype=np.int32)
 
+        #all track points are connected
         for ip in range(len(point_to_point_link)):
             adj_matrix[point_to_point_link[ip][0], point_to_point_link[ip][1]] = 1
-        
+       
+        #create connections between elements in the same cluster
         set_adj_matrix(adj_matrix, clid0)
         set_adj_matrix(adj_matrix, clid1)
         set_adj_matrix(adj_matrix, clid2)
         set_adj_matrix(adj_matrix, clid3)
 
+        #set lower triangular part of adjacency matrix
+        for i in range(adj_matrix.shape[0]):
+            for j in range(i, adj_matrix.shape[0]):
+                adj_matrix[j][i] = adj_matrix[i][j]
+
+        #Assign cluster id to points
         new_clid = -1*np.ones_like(clid0)
         icl = 0
         for sg in networkx.connected_components(networkx.from_numpy_matrix(adj_matrix)):
             for s in sg:
                 new_clid[s] = icl
             icl += 1
-       
+
+        #Assign cluster id to PF elements
         clid_elem = -1*np.ones((len(elements), ), dtype=np.int64)
         for ip in range(len(point_to_elem)):
             ie = point_to_elem[ip]
-            #if clid_elem[ie] != -1 and new_clid[ip] != clid_elem[ie]:
-            #    print(new_clid[ip], clid_elem[ie])
+            if clid_elem[ie] != -1 and new_clid[ip] != clid_elem[ie]:
+                print(new_clid[ip], clid_elem[ie])
             clid_elem[ie] = new_clid[ip]
 
         return clid_elem
-        
+
 
     @staticmethod
     def assign_cluster_id(points_data, rho_crit=10, delta_crit=0.2):
         cluster_id = -1*np.ones((len(points_data),), dtype=np.int32)
         Np = len(points_data)
         nClusters = 0
-        
+
         buffer_seeds = []
         followers = {i: [] for i in range(Np)}
-        
+
         for i in range(Np):
             isSeed = (points_data[i, 0] > rho_crit) and (points_data[i, 2] > delta_crit)
             isOutlier = (points_data[i, 0] <= rho_crit) and (points_data[i, 2] > 2*delta_crit)
             #isOutlier = False
-            
+
             if isSeed:
                 cluster_id[i] = nClusters
                 nClusters += 1
@@ -521,7 +539,7 @@ class GLUE(DummyPFAlgo):
         points_data_clue[points_data[mask, 1]==6, 1] = track_weight
     #     points_data_clue[points_types==5, 1] = 1
     
-        fill_local_density(points_pos[mask], points_data_clue)
+        fill_local_density(points_pos[mask], points_data_clue, delta_crit=delta_crit)
         find_nearest_higher(points_pos[mask], points_data_clue)
         clid = GLUE.assign_cluster_id(points_data_clue, rho_crit=rho_crit, delta_crit=delta_crit)
         clid_all[np.where(mask)] = clid
