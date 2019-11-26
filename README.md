@@ -27,8 +27,7 @@ git clone https://github.com/jpata/particleflow.git workspace/particleflow
 
 ## Running the RECO step with particle flow
 ```
-runTheMatrix.py -l 38.0
-edmConfigDump step3.py > step3_dump.py
+cmsDriver.py step3  --datatier GEN-SIM-RECO,MINIAODSIM,DQMIO --runUnscheduled  --conditions auto:phase1_2021_realistic -s RAW2DIGI,L1Reco,RECO,RECOSIM,EI,PAT,VALIDATION:@standardValidationNoHLT+@miniAODValidation,DQM:@standardDQMFakeHLT+@miniAODDQM --eventcontent RECOSIM,MINIAODSIM,DQM -n 100  --filein  file:step2.root  --fileout file:step3.root --no_exec --dump_python
 ```
 
 ## Small standalone example
