@@ -30,7 +30,7 @@ process.load('DQMOffline.Configuration.DQMOfflineMC_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(100),
+    input = cms.untracked.int32(10),
     output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
 )
 
@@ -258,29 +258,29 @@ process = customiseEarlyDelete(process)
 # End adding early deletion
 
 #To keep low-level inputs
-#clusters = [
-#  'keep recoPFClusters_particleFlowClusterECAL_*_*',
-#  'keep recoPFClusters_particleFlowClusterHCAL_*_*',
-#  'keep recoPFClusters_particleFlowClusterHO_*_*',
-#  'keep recoPFClusters_particleFlowClusterHF_*_*',
-#  'keep recoPFClusters_particleFlowClusterPS_*_*',
-#  'keep recoTracks_*_*_*',
-#  'keep recoPFRecTracks_*_*_*',
-#  'keep recoGsfPFRecTracks_*_*_*',
-#  'keep recoTrackExtras_*_*_*',
-#  'keep TrackingRecHitsOwned_generalTracks_*_*',
-#  'keep recoGenParticles_prunedGenParticles_*_*',
-#  'keep recoPFBlocks_particleFlowBlock_*_*'
-#]
-#
-#process.AODSIMoutput = cms.OutputModule("PoolOutputModule",
-#    dataset = cms.untracked.PSet(
-#        dataTier = cms.untracked.string('AODSIM'),
-#        filterName = cms.untracked.string('')
-#    ),
-#    fileName = cms.untracked.string('file:step3_AOD.root'),
-#    outputCommands = process.AODSIMEventContent.outputCommands + clusters,
-#    splitLevel = cms.untracked.int32(0)
-#)
-#process.AODSIMoutput_step = cms.EndPath(process.AODSIMoutput)
-#process.schedule.insert(-1, process.AODSIMoutput_step)
+clusters = [
+  'keep recoPFClusters_particleFlowClusterECAL_*_*',
+  'keep recoPFClusters_particleFlowClusterHCAL_*_*',
+  'keep recoPFClusters_particleFlowClusterHO_*_*',
+  'keep recoPFClusters_particleFlowClusterHF_*_*',
+  'keep recoPFClusters_particleFlowClusterPS_*_*',
+  'keep recoTracks_*_*_*',
+  'keep recoPFRecTracks_*_*_*',
+  'keep recoGsfPFRecTracks_*_*_*',
+  'keep recoTrackExtras_*_*_*',
+  'keep TrackingRecHitsOwned_generalTracks_*_*',
+  'keep recoGenParticles_prunedGenParticles_*_*',
+  'keep recoPFBlocks_particleFlowBlock_*_*'
+]
+
+process.AODSIMoutput = cms.OutputModule("PoolOutputModule",
+    dataset = cms.untracked.PSet(
+        dataTier = cms.untracked.string('AODSIM'),
+        filterName = cms.untracked.string('')
+    ),
+    fileName = cms.untracked.string('file:step3_AOD.root'),
+    outputCommands = process.AODSIMEventContent.outputCommands + clusters,
+    splitLevel = cms.untracked.int32(0)
+)
+process.AODSIMoutput_step = cms.EndPath(process.AODSIMoutput)
+process.schedule.insert(-1, process.AODSIMoutput_step)
