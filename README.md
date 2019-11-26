@@ -15,13 +15,20 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 ## Setting up the code
 ```bash
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-scramv1 project CMSSW CMSSW_11_0_0_pre7
-cd CMSSW_11_0_0_pre7/src
+export SCRAM_ARCH=slc7_amd64_gcc820
+scramv1 project CMSSW CMSSW_11_0_0_pre12
+cd CMSSW_11_0_0_pre12/src
 eval `scramv1 runtime -sh`
 git cms-init
 mkdir workspace
 git clone https://github.com/jpata/particleflow.git workspace/particleflow 
+```
 
+
+## Running the RECO step with particle flow
+```
+runTheMatrix.py -l 38.0
+edmConfigDump step3.py > step3_dump.py
 ```
 
 ## Small standalone example

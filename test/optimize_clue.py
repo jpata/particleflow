@@ -12,16 +12,22 @@ def run_model(args):
 def objective_function(pars):
     global all_elements, all_elements_blid, all_dms
 
-    delta_ecal = float(pars[0])
-    delta_hcal = float(pars[1])
-    delta_hf = float(pars[2])
+    rho_ecal = float(pars[0])
+    rho_hcal = float(pars[1])
+    rho_hf = float(pars[2])
+    delta_ecal = float(pars[3])
+    delta_hcal = float(pars[4])
+    delta_hf = float(pars[5])
 
-    model = CLUE(delta_ecal=delta_ecal, delta_hcal=delta_hcal, delta_hf=delta_hf)
+    model = CLUE(
+        rho_ecal=rho_ecal, rho_hcal=rho_hcal, rho_hf=rho_hf,
+        delta_ecal=delta_ecal, delta_hcal=delta_hcal, delta_hf=delta_hf
+    )
     with ProcessPoolExecutor(max_workers=16) as executor:
         scores = executor.map(run_model, [(model, a[0], a[1], a[2]) for a in zip(all_elements, all_elements_blid, all_dms)])
     scores = list(scores)
     m = np.mean(scores)
-    print(delta_ecal, delta_hcal, delta_hf, m)
+    print(rho_ecal, rho_hcal, rho_hf, delta_ecal, delta_hcal, delta_hf, m)
     return -m
 
 if __name__ == "__main__":
@@ -45,6 +51,9 @@ if __name__ == "__main__":
 
     from skopt import dummy_minimize, gp_minimize
     dims = [
+        np.arange(0.1, 1.0, 0.1),
+        np.arange(0.1, 1.0, 0.1),
+        np.arange(0.1, 1.0, 0.1),
         np.arange(0.001, 0.2, 0.001),
         np.arange(0.001, 0.2, 0.001),
         np.arange(0.001, 0.2, 0.001),

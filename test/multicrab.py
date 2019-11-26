@@ -11,10 +11,12 @@ def submit(config):
         fi.write(config.pythonise_())
 
 samples = [
-#    ("/RelValQCD_FlatPt_15_3000HS_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "QCD"),
-#    ("/RelValNuGun/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "NuGun"),
-#    ("/RelValTTbarLepton_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "TTbarLepton"),
-    ("/RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW", "TTbar"),
+    ("/RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "QCD_run3"),
+    ("/RelValNuGun/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "NuGun_run3"),
+    ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "TTbar_run3"),
+    ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU200-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu200")
+    ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU140-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu140"),
+
 ]
 
 if __name__ == "__main__":

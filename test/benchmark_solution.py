@@ -470,7 +470,10 @@ def clid_point_to_element(elements, point_to_elem, new_clid):
 
 class CLUE(DummyPFAlgo):
 
-    def __init__(self, delta_ecal=0.05, delta_hcal=0.05, delta_hf=0.05):
+    def __init__(self, rho_ecal=0.5, rho_hcal=0.5, rho_hf=0.5, delta_ecal=0.05, delta_hcal=0.05, delta_hf=0.05):
+        self.rho_ecal = rho_ecal
+        self.rho_hcal = rho_hcal
+        self.rho_hf = rho_hf
         self.delta_ecal = delta_ecal
         self.delta_hcal = delta_hcal
         self.delta_hf = delta_hf
@@ -480,9 +483,9 @@ class CLUE(DummyPFAlgo):
         points_data, points_pos, point_to_point_link, point_to_elem = create_points(elements)
 
         #Run the CLUE clustering in each layer
-        clid1 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==1, 0.1, 0.5, self.delta_ecal)
-        clid2 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==2, 0.1, 0.5, self.delta_hcal)
-        clid3 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==3, 1.0, 0.5, self.delta_hf)
+        clid1 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==1, 0.1, self.rho_ecal, self.delta_ecal)
+        clid2 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==2, 0.1, self.rho_hcal, self.delta_hcal)
+        clid3 = self.get_clusters_clue_layer(points_data, points_pos, points_data[:, 2]==3, 0.1, self.rho_hf, self.delta_hf)
 
         #Assign each track point on the tracker surface to it's own cluster
         clid0 = -1*np.ones_like(clid1)
@@ -658,7 +661,7 @@ if __name__ == "__main__":
 
     m = BaselineDNN()
     m0 = DummyPFAlgo()
-    m1 = CLUE(0.008, 0.125, 0.16)
+    m1 = CLUE(0.2, 0.7, 0.6, 0.003, 0.125, 0.16)
 
     fns = sys.argv[1:]
     for fn in fns:
