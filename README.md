@@ -35,11 +35,14 @@ cmsDriver.py step3  --datatier GEN-SIM-RECO,MINIAODSIM,DQMIO --runUnscheduled  -
 ```bash
 cmsRun test/step3.py
 
-python3 test/ntuplizer.py step3_ntuple.root step3_AOD.root
-root -l step3_ntuple.root
+#Produce the flat root ntuple
+python3 test/ntuplizer.py ./data step3_AOD.root
+root -l ./data/step3_AOD.root
 
-python3 test/graph.py step3_ntuple.root
-ls step3_ntuple_*.npz
+#Produce the numpy datasets
+python3 test/graph.py ./data/step3_AOD.root
+ls ./data/step3_AOD_*.npz
+
 ```
 
 ## Running on grid
