@@ -14,8 +14,8 @@ samples = [
     ("/RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "QCD_run3"),
     ("/RelValNuGun/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "NuGun_run3"),
     ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "TTbar_run3"),
-    ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU140-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu140"),
-    ("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU200-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu200")
+    #("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU140-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu140"),
+    #("/RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU25ns_110X_mcRun4_realistic_v2_2026D41PU200-v1/GEN-SIM-DIGI-RAW", "TTbar_run4_pu200")
 
 ]
 
@@ -32,15 +32,15 @@ if __name__ == "__main__":
         conf.General.workArea = 'crab_projects'
         conf.JobType.pluginName = 'Analysis'
         conf.JobType.psetName = 'step3_dump.py'
-        conf.JobType.maxJobRuntimeMin = 4*60
+        conf.JobType.maxJobRuntimeMin = 8*60
         conf.JobType.allowUndistributedCMSSW = True
         conf.JobType.outputFiles = ["step3_inMINIAODSIM.root", "step3_AOD.root"]
-        conf.JobType.maxMemoryMB = 5000
+        conf.JobType.maxMemoryMB = 6000
         conf.JobType.numCores = 2
         
         conf.Data.inputDataset = dataset
         conf.Data.splitting = 'LumiBased'
-        conf.Data.unitsPerJob = 10
+        conf.Data.unitsPerJob = 2
         #conf.Data.totalUnits = 50
         conf.Data.publication = False
         conf.Data.outputDatasetTag = 'pfvalidation'
