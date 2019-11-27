@@ -105,22 +105,31 @@ def create_candidates(block):
 ## Setting up the code
 ```bash
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-scramv1 project CMSSW CMSSW_11_0_0_pre7
-cd CMSSW_11_0_0_pre7/src
+export SCRAM_ARCH=slc7_amd64_gcc820
+scramv1 project CMSSW CMSSW_11_0_0_pre12
+cd CMSSW_11_0_0_pre12/src
 eval `scramv1 runtime -sh`
 git cms-init
 mkdir workspace
 git clone https://github.com/jpata/particleflow.git workspace/particleflow 
+```
 
+
+## Running the RECO step with particle flow
+```
+#Run 3
+cmsDriver.py step3  --datatier GEN-SIM-RECO,MINIAODSIM,DQMIO --runUnscheduled  --conditions auto:phase1_2021_realistic -s RAW2DIGI,L1Reco,RECO,RECOSIM,EI,PAT,VALIDATION:@standardValidationNoHLT+@miniAODValidation,DQM:@standardDQMFakeHLT+@miniAODDQM --eventcontent RECOSIM,MINIAODSIM,DQM -n 100  --filein  file:step2.root  --fileout file:step3.root --no_exec --era Run3 --scenario pp --geometry DB:Extended --mc
 ```
 
 ## Small standalone example
 ```bash
 cmsRun test/step3.py
 
+#Produce the flat root ntuple
 python3 test/ntuplizer.py ./data step3_AOD.root
 root -l ./data/step3_AOD.root
 
+#Produce the numpy datasets
 python3 test/graph.py ./data/step3_AOD.root
 ls ./data/step3_AOD_*.npz
 
@@ -141,6 +150,20 @@ make cache
 ```
 
 ## Datasets
+
+- November 27, 2019
+  - /RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
+    - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_14TeV/pfvalidation/191126_233751/0000/step3_AOD*.root
+    - flat ROOT: /storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.root or /eos/user/j/jpata/particleflow/TTbar_run3/step3_AOD*.root
+    - npy: /storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.npz
+  - /RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
+    - EDM: /mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD*.root 
+    - flat ROOT: /storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.root or /eos/user/j/jpata/particleflow/QCD_run3/step3_AOD*.root
+    - npy: /storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.npz
+  - /RelValNuGun/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
+    - EDM: /mnt/hadoop/store/user/jpata/RelValNuGun/pfvalidation/191126_233630/0000/step3_AOD*.root
+    - flat ROOT: /storage/user/jpata/particleflow/data/NuGun_run3/step3_ntuple_*.root or /eos/user/j/jpata/particleflow/NuGun_run3/step3_AOD*.root
+    - npy: /storage/user/jpata/particleflow/data/NuGun_run3/step3_ntuple_*.npz
 
 - October 9, 2019
   - /RelValTTbar_13/CMSSW_11_0_0_pre6-PU25ns_110X_upgrade2018_realistic_v3-v1/GEN-SIM-DIGI-RAW

@@ -19,4 +19,4 @@ mkdir -p $OUTPUT_DIR
 
 INFILES=`find $INPUT_DIR -name "step3_AOD_*.root"`
 
-echo $INFILES | xargs -n 1 -P 8 python test/ntuplizer.py $OUTPUT_DIR
+echo $INFILES | xargs -n 1 -P 24 python test/ntuplizer.py $OUTPUT_DIR

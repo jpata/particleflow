@@ -1,3 +1,4 @@
+from __future__ import print_function
 import ROOT
 import sys, os
 import numpy as np
@@ -280,7 +281,11 @@ if __name__ == "__main__":
 
     filename = sys.argv[2]
     outpath = sys.argv[1]
-    outfile = os.path.join(outpath, os.path.basename(filename))
+    outfile = os.path.join(outpath, os.path.basename(filename).replace("AOD", "ntuple"))
+    if os.path.isfile(outfile):
+        print("Output file {0} exists, exiting".format(outfile), file=sys.stderr)
+        sys.exit(0)
+
     events = Events(filename)
     print("Reading input file {0}".format(filename))
     print("Saving output to file {0}".format(outfile))
@@ -352,14 +357,13 @@ if __name__ == "__main__":
             output.pfcands_pt[npfcands] = c.pt()
             output.pfcands_eta[npfcands] = c.eta()
             output.pfcands_phi[npfcands] = c.phi()
-	    output.pfcands_charge[npfcands] = c.charge()
-	    output.pfcands_energy[npfcands] = c.energy()
+            output.pfcands_charge[npfcands] = c.charge()
+            output.pfcands_energy[npfcands] = c.energy()
             output.pfcands_pdgid[npfcands] = c.pdgId()
             output.pfcands_nelem[npfcands] = len(pfcand_to_block_element[npfcands])
             #fill the map of element -> pfcandidate 
             if len(pfcand_to_block_element[npfcands]) > 0:
                 blidx_ = -1
-                print(list(pfcand_to_block_element[npfcands]))
                 for ipf_block_elem in range(len(pfcand_to_block_element[npfcands])):
                     blidx, iel = pfcand_to_block_element[npfcands][ipf_block_elem]
                     if ipf_block_elem == 0:
