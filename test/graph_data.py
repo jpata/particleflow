@@ -65,17 +65,18 @@ class PFGraphDataset(Dataset):
             col_index = fi_dist['col']
             num_edges = row_index.shape[0]
 
-            edge_attr = fi_dist['data']
-            edge_attr = edge_attr.reshape((num_edges,1))
-            edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-
             edge_index = np.zeros((2, 2*num_edges))
             edge_index[0,:num_edges] = row_index
             edge_index[1,:num_edges] = col_index
             edge_index[0,num_edges:] = col_index
             edge_index[1,num_edges:] = row_index
-
             edge_index = torch.tensor(edge_index, dtype=torch.long)
+
+            edge_data = fi_dist['data']
+            edge_attr = np.zeros((2*num_edges,1))
+            edge_attr[:num_edges] = edge_data
+            edge_attr[num_edges:] = edge_data
+            edge_attr = torch.tensor(edge_attr, dtype=torch.float)
 
             x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
 

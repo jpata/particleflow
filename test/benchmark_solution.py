@@ -663,57 +663,48 @@ class BaselineGNN(DummyPFAlgo):
             self.preprocessing_reg = pickle.load(fi)
         self.num_onehot_y = 27
 
-    #Predict the elements from one block
-    def predict_one_block(self, elem_data):
-        Xs2 = elem_data.reshape((1,elem_data.shape[0], elem_data.shape[1]))
-        Xs_types = Xs2[:, :, 0]
-        Xs_kin = Xs2[:, :, 1:]
-        Xs_kin = Xs_kin.reshape((Xs_kin.shape[0], Xs_kin.shape[1]*Xs_kin.shape[2]))
-        transformed_type = self.preprocessing_reg["enc_X"].transform(Xs_types)
-        transformed_kin = self.preprocessing_reg["scaler_X"].transform(Xs_kin)
-        X = np.hstack([transformed_type, transformed_kin])
-
-        pred = self.model_regression.predict(X, batch_size=X.shape[0])
-
-        cand_types = self.preprocessing_reg["enc_y"].inverse_transform(pred[:, :self.num_onehot_y])
-        ncand = (cand_types!=0).sum(axis=1)
-
-        cand_momenta = self.preprocessing_reg["scaler_y"].inverse_transform(pred[:, self.num_onehot_y:])
-        set_pred_to_zero(cand_momenta, ncand)
-
-        pred_cands = fill_cand_vector(cand_types, ncand, cand_momenta)
-        return pred_cands
-
     #Predict the element to block clustering
     def predict_blocks(self, elements, distance_matrix):
         
         nelem = len(elements)
 
-        #integer cluster label for each element
-        ret = np.zeros(nelem, dtype=np.int32)
-
         #number of upper triangular elements without diagonal
         num_pairs = int(nelem*(nelem-1)/2)
         i1, i2 = np.triu_indices(nelem, k=1)
 
-        target_matrix = np.zeros_like(distance_matrix)
-        elem_pairs_X = np.zeros((num_pairs, 5), dtype=np.float32)
+        #integer cluster label for each element
+        ret = np.zeros(nelem, dtype=np.int32)
+
+        sparse_distance_matrix = scipy.sparse.coo_matrix(distance_matrix)
+        num_edges = sparse_distance_matrix.nnz
+        row_index = sparse_distance_matrix.row
+        col_index = sparse_distance_matrix.col
+
+        edge_index = np.zeros((2, 2*num_edges))
+        edge_index[0,:num_edges] = row_index
+        edge_index[1,:num_edges] = col_index
+        edge_index[0,num_edges:] = col_index
+        edge_index[1,num_edges:] = row_index
         
-        elem_pairs_X[:, 0] = elements[i1, 0]
-        elem_pairs_X[:, 1] = elements[i1, 1]
-        elem_pairs_X[:, 2] = elements[i2, 0]
-        elem_pairs_X[:, 3] = elements[i2, 1]
-        elem_pairs_X[:, 4] = distance_matrix[i1, i2]
+        bidir_row = edge_index[0].astype(int)
+        bidir_col = edge_index[1].astype(int)
 
-        #Predict linkage proba for each element pair with a nonzero distance
-        good_inds = np.nonzero(elem_pairs_X[:, -1])
-        pred = self.model_blocks.predict_proba(elem_pairs_X[good_inds], batch_size=10000)
-        pred2 = np.zeros(elem_pairs_X.shape[0], dtype=np.float64)
-        pred2[good_inds] = pred[:, 0]
+        import torch
+        edge_index = torch.tensor(edge_index, dtype=torch.long)
 
+        x = torch.tensor(elements, dtype=torch.float)
+        #y = [X_element_block_id[i]==X_element_block_id[j] for (i,j) in edge_index.t().contiguous()]
+        #y = torch.tensor(y, dtype=torch.float)
+
+        from torch_geometric.data import Data
+        data = Data(x=x, edge_index=edge_index)
+        pred = self.model_blocks(data)
+        pred_numpy = pred.detach().numpy()
+
+        sparse_pred_matrix = scipy.sparse.coo_matrix((pred_numpy, (bidir_row, bidir_col)))
+
+        pred_matrix = sparse_pred_matrix.todense()
         #Create adjacency matrix from element pairs which had predicted value greater than a threshold
-        pred_matrix = vector_to_triu_matrix(pred2, nelem)
-        pred_matrix[dm==0] = 0
         pred_matrix[pred_matrix>=0.9] = 1
         pred_matrix[pred_matrix<0.9] = 0
 
@@ -737,10 +728,11 @@ if __name__ == "__main__":
     from keras.backend.tensorflow_backend import set_session
     tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config)) 
 
-    mg = BaselineGNN()
     m = BaselineDNN()
     m0 = DummyPFAlgo()
     m1 = CLUE(0.2, 0.7, 0.6, 0.003, 0.125, 0.16)
+    m2 = BaselineGNN()
+
 
     fns = sys.argv[1:]
     for fn in fns:
@@ -749,14 +741,19 @@ if __name__ == "__main__":
         #Run the dummy block algo
         els_blid_pred_dummy = m0.predict_blocks(els, dm)
         score_blocks_dummy = m0.assess_blocks(els_blid, els_blid_pred_dummy, dm)
-        
+
+        #Run CLUE block algo
         els_blid_pred_glue = m1.predict_blocks(els, dm)
         score_blocks_glue = m1.assess_blocks(els_blid, els_blid_pred_glue, dm)
    
-        #Run the block algo
+        #Run the DNN block algo
         els_blid_pred = m.predict_blocks(els, dm)
         score_blocks = m.assess_blocks(els_blid, els_blid_pred, dm)
-   
+
+        #Run the GNN block algo
+        els_blid_pred_gnn = m2.predict_blocks(els, dm)
+        score_blocks_gnn = m2.assess_blocks(els_blid, els_blid_pred_gnn, dm)
+        
         #Run candidate regression with the true blocks 
         #score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
 
@@ -768,6 +765,7 @@ if __name__ == "__main__":
             "blocks": score_blocks,
             "blocks_dummy": score_blocks_dummy,
             "blocks_glue": score_blocks_glue,
+            "blocks_gnn": score_blocks_gnn,
             #"cand_true_blocks": score_true_blocks,
             #"cand_pred_blocks": score_cands,
         }
@@ -775,6 +773,7 @@ if __name__ == "__main__":
         print("score_blocks", score_blocks)
         print("score_blocks_dummy", score_blocks_dummy)
         print("score_blocks_glue", score_blocks_glue)
+        print("score_blocks_gnn", score_blocks_gnn)
 
         output_file = fn.replace(".npz", "_res.pkl")
         with open(output_file, "wb") as fi:
