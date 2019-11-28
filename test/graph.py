@@ -75,7 +75,7 @@ def create_graph_elements_candidates(data, data_elemtocand, iev):
     return pfgraph
 
 def analyze_graph_subgraph_elements(pfgraph):
-    sub_graphs = list(nx.connected_component_subgraphs(pfgraph))
+    sub_graphs = [pfgraph.subgraph(c).copy() for c in nx.connected_components(pfgraph)]
 
     subgraph_element_types = []
 
@@ -134,7 +134,7 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         for i in range(len(data["clusters_phi"][iev]))
     ])
     
-    #tracks
+    #tracks, track type is always 1
     X2 = np.vstack([
         1*np.ones_like(data["tracks_qoverp"][iev]),
         data["tracks_qoverp"][iev],
