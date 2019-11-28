@@ -366,6 +366,84 @@ def load_elements_candidates(fn):
 
     return els, els_blid, cands, cands_blid, dm
 
+#Graph NN based PF model
+class BaselineGNN(DummyPFAlgo):
+    def __init__(self):
+        input_dim = 8
+        hidden_dim = 32
+        n_iters = 1
+        from models import EdgeNet
+        import torch
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_blocks = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,n_iters=n_iters).to(device)
+        self.model_blocks.load_state_dict(torch.load('EdgeNet_13873_10e465f628_jduarte.best.pth',map_location=device))
+        self.model_regression = keras.models.load_model("data/regression.h5")
+        with open("data/preprocessing.pkl", "rb") as fi:
+            self.preprocessing_reg = pickle.load(fi)
+        self.num_onehot_y = 27
+
+    #Predict the elements from one block
+    def predict_one_block(self, elem_data):
+        Xs2 = elem_data.reshape((1,elem_data.shape[0], elem_data.shape[1]))
+        Xs_types = Xs2[:, :, 0]
+        Xs_kin = Xs2[:, :, 1:]
+        Xs_kin = Xs_kin.reshape((Xs_kin.shape[0], Xs_kin.shape[1]*Xs_kin.shape[2]))
+        transformed_type = self.preprocessing_reg["enc_X"].transform(Xs_types)
+        transformed_kin = self.preprocessing_reg["scaler_X"].transform(Xs_kin)
+        X = np.hstack([transformed_type, transformed_kin])
+
+        pred = self.model_regression.predict(X, batch_size=X.shape[0])
+
+        cand_types = self.preprocessing_reg["enc_y"].inverse_transform(pred[:, :self.num_onehot_y])
+        ncand = (cand_types!=0).sum(axis=1)
+
+        cand_momenta = self.preprocessing_reg["scaler_y"].inverse_transform(pred[:, self.num_onehot_y:])
+        set_pred_to_zero(cand_momenta, ncand)
+
+        pred_cands = fill_cand_vector(cand_types, ncand, cand_momenta)
+        return pred_cands
+
+    #Predict the element to block clustering
+    def predict_blocks(self, elements, distance_matrix):
+        
+        nelem = len(elements)
+
+        #integer cluster label for each element
+        ret = np.zeros(nelem, dtype=np.int32)
+
+        #number of upper triangular elements without diagonal
+        num_pairs = int(nelem*(nelem-1)/2)
+        i1, i2 = np.triu_indices(nelem, k=1)
+
+        target_matrix = np.zeros_like(distance_matrix)
+        elem_pairs_X = np.zeros((num_pairs, 5), dtype=np.float32)
+        
+        elem_pairs_X[:, 0] = elements[i1, 0]
+        elem_pairs_X[:, 1] = elements[i1, 1]
+        elem_pairs_X[:, 2] = elements[i2, 0]
+        elem_pairs_X[:, 3] = elements[i2, 1]
+        elem_pairs_X[:, 4] = distance_matrix[i1, i2]
+
+        #Predict linkage proba for each element pair with a nonzero distance
+        good_inds = np.nonzero(elem_pairs_X[:, -1])
+        pred = self.model_blocks.predict_proba(elem_pairs_X[good_inds], batch_size=10000)
+        pred2 = np.zeros(elem_pairs_X.shape[0], dtype=np.float64)
+        pred2[good_inds] = pred[:, 0]
+
+        #Create adjacency matrix from element pairs which had predicted value greater than a threshold
+        pred_matrix = vector_to_triu_matrix(pred2, nelem)
+        pred_matrix[dm==0] = 0
+        pred_matrix[pred_matrix>=0.9] = 1
+        pred_matrix[pred_matrix<0.9] = 0
+
+        #Find connected subgraphs based on adjacency matrix, set the label in the output vector
+        g = networkx.from_numpy_matrix(pred_matrix)
+        for isg, nodes in enumerate(networkx.connected_components(g)):
+            for node in nodes:
+                ret[node] = isg
+
+        return ret
+
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = str(-1)
     import keras
@@ -376,6 +454,7 @@ if __name__ == "__main__":
     from keras.backend.tensorflow_backend import set_session
     tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config)) 
 
+    mg = BaselineGNN()
     m = BaselineDNN()
     m0 = DummyPFAlgo()
 
