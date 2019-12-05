@@ -631,7 +631,7 @@ class BaselineDNN(DummyPFAlgo):
         for isg, nodes in enumerate(networkx.connected_components(g)):
             for node in nodes:
                 ret[node] = isg
-
+        
         return ret
 
 def load_elements_candidates(fn):
@@ -648,21 +648,17 @@ def load_elements_candidates(fn):
     return els, els_blid, cands, cands_blid, dm
 
 #Graph NN based PF model
-class BaselineGNN(DummyPFAlgo):
-    def __init__(self):
-        input_dim = 8
-        hidden_dim = 32
-        n_iters = 1
+class GNN(DummyPFAlgo):
+    def __init__(self, input_dim=8, edge_dim=1, hidden_dim=32, n_iters=1):
         from models import EdgeNet
         import torch
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_blocks = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,n_iters=n_iters).to(device)
-        self.model_blocks.load_state_dict(torch.load('EdgeNet_13873_10e465f628_jduarte.best.pth',map_location=device))
+        self.model_blocks = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
+        self.model_blocks.load_state_dict(torch.load('data/EdgeNet_14001_ca9bbfb3bb_jduarte.best.pth',map_location=device))
         self.model_regression = keras.models.load_model("data/regression.h5")
         with open("data/preprocessing.pkl", "rb") as fi:
             self.preprocessing_reg = pickle.load(fi)
-        self.num_onehot_y = 27
-
+       
     #Predict the element to block clustering
     def predict_blocks(self, elements, distance_matrix):
         
@@ -685,19 +681,23 @@ class BaselineGNN(DummyPFAlgo):
         edge_index[1,:num_edges] = col_index
         edge_index[0,num_edges:] = col_index
         edge_index[1,num_edges:] = row_index
-        
+
         bidir_row = edge_index[0].astype(int)
         bidir_col = edge_index[1].astype(int)
 
         import torch
         edge_index = torch.tensor(edge_index, dtype=torch.long)
 
-        x = torch.tensor(elements, dtype=torch.float)
-        #y = [X_element_block_id[i]==X_element_block_id[j] for (i,j) in edge_index.t().contiguous()]
-        #y = torch.tensor(y, dtype=torch.float)
+        edge_attr = np.zeros((2*num_edges,1))
 
+        edge_attr[:num_edges,0] = sparse_distance_matrix.data
+        edge_attr[num_edges:,0] = sparse_distance_matrix.data
+        edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+            
+        x = torch.tensor(elements, dtype=torch.float)
+       
         from torch_geometric.data import Data
-        data = Data(x=x, edge_index=edge_index)
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
         pred = self.model_blocks(data)
         pred_numpy = pred.detach().numpy()
 
@@ -708,6 +708,7 @@ class BaselineGNN(DummyPFAlgo):
         pred_matrix[pred_matrix>=0.9] = 1
         pred_matrix[pred_matrix<0.9] = 0
 
+        
         #Find connected subgraphs based on adjacency matrix, set the label in the output vector
         g = networkx.from_numpy_matrix(pred_matrix)
         for isg, nodes in enumerate(networkx.connected_components(g)):
@@ -731,7 +732,7 @@ if __name__ == "__main__":
     m = BaselineDNN()
     m0 = DummyPFAlgo()
     m1 = CLUE(0.2, 0.7, 0.6, 0.003, 0.125, 0.16)
-    m2 = BaselineGNN()
+    m2 = GNN(input_dim=8, edge_dim=1, hidden_dim=32, n_iters=1)
 
 
     fns = sys.argv[1:]

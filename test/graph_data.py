@@ -13,7 +13,6 @@ class PFGraphDataset(Dataset):
         self._max_elements = max_elements
         self._max_candidates = max_candidates
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
-        self.raw_dir = "data/TTbar/191009_155100"
 
     @property
     def raw_file_names(self):
@@ -32,18 +31,6 @@ class PFGraphDataset(Dataset):
         pass
 
     def process(self):
-
-        @numba.njit(parallel=True,fastmath=True)
-        def withinDeltaR(first, second, dr=0.4):
-            eta1 = first[:,2]
-            eta2 = second[:,2]
-            phi1 = first[:,3]
-            phi2 = second[:,3]
-            deta = np.abs(eta1 - eta2)
-            dphi = np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
-            dr2 = dr*dr
-            return ((deta**2 + dphi**2) < dr2)
-            
         feature_scale = np.array([1., 1., 1., 1., 1., 1., 1., 1.])
         i = 0
         for raw_file_name in self.raw_file_names:
@@ -74,8 +61,8 @@ class PFGraphDataset(Dataset):
 
             edge_data = fi_dist['data']
             edge_attr = np.zeros((2*num_edges,1))
-            edge_attr[:num_edges] = edge_data
-            edge_attr[num_edges:] = edge_data
+            edge_attr[:num_edges,0] = edge_data
+            edge_attr[num_edges:,0] = edge_data
             edge_attr = torch.tensor(edge_attr, dtype=torch.float)
 
             x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
@@ -84,7 +71,6 @@ class PFGraphDataset(Dataset):
             y = torch.tensor(y, dtype=torch.float)
 
             data = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr)
-
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
             if self.pre_transform is not None:
@@ -100,5 +86,5 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='graph_data/',connect_all=False,max_elements=None,max_candidates=None)
+    pfgraphdataset = PFGraphDataset(root='/storage/user/jduarte/particleflow/graph_data/')
     pfgraphdataset.process()
