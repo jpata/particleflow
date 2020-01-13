@@ -606,13 +606,12 @@ class BaselineDNN(DummyPFAlgo):
         i1, i2 = np.triu_indices(nelem, k=1)
 
         target_matrix = np.zeros_like(distance_matrix)
-        elem_pairs_X = np.zeros((num_pairs, 5), dtype=np.float32)
-        
-        elem_pairs_X[:, 0] = elements[i1, 0]
-        elem_pairs_X[:, 1] = elements[i1, 1]
-        elem_pairs_X[:, 2] = elements[i2, 0]
-        elem_pairs_X[:, 3] = elements[i2, 1]
-        elem_pairs_X[:, 4] = distance_matrix[i1, i2]
+        elem_pairs_X = np.zeros((num_pairs, 2*elements.shape[1] + 1), dtype=np.float32)
+       
+        for k in range(elements.shape[1]):
+            elem_pairs_X[:, k] = elements[i1, k]
+            elem_pairs_X[:, elements.shape[1] + k] = elements[i2, k]
+        elem_pairs_X[:, -1] = distance_matrix[i1, i2]
 
         #Predict linkage proba for each element pair with a nonzero distance
         good_inds = np.nonzero(elem_pairs_X[:, -1])
@@ -731,7 +730,7 @@ if __name__ == "__main__":
 
     m = BaselineDNN()
     m0 = DummyPFAlgo()
-    m1 = CLUE(0.2, 0.7, 0.6, 0.003, 0.125, 0.16)
+    m1 = CLUE(0.6, 0.2, 0.5, 0.024, 0.109, 0.167)
     m2 = GNN(input_dim=8, edge_dim=1, hidden_dim=32, n_iters=1)
 
 
@@ -744,8 +743,8 @@ if __name__ == "__main__":
         score_blocks_dummy = m0.assess_blocks(els_blid, els_blid_pred_dummy, dm)
 
         #Run CLUE block algo
-        els_blid_pred_glue = m1.predict_blocks(els, dm)
-        score_blocks_glue = m1.assess_blocks(els_blid, els_blid_pred_glue, dm)
+        els_blid_pred_clue = m1.predict_blocks(els, dm)
+        score_blocks_clue = m1.assess_blocks(els_blid, els_blid_pred_clue, dm)
    
         #Run the DNN block algo
         els_blid_pred = m.predict_blocks(els, dm)
@@ -765,7 +764,7 @@ if __name__ == "__main__":
         ret = {
             "blocks": score_blocks,
             "blocks_dummy": score_blocks_dummy,
-            "blocks_glue": score_blocks_glue,
+            "blocks_clue": score_blocks_clue,
             "blocks_gnn": score_blocks_gnn,
             #"cand_true_blocks": score_true_blocks,
             #"cand_pred_blocks": score_cands,
@@ -773,7 +772,7 @@ if __name__ == "__main__":
         
         print("score_blocks", score_blocks)
         print("score_blocks_dummy", score_blocks_dummy)
-        print("score_blocks_glue", score_blocks_glue)
+        print("score_blocks_clue", score_blocks_clue)
         print("score_blocks_gnn", score_blocks_gnn)
 
         output_file = fn.replace(".npz", "_res.pkl")

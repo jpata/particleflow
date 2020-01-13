@@ -54,8 +54,8 @@ if __name__ == "__main__":
     all_ys = []
     
     for i in range(1,6):
-        for j in range(500):
-            fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
+        for j in range(200):
+            fn = "data/TTbar_run3/step3_ntuple_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
             fi = open(fn, "rb")
             data = np.load(fi)
