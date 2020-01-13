@@ -45,8 +45,8 @@ def test(model,loader,total,batch_size):
         data = data.to(device)
         batch_target = data.y
         batch_output = model(data)
-        batch_weights_real = batch_target*1.
-        batch_weights_fake = (1 - batch_target)*torch.sum(batch_target)/torch.sum(1 - batch_target)
+        batch_weights_real = batch_target*len(batch_target)/(2.*torch.sum(batch_target))
+        batch_weights_fake = (1 - batch_target)*len(batch_target)/(2.*torch.sum(1 - batch_target))
         batch_weights = batch_weights_real + batch_weights_fake
         batch_loss_item = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights).item()
         sum_loss += batch_loss_item
@@ -89,7 +89,10 @@ def train(model, optimizer, epoch, loader, total, batch_size):
         optimizer.zero_grad()
         batch_target = data.y        
         batch_output = model(data)
-        batch_loss = F.binary_cross_entropy(batch_output, batch_target)
+        batch_weights_real = batch_target*len(batch_target)/(2.*torch.sum(batch_target))
+        batch_weights_fake = (1 - batch_target)*len(batch_target)/(2.*torch.sum(1 - batch_target))
+        batch_weights = batch_weights_real + batch_weights_fake
+        batch_loss = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights)
         batch_loss.backward()
         batch_loss_item = batch_loss.item()
         t.set_description("batch loss = %.5f" % batch_loss_item)
@@ -105,11 +108,13 @@ def train(model, optimizer, epoch, loader, total, batch_size):
 
 def main(args): 
 
-    full_dataset = PFGraphDataset(root='graph_data/')
+    full_dataset = PFGraphDataset(root='/storage/user/jduarte/particleflow/graph_data/')
     
     data = full_dataset.get(0)
     input_dim = data.x.shape[1]
-    fulllen = 1000
+    edge_dim = data.edge_attr.shape[1]
+    fulllen = len(full_dataset)
+    
     tv_frac = 0.10
     tv_num = math.ceil(fulllen*tv_frac)
     splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
@@ -131,7 +136,7 @@ def main(args):
     valid_samples = len(valid_dataset)
     test_samples = len(test_dataset)
     
-    model = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,n_iters=n_iters).to(device)
+    model = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
     model_fname = get_model_fname(model)
 

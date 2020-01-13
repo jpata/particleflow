@@ -5,9 +5,11 @@ from benchmark_solution import load_elements_candidates, CLUE
 
 def run_model(args):
     model, els, els_blid, dm = args
-    els_blid_pred_glue = model.predict_blocks(els, dm)
-    score_blocks_glue = model.assess_blocks(els_blid, els_blid_pred_glue, dm)
-    return score_blocks_glue["adjusted_rand_score"]
+    els_blid_pred_clue = model.predict_blocks(els, dm)
+    score_blocks_clue = model.assess_blocks(els_blid, els_blid_pred_clue, dm)
+    #final_score = 2*score_blocks_clue["edge_recall"] + score_blocks_clue["edge_precision"]
+    final_score = score_blocks_clue["adjusted_rand_score"]
+    return final_score
 
 def objective_function(pars):
     global all_elements, all_elements_blid, all_dms
@@ -25,16 +27,17 @@ def objective_function(pars):
     )
     with ProcessPoolExecutor(max_workers=16) as executor:
         scores = executor.map(run_model, [(model, a[0], a[1], a[2]) for a in zip(all_elements, all_elements_blid, all_dms)])
+    #scores = map(run_model, [(model, a[0], a[1], a[2]) for a in zip(all_elements, all_elements_blid, all_dms)])
     scores = list(scores)
     m = np.mean(scores)
-    print(rho_ecal, rho_hcal, rho_hf, delta_ecal, delta_hcal, delta_hf, m)
+    print(pars, m)
     return -m
 
 if __name__ == "__main__":
     fns = []
     for i in range(1,2):
-        for j in range(100):
-            fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
+        for j in range(200):
+            fn = "data/TTbar_run3/step3_ntuple_{0}_ev{1}.npz".format(i, j)
             fns += [fn]
 
     print("loading data from {0} files".format(len(fns)))
