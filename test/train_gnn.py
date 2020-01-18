@@ -44,11 +44,11 @@ def test(model,loader,total,batch_size):
     for i,data in t:
         data = data.to(device)
         batch_target = data.y
-        batch_output = model(data)
+        batch_output, candidates = model(data)
         batch_weights_real = batch_target*len(batch_target)/(2.*torch.sum(batch_target))
         batch_weights_fake = (1 - batch_target)*len(batch_target)/(2.*torch.sum(1 - batch_target))
         batch_weights = batch_weights_real + batch_weights_fake
-        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights).item()
+        batch_loss_item = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights).item() + F.mse_loss(candidates, data.y_candidates[:, 1:].to(dtype=torch.float)).item()
         sum_loss += batch_loss_item
         matches = ((batch_output > 0.5) == (batch_target > 0.5))
         true_pos = ((batch_output > 0.5) & (batch_target > 0.5))
@@ -74,8 +74,11 @@ def test(model,loader,total,batch_size):
           'sfp', sum_falsepos,
           'sfn', sum_falseneg,
           'stot', sum_total)
-    #acc = sum_corrrect / sum_total
-    acc = sum_truepos/sum_true/2. + sum_trueneg / sum_false/2.
+    acc = 0.0
+    if sum_true > 0 and sum_false > 0:
+        acc = sum_truepos/sum_true/2. + sum_trueneg / sum_false/2.
+    print(candidates[:5])
+    print(data.y_candidates[:5, 1:])
     return sum_loss/(i+1), acc, sum_truepos/sum_true, sum_falsepos / sum_false, sum_falseneg / sum_true, sum_truepos/(sum_truepos+sum_falsepos + 1e-6)
 
 def train(model, optimizer, epoch, loader, total, batch_size):
@@ -88,11 +91,11 @@ def train(model, optimizer, epoch, loader, total, batch_size):
         data = data.to(device)
         optimizer.zero_grad()
         batch_target = data.y        
-        batch_output = model(data)
+        batch_output, candidates = model(data)
         batch_weights_real = batch_target*len(batch_target)/(2.*torch.sum(batch_target))
         batch_weights_fake = (1 - batch_target)*len(batch_target)/(2.*torch.sum(1 - batch_target))
         batch_weights = batch_weights_real + batch_weights_fake
-        batch_loss = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights)
+        batch_loss = F.binary_cross_entropy(batch_output, batch_target, weight=batch_weights) + F.mse_loss(candidates, data.y_candidates[:, 1:].to(dtype=torch.float))
         batch_loss.backward()
         batch_loss_item = batch_loss.item()
         t.set_description("batch loss = %.5f" % batch_loss_item)
@@ -108,17 +111,17 @@ def train(model, optimizer, epoch, loader, total, batch_size):
 
 def main(args): 
 
-    full_dataset = PFGraphDataset(root='/storage/user/jduarte/particleflow/graph_data/')
+    full_dataset = PFGraphDataset(root='data/TTbar_run3/')
+    full_dataset.raw_dir = "data/TTbar_run3"
+    full_dataset.processed_dir = "data/TTbar_run3/processed_jd"
     
     data = full_dataset.get(0)
     input_dim = data.x.shape[1]
     edge_dim = data.edge_attr.shape[1]
     fulllen = len(full_dataset)
     
-    tv_frac = 0.10
-    tv_num = math.ceil(fulllen*tv_frac)
-    splits = np.cumsum([fulllen-2*tv_num,tv_num,tv_num])
-    batch_size = 64
+    splits = [10,20,30]
+    batch_size = 2
     n_epochs = 100
     lr = 0.01
     patience = 10
@@ -128,7 +131,7 @@ def main(args):
     train_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=0,stop=splits[0]))
     valid_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=splits[1],stop=splits[2]))
     test_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=splits[0],stop=splits[1]))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
 
@@ -136,7 +139,7 @@ def main(args):
     valid_samples = len(valid_dataset)
     test_samples = len(test_dataset)
     
-    model = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
+    model = EdgeNet(device, input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
     model_fname = get_model_fname(model)
 

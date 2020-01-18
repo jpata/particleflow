@@ -97,7 +97,7 @@ if __name__ == "__main__":
     all_elem_pairs_X = []
     all_elem_pairs_y = []
     
-    for i in range(1,6):
+    for i in range(1, 10):
         for j in range(200):
             fn = "data/TTbar_run3/step3_ntuple_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
@@ -151,10 +151,10 @@ if __name__ == "__main__":
     ret = model.fit(
         elem_pairs_X[:ntrain], elem_pairs_y[:ntrain, 0], sample_weight=weights[:ntrain],
         validation_data=(elem_pairs_X[ntrain:], elem_pairs_y[ntrain:, 0], weights[ntrain:]),
-        batch_size=10000, epochs=200
+        batch_size=100000, epochs=200
     )
 
-    pp = model.predict(elem_pairs_X, batch_size=10000)
+    pp = model.predict(elem_pairs_X, batch_size=100000)
     confusion = sklearn.metrics.confusion_matrix(elem_pairs_y[ntrain:, 0], pp[ntrain:]>0.5)
 
     print(confusion)

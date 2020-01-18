@@ -653,7 +653,7 @@ class GNN(DummyPFAlgo):
         import torch
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_blocks = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
-        self.model_blocks.load_state_dict(torch.load('data/EdgeNet_14001_ca9bbfb3bb_jduarte.best.pth',map_location=device))
+        self.model_blocks.load_state_dict(torch.load('EdgeNet_14001_ca9bbfb3bb_jpata.best.pth',map_location=device))
         self.model_regression = keras.models.load_model("data/regression.h5")
         with open("data/preprocessing.pkl", "rb") as fi:
             self.preprocessing_reg = pickle.load(fi)
@@ -755,19 +755,19 @@ if __name__ == "__main__":
         score_blocks_gnn = m2.assess_blocks(els_blid, els_blid_pred_gnn, dm)
         
         #Run candidate regression with the true blocks 
-        #score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
+        score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
 
         #Run candidate regression with the predicted blocks 
-        #cands_pred = m.predict_candidates(els, els_blid_pred)
-        #score_cands = m.assess_candidates(cands, cands_pred)
+        cands_pred = m.predict_candidates(els, els_blid_pred)
+        score_cands = m.assess_candidates(cands, cands_pred)
         
         ret = {
             "blocks": score_blocks,
             "blocks_dummy": score_blocks_dummy,
             "blocks_clue": score_blocks_clue,
             "blocks_gnn": score_blocks_gnn,
-            #"cand_true_blocks": score_true_blocks,
-            #"cand_pred_blocks": score_cands,
+            "cand_true_blocks": score_true_blocks,
+            "cand_pred_blocks": score_cands,
         }
         
         print("score_blocks", score_blocks)
