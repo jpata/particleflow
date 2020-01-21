@@ -1,9 +1,14 @@
-import setGPU
+use_gpu = False
+try:
+    import setGPU
+    use_gpu = True
+except Exception as e:
+    print("GPU not available")
 
 import torch
-print(torch.__version__)
+print("torch", torch.__version__)
 import torch_geometric
-print(torch_geometric.__version__)
+print("torch_geometric", torch_geometric.__version__)
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -25,159 +30,111 @@ import numba
 import tqdm
 import sys
 import os
-#import termplotlib as tpl
-  
+import sklearn
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from graph_data import PFGraphDataset
 
-device = torch.device('cuda')
+device = torch.device('cuda' if use_gpu else 'cpu')
 
-class EdgeConvWithEdgeAttr(MessagePassing):
-    def __init__(self, nn_phi, nn_gamma, aggr='max', **kwargs):
-        super(EdgeConvWithEdgeAttr, self).__init__(aggr=aggr, **kwargs)
-        self.nn_phi = nn_phi
-        self.nn_gamma = nn_gamma
-        self.reset_parameters()
+#all candidate pdg-ids (multiclass labels)
+class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 
-    def reset_parameters(self):
-        reset(self.nn_phi)
-        reset(self.nn_gamma)
+#map these to ids 0...Nclass
+class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
 
-    def forward(self, x, edge_index, edge_attr):
-        """"""
-        x = x.unsqueeze(-1) if x.dim() == 1 else x
-        pseudo = edge_attr.unsqueeze(-1) if edge_attr.dim() == 1 else edge_attr
-        return self.propagate(edge_index, x=x, pseudo=pseudo)
+def get_model_fname(model):
+    model_name = type(model).__name__
+    model_params = sum(p.numel() for p in model.parameters())
+    import hashlib
+    model_cfghash = hashlib.blake2b(repr(model).encode()).hexdigest()[:10]
+    model_user = os.environ['USER']
+    
+    model_fname = '%s_%d_%s_%s'%(model_name,model_params,
+                                 model_cfghash, model_user)
+    return model_fname
 
-    def message(self, x_i, x_j, pseudo):
-        return self.nn_phi(torch.cat([x_i, x_j - x_i, pseudo], dim=1))
+def plot_confusion_matrix(cm,
+                          target_names,
+                          title='Confusion matrix',
+                          cmap=None,
+                          normalize=True):
+    """
+    given a sklearn confusion matrix (cm), make a nice plot
 
-    def __repr__(self):
-        return '{}(nn_phi={}, nn_gamma={})'.format(self.__class__.__name__, self.nn_phi, self.nn_gamma)
-   
-    def update(self, aggr_out):
-        return self.nn_gamma(aggr_out) 
+    Arguments
+    ---------
+    cm:           confusion matrix from sklearn.metrics.confusion_matrix
 
-#Original graph net
-class PFNet2(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, edge_dim=1, output_dim=4, n_iters=1, aggr='mean'):
-        super(PFNet2, self).__init__()
-        
-        convnn = nn.Sequential(nn.Linear(2*(hidden_dim + input_dim)+edge_dim, 2*hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(2*hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-        )
-        gamma_nn = nn.Sequential(nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-        )
-        convnn2 = nn.Sequential(nn.Linear(2*(hidden_dim + input_dim)+hidden_dim, 2*hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(2*hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-        )
-        gamma_nn2 = nn.Sequential(nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, hidden_dim),
-                               nn.LeakyReLU(),
-                               nn.Linear(hidden_dim, 4),
-        )
+    target_names: given classification classes such as [0, 1, 2]
+                  the class names, for example: ['high', 'medium', 'low']
 
-        self.n_iters = n_iters
-        
-        self.batchnorm1 = nn.BatchNorm1d(input_dim)
-        self.batchnorm2 = nn.BatchNorm1d(hidden_dim + input_dim)
-        self.batchnorm3 = nn.BatchNorm1d(hidden_dim + input_dim)
+    title:        the text to display at the top of the matrix
 
-        self.inputnet =  nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-        )
+    cmap:         the gradient of the values displayed from matplotlib.pyplot.cm
+                  see http://matplotlib.org/examples/color/colormaps_reference.html
+                  plt.get_cmap('jet') or plt.cm.Blues
 
-        self.nodenetwork = EdgeConvWithEdgeAttr(nn_phi=convnn, nn_gamma=gamma_nn, aggr=aggr)
-        self.pooling1 = EdgePooling(hidden_dim + input_dim)
-        self.pooling2 = EdgePooling(hidden_dim + input_dim)
-        self.outnetwork = nn.Sequential(
-            nn.Linear(hidden_dim+input_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
+    normalize:    If False, plot the raw numbers
+                  If True, plot the proportions
 
-    def forward(self, data):        
-        X = self.batchnorm1(data.x)
-        X = data.x
-        H = self.inputnet(X)
-        x = torch.cat([H,X], dim=-1)
+    Usage
+    -----
+    plot_confusion_matrix(cm           = cm,                  # confusion matrix created by
+                                                              # sklearn.metrics.confusion_matrix
+                          normalize    = True,                # show proportions
+                          target_names = y_labels_vals,       # list of names of the classes
+                          title        = best_estimator_name) # title of graph
 
-        for i in range(self.n_iters):
-            x = self.batchnorm2(x)
-            H = self.nodenetwork(x, data.edge_index, data.edge_attr)
-            x = torch.cat([H,X], dim=-1)
+    Citiation
+    ---------
+    http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
 
-        x = self.batchnorm3(x)
-        r, edge_index, batch, unpool_info1 = self.pooling1(x, data.edge_index, data.batch)
-        r, edge_index, batch, unpool_info2 = self.pooling2(r, edge_index, batch)
-        r, edge_index, batch = self.pooling2.unpool(r, unpool_info2)
-        r, edge_index, batch = self.pooling1.unpool(r, unpool_info1)
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import itertools
 
-        r = self.outnetwork(r)
-        #Is this output candidate enabled?
-        r1 = torch.sigmoid(r[:, 0])
-        #Momentum components
-        r[:, 0] = r1
-        return r
+    accuracy = np.trace(cm) / float(np.sum(cm))
+    misclass = 1 - accuracy
 
-#GCN based
-class PFNet3(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, edge_dim=1, output_dim=4, n_iters=1, aggr='mean'):
-        super(PFNet3, self).__init__()
-        self.inputnet =  nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-        )
-        self.batchnorm1 = nn.BatchNorm1d(hidden_dim)
+    if cmap is None:
+        cmap = plt.get_cmap('Blues')
 
-        self.conv1 = GCNConv(hidden_dim, hidden_dim)        
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)        
-        self.conv3 = GCNConv(hidden_dim, hidden_dim)        
+    plt.figure(figsize=(8, 6))
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
 
-        self.outnetwork = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
+    if target_names is not None:
+        tick_marks = np.arange(len(target_names))
+        plt.xticks(tick_marks, target_names, rotation=45)
+        plt.yticks(tick_marks, target_names)
 
-    def forward(self, data):
-        x = self.inputnet(data.x)
-        x = self.batchnorm1(x)
-        #x = torch.nn.functional.dropout(x, p=0.3)
-        x = torch.nn.functional.elu(self.conv1(x, data.edge_index))
-        x = torch.nn.functional.elu(self.conv2(x, data.edge_index))
-        x = torch.nn.functional.elu(self.conv3(x, data.edge_index))
-        #x = torch.nn.functional.dropout(x, p=0.3)
-        r = self.outnetwork(x)
-        r1 = torch.sigmoid(r[:, 0])
-        r[:, 0] = r1
-        return r
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plt.text(j, i, "{:0.2f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plt.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+
+    plt.ylabel('True label')
+    plt.xlim(-1, len(target_names))
+    plt.ylim(-1, len(target_names))
+    plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+    plt.tight_layout()
 
 #Dense all to all (batch size 1 only)
 class PFNet4(nn.Module):
@@ -255,6 +212,12 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
         )
         #self.bn1 = nn.BatchNorm1d(hidden_dim)
         self.conv1 = GCNConv(hidden_dim, hidden_dim) 
@@ -264,17 +227,22 @@ class PFNet6(nn.Module):
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GCNConv(hidden_dim, hidden_dim) 
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        #self.bn2 = nn.BatchNorm1d(hidden_dim)
         #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
@@ -300,7 +268,6 @@ class PFNet6(nn.Module):
 
         #Run a graph convolution to embed the nodes
         x = self.conv1(x, data.edge_index, edge_weight)
-        #x = self.bn1(x)
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]]], axis=-1)
@@ -321,15 +288,10 @@ class PFNet6(nn.Module):
         #up = self.bn2(up)
 
         r = self.nn1(up)
-        #for i in range(r.shape[1]):
-        #    r[:, i] *= m
-        r[:, 0] = torch.sigmoid(r[:, 0])
-        #r2 = (r[:, 0] > 0.9).to(dtype=torch.float)
-        #r[:, 1] *= r2
-        #r[:, 2] *= r2
-        #r[:, 3] *= r2
-
-        return edge_weight, r
+        n_onehot = len(class_to_id)
+        cand_ids = torch.nn.functional.softmax(r[:, :n_onehot], dim=-1)
+        cand_p4 = r[:, n_onehot:]
+        return edge_weight, cand_ids, cand_p4
 
 def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
     losses = []
@@ -361,72 +323,101 @@ def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
     loss2 = torch.nn.functional.mse_loss(y_pred[:, 1:], y_true[:, 1:])
     loss = loss1 + loss2
     return (jagged_sum_pred, jagged_sum_tgt, loss)
- 
+
+#Do any in-memory transformations to data
+def data_prep(data):
+
+    #Convert pdg-ids to consecutive class labels
+    for k, v in class_to_id.items():
+        m = data.y_candidates[:, 0] == v
+        data.y_candidates[m, 0] = k
+
+    #Create a one-hot encoded vector of the class labels
+    id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
+    
+    #Extract the ids and momenta
+    data.y_candidates_id = data.y_candidates[:, 0].to(dtype=torch.long)
+    data.y_candidates = data.y_candidates[:, 1:]
+
+
 def train(model, loader, batch_size, epoch, optimizer):
     corrs_batch = []
-    
-    num_pred = []
-    num_true = []
-   
+
     is_train = not (optimizer is None)
 
-    losses = []
+    losses = np.zeros((len(loader), 3))
+
     for i, data in enumerate(loader):
         data = data.to(device)
+        data_prep(data)
+
         if is_train:
             optimizer.zero_grad()
-        edges, output = model(data)
 
-        data.y_candidates[:, 0] = (data.y_candidates[:, 0]!=0).to(dtype=torch.float)
-        
-        #Loss for output candidate enabled/disabled
-        l1 = torch.nn.functional.binary_cross_entropy(output[:, 0], data.y_candidates[:, 0])
+        edges, cand_id_onehot, cand_momentum = model(data)
+        _, indices = torch.max(cand_id_onehot, -1)
 
-        #Loss for candidate p4 properties
-        l2 = torch.nn.functional.mse_loss(output[:, 1:], data.y_candidates[:, 1:]) / 5.0
+        #Predictions where both the predicted and true class label was nonzero
+        #In these cases, the true candidate existed and a candidate was predicted
+        msk = (indices != 0) & (data.y_candidates_id != 0)
+
+        # msk_batch, _ = torch_geometric.utils.to_dense_batch(msk, data.batch)
+        # ids_batch, _ = torch_geometric.utils.to_dense_batch(data.y_candidates_id!=0, data.batch)
+
+        # ncand_pred = msk_batch.sum(axis=1).numpy()
+        # ncand_true = ids_batch.sum(axis=1).numpy()
+
+        #Loss for output candidate id (multiclass)
+        l1 = torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id)
+
+        #Loss for candidate p4 properties (regression)
+        l2 = torch.nn.functional.mse_loss(cand_momentum, data.y_candidates) / 10.0
         
-        #Loss for edges enabled/disabled in clustering
-        l3 = torch.nn.functional.binary_cross_entropy(edges, data.y)
+        #Loss for edges enabled/disabled in clustering (binary)
+        l3 = torch.nn.functional.binary_cross_entropy(edges, data.y) * 2.0
 
         batch_loss = l1 + l2 + l3
-        losses += [(l1.item(), l2.item(), l3.item())]
+        losses[i, 0] = l1.item()
+        losses[i, 1] = l2.item()
+        losses[i, 2] = l3.item()
         
         if is_train:
             batch_loss.backward()
         batch_loss_item = batch_loss.item()
+
         if is_train:
             optimizer.step()
 
-        #Compute correlation  
+        #Compute correlation of predicted and true pt values for monitoring
         corr_pt = 0.0 
-        msk = (output[:, 0]>0.9)
         if msk.sum()>0:
             corr_pt = np.corrcoef(
-                output[msk, 1].detach().cpu().numpy(),
-                data.y_candidates[msk, 1].detach().cpu().numpy())[0,1]
+                cand_momentum[msk, 0].detach().cpu().numpy(),
+                data.y_candidates[msk, 0].detach().cpu().numpy())[0,1]
 
         corrs_batch += [corr_pt]
-  
+
     corr = np.mean(corrs_batch)
-    losses = tuple([sum([l[i] for l in losses]) for i in range(len(losses[0]))])
+    losses = losses.sum(axis=0)
     return losses, corr
 
-def make_plots(path, losses_train, losses_test, corrs_train, corrs_test, test_loader):
+def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, test_loader):
    
     try:
         os.makedirs(path)
     except Exception as e:
         pass
- 
-    fig = plt.figure(figsize=(5,5))
-    plt.plot(losses_train)
-    plt.plot(losses_test)
-    plt.ylim(0,2*losses_train[-1])
-    plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.savefig(path + "loss.pdf")
-    del fig
-    plt.clf()
+
+    for i in range(losses_train.shape[1]):
+        fig = plt.figure(figsize=(5,5))
+        plt.plot(losses_train[:n_epoch, i])
+        plt.plot(losses_test[:n_epoch, i])
+        plt.ylim(0.5*losses_train[:n_epoch, i][-1],2*losses_train[:n_epoch, i][-1])
+        plt.xlabel("epoch")
+        plt.ylabel("loss")
+        plt.savefig(path + "loss_{0}.pdf".format(i))
+        del fig
+        plt.clf()
     
     fig = plt.figure(figsize=(5,5))
     plt.plot(corrs_train)
@@ -437,16 +428,31 @@ def make_plots(path, losses_train, losses_test, corrs_train, corrs_test, test_lo
     del fig
     plt.clf()
  
+    #plot the first 5 batches from the test dataset 
     for i, data in enumerate(test_loader):
         if i>5:
             break
         d = data.to(device=device)
-        edges, output = model(d)
-        msk = output[:, 0] > 0.9        
+        data_prep(data)
+
+        edges, cand_id_onehot, cand_momentum = model(d)
+        _, indices = torch.max(cand_id_onehot, -1)
+        msk = indices!=0
+        inds2 = torch.nonzero(msk)
+        perm = torch.randperm(len(inds2))
+        inds2 = inds2[perm[:1000]]
+
+        confusion = sklearn.metrics.confusion_matrix(
+            data.y_candidates_id, indices,
+            labels=range(len(class_labels)))
+        plot_confusion_matrix(cm = confusion, target_names=class_labels, normalize=False)
+        plt.savefig(path + "confusion_{0}.pdf".format(i))
+        plt.clf()
+
         fig = plt.figure(figsize=(5,5))
         plt.scatter(
-            data.y_candidates[msk, 1].detach().cpu().numpy(),
-            output[msk, 1].detach().cpu().numpy(),
+            data.y_candidates[inds2, 0].detach().cpu().numpy()[:1000],
+            cand_momentum[inds2, 0].detach().cpu().numpy()[:1000],
             marker=".", alpha=0.5)
         plt.plot([0,5],[0,5])
         plt.xlim(0,5)
@@ -459,8 +465,8 @@ def make_plots(path, losses_train, losses_test, corrs_train, corrs_test, test_lo
  
         fig = plt.figure(figsize=(5,5))
         plt.scatter(
-            data.y_candidates[msk, 2].detach().cpu().numpy(),
-            output[msk, 2].detach().cpu().numpy(),
+            data.y_candidates[inds2, 1].detach().cpu().numpy()[:1000],
+            cand_momentum[inds2, 1].detach().cpu().numpy()[:1000],
             marker=".", alpha=0.5)
         plt.plot([-5,5],[-5,5])
         plt.xlim(-5,5)
@@ -473,8 +479,8 @@ def make_plots(path, losses_train, losses_test, corrs_train, corrs_test, test_lo
  
         fig = plt.figure(figsize=(5,5))
         plt.scatter(
-            data.y_candidates[msk, 3].detach().cpu().numpy(),
-            output[msk, 3].detach().cpu().numpy(),
+            data.y_candidates[inds2, 2].detach().cpu().numpy()[:1000],
+            cand_momentum[inds2, 2].detach().cpu().numpy()[:1000],
             marker=".", alpha=0.5)
         plt.plot([-5,5],[-5,5])
         plt.xlim(-5,5)
@@ -486,29 +492,29 @@ def make_plots(path, losses_train, losses_test, corrs_train, corrs_test, test_lo
         plt.clf()
     
         fig = plt.figure(figsize=(5,5))
-        b = np.linspace(0,10,40)
-        plt.hist(data.y_candidates[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.hist(output[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.ylabel("pt")
-        plt.savefig(path + "pt.pdf")
+        b = np.linspace(0,10,60)
+        plt.hist(data.y_candidates[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.hist(cand_momentum[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.xlabel("pt")
+        plt.savefig(path + "pt_{0}.pdf".format(i))
         del fig
         plt.clf()
  
         fig = plt.figure(figsize=(5,5))
-        b = np.linspace(-5,5,40)
-        plt.hist(data.y_candidates[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.hist(output[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.ylabel("eta")
-        plt.savefig(path + "eta.pdf")
+        b = np.linspace(-5,5,60)
+        plt.hist(data.y_candidates[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.hist(cand_momentum[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.xlabel("eta")
+        plt.savefig(path + "eta_{0}.pdf".format(i))
         del fig
         plt.clf()
         
         fig = plt.figure(figsize=(5,5))
-        b = np.linspace(-5,5,40)
-        plt.hist(data.y_candidates[msk, 3].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.hist(output[msk, 3].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.ylabel("phi")
-        plt.savefig(path + "phi.pdf")
+        b = np.linspace(-5,5,60)
+        plt.hist(data.y_candidates[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.hist(cand_momentum[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.xlabel("phi")
+        plt.savefig(path + "phi_{0}.pdf".format(i))
         del fig
         plt.clf()
         plt.close("all")
@@ -518,16 +524,19 @@ if __name__ == "__main__":
     full_dataset = PFGraphDataset(root='data/TTbar_run3')
     full_dataset.raw_dir = "data/TTbar_run3"
     full_dataset.processed_dir = "data/TTbar_run3/processed_jd"
-  
-    model_name = sys.argv[1]
- 
+
+    model_choice = sys.argv[1]
+
     input_dim = 8
+
+    #one-hot particle ID and 3 momentum components
+    output_dim = len(class_to_id) + 3
     edge_dim = 1
-    
-    batch_size = 20
-    n_train = 100
-    n_epochs = 1000
-    lr = 1e-4
+
+    batch_size = 1
+    n_train = 1
+    n_epochs = 500
+    lr = 1e-3
     hidden_dim = 64
     patience = 200
 
@@ -536,11 +545,12 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
 
-    if model_name == "simple":
-        model = PFNet4(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
-    elif model_name == "gnn":
-        model = PFNet6(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
-
+    if model_choice == "simple":
+        model = PFNet4(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+    elif model_choice == "gnn":
+        model = PFNet6(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+    
+    model_fname = get_model_fname(model)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
@@ -552,11 +562,10 @@ if __name__ == "__main__":
     
     model.train()
     
-    losses1 = []
-    losses2 = []
+    losses_train = np.zeros((n_epochs, 3))
+    losses_test = np.zeros((n_epochs, 3))
+
     corrs = []
-    losses1_t = []
-    losses2_t = []
     corrs_t = []
     best_test_loss = 99999.9
     stale_epochs = 0
@@ -570,14 +579,14 @@ if __name__ == "__main__":
 
         model.train()
         losses, c = train(model, train_loader, batch_size, j, optimizer)
-        l = sum(list(losses))
-        losses1 += [l]    
+        l = sum(losses)
+        losses_train[j] = losses
         corrs += [c]
 
         model.eval()
         losses_t, c_t = train(model, test_loader, batch_size, j, None)
-        l_t = sum(list(losses_t))
-        losses1_t += [l_t]
+        l_t = sum(losses_t)
+        losses_test[j] = losses_t
         corrs_t += [c_t]
         
         if l_t < best_test_loss:
@@ -585,13 +594,12 @@ if __name__ == "__main__":
             stale_epochs = 0
         else:
             stale_epochs += 1
-        if j > 0 and j%20 == 0:
-            make_plots("data/{0}/epoch_{1}/".format(model_name, j), losses1, losses1_t, corrs, corrs_t, test_loader)
+        if j > 0 and j%5 == 0:
+            make_plots(j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
         
         t1 = time.time()
         eta = (n_epochs - j)*((t1 - t0_initial)/(j + 1)) / 60.0
-        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.5f}/{:.5f} l1={:.2f} l2={:.2f} l3={:.2f} stale={} eta={:.1f}m".format(
+
+        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
             j, n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
-    make_plots("data/{0}/epoch_{1}/".format(model_name, j), losses1, losses1_t, corrs, corrs_t, test_loader)
-
-
+    make_plots(j, "data/{0}/epoch_{1}/".format(model_name, j), losses_train, losses_test, corrs, corrs_t, test_loader)
