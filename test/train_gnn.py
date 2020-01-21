@@ -124,8 +124,8 @@ def main(args):
     batch_size = 2
     n_epochs = 100
     lr = 0.01
-    patience = 10
-    hidden_dim = 32
+    patience = 50
+    hidden_dim = 256
     n_iters = 1
 
     train_dataset = torch.utils.data.Subset(full_dataset,np.arange(start=0,stop=splits[0]))
