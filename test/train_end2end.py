@@ -351,6 +351,10 @@ def data_prep(data):
     data.y_candidates -= y_candidates_means
     data.y_candidates /= y_candidates_stds
 
+@torch.no_grad()
+def test(model, loader, batch_size, epoch):
+    return train(model, loader, batch_size, epoch, None)
+
 def train(model, loader, batch_size, epoch, optimizer):
     corrs_batch = []
 
@@ -412,12 +416,16 @@ def train(model, loader, batch_size, epoch, optimizer):
     losses = losses.sum(axis=0)
     return losses, corr
 
-def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, test_loader):
+def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, test_loader):
    
     try:
         os.makedirs(path)
     except Exception as e:
         pass
+
+    modpath = path + model_fname + '.best.pth'
+    torch.save(model.state_dict(), modpath)
+
 
     for i in range(losses_train.shape[1]):
         fig = plt.figure(figsize=(5,5))
@@ -565,9 +573,9 @@ if __name__ == "__main__":
     output_dim = len(class_to_id) + 3
     edge_dim = 1
 
-    batch_size = 1
-    n_train = 5
-    n_epochs = 1000
+    batch_size = 20
+    n_train = 1000
+    n_epochs = 10000
     lr = 5*1e-4
     hidden_dim = 64
     patience = n_epochs
@@ -617,7 +625,7 @@ if __name__ == "__main__":
         corrs += [c]
 
         model.eval()
-        losses_t, c_t = train(model, test_loader, batch_size, j, None)
+        losses_t, c_t = test(model, test_loader, batch_size, j)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
@@ -628,7 +636,7 @@ if __name__ == "__main__":
         else:
             stale_epochs += 1
         if j > 0 and j%20 == 0:
-            make_plots(j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
+            make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
         
         t1 = time.time()
         epochs_remaining = n_epochs - j
@@ -637,4 +645,4 @@ if __name__ == "__main__":
 
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
             j, n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
-    make_plots(j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
+    make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
