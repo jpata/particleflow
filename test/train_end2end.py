@@ -289,7 +289,7 @@ class PFNet6(nn.Module):
 
         r = self.nn1(up)
         n_onehot = len(class_to_id)
-        cand_ids = torch.nn.functional.softmax(r[:, :n_onehot], dim=-1)
+        cand_ids = r[:, :n_onehot]
         cand_p4 = r[:, n_onehot:]
         return edge_weight, cand_ids, cand_p4
 
@@ -437,56 +437,71 @@ def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test
 
         edges, cand_id_onehot, cand_momentum = model(d)
         _, indices = torch.max(cand_id_onehot, -1)
-        msk = indices!=0
+        msk = (indices != 0) & (data.y_candidates_id != 0)
         inds2 = torch.nonzero(msk)
         perm = torch.randperm(len(inds2))
         inds2 = inds2[perm[:1000]]
 
         confusion = sklearn.metrics.confusion_matrix(
-            data.y_candidates_id, indices,
+            data.y_candidates_id.detach().cpu().numpy(), indices.detach().cpu().numpy(),
             labels=range(len(class_labels)))
         plot_confusion_matrix(cm = confusion, target_names=class_labels, normalize=False)
         plt.savefig(path + "confusion_{0}.pdf".format(i))
         plt.clf()
 
         fig = plt.figure(figsize=(5,5))
+        v1 = data.y_candidates[inds2, 0].detach().cpu().numpy()[:, 0]
+        v2 = cand_momentum[inds2, 0].detach().cpu().numpy()[:, 0]
+        c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
-            data.y_candidates[inds2, 0].detach().cpu().numpy()[:1000],
-            cand_momentum[inds2, 0].detach().cpu().numpy()[:1000],
+            v1[:1000],
+            v2[:1000],
             marker=".", alpha=0.5)
         plt.plot([0,5],[0,5])
         plt.xlim(0,5)
         plt.ylim(0,5)
         plt.xlabel("pt_true")
         plt.ylabel("pt_pred")
+        plt.title("corr = {:.2f}".format(c))
+        plt.tight_layout()
         plt.savefig(path + "pt_corr_{0}.pdf".format(i))
         del fig
         plt.clf()
  
         fig = plt.figure(figsize=(5,5))
+        v1 = data.y_candidates[inds2, 1].detach().cpu().numpy()[:, 0]
+        v2 = cand_momentum[inds2, 1].detach().cpu().numpy()[:, 0]
+        c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
-            data.y_candidates[inds2, 1].detach().cpu().numpy()[:1000],
-            cand_momentum[inds2, 1].detach().cpu().numpy()[:1000],
+            v1[:1000],
+            v2[:1000],
             marker=".", alpha=0.5)
         plt.plot([-5,5],[-5,5])
         plt.xlim(-5,5)
         plt.ylim(-5,5)
         plt.xlabel("eta_true")
         plt.ylabel("eta_pred")
+        plt.title("corr = {:.2f}".format(c))
+        plt.tight_layout()
         plt.savefig(path + "eta_corr_{0}.pdf".format(i))
         del fig
         plt.clf()
  
         fig = plt.figure(figsize=(5,5))
+        v1 = data.y_candidates[inds2, 2].detach().cpu().numpy()[:, 0]
+        v2 = cand_momentum[inds2, 2].detach().cpu().numpy()[:, 0]
+        c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
-            data.y_candidates[inds2, 2].detach().cpu().numpy()[:1000],
-            cand_momentum[inds2, 2].detach().cpu().numpy()[:1000],
+            v1[:1000],
+            v2[:1000],
             marker=".", alpha=0.5)
         plt.plot([-5,5],[-5,5])
         plt.xlim(-5,5)
         plt.ylim(-5,5)
         plt.xlabel("phi_true")
         plt.ylabel("phi_pred")
+        plt.title("corr = {:.2f}".format(c))
+        plt.tight_layout()
         plt.savefig(path + "phi_corr_{0}.pdf".format(i))
         del fig
         plt.clf()
@@ -496,6 +511,7 @@ def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test
         plt.hist(data.y_candidates[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("pt")
+        plt.tight_layout()
         plt.savefig(path + "pt_{0}.pdf".format(i))
         del fig
         plt.clf()
@@ -505,6 +521,7 @@ def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test
         plt.hist(data.y_candidates[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("eta")
+        plt.tight_layout()
         plt.savefig(path + "eta_{0}.pdf".format(i))
         del fig
         plt.clf()
@@ -514,6 +531,7 @@ def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test
         plt.hist(data.y_candidates[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("phi")
+        plt.tight_layout()
         plt.savefig(path + "phi_{0}.pdf".format(i))
         del fig
         plt.clf()
@@ -533,12 +551,12 @@ if __name__ == "__main__":
     output_dim = len(class_to_id) + 3
     edge_dim = 1
 
-    batch_size = 1
-    n_train = 1
-    n_epochs = 500
-    lr = 1e-3
+    batch_size = 20
+    n_train = 100
+    n_epochs = 1000
+    lr = 1e-4
     hidden_dim = 64
-    patience = 200
+    patience = n_epochs
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=n_train))
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=n_train, stop=2*n_train))
@@ -594,12 +612,14 @@ if __name__ == "__main__":
             stale_epochs = 0
         else:
             stale_epochs += 1
-        if j > 0 and j%5 == 0:
+        if j > 0 and j%20 == 0:
             make_plots(j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
         
         t1 = time.time()
-        eta = (n_epochs - j)*((t1 - t0_initial)/(j + 1)) / 60.0
+        epochs_remaining = n_epochs - j
+        time_per_epoch = (t1 - t0_initial)/(j + 1) 
+        eta = epochs_remaining*time_per_epoch/60
 
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
             j, n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
-    make_plots(j, "data/{0}/epoch_{1}/".format(model_name, j), losses_train, losses_test, corrs, corrs_t, test_loader)
+    make_plots(j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
