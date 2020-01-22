@@ -330,7 +330,9 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
         )
         #self.bn1 = nn.BatchNorm1d(hidden_dim)
-        self.conv1 = SGConv(hidden_dim, hidden_dim, K=1) 
+        self.conv1a = SGConv(hidden_dim, hidden_dim, K=1) 
+        self.conv1b = SGConv(hidden_dim, hidden_dim, K=1) 
+        self.conv1c = SGConv(hidden_dim, hidden_dim, K=1) 
         #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim, hidden_dim),
@@ -340,7 +342,9 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+        self.conv2a = SGConv(hidden_dim, hidden_dim, K=1)
+        self.conv2b = SGConv(hidden_dim, hidden_dim, K=1)
+        self.conv2c = SGConv(hidden_dim, hidden_dim, K=1)
         #self.bn2 = nn.BatchNorm1d(hidden_dim)
         #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
         self.nn1 = nn.Sequential(
@@ -369,14 +373,18 @@ class PFNet7(nn.Module):
         edge_weight = data.edge_attr.squeeze(-1)
 
         #Run a graph convolution to embed the nodes
-        x = self.conv1(x, data.edge_index, edge_weight)
+        x = self.conv1a(x, data.edge_index, edge_weight)
+        x = self.conv1b(x, data.edge_index, edge_weight)
+        x = self.conv1c(x, data.edge_index, edge_weight)
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]]], axis=-1)
         edge_weight = self.edgenet(xpairs).squeeze(-1)
         
         #Run a second convolution
-        x = self.conv2(x, data.edge_index, edge_weight)
+        x = self.conv2a(x, data.edge_index, edge_weight)
+        x = self.conv2b(x, data.edge_index, edge_weight)
+        x = self.conv2c(x, data.edge_index, edge_weight)
 
         #Pooling step
         #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
