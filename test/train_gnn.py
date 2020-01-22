@@ -110,7 +110,6 @@ def train(model, optimizer, epoch, loader, total, batch_size):
 
 
 def main(args): 
-
     full_dataset = PFGraphDataset(root='data/TTbar_run3/')
     full_dataset.raw_dir = "data/TTbar_run3"
     full_dataset.processed_dir = "data/TTbar_run3/processed_jd"

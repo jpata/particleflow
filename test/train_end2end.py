@@ -145,9 +145,9 @@ def plot_confusion_matrix(cm,
     plt.tight_layout()
 
 #Dense all to all (batch size 1 only)
-class PFNet4(nn.Module):
+class PFDenseNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
-        super(PFNet4, self).__init__()
+        super(PFDenseNet, self).__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.inputnet = nn.Sequential(
@@ -171,16 +171,18 @@ class PFNet4(nn.Module):
         )
 
     def forward(self, data):
-        x = self.inputnet(data.x)
-        r1 = torch.sigmoid(x[:, 0])
-        x[:, 0] = r1
+        r = self.inputnet(data.x)
         edges = self.edgenet(data.edge_attr).squeeze(-1)
-        return edges, x
+
+        n_onehot = len(class_to_id)
+        cand_ids = r[:, :n_onehot]
+        cand_p4 = r[:, n_onehot:]
+        return edges, cand_ids, cand_p4
 
 #Based on GraphUNet
-class PFNet5(nn.Module):
+class PFGraphUNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
-        super(PFNet5, self).__init__()
+        super(PFGraphUNet, self).__init__()
         self.unet = GraphUNet(input_dim, hidden_dim, hidden_dim,
                               depth=2, pool_ratios=0.2)
         self.outnetwork = nn.Sequential(
@@ -289,7 +291,7 @@ class PFNet6(nn.Module):
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight = self.edgenet(xpairs).squeeze(-1)
         
-        #Run a second convolution
+        #Run a second convolution with the new edges
         x = self.conv2a(x, data.edge_index, edge_weight)
         x = self.conv2b(x, data.edge_index, edge_weight)
         x = self.conv2c(x, data.edge_index, edge_weight)
@@ -303,9 +305,10 @@ class PFNet6(nn.Module):
         #Postprocessing, add initial inputs to encoded hidden layer
         #m = (up[:, 0]!=0).to(dtype=torch.float)
         up = torch.cat([data.x, up], axis=-1)
-        #up = self.bn2(up)
 
+        #Final candidate inference
         r = self.nn1(up)
+
         n_onehot = len(class_to_id)
         cand_ids = r[:, :n_onehot]
         cand_p4 = r[:, n_onehot:]
@@ -391,6 +394,27 @@ class PFNet7(nn.Module):
         cand_ids = r[:, :n_onehot]
         cand_p4 = r[:, n_onehot:]
         return edge_weight, cand_ids, cand_p4
+
+
+model_classes = {
+    "PFDenseNet": PFDenseNet,
+    "PFGraphUNet": PFGraphUNet,
+    "PFNet6": PFNet6,
+    "PFNet7": PFNet7,
+}
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--n_train", type=int, default=100, help="number of training events")
+    parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=1, help="batch size")
+    parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
+    parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    args = parser.parse_args()
+    return args
+
 
 def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
     losses = []
@@ -656,7 +680,7 @@ if __name__ == "__main__":
     full_dataset.raw_dir = "data/TTbar_run3"
     full_dataset.processed_dir = "data/TTbar_run3/processed_jd"
 
-    model_choice = sys.argv[1]
+    args = parse_args()
 
     input_dim = 8
 
@@ -664,27 +688,18 @@ if __name__ == "__main__":
     output_dim = len(class_to_id) + 3
     edge_dim = 1
 
-    batch_size = 2
-    n_train = 100
-    n_epochs = 10000
-    lr = 1e-4
-    hidden_dim = 256
-    patience = n_epochs
+    patience = args.n_epochs
 
-    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=n_train))
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=n_train, stop=2*n_train))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
+    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=2*args.n_train))
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
 
-    if model_choice == "PFNet4":
-        model = PFNet4(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    elif model_choice == "PFNet6":
-        model = PFNet6(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    elif model_choice == "PFNet7":
-        model = PFNet7(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    
-    model_fname = get_model_fname(model, n_train, lr)
-    optimizer = torch.optim.Adam(model.parameters(), lr = lr)
+    model_class = model_classes[args.model]
+    model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim).to(device)
+    model_fname = get_model_fname(model, args.n_train, args.lr)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
     
@@ -696,8 +711,8 @@ if __name__ == "__main__":
     
     model.train()
     
-    losses_train = np.zeros((n_epochs, 3))
-    losses_test = np.zeros((n_epochs, 3))
+    losses_train = np.zeros((args.n_epochs, 3))
+    losses_test = np.zeros((args.n_epochs, 3))
 
     corrs = []
     corrs_t = []
@@ -705,20 +720,20 @@ if __name__ == "__main__":
     stale_epochs = 0
    
     t0_initial = time.time() 
-    for j in range(n_epochs):
+    for j in range(args.n_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
             break
 
         model.train()
-        losses, c = train(model, train_loader, batch_size, j, optimizer)
+        losses, c = train(model, train_loader, args.batch_size, j, optimizer)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
 
         model.eval()
-        losses_t, c_t = test(model, test_loader, batch_size, j)
+        losses_t, c_t = test(model, test_loader, args.batch_size, j)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
@@ -732,10 +747,10 @@ if __name__ == "__main__":
             make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
         
         t1 = time.time()
-        epochs_remaining = n_epochs - j
+        epochs_remaining = args.n_epochs - j
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
-            j, n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
+            j, args.n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
     make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
