@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from torch_geometric.nn import EdgeConv, MessagePassing, EdgePooling, GATConv, GCNConv, JumpingKnowledge, GraphUNet, DynamicEdgeConv
-from torch_geometric.nn import TopKPooling, SAGPooling
+from torch_geometric.nn import TopKPooling, SAGPooling, SGConv
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 from torch_scatter import scatter_mean
 from torch_geometric.nn.inits import reset
@@ -228,17 +228,23 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
         )
         #self.bn1 = nn.BatchNorm1d(hidden_dim)
-        self.conv1 = GCNConv(hidden_dim, hidden_dim) 
+        self.conv1a = GCNConv(hidden_dim, hidden_dim) 
+        self.conv1b = GCNConv(hidden_dim, hidden_dim) 
+        self.conv1c = GCNConv(hidden_dim, hidden_dim) 
         #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
+
+        #pairs of nodes + edge
         self.edgenet = nn.Sequential(
-            nn.Linear(2*hidden_dim, hidden_dim),
+            nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        self.conv2a = GCNConv(hidden_dim, hidden_dim)
+        self.conv2b = GCNConv(hidden_dim, hidden_dim)
+        self.conv2c = GCNConv(hidden_dim, hidden_dim)
         #self.bn2 = nn.BatchNorm1d(hidden_dim)
         #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
         self.nn1 = nn.Sequential(
@@ -251,6 +257,91 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, output_dim),
+        )
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+    def forward(self, data):
+        batch = data.batch
+        
+        #encode the inputs
+        x = self.inp(data.x)
+        edge_index = data.edge_index
+
+        if batch is None:
+            batch = edge_index.new_zeros(x.size(0))
+        edge_weight = data.edge_attr.squeeze(-1)
+
+        #Run a graph convolution to embed the nodes
+        x = self.conv1a(x, data.edge_index, edge_weight)
+        x = self.conv1b(x, data.edge_index, edge_weight)
+        x = self.conv1c(x, data.edge_index, edge_weight)
+        
+        #Compute new edge weights based on embedded node pairs
+        xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
+        edge_weight = self.edgenet(xpairs).squeeze(-1)
+        
+        #Run a second convolution
+        x = self.conv2a(x, data.edge_index, edge_weight)
+        x = self.conv2b(x, data.edge_index, edge_weight)
+        x = self.conv2c(x, data.edge_index, edge_weight)
+
+        #Pooling step
+        #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
+        #up = torch.zeros((data.x.shape[0], self.hidden_dim)).to(device)
+        #up[perm] = x
+        up = x
+
+        #Postprocessing, add initial inputs to encoded hidden layer
+        #m = (up[:, 0]!=0).to(dtype=torch.float)
+        up = torch.cat([data.x, up], axis=-1)
+        #up = self.bn2(up)
+
+        r = self.nn1(up)
+        n_onehot = len(class_to_id)
+        cand_ids = r[:, :n_onehot]
+        cand_p4 = r[:, n_onehot:]
+        return edge_weight, cand_ids, cand_p4
+
+class PFNet7(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
+        super(PFNet7, self).__init__()
+   
+        self.inp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        #self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.conv1 = SGConv(hidden_dim, hidden_dim, K=1) 
+        #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
+        self.edgenet = nn.Sequential(
+            nn.Linear(2*hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid(),
+        )
+        self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+        #self.bn2 = nn.BatchNorm1d(hidden_dim)
+        #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
+        self.nn1 = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
@@ -573,11 +664,11 @@ if __name__ == "__main__":
     output_dim = len(class_to_id) + 3
     edge_dim = 1
 
-    batch_size = 20
-    n_train = 1000
+    batch_size = 2
+    n_train = 100
     n_epochs = 10000
-    lr = 5*1e-4
-    hidden_dim = 64
+    lr = 1e-4
+    hidden_dim = 256
     patience = n_epochs
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=n_train))
@@ -585,10 +676,12 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
 
-    if model_choice == "simple":
+    if model_choice == "PFNet4":
         model = PFNet4(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    elif model_choice == "gnn":
+    elif model_choice == "PFNet6":
         model = PFNet6(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+    elif model_choice == "PFNet7":
+        model = PFNet7(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
     
     model_fname = get_model_fname(model, n_train, lr)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
