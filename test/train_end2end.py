@@ -512,7 +512,7 @@ def train(model, loader, batch_size, epoch, optimizer):
         edges, cand_id_onehot, cand_momentum = model(data)
         _, indices = torch.max(cand_id_onehot, -1)
 
-        accuracies_batch[i] = accuracy_score(data.y_candidates_id, indices)
+        accuracies_batch[i] = accuracy_score(data.y_candidates_id.detach().cpu().numpy(), indices.detach().cpu().numpy())
 
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
@@ -795,7 +795,10 @@ if __name__ == "__main__":
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
-        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
-            j, args.n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
+        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
+            model_fname, j, args.n_epochs,
+            t1 - t0, l, l_t, c, c_t, acc, acc_t,
+            losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
+
     make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
         losses_train, losses_test, accuracies, accuracies_t, corrs, corrs_t, test_loader)
