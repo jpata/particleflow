@@ -709,7 +709,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 if __name__ == "__main__":
     full_dataset = PFGraphDataset(root='data/TTbar_run3')
     full_dataset.raw_dir = "data/TTbar_run3"
-    full_dataset.processed_dir = "data/TTbar_run3/processed_jd"
+    full_dataset.processed_dir = "data/TTbar_run3/processed_jd2"
 
     args = parse_args()
 
