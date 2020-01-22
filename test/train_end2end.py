@@ -36,6 +36,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from sklearn.metrics import accuracy_score
 from graph_data import PFGraphDataset
 
 device = torch.device('cuda' if use_gpu else 'cpu')
@@ -474,16 +475,32 @@ def data_prep(data):
     data.y_candidates -= y_candidates_means
     data.y_candidates /= y_candidates_stds
 
+    #Compute weights for candidate pdgids
+    # data.y_candidates_id_weights = torch.zeros_like(data.y_candidates_id).to(dtype=torch.float)
+    # uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
+    # data.y_candidates_id_weights_cls = torch.zeros(len(class_labels), dtype=torch.float)
+    # for cls_id, num_cls in zip(uniqs, counts):
+    #     data.y_candidates_id_weights_cls[cls_id] = 1.0 / float(num_cls)
+    #     m = data.y_candidates_id == cls_id
+    #     data.y_candidates_id_weights[m] = 1.0 / float(num_cls)
+
+def mse_loss(input, target):
+    return torch.sum((input - target) ** 2)
+
+def weighted_mse_loss(input, target, weight):
+    return torch.sum(weight * (input - target).sum(axis=1) ** 2)
+
 @torch.no_grad()
 def test(model, loader, batch_size, epoch):
     return train(model, loader, batch_size, epoch, None)
 
 def train(model, loader, batch_size, epoch, optimizer):
-    corrs_batch = []
 
     is_train = not (optimizer is None)
 
     losses = np.zeros((len(loader), 3))
+    corrs_batch = np.zeros(len(loader))
+    accuracies_batch = np.zeros(len(loader))
 
     for i, data in enumerate(loader):
         data = data.to(device)
@@ -494,6 +511,8 @@ def train(model, loader, batch_size, epoch, optimizer):
 
         edges, cand_id_onehot, cand_momentum = model(data)
         _, indices = torch.max(cand_id_onehot, -1)
+
+        accuracies_batch[i] = accuracy_score(data.y_candidates_id, indices)
 
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
@@ -533,13 +552,14 @@ def train(model, loader, batch_size, epoch, optimizer):
                 cand_momentum[msk, 0].detach().cpu().numpy(),
                 data.y_candidates[msk, 0].detach().cpu().numpy())[0,1]
 
-        corrs_batch += [corr_pt]
+        corrs_batch[i] = corr_pt
 
     corr = np.mean(corrs_batch)
+    acc = np.mean(accuracies_batch)
     losses = losses.sum(axis=0)
-    return losses, corr
+    return losses, corr, acc
 
-def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, test_loader):
+def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, accuracies, accuracies_t, test_loader):
    
     try:
         os.makedirs(path)
@@ -566,7 +586,18 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.plot(corrs_test)
     plt.xlabel("epoch")
     plt.ylabel("pt correlation")
+    plt.tight_layout()
     plt.savefig(path + "corr.pdf")
+    del fig
+    plt.clf()
+
+    fig = plt.figure(figsize=(5,5))
+    plt.plot(accuracies)
+    plt.plot(accuracies_t)
+    plt.xlabel("epoch")
+    plt.ylabel("classification accuracy")
+    plt.tight_layout()
+    plt.savefig(path + "acc.pdf")
     del fig
     plt.clf()
  
@@ -724,6 +755,8 @@ if __name__ == "__main__":
 
     corrs = []
     corrs_t = []
+    accuracies = []
+    accuracies_t = []
     best_test_loss = 99999.9
     stale_epochs = 0
    
@@ -735,24 +768,27 @@ if __name__ == "__main__":
             break
 
         model.train()
-        losses, c = train(model, train_loader, args.batch_size, j, optimizer)
+        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
+        accuracies += [acc]
 
         model.eval()
-        losses_t, c_t = test(model, test_loader, args.batch_size, j)
+        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
-        
+        accuracies_t += [acc_t]
+
         if l_t < best_test_loss:
             best_test_loss = l_t 
             stale_epochs = 0
         else:
             stale_epochs += 1
         if j > 0 and j%20 == 0:
-            make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
+            make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+                losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
         
         t1 = time.time()
         epochs_remaining = args.n_epochs - j
@@ -761,4 +797,5 @@ if __name__ == "__main__":
 
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
             j, args.n_epochs, t1 - t0, l, l_t, c, c_t, losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
-    make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j), losses_train, losses_test, corrs, corrs_t, test_loader)
+    make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+        losses_train, losses_test, accuracies, accuracies_t, corrs, corrs_t, test_loader)
