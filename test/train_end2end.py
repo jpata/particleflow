@@ -370,14 +370,14 @@ class PFNet7(nn.Module):
         edge_weight = data.edge_attr.squeeze(-1)
 
         #Run a graph convolution to embed the nodes
-        x = self.conv1(x, data.edge_index, edge_weight)
+        x = torch.nn.functional.selu(self.conv1(x, data.edge_index, edge_weight))
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]]], axis=-1)
         edge_weight = self.edgenet(xpairs).squeeze(-1)
         
         #Run a second convolution with the new edge weight
-        x = self.conv2(x, data.edge_index, edge_weight)
+        x = torch.nn.functional.selu(self.conv2(x, data.edge_index, edge_weight))
 
         #Pooling step
         #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
