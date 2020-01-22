@@ -46,15 +46,23 @@ class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 #map these to ids 0...Nclass
 class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
 
-def get_model_fname(model):
+#Data normalization constants for faster convergence.
+#These are just estimated with a printout and rounding, don't need to be super accurate
+x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
+x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
+y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
+y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
+
+def get_model_fname(model, n_train, lr):
     model_name = type(model).__name__
     model_params = sum(p.numel() for p in model.parameters())
     import hashlib
     model_cfghash = hashlib.blake2b(repr(model).encode()).hexdigest()[:10]
     model_user = os.environ['USER']
     
-    model_fname = '%s_%d_%s_%s'%(model_name,model_params,
-                                 model_cfghash, model_user)
+    model_fname = '{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}'.format(
+        model_name, model_params,
+        model_cfghash, model_user, n_train, lr)
     return model_fname
 
 def plot_confusion_matrix(cm,
@@ -331,6 +339,8 @@ def data_prep(data):
     for k, v in class_to_id.items():
         m = data.y_candidates[:, 0] == v
         data.y_candidates[m, 0] = k
+    data.x -= x_means
+    data.x /= x_stds
 
     #Create a one-hot encoded vector of the class labels
     id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
@@ -338,7 +348,8 @@ def data_prep(data):
     #Extract the ids and momenta
     data.y_candidates_id = data.y_candidates[:, 0].to(dtype=torch.long)
     data.y_candidates = data.y_candidates[:, 1:]
-
+    data.y_candidates -= y_candidates_means
+    data.y_candidates /= y_candidates_stds
 
 def train(model, loader, batch_size, epoch, optimizer):
     corrs_batch = []
@@ -436,6 +447,9 @@ def make_plots(n_epoch, path, losses_train, losses_test, corrs_train, corrs_test
         data_prep(data)
 
         edges, cand_id_onehot, cand_momentum = model(d)
+        cand_momentum *= y_candidates_stds
+        cand_momentum += y_candidates_means
+
         _, indices = torch.max(cand_id_onehot, -1)
         msk = (indices != 0) & (data.y_candidates_id != 0)
         inds2 = torch.nonzero(msk)
@@ -551,10 +565,10 @@ if __name__ == "__main__":
     output_dim = len(class_to_id) + 3
     edge_dim = 1
 
-    batch_size = 20
-    n_train = 100
+    batch_size = 1
+    n_train = 5
     n_epochs = 1000
-    lr = 1e-4
+    lr = 5*1e-4
     hidden_dim = 64
     patience = n_epochs
 
@@ -568,12 +582,13 @@ if __name__ == "__main__":
     elif model_choice == "gnn":
         model = PFNet6(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
     
-    model_fname = get_model_fname(model)
+    model_fname = get_model_fname(model, n_train, lr)
     optimizer = torch.optim.Adam(model.parameters(), lr = lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
     
     print(model)
+    print(model_fname)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print("params", params)
