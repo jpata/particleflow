@@ -122,7 +122,7 @@ class PFGraphDataset(Dataset):
             col_index = fi_dist['col']
             mat = scipy.sparse.coo_matrix((fi_dist["data"], (row_index, col_index)), shape=(len(X_elements), len(X_elements))).todense()
             #Add additional edges to create more initial connectivity
-            compute_distances(X_elements, mat)
+            #compute_distances(X_elements, mat)
 
             mat = scipy.sparse.coo_matrix(mat)
             row_index, col_index, dm_data = mat.row, mat.col, mat.data
