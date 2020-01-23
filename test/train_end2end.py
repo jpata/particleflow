@@ -397,6 +397,7 @@ def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_train", type=int, default=100, help="number of training events")
+    parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
@@ -568,7 +569,6 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         fig = plt.figure(figsize=(5,5))
         plt.plot(losses_train[:n_epoch, i])
         plt.plot(losses_test[:n_epoch, i])
-        plt.ylim(0.5*losses_train[:n_epoch, i][-1],2*losses_train[:n_epoch, i][-1])
         plt.xlabel("epoch")
         plt.ylabel("loss")
         plt.savefig(path + "loss_{0}.pdf".format(i))
@@ -726,7 +726,7 @@ if __name__ == "__main__":
     patience = args.n_epochs
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=2*args.n_train))
+    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
 
