@@ -465,6 +465,9 @@ def data_prep(data):
     #normalize and center the target momenta (roughly)
     data.y_candidates -= y_candidates_means
     data.y_candidates /= y_candidates_stds
+    
+    data.x[torch.isnan(data.x)] = 0.0
+    data.y_candidates[torch.isnan(data.y_candidates)] = 0.0
 
     #Compute weights for candidate pdgids
     # data.y_candidates_id_weights = torch.zeros_like(data.y_candidates_id).to(dtype=torch.float)
