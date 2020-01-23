@@ -280,6 +280,51 @@ class PFGraphUNet(nn.Module):
         r[:, 0] = r1
         return r
 
+#Predict only particle id
+class PFNetOnlyID(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim=None):
+        super(PFNetOnlyID, self).__init__()
+
+        self.conv1 = GCNConv(input_dim, hidden_dim)
+
+        self.nn1 = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, len(class_to_id)),
+        )
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+    def forward(self, data):
+        batch = data.batch
+        
+        x = data.x
+        edge_index = data.edge_index
+
+        if batch is None:
+            batch = edge_index.new_zeros(x.size(0))
+        edge_weight = data.edge_attr.squeeze(-1)
+
+        #Run a graph convolution to embed the nodes
+        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index, edge_weight))
+        x = torch.cat([data.x, x], axis=-1)
+        r = self.nn1(x)
+        
+        n_onehot = len(class_to_id)
+        cand_ids = r[:, :n_onehot]
+        cand_p4 = torch.zeros((data.x.shape[0], 3)).to(device=device)
+        return edge_weight, cand_ids, cand_p4
+
 class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
         super(PFNet6, self).__init__()
@@ -503,6 +548,7 @@ model_classes = {
     "PFDenseNet": PFDenseNet,
     "PFDenseAllToAllNet": PFDenseAllToAllNet,
     "PFGraphUNet": PFGraphUNet,
+    "PFNetOnlyID": PFNetOnlyID,
     "PFNet6": PFNet6,
     "PFNet7": PFNet7,
 }
