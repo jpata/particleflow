@@ -44,8 +44,14 @@ device = torch.device('cuda' if use_gpu else 'cpu')
 #all candidate pdg-ids (multiclass labels)
 class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 
+#detector element labels
+elem_labels = [ 1.,  2.,  3.,  4.,  5.,  8.,  9., 11.]
+
 #map these to ids 0...Nclass
 class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
+
+#map these to ids 0...Nclass
+elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
 
 #Data normalization constants for faster convergence.
 #These are just estimated with a printout and rounding, don't need to be super accurate
@@ -223,43 +229,26 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
         )
-        #self.bn1 = nn.BatchNorm1d(hidden_dim)
-        self.conv1a = GCNConv(hidden_dim, hidden_dim) 
-        self.conv1b = GCNConv(hidden_dim, hidden_dim) 
-        self.conv1c = GCNConv(hidden_dim, hidden_dim) 
-        #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
-
+        self.conv1 = GCNConv(hidden_dim, hidden_dim) 
+        
         #pairs of nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2a = GCNConv(hidden_dim, hidden_dim)
-        self.conv2b = GCNConv(hidden_dim, hidden_dim)
-        self.conv2c = GCNConv(hidden_dim, hidden_dim)
-        #self.bn2 = nn.BatchNorm1d(hidden_dim)
-        #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
-            nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
@@ -284,18 +273,14 @@ class PFNet6(nn.Module):
         edge_weight = data.edge_attr.squeeze(-1)
 
         #Run a graph convolution to embed the nodes
-        x = self.conv1a(x, data.edge_index, edge_weight)
-        x = self.conv1b(x, data.edge_index, edge_weight)
-        x = self.conv1c(x, data.edge_index, edge_weight)
+        x = torch.nn.functional.selu(self.conv1(x, data.edge_index, edge_weight))
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight = self.edgenet(xpairs).squeeze(-1)
         
         #Run a second convolution with the new edges
-        x = self.conv2a(x, data.edge_index, edge_weight)
-        x = self.conv2b(x, data.edge_index, edge_weight)
-        x = self.conv2c(x, data.edge_index, edge_weight)
+        x = torch.nn.functional.selu(self.conv2(x, data.edge_index, edge_weight))
 
         #Pooling step
         #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
@@ -334,7 +319,11 @@ class PFNet7(nn.Module):
         self.conv1 = SGConv(hidden_dim, hidden_dim, K=1) 
         #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
         self.edgenet = nn.Sequential(
-            nn.Linear(2*hidden_dim, hidden_dim),
+            nn.Linear(2*hidden_dim + 1, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SELU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.SELU(),
@@ -373,7 +362,7 @@ class PFNet7(nn.Module):
         x = torch.nn.functional.selu(self.conv1(x, data.edge_index, edge_weight))
         
         #Compute new edge weights based on embedded node pairs
-        xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]]], axis=-1)
+        xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight = self.edgenet(xpairs).squeeze(-1)
         
         #Run a second convolution with the new edge weight
@@ -451,19 +440,29 @@ def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
 #Do any in-memory transformations to data
 def data_prep(data):
 
+    for k, v in elem_to_id.items():
+        m = data.x[:, 0] == v
+        data.x[m, 0] = k
+
     #Convert pdg-ids to consecutive class labels
     for k, v in class_to_id.items():
         m = data.y_candidates[:, 0] == v
         data.y_candidates[m, 0] = k
+    
     data.x -= x_means
     data.x /= x_stds
 
     #Create a one-hot encoded vector of the class labels
     id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
-    
+
+    #one-hot encode the input categorical
+    elem_id_onehot = torch.nn.functional.one_hot(data.x[:, 0].to(dtype=torch.long), num_classes=len(elem_to_id))
+    data.x = torch.cat([elem_id_onehot.to(dtype=torch.float), data.x[:, 1:]], axis=-1)
+
     #Extract the ids and momenta
     data.y_candidates_id = data.y_candidates[:, 0].to(dtype=torch.long)
     data.y_candidates = data.y_candidates[:, 1:]
+    #normalize and center the target momenta (roughly)
     data.y_candidates -= y_candidates_means
     data.y_candidates /= y_candidates_stds
 
@@ -601,8 +600,9 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         data_prep(data)
 
         edges, cand_id_onehot, cand_momentum = model(d)
-        cand_momentum *= y_candidates_stds
-        cand_momentum += y_candidates_means
+        #undo the normalization and centering
+        #cand_momentum *= y_candidates_stds
+        #cand_momentum += y_candidates_means
 
         _, indices = torch.max(cand_id_onehot, -1)
         msk = (indices != 0) & (data.y_candidates_id != 0)
@@ -713,7 +713,8 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    input_dim = 8
+    #one-hot encoded element ID + 7 element parameters (energy, eta, phi, track stuff)
+    input_dim = 15
 
     #one-hot particle ID and 3 momentum components
     output_dim = len(class_to_id) + 3
