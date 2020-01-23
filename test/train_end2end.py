@@ -39,6 +39,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
 from graph_data import PFGraphDataset
 
+#Ignore divide by 0 errors
+np.seterr(divide='ignore', invalid='ignore')
+
 device = torch.device('cuda' if use_gpu else 'cpu')
 
 #all candidate pdg-ids (multiclass labels)
@@ -119,6 +122,10 @@ def plot_confusion_matrix(cm,
     if cmap is None:
         cmap = plt.get_cmap('Blues')
 
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    cm[np.isnan(cm)] = 0.0
+
     plt.figure(figsize=(8, 6))
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)
@@ -128,10 +135,6 @@ def plot_confusion_matrix(cm,
         tick_marks = np.arange(len(target_names))
         plt.xticks(tick_marks, target_names, rotation=45)
         plt.yticks(tick_marks, target_names)
-
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-
 
     thresh = cm.max() / 1.5 if normalize else cm.max() / 2
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
@@ -603,15 +606,22 @@ def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
 
 #Do any in-memory transformations to data
 def data_prep(data):
-
+    new_ids = torch.zeros_like(data.x[:, 0])
     for k, v in elem_to_id.items():
         m = data.x[:, 0] == v
-        data.x[m, 0] = k
+        new_ids[m] = k
+    data.x[:, 0] = new_ids
 
     #Convert pdg-ids to consecutive class labels
+    new_ids = torch.zeros_like(data.y_candidates[:, 0])
     for k, v in class_to_id.items():
         m = data.y_candidates[:, 0] == v
-        data.y_candidates[m, 0] = k
+        new_ids[m] = k
+    data.y_candidates[:, 0] = new_ids
+  
+    #randomize the target order - then we should not be able to predict anything!
+    #perm = torch.randperm(len(data.y_candidates))
+    #data.y_candidates = data.y_candidates[perm]
     
     data.x -= x_means
     data.x /= x_stds
@@ -775,6 +785,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     #plot the first 5 batches from the test dataset
     num_preds = []
     num_trues = []
+    cand_ids_true = []
+    cand_ids_pred = []
     for i, data in enumerate(test_loader):
         d = data.to(device=device)
         data_prep(data)
@@ -784,19 +796,20 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         #cand_momentum *= y_candidates_stds
         #cand_momentum += y_candidates_means
 
-        _, indices = torch.max(cand_id_onehot, -1)
-        cand_momentum[indices==0] = 0.0
+        _, cand_ids_pred_batch = torch.max(cand_id_onehot, -1)
+        cand_momentum[cand_ids_pred_batch==0] = 0.0
         sumpt_pred = cand_momentum[:, 0].sum().detach().cpu().numpy()
         sumpt_true = data.y_candidates[:, 0].sum().detach().cpu().numpy()
-        print(sumpt_pred, sumpt_true)
 
-        cand_ids_batched = torch_geometric.utils.to_dense_batch(indices, batch=data.batch)
+        cand_ids_batched = torch_geometric.utils.to_dense_batch(cand_ids_pred_batch, batch=data.batch)
         num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
         num_true = (torch_geometric.utils.to_dense_batch(data.y_candidates_id, batch=data.batch)[0]!=0).sum(axis=1)
         num_preds += list(num_pred.cpu().numpy())
         num_trues += list(num_true.cpu().numpy())
+        cand_ids_true += list(data.y_candidates_id.detach().cpu().numpy())
+        cand_ids_pred += list(cand_ids_pred_batch.detach().cpu().numpy())
         
-        msk = (indices != 0) & (data.y_candidates_id != 0)
+        msk = (cand_ids_pred_batch != 0) & (data.y_candidates_id != 0)
         if i>5:
             break
 
@@ -804,13 +817,6 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         inds2 = torch.nonzero(msk)
         perm = torch.randperm(len(inds2))
         inds2 = inds2[perm[:1000]]
-
-        confusion = sklearn.metrics.confusion_matrix(
-            data.y_candidates_id.detach().cpu().numpy(), indices.detach().cpu().numpy(),
-            labels=range(len(class_labels)))
-        plot_confusion_matrix(cm = confusion, target_names=class_labels, normalize=False)
-        plt.savefig(path + "confusion_{0}.pdf".format(i))
-        plt.clf()
 
         fig = plt.figure(figsize=(5,5))
         v1 = data.y_candidates[inds2, 0].detach().cpu().numpy()[:, 0]
@@ -899,7 +905,15 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         del fig
         plt.clf()
         plt.close("all")
-    
+   
+    confusion = sklearn.metrics.confusion_matrix(
+        cand_ids_true, cand_ids_pred,
+        labels=range(len(class_labels)))
+    np.savetxt(path+"confusion.txt", confusion)
+    plot_confusion_matrix(cm = confusion, target_names=class_labels, normalize=True)
+    plt.savefig(path + "confusion.pdf")
+    plt.clf()
+
     fig = plt.figure(figsize=(5,5))
     print(num_preds)
     print(num_trues)
