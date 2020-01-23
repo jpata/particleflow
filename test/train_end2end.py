@@ -563,7 +563,12 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 
     modpath = path + model_fname + '.best.pth'
     torch.save(model.state_dict(), modpath)
-
+    np.savetxt(path+"losses_train.txt", losses_train)
+    np.savetxt(path+"losses_test.txt", losses_test)
+    np.savetxt(path+"corrs_train.txt", corrs_train)
+    np.savetxt(path+"corrs_test.txt", corrs_test)
+    np.savetxt(path+"accuracies_train.txt", accuracies)
+    np.savetxt(path+"accuracies_test.txt", accuracies_t)
 
     for i in range(losses_train.shape[1]):
         fig = plt.figure(figsize=(5,5))
@@ -574,7 +579,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         plt.savefig(path + "loss_{0}.pdf".format(i))
         del fig
         plt.clf()
-    
+ 
     fig = plt.figure(figsize=(5,5))
     plt.plot(corrs_train)
     plt.plot(corrs_test)
