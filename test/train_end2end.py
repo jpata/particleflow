@@ -749,10 +749,14 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 
     for i in range(losses_train.shape[1]):
         fig = plt.figure(figsize=(5,5))
+        ax = plt.axes()
+        plt.ylabel("train loss")
         plt.plot(losses_train[:n_epoch, i])
-        plt.plot(losses_test[:n_epoch, i])
+        ax2=ax.twinx()
+        ax2.plot(losses_test[:n_epoch, i], color="orange")
+        ax2.set_ylabel("test loss", color="orange")
         plt.xlabel("epoch")
-        plt.ylabel("loss")
+        plt.tight_layout()
         plt.savefig(path + "loss_{0}.pdf".format(i))
         del fig
         plt.clf()
@@ -912,8 +916,6 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.clf()
 
     fig = plt.figure(figsize=(5,5))
-    print(num_preds)
-    print(num_trues)
     c = np.corrcoef(num_preds, num_trues)[0,1]
     plt.scatter(
         num_trues,
