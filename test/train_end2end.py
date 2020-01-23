@@ -288,10 +288,9 @@ class PFNetOnlyID(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=None):
         super(PFNetOnlyID, self).__init__()
 
-        self.conv1 = GCNConv(input_dim, hidden_dim)
-
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=8, dropout=0.5)
         self.nn1 = nn.Sequential(
-            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Linear(8*hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
@@ -303,24 +302,20 @@ class PFNetOnlyID(nn.Module):
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, len(class_to_id)),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, output_dim),
         )
+
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
 
     def forward(self, data):
-        batch = data.batch
-        
-        x = data.x
-        edge_index = data.edge_index
-
-        if batch is None:
-            batch = edge_index.new_zeros(x.size(0))
         edge_weight = data.edge_attr.squeeze(-1)
-
-        #Run a graph convolution to embed the nodes
-        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index, edge_weight))
-        x = torch.cat([data.x, x], axis=-1)
+        
+        x = self.conv1(data.x, data.edge_index)
         r = self.nn1(x)
         
         n_onehot = len(class_to_id)
@@ -817,6 +812,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         inds2 = torch.nonzero(msk)
         perm = torch.randperm(len(inds2))
         inds2 = inds2[perm[:1000]]
+        if len(inds2) == 0:
+            break 
 
         fig = plt.figure(figsize=(5,5))
         v1 = data.y_candidates[inds2, 0].detach().cpu().numpy()[:, 0]
@@ -929,7 +926,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.ylabel("num_pred")
     plt.title("corr = {:.2f}".format(c))
     plt.tight_layout()
-    plt.savefig(path + "num_corr_{0}.pdf".format(i))
+    plt.savefig(path + "num_corr.pdf")
     del fig
     plt.clf()
     plt.close("all")
