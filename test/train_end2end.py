@@ -151,7 +151,7 @@ def plot_confusion_matrix(cm,
     plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
 
-#Dense all to all (batch size 1 only)
+#Baseline dense models
 class PFDenseNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
         super(PFDenseNet, self).__init__()
@@ -159,26 +159,91 @@ class PFDenseNet(nn.Module):
         self.output_dim = output_dim
         self.inputnet = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, output_dim),
         )
         self.edgenet = nn.Sequential(
             nn.Linear(1, hidden_dim),
-            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
         )
 
     def forward(self, data):
         r = self.inputnet(data.x)
+        edges = self.edgenet(data.edge_attr).squeeze(-1)
+
+        n_onehot = len(class_to_id)
+        cand_ids = r[:, :n_onehot]
+        cand_p4 = r[:, n_onehot:]
+        return edges, cand_ids, cand_p4
+
+class PFDenseAllToAllNet(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
+        super(PFDenseAllToAllNet, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.max_elements = 10000
+        self.inputnet = nn.Sequential(
+            nn.Linear(input_dim*self.max_elements, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, output_dim*self.max_elements),
+        )
+        self.edgenet = nn.Sequential(
+            nn.Linear(1, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, data):
+        x = data.x
+        xb, batch_mask = torch_geometric.utils.to_dense_batch(x, data.batch)
+        n_elem = xb.shape[1]
+        assert(self.max_elements > n_elem)
+        n_batch = xb.shape[0]
+        xb = torch.nn.functional.pad(xb, (0, 0, 0, self.max_elements - n_elem, 0, 0))
+        xb = torch.reshape(xb, (n_batch, input_dim*self.max_elements))
+        r = self.inputnet(xb)
+        r = torch.reshape(r, (n_batch, self.max_elements, output_dim))
+        r = r[:, :n_elem, :]
+        r = r[batch_mask]
         edges = self.edgenet(data.edge_attr).squeeze(-1)
 
         n_onehot = len(class_to_id)
@@ -330,13 +395,21 @@ class PFNet7(nn.Module):
    
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
         #self.bn1 = nn.BatchNorm1d(hidden_dim)
@@ -344,13 +417,21 @@ class PFNet7(nn.Module):
         #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
@@ -359,13 +440,21 @@ class PFNet7(nn.Module):
         #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SELU(),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, output_dim),
         )
         self.input_dim = input_dim
@@ -412,6 +501,7 @@ class PFNet7(nn.Module):
 
 model_classes = {
     "PFDenseNet": PFDenseNet,
+    "PFDenseAllToAllNet": PFDenseAllToAllNet,
     "PFGraphUNet": PFGraphUNet,
     "PFNet6": PFNet6,
     "PFNet7": PFNet7,

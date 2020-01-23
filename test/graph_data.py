@@ -105,7 +105,7 @@ class PFGraphDataset(Dataset):
     def process(self):
         feature_scale = np.array([1., 1., 1., 1., 1., 1., 1., 1.])
         i = 0
-        for raw_file_name in self.raw_file_names:
+        for raw_file_name in self.raw_file_names[:100]:
             dist_file_name = raw_file_name.replace('ev','dist')
             print("loading data from files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
             try:
