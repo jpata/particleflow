@@ -595,10 +595,10 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     del fig
     plt.clf()
  
-    #plot the first 5 batches from the test dataset 
+    #plot the first 5 batches from the test dataset
+    num_preds = []
+    num_trues = []
     for i, data in enumerate(test_loader):
-        if i>5:
-            break
         d = data.to(device=device)
         data_prep(data)
 
@@ -608,7 +608,18 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         #cand_momentum += y_candidates_means
 
         _, indices = torch.max(cand_id_onehot, -1)
+
+        cand_ids_batched = torch_geometric.utils.to_dense_batch(indices, batch=data.batch)
+        num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
+        num_true = (torch_geometric.utils.to_dense_batch(data.y_candidates_id, batch=data.batch)[0]!=0).sum(axis=1)
+        num_preds += list(num_pred.cpu().numpy())
+        num_trues += list(num_true.cpu().numpy())
+        
         msk = (indices != 0) & (data.y_candidates_id != 0)
+        if i>5:
+            break
+
+        #Get the first 1000 candidates in the batch
         inds2 = torch.nonzero(msk)
         perm = torch.randperm(len(inds2))
         inds2 = inds2[perm[:1000]]
@@ -707,6 +718,25 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         del fig
         plt.clf()
         plt.close("all")
+    
+    fig = plt.figure(figsize=(5,5))
+    print(num_preds)
+    print(num_trues)
+    c = np.corrcoef(num_preds, num_trues)[0,1]
+    plt.scatter(
+        num_trues,
+        num_preds,
+        marker=".", alpha=0.5)
+    plt.plot([0,5000],[0,5000])
+    plt.xlim(0,5000)
+    plt.ylim(0,5000)
+    plt.xlabel("num_true")
+    plt.ylabel("num_pred")
+    plt.title("corr = {:.2f}".format(c))
+    plt.tight_layout()
+    plt.savefig(path + "num_corr_{0}.pdf".format(i))
+    del fig
+    plt.clf()
     plt.close("all")
 
 if __name__ == "__main__":
