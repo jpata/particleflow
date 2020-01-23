@@ -517,6 +517,9 @@ def parse_args():
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
+    parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
+    parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
     args = parser.parse_args()
     return args
 
@@ -600,10 +603,10 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, batch_size, epoch):
-    return train(model, loader, batch_size, epoch, None)
+def test(model, loader, batch_size, epoch, l1m, l2m, l3m):
+    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m)
 
-def train(model, loader, batch_size, epoch, optimizer):
+def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
 
     is_train = not (optimizer is None)
 
@@ -634,13 +637,22 @@ def train(model, loader, batch_size, epoch, optimizer):
         # ncand_true = ids_batch.sum(axis=1).numpy()
 
         #Loss for output candidate id (multiclass)
-        l1 = torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id)
+        if l1m > 0.0:
+            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id)
+        else:
+            l1 = torch.tensor(0.0).to(device=device)
 
         #Loss for candidate p4 properties (regression)
-        l2 = torch.nn.functional.mse_loss(cand_momentum, data.y_candidates) / 10.0
-        
+        if l2m > 0.0:
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.y_candidates) / 10.0
+        else:
+            l2 = torch.tensor(0.0).to(device=device)
+
         #Loss for edges enabled/disabled in clustering (binary)
-        l3 = torch.nn.functional.binary_cross_entropy(edges, data.y) * 2.0
+        if l3m > 0.0:
+            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.y) * 2.0
+        else:
+            l3 = torch.tensor(0.0).to(device=device)
 
         batch_loss = l1 + l2 + l3
         losses[i, 0] = l1.item()
@@ -727,6 +739,10 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         #cand_momentum += y_candidates_means
 
         _, indices = torch.max(cand_id_onehot, -1)
+        cand_momentum[indices==0] = 0.0
+        sumpt_pred = cand_momentum[:, 0].sum().detach().cpu().numpy()
+        sumpt_true = data.y_candidates[:, 0].sum().detach().cpu().numpy()
+        print(sumpt_pred, sumpt_true)
 
         cand_ids_batched = torch_geometric.utils.to_dense_batch(indices, batch=data.batch)
         num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
@@ -913,14 +929,14 @@ if __name__ == "__main__":
             break
 
         model.train()
-        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer)
+        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
         accuracies += [acc]
 
         model.eval()
-        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j)
+        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
