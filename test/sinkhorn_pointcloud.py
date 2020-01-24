@@ -18,7 +18,7 @@ def sinkhorn_normalized(x, y, epsilon, n, niter):
     return 2 * Wxy - Wxx - Wyy
 
 
-def sinkhorn_loss(x, y, epsilon, n, niter):
+def sinkhorn_loss(x, y, epsilon, n, niter, device):
     """
     Given two emprical measures with n points each with locations x and y
     outputs an approximation of the OT cost with regularization parameter epsilon
@@ -31,8 +31,8 @@ def sinkhorn_loss(x, y, epsilon, n, niter):
     # both marginals are fixed with equal weights
     # mu = Variable(1. / n * torch.cuda.FloatTensor(n).fill_(1), requires_grad=False)
     # nu = Variable(1. / n * torch.cuda.FloatTensor(n).fill_(1), requires_grad=False)
-    mu = Variable(1. / n * torch.FloatTensor(n).fill_(1), requires_grad=False)
-    nu = Variable(1. / n * torch.FloatTensor(n).fill_(1), requires_grad=False)
+    mu = Variable(1. / n * torch.FloatTensor(n).fill_(1), requires_grad=False).to(device=device)
+    nu = Variable(1. / n * torch.FloatTensor(n).fill_(1), requires_grad=False).to(device=device)
 
     # Parameters of the Sinkhorn algorithm.
     rho = 1  # (.5) **2          # unbalanced transport

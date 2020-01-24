@@ -348,11 +348,11 @@ class PFNet6(nn.Module):
             nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False) 
+        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4)
         
         #pairs of nodes + edge
         self.edgenet = nn.Sequential(
-            nn.Linear(2*hidden_dim + 1, hidden_dim),
+            nn.Linear(2*4*hidden_dim + 1, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
@@ -371,10 +371,10 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        self.conv2 = GATConv(4*hidden_dim, hidden_dim, heads=4)
         
         self.nn1 = nn.Sequential(
-            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Linear(input_dim + 4*hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
@@ -390,7 +390,26 @@ class PFNet6(nn.Module):
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden_dim, len(class_to_id)),
+        )
+        self.nn2 = nn.Sequential(
+            nn.Linear(input_dim + 4*hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, 3),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -411,22 +430,23 @@ class PFNet6(nn.Module):
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
-        edge_weight = self.edgenet(xpairs).squeeze(-1)
-        
+        edge_weight2 = self.edgenet(xpairs).squeeze(-1)
+        edge_mask = edge_weight > 0.5
+        row, col = data.edge_index
+        row2, col2 = row[edge_mask], col[edge_mask]
+
         #Run a second convolution with the new edges
-        x = torch.nn.functional.leaky_relu(self.conv2(x, data.edge_index, edge_weight))
+        x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
         
         up = x
 
         up = torch.cat([data.x, up], axis=-1)
 
         #Final candidate inference
-        r = self.nn1(up)
+        cand_ids = torch.sigmoid(self.nn1(up))
+        cand_p4 = self.nn2(up)
 
-        n_onehot = len(class_to_id)
-        cand_ids = r[:, :n_onehot]
-        cand_p4 = r[:, n_onehot:]
-        return edge_weight, cand_ids, cand_p4
+        return edge_weight2, cand_ids, cand_p4
 
 class PFNet7(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
@@ -676,25 +696,27 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
             l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id, weight=data.y_candidates_weights)
+            n_pred = torch_geometric.utils.to_dense_batch((indices != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
+            n_true = torch_geometric.utils.to_dense_batch((data.y_candidates_id != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
+            l1 += torch.nn.functional.mse_loss(n_pred, n_true)/10000.0
         else:
             l1 = torch.tensor(0.0).to(device=device)
 
         #Loss for candidate p4 properties (regression)
-        if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.y_candidates) / 10.0
-        else:
-            l2 = torch.tensor(0.0).to(device=device)
+        l2 = torch.tensor(0.0).to(device=device)
+        if l2m > 0.0 and int(msk.sum())>100:
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk], data.y_candidates[msk])
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
-            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.y) * 2.0
+            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.y)
         else:
             l3 = torch.tensor(0.0).to(device=device)
 
         if l4m > 0.0:
             rperm = torch.randperm(int(msk.sum()))
             n = len(rperm)
-            l4 = l4m*spc.sinkhorn_loss(cand_momentum[msk, 1:][rperm], data.y_candidates[msk, 1:][rperm], 0.01, n, 10)
+            l4 = l4m*spc.sinkhorn_loss(cand_momentum[msk, 1:][rperm], data.y_candidates[msk, 1:][rperm], 0.01, n, 100, device)
         else:
             l4 = torch.tensor(0.0).to(device=device)
 
@@ -821,9 +843,9 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
             v1[:1000],
             v2[:1000],
             marker=".", alpha=0.5)
-        plt.plot([0,5],[0,5])
-        plt.xlim(0,5)
-        plt.ylim(0,5)
+        plt.plot([0,2],[0,2])
+        plt.xlim(0,2)
+        plt.ylim(0,2)
         plt.xlabel("pt_true")
         plt.ylabel("pt_pred")
         plt.title("corr = {:.2f}".format(c))
@@ -871,7 +893,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         plt.clf()
     
         fig = plt.figure(figsize=(5,5))
-        b = np.linspace(0,10,60)
+        b = np.linspace(0,2,60)
         plt.hist(data.y_candidates[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("pt")
@@ -951,6 +973,9 @@ if __name__ == "__main__":
     model_class = model_classes[args.model]
     model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim).to(device)
     model_fname = get_model_fname(model, args.n_train, args.lr)
+    if os.path.isdir("data/" + model_fname):
+        print("model output data/{} already exists, please delete it".format(model_fname), file=sys.stderr)
+        sys.exit(0)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss = torch.nn.MSELoss()
