@@ -39,6 +39,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
 from graph_data import PFGraphDataset
 
+import sinkhorn_pointcloud as spc
+
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -314,10 +316,10 @@ class PFNetOnlyID(nn.Module):
 
     def forward(self, data):
         edge_weight = data.edge_attr.squeeze(-1)
-        
+
         x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
-        r = self.nn1(x)
-        
+        r = torch.sigmoid(self.nn1(x))
+
         n_onehot = len(class_to_id)
         cand_ids = r[:, :n_onehot]
         cand_p4 = torch.zeros((data.x.shape[0], 3)).to(device=device)
@@ -326,7 +328,7 @@ class PFNetOnlyID(nn.Module):
 class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
         super(PFNet6, self).__init__()
-   
+
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
@@ -547,6 +549,7 @@ def parse_args():
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
+    parser.add_argument("--l4", type=float, default=1.0, help="Loss multiplier for Sinkhorn")
     args = parser.parse_args()
     return args
 
@@ -613,6 +616,12 @@ def data_prep(data):
 
     #Extract the ids and momenta
     data.y_candidates_id = data.y_candidates[:, 0].to(dtype=torch.long)
+    vs, cs = torch.unique(data.y_candidates_id, return_counts=True)
+    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
+    #for k, v in zip(vs, cs):
+    #    data.y_candidates_weights[k] = 1.0/float(v)
+    data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
+
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
     data.y_candidates -= y_candidates_means
@@ -637,14 +646,14 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, batch_size, epoch, l1m, l2m, l3m):
-    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m)
+def test(model, loader, batch_size, epoch, l1m, l2m, l3m, l4m):
+    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m, l4m)
 
-def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
+def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
 
     is_train = not (optimizer is None)
 
-    losses = np.zeros((len(loader), 3))
+    losses = np.zeros((len(loader), 4))
     corrs_batch = np.zeros(len(loader))
     accuracies_batch = np.zeros(len(loader))
 
@@ -659,14 +668,14 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         _, indices = torch.max(cand_id_onehot, -1)
 
         accuracies_batch[i] = accuracy_score(data.y_candidates_id.detach().cpu().numpy(), indices.detach().cpu().numpy())
-
+        
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
         msk = (indices != 0) & (data.y_candidates_id != 0)
 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
-            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id)
+            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id, weight=data.y_candidates_weights)
         else:
             l1 = torch.tensor(0.0).to(device=device)
 
@@ -682,10 +691,18 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         else:
             l3 = torch.tensor(0.0).to(device=device)
 
-        batch_loss = l1 + l2 + l3
+        if l4m > 0.0:
+            rperm = torch.randperm(int(msk.sum()))
+            n = len(rperm)
+            l4 = l4m*spc.sinkhorn_loss(cand_momentum[msk, 1:][rperm], data.y_candidates[msk, 1:][rperm], 0.01, n, 10)
+        else:
+            l4 = torch.tensor(0.0).to(device=device)
+
+        batch_loss = l1 + l2 + l3 + l4
         losses[i, 0] = l1.item()
         losses[i, 1] = l2.item()
         losses[i, 2] = l3.item()
+        losses[i, 3] = l4.item()
         
         if is_train:
             batch_loss.backward()
@@ -947,8 +964,8 @@ if __name__ == "__main__":
     
     model.train()
     
-    losses_train = np.zeros((args.n_epochs, 3))
-    losses_test = np.zeros((args.n_epochs, 3))
+    losses_train = np.zeros((args.n_epochs, 4))
+    losses_test = np.zeros((args.n_epochs, 4))
 
     corrs = []
     corrs_t = []
@@ -965,14 +982,14 @@ if __name__ == "__main__":
             break
 
         model.train()
-        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3)
+        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3, args.l4)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
         accuracies += [acc]
 
         model.eval()
-        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3)
+        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3, args.l4)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
@@ -992,10 +1009,11 @@ if __name__ == "__main__":
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
-        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} l1={:.5f} l2={:.5f} l3={:.5f} stale={} eta={:.1f}m".format(
+        losses_str = " ".join(["{:.4f}".format(x) for x in losses_t])
+        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} {} stale={} eta={:.1f}m".format(
             model_fname, j, args.n_epochs,
             t1 - t0, l, l_t, c, c_t, acc, acc_t,
-            losses_t[0], losses_t[1], losses_t[2], stale_epochs, eta))
+            losses_str, stale_epochs, eta))
 
     make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
         losses_train, losses_test, accuracies, accuracies_t, corrs, corrs_t, test_loader)
