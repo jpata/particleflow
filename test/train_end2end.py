@@ -346,7 +346,7 @@ class PFNet6(nn.Module):
             nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = GCNConv(hidden_dim, hidden_dim) 
+        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=8, concat=False) 
         
         #pairs of nodes + edge
         self.edgenet = nn.Sequential(
@@ -405,7 +405,7 @@ class PFNet6(nn.Module):
         edge_weight = data.edge_attr.squeeze(-1)
 
         #Run a graph convolution to embed the nodes
-        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index, edge_weight))
+        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
@@ -413,15 +413,9 @@ class PFNet6(nn.Module):
         
         #Run a second convolution with the new edges
         x = torch.nn.functional.leaky_relu(self.conv2(x, data.edge_index, edge_weight))
-
-        #Pooling step
-        #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
-        #up = torch.zeros((data.x.shape[0], self.hidden_dim)).to(device)
-        #up[perm] = x
+        
         up = x
 
-        #Postprocessing, add initial inputs to encoded hidden layer
-        #m = (up[:, 0]!=0).to(dtype=torch.float)
         up = torch.cat([data.x, up], axis=-1)
 
         #Final candidate inference
@@ -455,9 +449,7 @@ class PFNet7(nn.Module):
             nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        #self.bn1 = nn.BatchNorm1d(hidden_dim)
         self.conv1 = SGConv(hidden_dim, hidden_dim, K=1) 
-        #self.bn2 = nn.BatchNorm1d(input_dim + hidden_dim)
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
@@ -479,8 +471,6 @@ class PFNet7(nn.Module):
             nn.Sigmoid(),
         )
         self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
-        #self.bn2 = nn.BatchNorm1d(hidden_dim)
-        #self.pooling = TopKPooling(hidden_dim, ratio=0.9)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
@@ -524,16 +514,9 @@ class PFNet7(nn.Module):
         #Run a second convolution with the new edge weight
         x = torch.nn.functional.leaky_relu(self.conv2(x, data.edge_index, edge_weight))
 
-        #Pooling step
-        #x, edge_index2, edge_weight2, batch, perm, _ = self.pooling(x, data.edge_index, edge_weight, batch)
-        #up = torch.zeros((data.x.shape[0], self.hidden_dim)).to(device)
-        #up[perm] = x
         up = x
 
-        #Postprocessing, add initial inputs to encoded hidden layer
-        #m = (up[:, 0]!=0).to(dtype=torch.float)
         up = torch.cat([data.x, up], axis=-1)
-        #up = self.bn2(up)
 
         r = self.nn1(up)
         n_onehot = len(class_to_id)
@@ -680,12 +663,6 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
         msk = (indices != 0) & (data.y_candidates_id != 0)
-
-        # msk_batch, _ = torch_geometric.utils.to_dense_batch(msk, data.batch)
-        # ids_batch, _ = torch_geometric.utils.to_dense_batch(data.y_candidates_id!=0, data.batch)
-
-        # ncand_pred = msk_batch.sum(axis=1).numpy()
-        # ncand_true = ids_batch.sum(axis=1).numpy()
 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
@@ -911,7 +888,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         cand_ids_true, cand_ids_pred,
         labels=range(len(class_labels)))
     np.savetxt(path+"confusion.txt", confusion)
-    plot_confusion_matrix(cm = confusion, target_names=class_labels, normalize=True)
+    plot_confusion_matrix(cm = confusion, target_names=[int(x) for x in class_labels], normalize=False)
     plt.savefig(path + "confusion.pdf")
     plt.clf()
 
@@ -921,7 +898,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         num_trues,
         num_preds,
         marker=".", alpha=0.5)
-    plt.plot([0,5000],[0,5000])
+    plt.plot([0,5000],[0,5000], color="black")
     plt.xlim(0,5000)
     plt.ylim(0,5000)
     plt.xlabel("num_true")
