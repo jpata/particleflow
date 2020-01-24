@@ -288,9 +288,9 @@ class PFNetOnlyID(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=None):
         super(PFNetOnlyID, self).__init__()
 
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=8, dropout=0.5)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=8, concat=False)
         self.nn1 = nn.Sequential(
-            nn.Linear(8*hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5),
@@ -315,7 +315,7 @@ class PFNetOnlyID(nn.Module):
     def forward(self, data):
         edge_weight = data.edge_attr.squeeze(-1)
         
-        x = self.conv1(data.x, data.edge_index)
+        x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
         r = self.nn1(x)
         
         n_onehot = len(class_to_id)
