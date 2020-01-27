@@ -331,84 +331,44 @@ class PFNet6(nn.Module):
 
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4)
+        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
         
-        #pairs of nodes + edge
+        #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
-            nn.Linear(2*4*hidden_dim + 1, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GATConv(4*hidden_dim, hidden_dim, heads=4)
+        self.conv2 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
         
         self.nn1 = nn.Sequential(
-            nn.Linear(input_dim + 4*hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
-            nn.Linear(input_dim + 4*hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, 3),
         )
         self.input_dim = input_dim
@@ -443,7 +403,7 @@ class PFNet6(nn.Module):
         up = torch.cat([data.x, up], axis=-1)
 
         #Final candidate inference
-        cand_ids = torch.sigmoid(self.nn1(up))
+        cand_ids = self.nn1(up)
         cand_p4 = self.nn2(up)
 
         return edge_weight2, cand_ids, cand_p4
@@ -454,63 +414,42 @@ class PFNet7(nn.Module):
    
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = SGConv(hidden_dim, hidden_dim, K=1) 
+        self.conv1 = GCNConv(hidden_dim, hidden_dim) 
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
+            nn.Linear(hidden_dim, len(class_to_id)),
+        )
+        self.nn2 = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, 3),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -531,20 +470,18 @@ class PFNet7(nn.Module):
         
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
-        edge_weight = self.edgenet(xpairs).squeeze(-1)
-        
-        #Run a second convolution with the new edge weight
-        x = torch.nn.functional.leaky_relu(self.conv2(x, data.edge_index, edge_weight))
+        edge_weight2 = self.edgenet(xpairs).squeeze(-1)
+        edge_mask = edge_weight > 0.5
+        row, col = data.edge_index
+        row2, col2 = row[edge_mask], col[edge_mask]
 
-        up = x
+        #Run a second convolution with the new edges
+        x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
+        up = torch.cat([data.x, x], axis=-1)
 
-        up = torch.cat([data.x, up], axis=-1)
-
-        r = self.nn1(up)
-        n_onehot = len(class_to_id)
-        cand_ids = r[:, :n_onehot]
-        cand_p4 = r[:, n_onehot:]
-        return edge_weight, cand_ids, cand_p4
+        cand_ids = self.nn1(up)
+        cand_p4 = self.nn2(up)
+        return edge_weight2, cand_ids, cand_p4
 
 
 model_classes = {
@@ -623,7 +560,7 @@ def data_prep(data):
     #randomize the target order - then we should not be able to predict anything!
     #perm = torch.randperm(len(data.y_candidates))
     #data.y_candidates = data.y_candidates[perm]
-    
+   
     data.x -= x_means
     data.x /= x_stds
 
@@ -641,6 +578,10 @@ def data_prep(data):
     #for k, v in zip(vs, cs):
     #    data.y_candidates_weights[k] = 1.0/float(v)
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
+
+    #Give the pions higher weight in the training
+    data.y_candidates_weights[class_labels.index(-211)] = 2.0
+    data.y_candidates_weights[class_labels.index(211)] = 2.0
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
@@ -698,14 +639,14 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
             l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id, weight=data.y_candidates_weights)
             n_pred = torch_geometric.utils.to_dense_batch((indices != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
             n_true = torch_geometric.utils.to_dense_batch((data.y_candidates_id != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
-            l1 += torch.nn.functional.mse_loss(n_pred, n_true)/10000.0
+            #l1 += torch.nn.functional.mse_loss(n_pred, n_true)/10000-0.0
         else:
             l1 = torch.tensor(0.0).to(device=device)
 
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0 and int(msk.sum())>100:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk], data.y_candidates[msk])
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.y_candidates)
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
@@ -1025,7 +966,7 @@ if __name__ == "__main__":
             stale_epochs = 0
         else:
             stale_epochs += 1
-        if j > 0 and j%20 == 0:
+        if j > 0 and j%10 == 0:
             make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
                 losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
         
