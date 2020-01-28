@@ -41,10 +41,10 @@ def regularize_X_y(X_elements, y_candidates, X_element_block_id, y_candidate_blo
 
         #we should always have more elements than candidates, this is a temporary workaround
         if len(y) > len(x):
+            print("ERROR: dropping candidates", len(y), len(x))
+            num_dropped += (len(y) - len(x))
             #More candidates than elements, drop the remaining candidates
             y = y[:len(x)]
-            num_dropped += (len(y) - len(x))
-            print("ERROR: dropping candidates", len(y), len(x))
 
         #this array contains for each element in X an index to the index of the matched candidate in the target array
         inds_new = -1*np.ones(len(x), dtype=np.int32)
@@ -230,6 +230,6 @@ class PFGraphDataset(Dataset):
 if __name__ == "__main__":
 
     pfgraphdataset = PFGraphDataset(root='data/TTbar_run3/')
-    pfgraphdataset.raw_dir = "data/TTbar_run3"
-    pfgraphdataset.processed_dir = "data/TTbar_run3/processed_jd2"
+    pfgraphdataset.raw_dir = "data/QCD_run3"
+    pfgraphdataset.processed_dir = "data/QCD_run3/processed"
     pfgraphdataset.process()

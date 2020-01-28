@@ -543,7 +543,7 @@ def loss_by_cluster(y_pred, y_true, batches, true_block_ids):
     return (jagged_sum_pred, jagged_sum_tgt, loss)
 
 #Do any in-memory transformations to data
-def data_prep(data):
+def data_prep(data, device=device):
     new_ids = torch.zeros_like(data.x[:, 0])
     for k, v in elem_to_id.items():
         m = data.x[:, 0] == v
@@ -561,8 +561,8 @@ def data_prep(data):
     #perm = torch.randperm(len(data.y_candidates))
     #data.y_candidates = data.y_candidates[perm]
    
-    data.x -= x_means
-    data.x /= x_stds
+    data.x -= x_means.to(device=device)
+    data.x /= x_stds.to(device=device)
 
     #Create a one-hot encoded vector of the class labels
     id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
@@ -582,11 +582,16 @@ def data_prep(data):
     #Give the pions higher weight in the training
     data.y_candidates_weights[class_labels.index(-211)] = 2.0
     data.y_candidates_weights[class_labels.index(211)] = 2.0
+    data.y_candidates_weights[class_labels.index(-13)] = 100.0
+    data.y_candidates_weights[class_labels.index(13)] = 100.0
+    data.y_candidates_weights[class_labels.index(-11)] = 100.0
+    data.y_candidates_weights[class_labels.index(11)] = 100.0
+    data.y_candidates_weights[class_labels.index(22)] = 2.0
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
-    data.y_candidates -= y_candidates_means
-    data.y_candidates /= y_candidates_stds
+    data.y_candidates -= y_candidates_means.to(device=device)
+    data.y_candidates /= y_candidates_stds.to(device=device)
     
     data.x[torch.isnan(data.x)] = 0.0
     data.y_candidates[torch.isnan(data.y_candidates)] = 0.0
@@ -893,7 +898,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 if __name__ == "__main__":
     full_dataset = PFGraphDataset(root='data/TTbar_run3')
     full_dataset.raw_dir = "data/TTbar_run3"
-    full_dataset.processed_dir = "data/TTbar_run3/processed_jd2"
+    full_dataset.processed_dir = "data/TTbar_run3/processed"
 
     args = parse_args()
 
