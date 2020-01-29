@@ -421,7 +421,7 @@ class PFNet7(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = GCNConv(hidden_dim, hidden_dim) 
+        self.conv1 = SGConv(hidden_dim, hidden_dim) 
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.LeakyReLU(),
@@ -432,7 +432,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+        self.conv2 = SGConv(hidden_dim, hidden_dim)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.LeakyReLU(),
@@ -577,16 +577,13 @@ def data_prep(data, device=device):
     #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
     #for k, v in zip(vs, cs):
     #    data.y_candidates_weights[k] = 1.0/float(v)
+    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
 
     #Give the pions higher weight in the training
-    data.y_candidates_weights[class_labels.index(-211)] = 2.0
-    data.y_candidates_weights[class_labels.index(211)] = 2.0
-    data.y_candidates_weights[class_labels.index(-13)] = 100.0
-    data.y_candidates_weights[class_labels.index(13)] = 100.0
-    data.y_candidates_weights[class_labels.index(-11)] = 100.0
-    data.y_candidates_weights[class_labels.index(11)] = 100.0
-    data.y_candidates_weights[class_labels.index(22)] = 2.0
+    #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
+    #for u, c in zip(uniqs, counts):
+    #    data.y_candidates_weights[u] = 1.0/float(c)
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
