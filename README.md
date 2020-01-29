@@ -1,96 +1,28 @@
 Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
 
-## Standard CMS offline PF
-The following pseudocode illustrates how the standard offline PF works in CMS.
+# Overview
 
-```python
-# Inputs and outputs of Particle Flow
-# elements: array of ECAL cluster, HCAL cluster, tracks etc, size Nelem
-# candidates: array of produced particle flow candidates (pions, kaons, photons etc)
-
-# Intermediate data structures
-# link_matrix: whether or not two elements are linked by having a finite distance (sparse, Nelem x Nelem)
-
-def particle_flow(elements):
-
-    #based on https://github.com/cms-sw/cmssw/tree/master/RecoParticleFlow/PFProducer/plugins/linkers
-    link_matrix = compute_links(elements)
-    
-    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc
-    blocks = create_blocks(elements, link_matrix)
-    
-    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc
-    candidates = []
-    for block in blocks:
-        candidates.append(create_candidates(block))
-    
-    return candidates
-    
-def compute_links(elements):
-    Nelem = len(elements)
- 
-    link_matrix = np.array((Nelem, Nelem))
-    link_matrix[:] = 0
-    
-    #test if two elements are close by based on neighborhood implemented with KD-trees
-    for ielem in range(Nelem):
-        for jelem in range(Nelem):
-            if in_neighbourhood(elements, ielem, jelem):
-                link_matrix[ielem, jelem] = 1
-                
-    return link_matrix
-
-def in_neighbourhood(elements, ielem, jelem):
-    #This element-to-element neighborhood checking is done based on detector geometry
-    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> linkPrefilter
-    return True
-
-def distance(elements, ielem, jelem):
-    #This element-to-element distance checking is done based on detector geometry
-    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> testLink
-    return 0.0
-    
-def create_blocks(elements, link_matrix):
-    #Each block is a list of elements, this is a list of blocks
-    blocks = []
-    
-    Nelem = len(elements)
-
-    #Elements and connections between the elements
-    graph = Graph()
-    for ielem in range(Nelem):
-        graph.add_node(ielem)
-    
-    #Check the distance between all relevant element pairs
-    for ielem in range(Nelem):
-        for jelem in range(Nelem):
-            if link_matrix[ielem, jelem]:
-                dist = distance(elements, ielem, jelem)
-                if dist > -0.5:
-                    graph.add_edge(ielem, jelem)
-    
-    #Find the sets of elements that are connected
-    for subgraph in find_subgraphs(graph):
-        this_block = []
-        for element in subgraph:
-            this_block.append(element)
-        blocks.append(this_block)
-
-    return blocks   
-
-def create_candidates(block):
-    #find all HCAL-ECAL-TRK triplets, produce pions
-    #find all HCAL-TRK pairs, produce kaons
-    #find all ECAL-TRK pairs, produce pions
-    #find all independent ECAL elements, produce photons
-    #etc etc
-    candidates = []
-    return candidates
-```
-
-
+- [x] set up datasets and ntuples for detailed PF analysis
+- [ ] GPU code for existing PF algorithms
+  - [x] test CLUE for element to block clustering
+  - [ ] port CLUE to PFBlockAlgo in CMSSW
+  - [ ] parallelize PFAlgo calls on blocks
+  - [ ] GPU-implementation of PFAlgo
+- [ ] reproduce existing PF with machine learning
+  - [x] test element-to-block clustering with ML (Edge classifier, GNN)
+  - [x] test block-to-candidate regression
+  - [ ] end-to-end training of elements to MLPF-candidates using GNN-s
+    - [x] first baseline training converges to multiclass accuracy > 0.96, momentum correlation > 0.9
+    - [ ] improve training speed
+    - [ ] detailed hyperparameter scan
+    - [ ] further reduce bias in end-to-end training (muons, electrons, momentum tails)
+- [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
+  - [ ] set up datasets for regression genparticles from elements
+    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN?
 ## Presentations
 
+- Caltech group meeting, 2020-01-28: https://indico.cern.ch/event/881683/contributions/3714961/attachments/1977131/3291096/2020_01_21.pdf
+- CMS PF group, 2020-01-17: https://indico.cern.ch/event/862200/contributions/3706909/attachments/1971145/3279010/2020_01_16.pdf
 - CMS PF group, 2019-11-22: https://indico.cern.ch/event/862195/contributions/3649510/attachments/1949957/3236487/2019_11_22.pdf
 - CMS PF group, 2019-11-08: https://indico.cern.ch/event/861409/contributions/3632204/attachments/1941376/3219105/2019_11_08.pdf
 - Caltech ML meeting, 2019-10-31: https://indico.cern.ch/event/858644/contributions/3623446/attachments/1936711/3209684/2019_10_07_pf.pdf
@@ -277,3 +209,91 @@ python3 test/graph.py step3_AOD_1.root
   - candidates: [Ncand, Ncand_feat] for the output PFCandidate data
   - candidate_block_id: [Ncand, ] for the PFAlgo-based block id 
 - step3_AOD_1_dist.npz: sparse [Nelem, Nelem] distance matrix from PFBlockAlgo between the candidates
+
+## Standard CMS offline PF
+The following pseudocode illustrates how the standard offline PF works in CMS.
+
+```python
+# Inputs and outputs of Particle Flow
+# elements: array of ECAL cluster, HCAL cluster, tracks etc, size Nelem
+# candidates: array of produced particle flow candidates (pions, kaons, photons etc)
+
+# Intermediate data structures
+# link_matrix: whether or not two elements are linked by having a finite distance (sparse, Nelem x Nelem)
+
+def particle_flow(elements):
+
+    #based on https://github.com/cms-sw/cmssw/tree/master/RecoParticleFlow/PFProducer/plugins/linkers
+    link_matrix = compute_links(elements)
+    
+    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc
+    blocks = create_blocks(elements, link_matrix)
+    
+    #based on https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc
+    candidates = []
+    for block in blocks:
+        candidates.append(create_candidates(block))
+    
+    return candidates
+    
+def compute_links(elements):
+    Nelem = len(elements)
+ 
+    link_matrix = np.array((Nelem, Nelem))
+    link_matrix[:] = 0
+    
+    #test if two elements are close by based on neighborhood implemented with KD-trees
+    for ielem in range(Nelem):
+        for jelem in range(Nelem):
+            if in_neighbourhood(elements, ielem, jelem):
+                link_matrix[ielem, jelem] = 1
+                
+    return link_matrix
+
+def in_neighbourhood(elements, ielem, jelem):
+    #This element-to-element neighborhood checking is done based on detector geometry
+    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> linkPrefilter
+    return True
+
+def distance(elements, ielem, jelem):
+    #This element-to-element distance checking is done based on detector geometry
+    #e.g. here for TRK to ECAL: https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/plugins/linkers/TrackAndECALLinker.cc -> testLink
+    return 0.0
+    
+def create_blocks(elements, link_matrix):
+    #Each block is a list of elements, this is a list of blocks
+    blocks = []
+    
+    Nelem = len(elements)
+
+    #Elements and connections between the elements
+    graph = Graph()
+    for ielem in range(Nelem):
+        graph.add_node(ielem)
+    
+    #Check the distance between all relevant element pairs
+    for ielem in range(Nelem):
+        for jelem in range(Nelem):
+            if link_matrix[ielem, jelem]:
+                dist = distance(elements, ielem, jelem)
+                if dist > -0.5:
+                    graph.add_edge(ielem, jelem)
+    
+    #Find the sets of elements that are connected
+    for subgraph in find_subgraphs(graph):
+        this_block = []
+        for element in subgraph:
+            this_block.append(element)
+        blocks.append(this_block)
+
+    return blocks   
+
+def create_candidates(block):
+    #find all HCAL-ECAL-TRK triplets, produce pions
+    #find all HCAL-TRK pairs, produce kaons
+    #find all ECAL-TRK pairs, produce pions
+    #find all independent ECAL elements, produce photons
+    #etc etc
+    candidates = []
+    return candidates
+```
