@@ -72,9 +72,13 @@ def get_model_fname(model, n_train, lr):
     model_cfghash = hashlib.blake2b(repr(model).encode()).hexdigest()[:10]
     model_user = os.environ['USER']
     
-    model_fname = '{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}'.format(
-        model_name, model_params,
-        model_cfghash, model_user, n_train, lr)
+    model_fname = '{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}__{}'.format(
+        model_name,
+        model_params,
+        model_cfghash,
+        model_user,
+        n_train,
+        lr, int(time.time()))
     return model_fname
 
 def plot_confusion_matrix(cm,
@@ -326,15 +330,18 @@ class PFNetOnlyID(nn.Module):
         return edge_weight, cand_ids, cand_p4
 
 class PFNet6(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet6, self).__init__()
 
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
         )
@@ -343,10 +350,13 @@ class PFNet6(nn.Module):
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
@@ -355,19 +365,25 @@ class PFNet6(nn.Module):
         
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, 3),
         )
@@ -397,10 +413,9 @@ class PFNet6(nn.Module):
 
         #Run a second convolution with the new edges
         x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
-        
-        up = x
-
-        up = torch.cat([data.x, up], axis=-1)
+       
+        #concatenate hidden layer with inputs 
+        up = torch.cat([data.x, x], axis=-1)
 
         #Final candidate inference
         cand_ids = self.nn1(up)
@@ -408,46 +423,33 @@ class PFNet6(nn.Module):
 
         return edge_weight2, cand_ids, cand_p4
 
+#Simplified model
 class PFNet7(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet7, self).__init__()
    
-        self.inp = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-        )
-        self.conv1 = SGConv(hidden_dim, hidden_dim) 
-        self.edgenet = nn.Sequential(
-            nn.Linear(2*hidden_dim + 1, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid(),
-        )
-        self.conv2 = SGConv(hidden_dim, hidden_dim)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=1, concat=False) 
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, 3),
         )
@@ -456,32 +458,15 @@ class PFNet7(nn.Module):
 
     def forward(self, data):
         batch = data.batch
-        
-        #encode the inputs
-        x = self.inp(data.x)
-        edge_index = data.edge_index
-
-        if batch is None:
-            batch = edge_index.new_zeros(x.size(0))
         edge_weight = data.edge_attr.squeeze(-1)
-
-        #Run a graph convolution to embed the nodes
-        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index, edge_weight))
         
-        #Compute new edge weights based on embedded node pairs
-        xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
-        edge_weight2 = self.edgenet(xpairs).squeeze(-1)
-        edge_mask = edge_weight > 0.5
-        row, col = data.edge_index
-        row2, col2 = row[edge_mask], col[edge_mask]
-
         #Run a second convolution with the new edges
-        x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
-        up = torch.cat([data.x, x], axis=-1)
+        x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
 
+        up = torch.cat([data.x, x], axis=-1)
         cand_ids = self.nn1(up)
         cand_p4 = self.nn2(up)
-        return edge_weight2, cand_ids, cand_p4
+        return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 
 model_classes = {
@@ -499,6 +484,7 @@ def parse_args():
     parser.add_argument("--n_train", type=int, default=100, help="number of training events")
     parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
+    parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use")
@@ -577,13 +563,20 @@ def data_prep(data, device=device):
     #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
     #for k, v in zip(vs, cs):
     #    data.y_candidates_weights[k] = 1.0/float(v)
-    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
+    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
 
     #Give the pions higher weight in the training
     #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
     #for u, c in zip(uniqs, counts):
     #    data.y_candidates_weights[u] = 1.0/float(c)
+    data.y_candidates[class_labels.index(13)] *= 500
+    data.y_candidates[class_labels.index(-13)] *= 500
+    data.y_candidates[class_labels.index(11)] *= 500
+    data.y_candidates[class_labels.index(-11)] *= 500
+    data.y_candidates[class_labels.index(22)] *= 10
+    data.y_candidates[class_labels.index(1)] *= 0.5
+    data.y_candidates[class_labels.index(2)] *= 0.5
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
@@ -647,7 +640,7 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
 
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
-        if l2m > 0.0 and int(msk.sum())>100:
+        if l2m > 0.0:
             l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.y_candidates)
 
         #Loss for edges enabled/disabled in clustering (binary)
@@ -912,12 +905,14 @@ if __name__ == "__main__":
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    print("train_loader", len(train_loader))
+    print("test_loader", len(test_loader))
 
     model_class = model_classes[args.model]
     model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim).to(device)
     model_fname = get_model_fname(model, args.n_train, args.lr)
     if os.path.isdir("data/" + model_fname):
-        print("model output data/{} already exists, please delete it".format(model_fname), file=sys.stderr)
+        print("model output data/{} already exists, please delete it".format(model_fname))
         sys.exit(0)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -942,11 +937,13 @@ if __name__ == "__main__":
     best_test_loss = 99999.9
     stale_epochs = 0
    
-    t0_initial = time.time() 
+    t0_initial = time.time()
+    print("Training over {} epochs".format(args.n_epochs)) 
     for j in range(args.n_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
+            print("breaking due to stale epochs")
             break
 
         model.train()
@@ -968,7 +965,7 @@ if __name__ == "__main__":
             stale_epochs = 0
         else:
             stale_epochs += 1
-        if j > 0 and j%10 == 0:
+        if j > 0 and j%args.n_plot == 0:
             make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
                 losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
         
@@ -984,4 +981,4 @@ if __name__ == "__main__":
             losses_str, stale_epochs, eta))
 
     make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
-        losses_train, losses_test, accuracies, accuracies_t, corrs, corrs_t, test_loader)
+        losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
