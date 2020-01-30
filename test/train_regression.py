@@ -53,9 +53,9 @@ if __name__ == "__main__":
     all_Xs = []
     all_ys = []
     
-    for i in range(1,6):
-        for j in range(500):
-            fn = "data/TTbar/191009_155100/step3_AOD_{0}_ev{1}.npz".format(i, j)
+    for i in range(1, 5):
+        for j in range(200):
+            fn = "data/TTbar_run3/step3_ntuple_{0}_ev{1}.npz".format(i, j)
             print("Loading {0}".format(fn))
             fi = open(fn, "rb")
             data = np.load(fi)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     ret = model.fit(
         X[:ntrain], y[:ntrain],
         validation_data=(X[ntrain:], y[ntrain:]),
-        batch_size=1000, epochs=100
+        batch_size=100, epochs=100
     )
     model.save("regression.h5")
     
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     with open("regression.json", "w") as fi:
         json.dump(training_info, fi)
 
-    pp = model.predict(X, batch_size=10000)
+    pp = model.predict(X, batch_size=100)
     pred_types = enc_y.inverse_transform(pp[:, :num_onehot_y])
   
     ncands_true = (all_ys_types!=0).sum(axis=1)
