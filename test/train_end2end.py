@@ -570,13 +570,14 @@ def data_prep(data, device=device):
     #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
     #for u, c in zip(uniqs, counts):
     #    data.y_candidates_weights[u] = 1.0/float(c)
-    data.y_candidates_weights[class_labels.index(13)] *= 500
-    data.y_candidates_weights[class_labels.index(-13)] *= 500
-    data.y_candidates_weights[class_labels.index(11)] *= 500
-    data.y_candidates_weights[class_labels.index(-11)] *= 500
+    #print(data.y_candidates_weights)
+    data.y_candidates_weights[class_labels.index(13)] *= 100
+    data.y_candidates_weights[class_labels.index(-13)] *= 100
+    data.y_candidates_weights[class_labels.index(11)] *= 100
+    data.y_candidates_weights[class_labels.index(-11)] *= 100
     data.y_candidates_weights[class_labels.index(22)] *= 10
-    data.y_candidates_weights[class_labels.index(1)] *= 0.5
-    data.y_candidates_weights[class_labels.index(2)] *= 0.5
+    data.y_candidates_weights[class_labels.index(1)] *= 1.0
+    data.y_candidates_weights[class_labels.index(2)] *= 1.0
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
