@@ -606,13 +606,12 @@ class BaselineDNN(DummyPFAlgo):
         i1, i2 = np.triu_indices(nelem, k=1)
 
         target_matrix = np.zeros_like(distance_matrix)
-        elem_pairs_X = np.zeros((num_pairs, 5), dtype=np.float32)
-        
-        elem_pairs_X[:, 0] = elements[i1, 0]
-        elem_pairs_X[:, 1] = elements[i1, 1]
-        elem_pairs_X[:, 2] = elements[i2, 0]
-        elem_pairs_X[:, 3] = elements[i2, 1]
-        elem_pairs_X[:, 4] = distance_matrix[i1, i2]
+        elem_pairs_X = np.zeros((num_pairs, 2*elements.shape[1] + 1), dtype=np.float32)
+       
+        for k in range(elements.shape[1]):
+            elem_pairs_X[:, k] = elements[i1, k]
+            elem_pairs_X[:, elements.shape[1] + k] = elements[i2, k]
+        elem_pairs_X[:, -1] = distance_matrix[i1, i2]
 
         #Predict linkage proba for each element pair with a nonzero distance
         good_inds = np.nonzero(elem_pairs_X[:, -1])
@@ -631,7 +630,7 @@ class BaselineDNN(DummyPFAlgo):
         for isg, nodes in enumerate(networkx.connected_components(g)):
             for node in nodes:
                 ret[node] = isg
-
+        
         return ret
 
 def load_elements_candidates(fn):
@@ -647,6 +646,76 @@ def load_elements_candidates(fn):
 
     return els, els_blid, cands, cands_blid, dm
 
+#Graph NN based PF model
+class GNN(DummyPFAlgo):
+    def __init__(self, input_dim=8, edge_dim=1, hidden_dim=32, n_iters=1):
+        from models import EdgeNet
+        import torch
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_blocks = EdgeNet(input_dim=input_dim,hidden_dim=hidden_dim,edge_dim=edge_dim,n_iters=n_iters).to(device)
+        self.model_blocks.load_state_dict(torch.load('EdgeNet_14001_ca9bbfb3bb_jpata.best.pth',map_location=device))
+        self.model_regression = keras.models.load_model("data/regression.h5")
+        with open("data/preprocessing.pkl", "rb") as fi:
+            self.preprocessing_reg = pickle.load(fi)
+       
+    #Predict the element to block clustering
+    def predict_blocks(self, elements, distance_matrix):
+        
+        nelem = len(elements)
+
+        #number of upper triangular elements without diagonal
+        num_pairs = int(nelem*(nelem-1)/2)
+        i1, i2 = np.triu_indices(nelem, k=1)
+
+        #integer cluster label for each element
+        ret = np.zeros(nelem, dtype=np.int32)
+
+        sparse_distance_matrix = scipy.sparse.coo_matrix(distance_matrix)
+        num_edges = sparse_distance_matrix.nnz
+        row_index = sparse_distance_matrix.row
+        col_index = sparse_distance_matrix.col
+
+        edge_index = np.zeros((2, 2*num_edges))
+        edge_index[0,:num_edges] = row_index
+        edge_index[1,:num_edges] = col_index
+        edge_index[0,num_edges:] = col_index
+        edge_index[1,num_edges:] = row_index
+
+        bidir_row = edge_index[0].astype(int)
+        bidir_col = edge_index[1].astype(int)
+
+        import torch
+        edge_index = torch.tensor(edge_index, dtype=torch.long)
+
+        edge_attr = np.zeros((2*num_edges,1))
+
+        edge_attr[:num_edges,0] = sparse_distance_matrix.data
+        edge_attr[num_edges:,0] = sparse_distance_matrix.data
+        edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+            
+        x = torch.tensor(elements, dtype=torch.float)
+       
+        from torch_geometric.data import Data
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+        pred = self.model_blocks(data)
+        pred_numpy = pred.detach().numpy()
+
+        sparse_pred_matrix = scipy.sparse.coo_matrix((pred_numpy, (bidir_row, bidir_col)))
+
+        pred_matrix = sparse_pred_matrix.todense()
+        #Create adjacency matrix from element pairs which had predicted value greater than a threshold
+        pred_matrix[pred_matrix>=0.9] = 1
+        pred_matrix[pred_matrix<0.9] = 0
+
+        
+        #Find connected subgraphs based on adjacency matrix, set the label in the output vector
+        g = networkx.from_numpy_matrix(pred_matrix)
+        for isg, nodes in enumerate(networkx.connected_components(g)):
+            for node in nodes:
+                ret[node] = isg
+
+        return ret
+
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = str(-1)
 
@@ -661,7 +730,9 @@ if __name__ == "__main__":
 
     m = BaselineDNN()
     m0 = DummyPFAlgo()
-    m1 = CLUE(0.2, 0.7, 0.6, 0.003, 0.125, 0.16)
+    m1 = CLUE(0.6, 0.2, 0.5, 0.024, 0.109, 0.167)
+    m2 = GNN(input_dim=8, edge_dim=1, hidden_dim=32, n_iters=1)
+
 
     fns = sys.argv[1:]
     for fn in fns:
@@ -670,32 +741,39 @@ if __name__ == "__main__":
         #Run the dummy block algo
         els_blid_pred_dummy = m0.predict_blocks(els, dm)
         score_blocks_dummy = m0.assess_blocks(els_blid, els_blid_pred_dummy, dm)
-        
-        els_blid_pred_glue = m1.predict_blocks(els, dm)
-        score_blocks_glue = m1.assess_blocks(els_blid, els_blid_pred_glue, dm)
+
+        #Run CLUE block algo
+        els_blid_pred_clue = m1.predict_blocks(els, dm)
+        score_blocks_clue = m1.assess_blocks(els_blid, els_blid_pred_clue, dm)
    
-        #Run the block algo
+        #Run the DNN block algo
         els_blid_pred = m.predict_blocks(els, dm)
         score_blocks = m.assess_blocks(els_blid, els_blid_pred, dm)
-   
+
+        #Run the GNN block algo
+        els_blid_pred_gnn = m2.predict_blocks(els, dm)
+        score_blocks_gnn = m2.assess_blocks(els_blid, els_blid_pred_gnn, dm)
+        
         #Run candidate regression with the true blocks 
-        #score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
+        score_true_blocks = m.predict_with_true_blocks(els, els_blid, cands, cands_blid)
 
         #Run candidate regression with the predicted blocks 
-        #cands_pred = m.predict_candidates(els, els_blid_pred)
-        #score_cands = m.assess_candidates(cands, cands_pred)
+        cands_pred = m.predict_candidates(els, els_blid_pred)
+        score_cands = m.assess_candidates(cands, cands_pred)
         
         ret = {
             "blocks": score_blocks,
             "blocks_dummy": score_blocks_dummy,
-            "blocks_glue": score_blocks_glue,
-            #"cand_true_blocks": score_true_blocks,
-            #"cand_pred_blocks": score_cands,
+            "blocks_clue": score_blocks_clue,
+            "blocks_gnn": score_blocks_gnn,
+            "cand_true_blocks": score_true_blocks,
+            "cand_pred_blocks": score_cands,
         }
         
         print("score_blocks", score_blocks)
         print("score_blocks_dummy", score_blocks_dummy)
-        print("score_blocks_glue", score_blocks_glue)
+        print("score_blocks_clue", score_blocks_clue)
+        print("score_blocks_gnn", score_blocks_gnn)
 
         output_file = fn.replace(".npz", "_res.pkl")
         with open(output_file, "wb") as fi:
