@@ -9,7 +9,7 @@ def submit(config):
     #save crab config for the future
     with open(config.General.workArea + "/crab_" + config.General.requestName + "/crab_config.py", "w") as fi:
         fi.write(config.pythonise_())
-
+#https://cmsweb.cern.ch/das/request?view=plain&limit=50&instance=prod%2Fglobal&input=%2FRelVal*%2FCMSSW_11_0_0_pre4*%2FGEN-SIM-DIGI-RAW
 samples = [
     ("/RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "QCD_run3"),
     ("/RelValNuGun/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW", "NuGun_run3"),

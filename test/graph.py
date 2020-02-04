@@ -74,6 +74,7 @@ def create_graph_elements_candidates(data, data_elemtocand, iev):
     
     return pfgraph
 
+#assign a new block id to all connected subgraphs
 def analyze_graph_subgraph_elements(pfgraph):
     sub_graphs = [pfgraph.subgraph(c).copy() for c in nx.connected_components(pfgraph)]
 
@@ -125,7 +126,16 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         data["clusters_type"][iev],
         data["clusters_energy"][iev],
         data["clusters_eta"][iev],
-        data["clusters_phi"][iev]]
+        data["clusters_phi"][iev],
+        data["clusters_depth"][iev],
+        data["clusters_layer"][iev],
+        data["clusters_ecalIso"][iev],
+        data["clusters_hcalIso"][iev],
+        data["clusters_trackIso"][iev],
+        data["clusters_phiWidth"][iev],
+        data["clusters_etaWidth"][iev],
+        data["clusters_preshowerEnergy"][iev],
+        data["clusters_correctedEnergy"][iev]]
     ).T
     ys1 = np.array([assign_cand(
         data["clusters_iblock"][iev],
@@ -136,14 +146,18 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
     
     #tracks, track type is always 1
     X2 = np.vstack([
-        1*np.ones_like(data["tracks_qoverp"][iev]),
+        np.ones_like(data["tracks_qoverp"][iev]),
         data["tracks_qoverp"][iev],
         data["tracks_eta"][iev],
         data["tracks_phi"][iev],
         data["tracks_inner_eta"][iev],
         data["tracks_inner_phi"][iev],
         data["tracks_outer_eta"][iev],
-        data["tracks_outer_phi"][iev]]
+        data["tracks_outer_phi"][iev],
+        data["tracks_lambda"][iev],
+        data["tracks_dxy"][iev],
+        data["tracks_dsz"][iev]
+    ]
     ).T
     ys2 = np.array([assign_cand(
         data["tracks_iblock"][iev],
@@ -152,8 +166,8 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
     for i in range(len(data["tracks_phi"][iev]))])
 
     #make the track array the same size as the clusters, concatenate
-    X1p = np.pad(X1, ((0,0),(0, X2.shape[1] - X1.shape[1])), mode="constant")
-    X = np.vstack([X1p, X2])
+    X2p = np.pad(X2, ((0,0),(0, X1.shape[1] - X2.shape[1])), mode="constant")
+    X = np.vstack([X1, X2p])
     y = np.concatenate([ys1, ys2])
 
     #Fill the distance matrix between all elements
@@ -257,10 +271,3 @@ if __name__ == "__main__":
         #     np.savez(fi, Xs=Xs, ys=ys)
 
         all_sgs += sgs
-   
-    block_sizes = Counter([len(sg) for sg in all_sgs])
-    print("block sizes", block_sizes)
-
-    for blocksize in range(1,5): 
-        blocks_nelem = Counter([tuple(sg) for sg in all_sgs if len(sg)==blocksize])
-        print("{0}-element blocks".format(blocksize), blocks_nelem)

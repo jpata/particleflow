@@ -60,10 +60,10 @@ elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
 
 #Data normalization constants for faster convergence.
 #These are just estimated with a printout and rounding, don't need to be super accurate
-x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
-x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
-y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
-y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
+#x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
+#x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
+#y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
+#y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
 
 def get_model_fname(model, n_train, lr):
     model_name = type(model).__name__
@@ -428,7 +428,7 @@ class PFNet7(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet7, self).__init__()
    
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=1, concat=False) 
+        self.conv1 = SGConv(input_dim, hidden_dim) 
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
@@ -439,19 +439,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
-            nn.Linear(hidden_dim, len(class_to_id)),
-        )
-        self.nn2 = nn.Sequential(
-            nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 3),
+            nn.Linear(hidden_dim, len(class_to_id) + 3),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -464,8 +452,9 @@ class PFNet7(nn.Module):
         x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
 
         up = torch.cat([data.x, x], axis=-1)
-        cand_ids = self.nn1(up)
-        cand_p4 = self.nn2(up)
+        r = self.nn1(up)
+        cand_ids = r[:, :len(class_to_id)]
+        cand_p4 = r[:, len(class_to_id):]
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 
@@ -547,8 +536,8 @@ def data_prep(data, device=device):
     #perm = torch.randperm(len(data.y_candidates))
     #data.y_candidates = data.y_candidates[perm]
    
-    data.x -= x_means.to(device=device)
-    data.x /= x_stds.to(device=device)
+    #data.x -= x_means.to(device=device)
+    #data.x /= x_stds.to(device=device)
 
     #Create a one-hot encoded vector of the class labels
     id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
@@ -570,31 +559,14 @@ def data_prep(data, device=device):
     #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
     #for u, c in zip(uniqs, counts):
     #    data.y_candidates_weights[u] = 1.0/float(c)
-    #print(data.y_candidates_weights)
-    data.y_candidates_weights[class_labels.index(13)] *= 100
-    data.y_candidates_weights[class_labels.index(-13)] *= 100
-    data.y_candidates_weights[class_labels.index(11)] *= 100
-    data.y_candidates_weights[class_labels.index(-11)] *= 100
-    data.y_candidates_weights[class_labels.index(22)] *= 10
-    data.y_candidates_weights[class_labels.index(1)] *= 1.0
-    data.y_candidates_weights[class_labels.index(2)] *= 1.0
 
     data.y_candidates = data.y_candidates[:, 1:]
     #normalize and center the target momenta (roughly)
-    data.y_candidates -= y_candidates_means.to(device=device)
-    data.y_candidates /= y_candidates_stds.to(device=device)
+    #data.y_candidates -= y_candidates_means.to(device=device)
+    #data.y_candidates /= y_candidates_stds.to(device=device)
     
     data.x[torch.isnan(data.x)] = 0.0
     data.y_candidates[torch.isnan(data.y_candidates)] = 0.0
-
-    #Compute weights for candidate pdgids
-    # data.y_candidates_id_weights = torch.zeros_like(data.y_candidates_id).to(dtype=torch.float)
-    # uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
-    # data.y_candidates_id_weights_cls = torch.zeros(len(class_labels), dtype=torch.float)
-    # for cls_id, num_cls in zip(uniqs, counts):
-    #     data.y_candidates_id_weights_cls[cls_id] = 1.0 / float(num_cls)
-    #     m = data.y_candidates_id == cls_id
-    #     data.y_candidates_id_weights[m] = 1.0 / float(num_cls)
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2)
@@ -887,14 +859,15 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.close("all")
 
 if __name__ == "__main__":
-    full_dataset = PFGraphDataset(root='data/TTbar_run3')
-    full_dataset.raw_dir = "data/TTbar_run3"
-    full_dataset.processed_dir = "data/TTbar_run3/processed"
+    dataset = "QCD_run3"
+    full_dataset = PFGraphDataset(root='data/{}/'.format(dataset))
+    full_dataset.raw_dir = "data/{}".format(dataset)
+    full_dataset.processed_dir = "data/{}/processed".format(dataset)
 
     args = parse_args()
 
-    #one-hot encoded element ID + 7 element parameters (energy, eta, phi, track stuff)
-    input_dim = 15
+    #one-hot encoded element ID + element parameters
+    input_dim = 20
 
     #one-hot particle ID and 3 momentum components
     output_dim = len(class_to_id) + 3
