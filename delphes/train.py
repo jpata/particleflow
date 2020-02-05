@@ -85,7 +85,7 @@ class PFNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, dropout_rate=0.5):
         super(PFNet, self).__init__()
 
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=4, concat=False)
+        self.conv1 = SGConv(input_dim, hidden_dim)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
@@ -126,11 +126,10 @@ class PFNet(nn.Module):
         return cand_id, cand_p
 
 if __name__ == "__main__":
-    dataset = DelphesDataset(".", 200)
-#    dataset.process()
+    dataset = DelphesDataset(".", 500)
 
-    loader = DataLoader(dataset, batch_size=1, pin_memory=True, shuffle=False)
-    model = PFNet(6, 128, 0.5).to(device=device)
+    loader = DataLoader(dataset, batch_size=20, pin_memory=True, shuffle=False)
+    model = PFNet(6, 128, 0.2).to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     n_epoch = 500
     n_train = int(0.8*len(loader))

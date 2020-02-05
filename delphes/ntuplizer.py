@@ -119,7 +119,7 @@ if __name__ == "__main__":
     f = ROOT.TFile("out.root")
     tree = f.Get("Delphes")
 
-    out = Output("out_flat.root")    
+    #out = Output("out_flat.root")    
     for iev in range(tree.GetEntries()):
         print(iev)
         out.clear()
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         adj_matrix = np.zeros((n, n))
         fill_adj_matrix(adj_matrix, inds_tile_eta, inds_tile_phi)
 
-        np.savez_compressed("ev_{}.npz".format(iev), X=src_array, y=tgt_array, adj=adj_matrix)
+        np.savez_compressed("raw/ev_{}.npz".format(iev), X=src_array, y=tgt_array, adj=adj_matrix)
 
         #all_particles = pileupmix 
         #itgt = 0
@@ -272,4 +272,4 @@ if __name__ == "__main__":
         #out.ntracks[0] = itgt
 
         #out.tree.Fill()
-    out.close()
+    #out.close()
