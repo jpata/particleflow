@@ -20,44 +20,6 @@ set ExecutionPath {
   HCal
   Calorimeter
 
-  ElectronFilter
-  TrackPileUpSubtractor
-  NeutralTowerMerger
-  EFlowMergerAllTracks
-  EFlowMerger
-  EFlowFilter
-  
-  NeutrinoFilter
-  GenJetFinder
-  GenMissingET
-
-  Rho
-  FastJetFinder
-  PileUpJetID
-  JetPileUpSubtractor
-
-  JetEnergyScale
-
-  PhotonEfficiency
-  PhotonIsolation
-
-  ElectronEfficiency
-  ElectronIsolation
-
-  MuonEfficiency
-  MuonIsolation
-
-  MissingET
-
-  JetFlavorAssociation
-
-  BTagging
-  TauTagging
-
-  UniqueObjectFinder
-
-  ScalarHT
-
   TreeWriter
 }
 
@@ -884,3 +846,6 @@ module TreeWriter TreeWriter {
 #  add Branch Rho/rho Rho Rho
 #  add Branch PileUpMerger/vertices Vertex Vertex
 }
+
+set MaxEvents 10
+

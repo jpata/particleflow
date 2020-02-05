@@ -5,7 +5,7 @@
 
 XFILE="tev14_pythia8_qcdjets_wgt_001"
 
-if [! -f ${XFILE}.promc ]; then
+if [ ! -f ${XFILE}.promc ]; then
     wget http://mc.hep.anl.gov/asc/hepsim/events/pp/14tev/pythia8_qcdjets_wgt/${XFILE}.promc
 fi
 

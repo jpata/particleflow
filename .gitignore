@@ -1,1 +1,7 @@
 *~
+*.npy
+*.npz
+*.pt
+*.pdf
+data/*
+*.pth
