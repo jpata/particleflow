@@ -82,31 +82,29 @@ def load_data(fn):
     return d
 
 class PFNet(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, dropout_rate=0.5):
+    def __init__(self, input_dim=3, hidden_dim=32):
         super(PFNet, self).__init__()
 
-        self.conv1 = SGConv(input_dim, hidden_dim)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=4, concat=False)
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, len(pdgid_to_numid) + 1),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=dropout_rate),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(),
             nn.Linear(hidden_dim, 3),
         )
@@ -125,13 +123,31 @@ class PFNet(nn.Module):
         cand_p = self.nn2(up)
         return cand_id, cand_p
 
-if __name__ == "__main__":
-    dataset = DelphesDataset(".", 500)
+def to_binary(ids):
+    return (ids==0).to(dtype=torch.float)
 
-    loader = DataLoader(dataset, batch_size=20, pin_memory=True, shuffle=False)
-    model = PFNet(6, 128, 0.2).to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    n_epoch = 500
+def compute_tpr_fpr(ids_true, ids_pred):
+    a = to_binary(ids_true)
+    b = to_binary(ids_pred)
+    
+    tp = float((a==1).sum())
+    fp = float((a==0).sum())
+
+    tpr = (a==1)&(b==1)
+    fpr = (a==0)&(b==1)
+
+    return float(tpr.sum())/tp, float(fpr.sum())/fp
+
+if __name__ == "__main__":
+    dataset = DelphesDataset(".", 5000)
+    dataset.raw_dir = "raw2"
+    dataset.processed_dir = "processed2"
+    #dataset.process()
+
+    loader = DataLoader(dataset, batch_size=2, pin_memory=True, shuffle=False)
+    model = PFNet(6, 512).to(device=device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    n_epoch = 200
     n_train = int(0.8*len(loader))
     
     losses1 = np.zeros((n_epoch, len(loader)))
@@ -142,18 +158,19 @@ if __name__ == "__main__":
         t0 = time.time()
         for j, data in enumerate(loader):
             d = data.to(device=device)
+            d.x = d.x[:, :6]
             d.is_train = True
             if j >= n_train:
                 d.is_train = False
+
             pred_id_onehot, pred_p = model(d)
-            
-            #true_ids_onehot = torch.nn.functional.one_hot(d.y_id[:, 0].to(dtype=torch.long), num_classes=len(pdgid_to_numid)+1)
-            loss1 = 10*torch.nn.functional.cross_entropy(pred_id_onehot, d.y_id[:, 0].to(dtype=torch.long))
+            _, pred_id_num = torch.max(pred_id_onehot, -1)
+            #pred_p[pred_id_num==0, :] *= 0.00001
+            loss1 = 100*torch.nn.functional.cross_entropy(pred_id_onehot, d.y_id[:, 0].to(dtype=torch.long))
             loss2 = torch.nn.functional.mse_loss(pred_p, d.y_p)
             loss = loss1 + loss2
             
-            _, pred_id_num = torch.max(pred_id_onehot, -1)
-    
+ 
             losses1[i, j] = float(loss1.item())
             losses2[i, j] = float(loss2.item())
             acc = (pred_id_num==d.y_id[:, 0]).sum() / float(len(d.y_id))
@@ -166,7 +183,9 @@ if __name__ == "__main__":
 
         t1 = time.time()
         dt = t1 - t0
-        
+       
+        if i%10 == 0: 
+            torch.save(model.state_dict(), "model_{}.pth".format(i))
         print("epoch {} dt={:.2f} l1={:.4f}/{:.4f} l2={:.4f}/{:.4f} acc={:.4f}/{:.4f} st={:.2f}".format(
             i,
             dt,

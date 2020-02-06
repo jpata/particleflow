@@ -11,7 +11,7 @@ ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 bins_eta = np.linspace(-8, 8, 50)
 bins_phi = np.linspace(-4, 4, 50)
 
-maxparticles_per_tower = 5
+maxparticles_per_tower = 1
 
 @numba.njit
 def fill_adj_matrix(adj_matrix, inds_tile_eta, inds_tile_phi):
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     #out = Output("out_flat.root")    
     for iev in range(tree.GetEntries()):
         print(iev)
-        out.clear()
+        #out.clear()
 
         tree.GetEntry(iev)
         particles = list(tree.Particle)
@@ -161,17 +161,29 @@ if __name__ == "__main__":
             sources = []
             targets = []
             if len(track_nodes) + len(tower_nodes) > 0:
+                matched_gp_from_tracks = []
                 for t in track_nodes:
                     matched_gp = pileupmix_idxdict[tracks[t[1]].Particle.GetObject()]
-                    sources += [t]
-                    targets += [matched_gp]
+                    sources += [(t, 0)]
+                    p = matched_gp
+                    #print(p, pileupmix[p].PID, pileupmix[p].PT, pileupmix[p].Eta, pileupmix[p].Phi)
+                    matched_gp_from_tracks += [matched_gp]
+                targets += matched_gp_from_tracks
+
                 for t in tower_nodes:
                     matched_gps = [pileupmix_idxdict[p] for p in towers[t[1]].Particles]
-
+                    matched_gps = [p for p in matched_gps if not (p in matched_gp_from_tracks)]
+                    matched_gps = sorted(matched_gps, key=lambda p, pileupmix=pileupmix: pileupmix[p].PT, reverse=True)  
+                    matched_gps = [p for p in matched_gps if pileupmix[p].PT > 2]
+                    #if len(matched_gps) > 1:
+                    #    print("tower", towers[t[1]].E, towers[t[1]].Eta, towers[t[1]].Phi)
+                    #    for p in matched_gps:
+                    #        print(p, pileupmix[p].PID, pileupmix[p].PT, pileupmix[p].Eta, pileupmix[p].Phi)
+                    #    import pdb;pdb.set_trace()
                     #Each tower is assumed to produce up to maxparticles_per_tower particles, truncate the rest
                     matched_gps_trunc = matched_gps[:maxparticles_per_tower]
                     truncated_particles += len(matched_gps) - len(matched_gps_trunc)
-                    src = maxparticles_per_tower * [t]
+                    src = [(t, i) for i in range(maxparticles_per_tower)]
                     tgt = maxparticles_per_tower * [None]
                     tgt[:len(matched_gps_trunc)] = matched_gps_trunc[:]
                     sources += src
@@ -182,17 +194,17 @@ if __name__ == "__main__":
         print("truncated candidates from towers {:.4f}%".format(100.0*truncated_particles/len(pileupmix)))
 
         #convert to flat numpy arrays
-        src_array = np.zeros((len(all_sources), 6))
+        src_array = np.zeros((len(all_sources), 7))
         tgt_array = np.zeros((len(all_targets), 4))
 
         #source conversion
-        for i, s in enumerate(all_sources):
+        for i, (s, src_index_copy) in enumerate(all_sources):
             if s[0] == "tower":
                 tower = towers[s[1]]
-                src_array[i] = np.array([0, tower.E, tower.Eta, tower.Phi, tower.Eem, tower.Ehad])  
+                src_array[i] = np.array([0, tower.E, tower.Eta, tower.Phi, tower.Eem, tower.Ehad, src_index_copy])  
             elif s[0] == "track":
                 track = tracks[s[1]]
-                src_array[i] = np.array([1, track.Charge/track.PT, track.Eta, track.Phi, track.EtaOuter, track.PhiOuter])
+                src_array[i] = np.array([1, track.Charge/track.PT, track.Eta, track.Phi, track.EtaOuter, track.PhiOuter, src_index_copy])
         inds_tile_eta = np.searchsorted(bins_eta, src_array[:, 2])
         inds_tile_phi = np.searchsorted(bins_phi, src_array[:, 3])
 
@@ -209,7 +221,7 @@ if __name__ == "__main__":
         adj_matrix = np.zeros((n, n))
         fill_adj_matrix(adj_matrix, inds_tile_eta, inds_tile_phi)
 
-        np.savez_compressed("raw/ev_{}.npz".format(iev), X=src_array, y=tgt_array, adj=adj_matrix)
+        np.savez_compressed("raw2/ev_{}.npz".format(iev), X=src_array, y=tgt_array, adj=adj_matrix)
 
         #all_particles = pileupmix 
         #itgt = 0
