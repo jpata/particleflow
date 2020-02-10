@@ -439,6 +439,9 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            nn.LeakyReLU(),
             nn.Linear(hidden_dim, len(class_to_id) + 3),
         )
         self.input_dim = input_dim
@@ -859,7 +862,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.close("all")
 
 if __name__ == "__main__":
-    dataset = "QCD_run3"
+    dataset = "TTbar_run3"
     full_dataset = PFGraphDataset(root='data/{}/'.format(dataset))
     full_dataset.raw_dir = "data/{}".format(dataset)
     full_dataset.processed_dir = "data/{}/processed".format(dataset)
@@ -867,7 +870,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     #one-hot encoded element ID + element parameters
-    input_dim = 20
+    input_dim = 15
 
     #one-hot particle ID and 3 momentum components
     output_dim = len(class_to_id) + 3

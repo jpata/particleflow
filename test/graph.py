@@ -127,15 +127,15 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         data["clusters_energy"][iev],
         data["clusters_eta"][iev],
         data["clusters_phi"][iev],
-        data["clusters_depth"][iev],
-        data["clusters_layer"][iev],
-        data["clusters_ecalIso"][iev],
-        data["clusters_hcalIso"][iev],
-        data["clusters_trackIso"][iev],
-        data["clusters_phiWidth"][iev],
-        data["clusters_etaWidth"][iev],
-        data["clusters_preshowerEnergy"][iev],
-        data["clusters_correctedEnergy"][iev]]
+        #data["clusters_depth"][iev],
+        #data["clusters_layer"][iev],
+        #data["clusters_ecalIso"][iev],
+        #data["clusters_hcalIso"][iev],
+        #data["clusters_trackIso"][iev],
+        #data["clusters_phiWidth"][iev],
+        #data["clusters_etaWidth"][iev],
+        #data["clusters_preshowerEnergy"][iev],
+        #data["clusters_correctedEnergy"][iev]]
     ).T
     ys1 = np.array([assign_cand(
         data["clusters_iblock"][iev],
@@ -154,9 +154,9 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
         data["tracks_inner_phi"][iev],
         data["tracks_outer_eta"][iev],
         data["tracks_outer_phi"][iev],
-        data["tracks_lambda"][iev],
-        data["tracks_dxy"][iev],
-        data["tracks_dsz"][iev]
+        #data["tracks_lambda"][iev],
+        #data["tracks_dxy"][iev],
+        #data["tracks_dsz"][iev]
     ]
     ).T
     ys2 = np.array([assign_cand(
@@ -166,8 +166,8 @@ def prepare_data(data, data_elemtocand, data_elemtoelem, elem_to_newblock, cand_
     for i in range(len(data["tracks_phi"][iev]))])
 
     #make the track array the same size as the clusters, concatenate
-    X2p = np.pad(X2, ((0,0),(0, X1.shape[1] - X2.shape[1])), mode="constant")
-    X = np.vstack([X1, X2p])
+    X1p = np.pad(X2, ((0,0),(0, X2.shape[1] - X1.shape[1])), mode="constant")
+    X = np.vstack([X1p, X2])
     y = np.concatenate([ys1, ys2])
 
     #Fill the distance matrix between all elements

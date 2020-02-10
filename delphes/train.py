@@ -11,25 +11,45 @@ import os.path as osp
 use_gpu = True
 device = torch.device('cuda' if use_gpu else 'cpu')
 
-pdgid_to_numid = {
-    0: 0,
-    22: 1,
-    11: 2,
-    -11: 3,
-    211: 4,
-    -211: 5,
-    130: 6,
+max_particles_per_tower = 5
+
+map_candid_to_pdgid = {
+    0: [0],
+    211: [211, 2212, 321, -3112, 3222, -3312, -3334],
+    -211: [-211, -2212, -321, 3112, -3222, 3312, 3334],
+    130: [130, 2112, -2112, 310, 3122, -3122, 3322, -3322],
+    22: [22],
+    11: [11],
+    -11: [-11],
+     13: [13],
+     -13: [-13]
 }
 
-def encode_ids(src_ids, encoding_map):
-    new_ids = torch.zeros_like(src_ids)
-    placeholder = max(encoding_map.values()) + 1
-    new_ids[:] = placeholder
-    for k, v in encoding_map.items():
-        m = src_ids == k
-        new_ids[m] = v
-    return new_ids
+map_candid_to_numid = {
+    0: 0,
+    211: 1,
+    -211: 2,
+    130: 3,
+    22: 4,
+    11: 5,
+    -11: 6,
+    13: 7,
+    -13: 8,
+}
 
+def encode_ids(src_ids, map_candid_to_pdgid, map_candid_to_numid):
+    new_ids = torch.zeros_like(src_ids)
+    new_ids[:] = -1
+    
+    for candid, pdgids in map_candid_to_pdgid.items():
+        numid = map_candid_to_numid[candid]
+        for pdgid in pdgids:
+            m = src_ids == pdgid
+            new_ids[m] = numid
+    if (new_ids==-1).sum() != 0:
+        print(src_ids[new_ids==-1])
+        raise Exception()
+    return new_ids
 
 class DelphesDataset(Dataset):
     def __init__(self, root, nfiles, transform=None, pre_transform=None):
@@ -67,46 +87,44 @@ def load_data(fn):
     print("loading {}".format(fn))
     fi = np.load(fn)
     X = fi["X"]
-    y = fi["y"]
+    y_trk = fi["y_trk"]
+    y_tower = fi["y_tower"]
     adj = fi["adj"]
     row_idx, col_idx = np.nonzero(adj)
     
     Xt = torch.Tensor(X)
-    yt = torch.Tensor(y).to(dtype=torch.float)
     edge_index = torch.Tensor(np.stack([row_idx, col_idx], -1).T).to(dtype=torch.long)
     
     d = Data(Xt, edge_index, edge_attr=torch.ones(len(edge_index[0]), dtype=torch.float))
-    d.y_id = encode_ids(yt[:, 0], pdgid_to_numid).to(dtype=torch.float).unsqueeze(-1)
-    d.y_p = yt[:, 1:]
-    print(d)
+    d.y_trk = torch.Tensor(y_trk)
+    d.y_tower = torch.Tensor(y_tower)
+    new_ids_tower = encode_ids(d.y_tower[:, :, 0], map_candid_to_pdgid, map_candid_to_numid)
+    d.y_tower[:, :, 0] = new_ids_tower 
+    new_ids_trk = encode_ids(d.y_trk[:, :, 0], map_candid_to_pdgid, map_candid_to_numid)
+    d.y_trk[:, :, 0] = new_ids_trk
     return d
 
 class PFNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32):
         super(PFNet, self).__init__()
 
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=4, concat=False)
-        self.nn1 = nn.Sequential(
+        self.conv1 = SGConv(input_dim, hidden_dim)
+        self.conv2 = SGConv(hidden_dim, hidden_dim)
+        self.conv3 = SGConv(hidden_dim, hidden_dim)
+        self.nn = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(0.5),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(0.5),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(),
+            nn.Dropout(0.5),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(),
-            nn.Linear(hidden_dim, len(pdgid_to_numid) + 1),
-        )
-        self.nn2 = nn.Sequential(
-            nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 3),
+            nn.Dropout(0.5),
+            nn.Linear(hidden_dim, max_particles_per_tower*(len(map_candid_to_numid)+3))
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -115,13 +133,33 @@ class PFNet(nn.Module):
         batch = data.batch
         edge_weight = data.edge_attr.squeeze(-1)
 
-        #Run a second convolution with the new edges
-        x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
+        mask_tower = data.x[:, 0] == 0
+        x1 = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
+        x2 = torch.nn.functional.leaky_relu(self.conv2(x1, data.edge_index))
+        x3 = torch.nn.functional.leaky_relu(self.conv3(x2, data.edge_index))
 
-        up = torch.cat([data.x, x], axis=-1)
-        cand_id = self.nn1(up)
-        cand_p = self.nn2(up)
-        return cand_id, cand_p
+        up = torch.cat([data.x, x3], axis=-1)
+
+        cands = self.nn(up)
+        cands_tower = cands[mask_tower]
+        cands_tower = cands_tower.reshape((cands_tower.shape[0], max_particles_per_tower, 3 + len(map_candid_to_numid)))
+        cands_tower_id = cands_tower[:, :, :len(map_candid_to_numid)]
+        cands_tower_p = cands_tower[:, :, len(map_candid_to_numid):]
+
+        cands_trk = cands[~mask_tower]
+        cands_trk = cands_trk.reshape((cands_trk.shape[0], max_particles_per_tower, 3 + len(map_candid_to_numid)))[:, :1, :]
+        cands_trk_id = cands_trk[:, :, :len(map_candid_to_numid)]
+        cands_trk_p = cands_trk[:, :, len(map_candid_to_numid):]
+
+        return cands_tower_id, cands_trk_id, cands_tower_p, cands_trk_p
+
+    def encode_ids(self, ids, n=len(map_candid_to_numid)):
+        ids_onehot = torch.nn.functional.one_hot(ids.to(dtype=torch.long), num_classes=n)
+        return ids_onehot
+    
+    def decode_ids(self, ids_onehot):
+        _, ids = ids_onehot.max(axis=-1)
+        return ids
 
 def to_binary(ids):
     return (ids==0).to(dtype=torch.float)
@@ -144,38 +182,55 @@ if __name__ == "__main__":
     dataset.processed_dir = "processed2"
     #dataset.process()
 
-    loader = DataLoader(dataset, batch_size=2, pin_memory=True, shuffle=False)
-    model = PFNet(6, 512).to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    n_epoch = 200
+    loader = DataLoader(dataset, batch_size=50, pin_memory=True, shuffle=False)
+    model = PFNet(10, 512).to(device=device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    n_epoch = 1001
     n_train = int(0.8*len(loader))
     
     losses1 = np.zeros((n_epoch, len(loader)))
     losses2 = np.zeros((n_epoch, len(loader)))
-    accuracies = np.zeros((n_epoch, len(loader)))
+    accuracies1 = np.zeros((n_epoch, len(loader)))
+    accuracies2 = np.zeros((n_epoch, len(loader)))
    
     for i in range(n_epoch):
         t0 = time.time()
         for j, data in enumerate(loader):
             d = data.to(device=device)
-            d.x = d.x[:, :6]
+ 
             d.is_train = True
             if j >= n_train:
                 d.is_train = False
 
-            pred_id_onehot, pred_p = model(d)
-            _, pred_id_num = torch.max(pred_id_onehot, -1)
-            #pred_p[pred_id_num==0, :] *= 0.00001
-            loss1 = 100*torch.nn.functional.cross_entropy(pred_id_onehot, d.y_id[:, 0].to(dtype=torch.long))
-            loss2 = torch.nn.functional.mse_loss(pred_p, d.y_p)
-            loss = loss1 + loss2
-            
- 
+            if d.is_train:
+                model.train()
+            else:
+                model.eval()
+
+            cands_tower_id, cands_trk_id, cands_tower_p, cands_trk_p = model(d)
+            enc1 = model.encode_ids(d.y_tower[:, :, 0])
+            dec1 = model.decode_ids(enc1)
+
+            cands_tower_id_2d = cands_tower_id.reshape((d.y_tower.shape[0]*max_particles_per_tower, len(map_candid_to_numid)))
+            cands_tower_id_decoded = model.decode_ids(cands_tower_id_2d)
+            true_tower_id_2d = d.y_tower[:, :, 0].reshape((d.y_tower.shape[0]*max_particles_per_tower)).to(dtype=torch.long)
+
+            cands_trk_id_2d = cands_trk_id.reshape((d.y_trk.shape[0]*1, len(map_candid_to_numid)))
+            cands_trk_id_decoded = model.decode_ids(cands_trk_id_2d)
+            true_trk_id_2d = d.y_trk[:, :, 0].reshape((d.y_trk.shape[0]*1)).to(dtype=torch.long)
+
+            loss1 = 10.0*(
+                torch.nn.functional.cross_entropy(cands_tower_id_2d, true_tower_id_2d) +
+                torch.nn.functional.cross_entropy(cands_trk_id_2d, true_trk_id_2d)
+            )
+            loss2 = torch.nn.functional.mse_loss(cands_tower_p, d.y_tower[:, :, 1:]) + torch.nn.functional.mse_loss(cands_trk_p, d.y_trk[:, :, 1:])
             losses1[i, j] = float(loss1.item())
             losses2[i, j] = float(loss2.item())
-            acc = (pred_id_num==d.y_id[:, 0]).sum() / float(len(d.y_id))
-            accuracies[i, j] = acc
-            
+
+            loss = loss1 + loss2           
+            accuracies1[i, j]  = float((cands_tower_id_decoded==true_tower_id_2d).sum()) / float(len(true_tower_id_2d))
+            accuracies2[i, j]  = float((cands_trk_id_decoded==true_trk_id_2d).sum()) / float(len(true_trk_id_2d))
+
             if d.is_train:
                 optimizer.zero_grad()
                 loss.backward()
@@ -186,14 +241,16 @@ if __name__ == "__main__":
        
         if i%10 == 0: 
             torch.save(model.state_dict(), "model_{}.pth".format(i))
-        print("epoch {} dt={:.2f} l1={:.4f}/{:.4f} l2={:.4f}/{:.4f} acc={:.4f}/{:.4f} st={:.2f}".format(
+        print("epoch {} dt={:.2f} l1={:.4f}/{:.4f} l2={:.4f}/{:.4f} acc_tower={:.4f}/{:.4f} acc_track={:.4f}/{:.4f} st={:.2f}".format(
             i,
             dt,
             losses1[i, :n_train].mean(),
             losses1[i, n_train:].mean(),
             losses2[i, :n_train].mean(),
             losses2[i, n_train:].mean(),
-            accuracies[i, :n_train].mean(),
-            accuracies[i, n_train:].mean(),
+            accuracies1[i, :n_train].mean(),
+            accuracies1[i, n_train:].mean(),
+            accuracies2[i, :n_train].mean(),
+            accuracies2[i, n_train:].mean(),
             len(dataset)/dt
         ))
