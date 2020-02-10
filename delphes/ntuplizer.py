@@ -46,6 +46,8 @@ class Output:
         self.tree.Branch("nparticles", self.nparticles, "nparticles/i")
         self.particles_pt = np.zeros(self.maxparticles, dtype=np.float32)
         self.tree.Branch("particles_pt", self.particles_pt, "particles_pt[nparticles]/F")
+        self.particles_e = np.zeros(self.maxparticles, dtype=np.float32)
+        self.tree.Branch("particles_e", self.particles_e, "particles_e[nparticles]/F")
         self.particles_eta = np.zeros(self.maxparticles, dtype=np.float32)
         self.tree.Branch("particles_eta", self.particles_eta, "particles_eta[nparticles]/F")
         self.particles_phi = np.zeros(self.maxparticles, dtype=np.float32)
@@ -54,8 +56,10 @@ class Output:
         self.tree.Branch("particles_mass", self.particles_mass, "particles_mass[nparticles]/F")
         self.particles_pid = np.zeros(self.maxparticles, dtype=np.int32)
         self.tree.Branch("particles_pid", self.particles_pid, "particles_pid[nparticles]/I")
-        self.particles_nelem = np.zeros(self.maxparticles, dtype=np.int32)
-        self.tree.Branch("particles_nelem", self.particles_nelem, "particles_nelem[nparticles]/I")
+        self.particles_nelem_tower = np.zeros(self.maxparticles, dtype=np.int32)
+        self.tree.Branch("particles_nelem_tower", self.particles_nelem_tower, "particles_nelem_tower[nparticles]/I")
+        self.particles_nelem_track = np.zeros(self.maxparticles, dtype=np.int32)
+        self.tree.Branch("particles_nelem_track", self.particles_nelem_track, "particles_nelem_track[nparticles]/I")
         self.particles_iblock = np.zeros(self.maxparticles, dtype=np.int32)
         self.tree.Branch("particles_iblock", self.particles_iblock, "particles_iblock[nparticles]/I")
 
@@ -98,11 +102,13 @@ class Output:
     def clear(self):
         self.nparticles[:] = 0        
         self.particles_pt[:] = 0
+        self.particles_e[:] = 0
         self.particles_eta[:] = 0
         self.particles_phi[:] = 0
         self.particles_mass[:] = 0
         self.particles_pid[:] = 0
-        self.particles_nelem[:] = 0
+        self.particles_nelem_tower[:] = 0
+        self.particles_nelem_track[:] = 0
         self.particles_iblock[:] = 0
 
         self.ntowers[:] = 0
@@ -177,7 +183,8 @@ if __name__ == "__main__":
         all_targets_trk = []
         all_targets_tower = []
         tower_matched_particles = np.zeros(len(towers))
-        particles_matched_nelems = np.zeros(len(pileupmix))
+        particles_matched_nelem_tower = np.zeros(len(pileupmix))
+        particles_matched_nelem_track = np.zeros(len(pileupmix))
 
         for sg in nx.connected_components(graph):
             for node in sg:
@@ -191,11 +198,12 @@ if __name__ == "__main__":
 
             if len(track_nodes) + len(tower_nodes) > 0:
                 matched_gp_from_tracks = []
+                matched_gp_from_towers = []
                 for t in track_nodes:
                     matched_gp = pileupmix_idxdict[tracks[t[1]].Particle.GetObject()]
                     all_sources_trk += [t]
                     all_targets_trk += [matched_gp]
-                    particles_matched_nelems[matched_gp] += 1
+                    particles_matched_nelem_track[matched_gp] += 1
 
                 for t in tower_nodes:
                     #find particles matched to tower
@@ -204,29 +212,43 @@ if __name__ == "__main__":
                     #remove particles that were already matched to tracks
                     matched_gps = [p for p in matched_gps if not (p in matched_gp_from_tracks)]
 
-                    #sort according to pt
-                    matched_gps = sorted(matched_gps, key=lambda p, pileupmix=pileupmix: pileupmix[p].PT, reverse=True)
+                    #sort according to energy
+                    matched_gps = sorted(matched_gps, key=lambda p, pileupmix=pileupmix: pileupmix[p].E, reverse=True)
 
                     #keep only stable particles
                     matched_gps = [p for p in matched_gps if pileupmix[p].Status==1]
-                    for matched_gp in matched_gps:
-                        particles_matched_nelems[matched_gp] += 1
 
+                    #remove particles already matched to another tower
+                    #matched_gps = [p for p in matched_gps if not p in matched_gp_from_towers]
+
+                    #print("tower", isg, towers[t[1]].Eem, towers[t[1]].Ehad)
+                    #for gp in matched_gps:
+                    #    print("p", pileupmix[gp].E, pileupmix[gp].PID)
+                    #import pdb;pdb.set_trace()     
+
+                    #keep track of how many particles were attached to this tower, and how many towers to each particle            
+                    tower_matched_particles[t[1]] += len(matched_gps)
+                    for matched_gp in matched_gps:
+                        particles_matched_nelem_tower[matched_gp] += 1
+                    
+                    matched_gp_from_towers += matched_gps
                     all_sources_tower += [t]
                     all_targets_tower += [matched_gps]
+
             isg += 1
+
         #convert to flat numpy arrays
         src_array_trk = np.zeros((len(all_sources_trk), 10))
         src_array_tower = np.zeros((len(all_sources_tower), 10))
-        tgt_array_trk = np.zeros((len(all_targets_trk), 1, 4))
-        tgt_array_tower = np.zeros((len(all_targets_tower), 5, 4))
+        tgt_array_trk = np.zeros((len(all_targets_trk), 4))
+        tgt_array_tower = np.zeros((len(all_targets_tower), 4))
 
         #source conversion
         for i, s in enumerate(all_sources_tower):
             tower = towers[s[1]]
             src_array_tower[i, 0] = 0
             src_array_tower[i, 1:5] = np.array([
-                tower.Eta, tower.Phi, tower.Eem, tower.Ehad\
+                tower.Eta, tower.Phi, tower.Eem, tower.Ehad
             ])
         for i, s in enumerate(all_sources_trk):
             track = tracks[s[1]]
@@ -238,18 +260,17 @@ if __name__ == "__main__":
                 track.D0, track.DZ
             ])
 
-        #Target conversion
+        #Target array conversion
         for i, targets_per_source in enumerate(all_targets_tower):
             nt = len(targets_per_source)
             if nt > 0:
-                targets_per_source = targets_per_source[:5]
-                for j, t in enumerate(targets_per_source):
-                    ptcl = pileupmix[t]
-                    tgt_array_tower[i, j] = np.array([ptcl.PID, ptcl.E, ptcl.Eta, ptcl.Phi])
+                ptcl = pileupmix[targets_per_source[0]]
+                etot = sum([pileupmix[t].E for t in targets_per_source]) 
+                tgt_array_tower[i] = np.array([ptcl.PID, etot, ptcl.Eta, ptcl.Phi])
   
         for i, t in enumerate(all_targets_trk):
             ptcl = pileupmix[t]
-            tgt_array_trk[i, 0] = np.array([ptcl.PID, ptcl.E, ptcl.Eta, ptcl.Phi])  
+            tgt_array_trk[i] = np.array([ptcl.PID, ptcl.E, ptcl.Eta, ptcl.Phi])  
        
         src_array = np.concatenate([src_array_tower, src_array_trk], axis=0)
   
@@ -265,20 +286,24 @@ if __name__ == "__main__":
         for isrc in range(len(all_particles)):
             if all_particles[isrc].Status==1:
                 out.particles_pt[itgt] = all_particles[isrc].PT 
+                out.particles_e[itgt] = all_particles[isrc].E
                 out.particles_eta[itgt] = all_particles[isrc].Eta
                 out.particles_phi[itgt] = all_particles[isrc].Phi
                 out.particles_mass[itgt] = all_particles[isrc].Mass
                 out.particles_pid[itgt] = all_particles[isrc].PID
-                out.particles_nelem[itgt] = particles_matched_nelems[isrc]
+                out.particles_nelem_tower[itgt] = particles_matched_nelem_tower[isrc]
+                out.particles_nelem_track[itgt] = particles_matched_nelem_track[isrc]
                 out.particles_iblock[itgt] = graph.nodes[("particle", isrc)]["iblock"]
                 itgt += 1
         inds = np.argsort(out.particles_iblock[:itgt])
         out.particles_pt[:len(inds)] = out.particles_pt[inds][:]
+        out.particles_e[:len(inds)] = out.particles_e[inds][:]
         out.particles_eta[:len(inds)] = out.particles_eta[inds][:]
         out.particles_phi[:len(inds)] = out.particles_phi[inds][:]
         out.particles_mass[:len(inds)] = out.particles_mass[inds][:] 
         out.particles_pid[:len(inds)] = out.particles_pid[inds][:] 
-        out.particles_nelem[:len(inds)] = out.particles_nelem[inds][:] 
+        out.particles_nelem_tower[:len(inds)] = out.particles_nelem_tower[inds][:] 
+        out.particles_nelem_track[:len(inds)] = out.particles_nelem_track[inds][:] 
         out.particles_iblock[:len(inds)] = out.particles_iblock[inds][:] 
         out.nparticles[0] = itgt
         
@@ -299,7 +324,7 @@ if __name__ == "__main__":
         out.towers_eem[:len(inds)] = out.towers_eem[inds][:] 
         out.towers_ehad[:len(inds)] = out.towers_ehad[inds][:] 
         out.towers_iblock[:len(inds)] = out.towers_iblock[inds][:] 
-        out.towers_nparticles[:len(inds)] = out.towers_nparticles[inds][:] 
+        out.towers_nparticles[:len(inds)] = out.towers_nparticles[inds][:]
         out.ntowers[0] = itgt
         
         itgt = 0
