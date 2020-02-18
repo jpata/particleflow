@@ -265,8 +265,11 @@ if __name__ == "__main__":
             nt = len(targets_per_source)
             if nt > 0:
                 ptcl = pileupmix[targets_per_source[0]]
-                etot = sum([pileupmix[t].E for t in targets_per_source]) 
-                tgt_array_tower[i] = np.array([ptcl.PID, etot, ptcl.Eta, ptcl.Phi])
+                etot = sum([pileupmix[t].E for t in targets_per_source])
+                pid = ptcl.PID
+                if pid != 22:
+                    pid = 130 
+                tgt_array_tower[i] = np.array([pid, etot, ptcl.Eta, ptcl.Phi])
   
         for i, t in enumerate(all_targets_trk):
             ptcl = pileupmix[t]

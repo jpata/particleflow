@@ -14,10 +14,33 @@ def get_index_triu_vector(i, j, vecsize):
     k -= missing
     return k
 
+@numba.njit(fastmath=True)
+def deltaphi(phi1, phi2):
+    return np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
+
+@numba.njit
+def associate_deltar(etaphi1, etaphi2):
+    associations1 = np.zeros(len(etaphi1), dtype=np.int32)
+    associations2 = np.zeros(len(etaphi2), dtype=np.int32)
+    associations1[:] = -1
+    associations2[:] = -1
+    
+    for i in range(len(etaphi1)):
+        for j in range(len(etaphi2)):
+            if associations1[i] == -1 and associations2[j] == -1:
+                dphi = deltaphi(etaphi1[i, 1], etaphi2[j, 1])
+                deta = etaphi1[i, 0] - etaphi2[j, 0]
+                dr = np.sqrt(dphi**2 + deta**2)
+                if dr < 0.001:
+                    associations1[i] = j
+                    associations2[j] = i
+                    continue
+    return associations1, associations2
+
 class HandleLabel:
-    def __init__(self, dtype, label):
+    def __init__(self, dtype, label1, label2="", label3=""):
         self.handle = Handle(dtype)
-        self.label = (label, )
+        self.label = (label1, label2, label3)
 
     def getByLabel(self, event):
         event.getByLabel(self.label, self.handle)
@@ -27,15 +50,21 @@ class HandleLabel:
 
 class EventDesc:
     def __init__(self):
-        self.genparticle = HandleLabel("std::vector<reco::GenParticle>", "genParticles")
         self.simtrack = HandleLabel("std::vector<SimTrack>", "g4SimHits")
+        self.genparticle = HandleLabel("std::vector<reco::GenParticle>", "genParticlePlusGeant")
+        self.pfsim = HandleLabel("vector<reco::PFSimParticle>", "particleFlowSimParticle")
+        self.mixtrack = HandleLabel("vector<TrackingParticle>", "mix", "MergedTrackTruth", "HLT")
+        
         self.pfblock = HandleLabel("std::vector<reco::PFBlock>", "particleFlowBlock")
         self.pfcand = HandleLabel("std::vector<reco::PFCandidate>", "particleFlow")
         self.tracks = HandleLabel("std::vector<reco::PFRecTrack>", "pfTrack")
 
     def get(self, event):
-        self.genparticle.getByLabel(event) 
         self.simtrack.getByLabel(event) 
+        self.genparticle.getByLabel(event) 
+        self.pfsim.getByLabel(event)
+        self.mixtrack.getByLabel(event)
+ 
         self.pfcand.getByLabel(event) 
         self.tracks.getByLabel(event) 
         self.pfblock.getByLabel(event)
@@ -110,6 +139,27 @@ class Output:
         self.pftree.Branch("genparticles_z", self.genparticles_z, "genparticles_z[ngenparticles]/F")
         self.pftree.Branch("genparticles_pdgid", self.genparticles_pdgid, "genparticles_pdgid[ngenparticles]/I")
         self.pftree.Branch("genparticles_status", self.genparticles_status, "genparticles_status[ngenparticles]/I")
+        
+        self.npfsimparticles = np.zeros(1, dtype=np.uint32)
+        self.maxpfsimparticles = 50000
+        self.pfsimparticles_pt = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_eta = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_phi = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_x = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_y = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_z = np.zeros(self.maxpfsimparticles, dtype=np.float32)
+        self.pfsimparticles_pdgid = np.zeros(self.maxpfsimparticles, dtype=np.int32)
+        self.pfsimparticles_status = np.zeros(self.maxpfsimparticles, dtype=np.int32)
+        
+        self.pftree.Branch("npfsimparticles", self.npfsimparticles, "npfsimparticles/i")
+        self.pftree.Branch("pfsimparticles_pt", self.pfsimparticles_pt, "pfsimparticles_pt[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_eta", self.pfsimparticles_eta, "pfsimparticles_eta[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_phi", self.pfsimparticles_phi, "pfsimparticles_phi[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_x", self.pfsimparticles_x, "pfsimparticles_x[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_y", self.pfsimparticles_y, "pfsimparticles_y[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_z", self.pfsimparticles_z, "pfsimparticles_z[npfsimparticles]/F")
+        self.pftree.Branch("pfsimparticles_pdgid", self.pfsimparticles_pdgid, "pfsimparticles_pdgid[npfsimparticles]/I")
+        self.pftree.Branch("pfsimparticles_status", self.pfsimparticles_status, "pfsimparticles_status[npfsimparticles]/I")
        
         #http://cmsdoxygen.web.cern.ch/cmsdoxygen/CMSSW_10_6_2/doc/html/dd/d5b/classreco_1_1Track.html 
         self.ntracks = np.zeros(1, dtype=np.uint32)
@@ -232,6 +282,16 @@ class Output:
         self.genparticles_pdgid[:] = 0
         self.genparticles_status[:] = 0
         
+        self.npfsimparticles[0] = 0
+        self.pfsimparticles_pt[:] = 0 
+        self.pfsimparticles_eta[:] = 0
+        self.pfsimparticles_phi[:] = 0
+        self.pfsimparticles_x[:] = 0
+        self.pfsimparticles_y[:] = 0
+        self.pfsimparticles_z[:] = 0
+        self.pfsimparticles_pdgid[:] = 0
+        self.pfsimparticles_status[:] = 0
+        
         self.ntracks[0] = 0
         self.tracks_iblock[:] = 0
         self.tracks_ielem[:] = 0
@@ -272,9 +332,9 @@ if __name__ == "__main__":
     filename = sys.argv[2]
     outpath = sys.argv[1]
     outfile = os.path.join(outpath, os.path.basename(filename).replace("AOD", "ntuple"))
-    if os.path.isfile(outfile):
-        print("Output file {0} exists, exiting".format(outfile), file=sys.stderr)
-        sys.exit(0)
+    #if os.path.isfile(outfile):
+    #    print("Output file {0} exists, exiting".format(outfile), file=sys.stderr)
+    #    sys.exit(0)
 
     events = Events(filename)
     print("Reading input file {0}".format(filename))
@@ -297,8 +357,85 @@ if __name__ == "__main__":
         output.clear()
         evdesc.get(event)
 
+        pfcand = evdesc.pfcand.product()
         simtrack = evdesc.simtrack.product()
-        print(simtrack.size())
+        pfsim = evdesc.pfsim.product()
+        genpart = evdesc.genparticle.product()
+        mixtrack = evdesc.mixtrack.product()
+        print(pfcand.size(), simtrack.size(), pfsim.size(), genpart.size(), mixtrack.size())
+
+        arr_simtrack = np.zeros((simtrack.size(), 4))
+        for i in range(simtrack.size()):
+            p = simtrack.at(i)
+            arr_simtrack[i, 0] = p.type()
+            arr_simtrack[i, 1] = p.trackerSurfaceMomentum().pt()
+            arr_simtrack[i, 2] = p.trackerSurfaceMomentum().eta()
+            arr_simtrack[i, 3] = p.trackerSurfaceMomentum().phi()
+        
+        arr_genpart = np.zeros((genpart.size(), 4))
+        for i in range(genpart.size()):
+            p = genpart.at(i)
+            arr_genpart[i, 0] = p.pdgId()
+            arr_genpart[i, 1] = p.pt()
+            arr_genpart[i, 2] = p.eta()
+            arr_genpart[i, 3] = p.phi()
+
+        arr_mixtrack = np.zeros((mixtrack.size(), 4))
+        n = 0
+        for i in range(mixtrack.size()):
+            p = mixtrack.at(i)
+            gps = p.genParticles()
+            arr_mixtrack[i, 0] = p.pdgId()
+            arr_mixtrack[i, 1] = p.pt()
+            arr_mixtrack[i, 2] = p.eta()
+            arr_mixtrack[i, 3] = p.phi()
+            n += 1
+       
+        arr_pfcand = np.zeros((pfcand.size(), 4))
+        for i in range(pfcand.size()):
+            p = pfcand.at(i)
+            arr_pfcand[i, 0] = p.pdgId()
+            arr_pfcand[i, 1] = p.pt()
+            arr_pfcand[i, 2] = p.eta()
+            arr_pfcand[i, 3] = p.phi()
+        
+        arr_pfsim = np.zeros((pfsim.size(), 4))
+        for i in range(pfsim.size()):
+            p = pfsim.at(i)
+            arr_pfsim[i, 0] = p.pdgCode()
+            p4 = p.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ClosestApproach).momentum()
+            arr_pfsim[i, 1] = p4.pt()
+            arr_pfsim[i, 2] = p4.eta()
+            arr_pfsim[i, 3] = p4.phi()
+
+        a1, a2 = associate_deltar(arr_pfcand[:, [2,3]], arr_mixtrack[:, [2,3]])
+        print("matched {} mixtracks to pfcands".format(np.sum(a2!=-1)))
+        for i in range(len(a2)):
+            if a2[i] != -1:
+                mt = mixtrack.at(i)
+                print("pfcand", pfcand.at(int(a2[i])).pdgId())
+                print("mixtrack", mt.pdgId(), mt.status(), [t.genpartIndex() for t in mt.g4Tracks()], mt.decayVertices().size(), mt.vertex().x(), mt.vertex().y(), mt.vertex().z())
+                import pdb;pdb.set_trace() 
+        np.savez("ev_{}.npz".format(iev), mixtrack=arr_mixtrack, pfcand=arr_pfcand, simtrack=arr_simtrack, genpart=arr_genpart, pfsim=arr_pfsim)
+
+        npfsimparticles = 0
+        for part in simtrack:
+            #gp = part.extrapolatedPoint(ROOT.reco.PFTrajectoryPoint.ClosestApproach)
+            #output.pfsimparticles_pt[npfsimparticles] = gp.momentum().pt() 
+            #output.pfsimparticles_eta[npfsimparticles] = gp.momentum().eta() 
+            #output.pfsimparticles_phi[npfsimparticles] = gp.momentum().phi() 
+            #output.pfsimparticles_pdgid[npfsimparticles] = part.pdgCode() 
+            #output.pfsimparticles_status[npfsimparticles] = 0
+            #output.pfsimparticles_x[npfsimparticles] = gp.position().x() 
+            #output.pfsimparticles_y[npfsimparticles] = gp.position().y() 
+            #output.pfsimparticles_z[npfsimparticles] = gp.position().z() 
+            output.pfsimparticles_pt[npfsimparticles] = part.trackerSurfaceMomentum().pt() 
+            output.pfsimparticles_eta[npfsimparticles] = part.trackerSurfaceMomentum().eta() 
+            output.pfsimparticles_phi[npfsimparticles] = part.trackerSurfaceMomentum().phi() 
+            output.pfsimparticles_pdgid[npfsimparticles] = 0
+            output.pfsimparticles_status[npfsimparticles] = 0
+            npfsimparticles += 1
+        output.npfsimparticles[0] = npfsimparticles
         #genjets = evdesc.genjet.product()
         #genjet_daughters = []
         #for gj in genjets:
@@ -306,7 +443,6 @@ if __name__ == "__main__":
         #    for idaughter in range(nd):
         #        genjet_daughters += [gj.daughter(idaughter)]
         
-        genpart = evdesc.genparticle.product()
         ngenparticles = 0
         for gp in sorted(genpart, key=lambda x: x.pt(), reverse=True):
             output.genparticles_pt[ngenparticles] = gp.pt() 
@@ -321,7 +457,6 @@ if __name__ == "__main__":
         output.ngenparticles[0] = ngenparticles
 
         blocks = {}
-        pfcand = evdesc.pfcand.product()
         npfcands = 0
 
         #create initial list of pf candidates

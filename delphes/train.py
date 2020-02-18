@@ -108,9 +108,9 @@ class PFNet(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32):
         super(PFNet, self).__init__()
 
-        self.conv1 = SGConv(input_dim, hidden_dim)
-        self.conv2 = SGConv(hidden_dim, hidden_dim)
-        self.conv3 = SGConv(hidden_dim, hidden_dim)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=4, concat=False)
+        self.conv2 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
+        self.conv3 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
         self.nn = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.LeakyReLU(),
@@ -178,9 +178,9 @@ if __name__ == "__main__":
     dataset = DelphesDataset(".", 5000)
     dataset.raw_dir = "raw2"
     dataset.processed_dir = "processed2"
-    #dataset.process()
+    dataset.process()
 
-    loader = DataLoader(dataset, batch_size=50, pin_memory=True, shuffle=False)
+    loader = DataLoader(dataset, batch_size=1, pin_memory=True, shuffle=False)
     model = PFNet(10, 512).to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     n_epoch = 1001

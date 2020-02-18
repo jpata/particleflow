@@ -14,7 +14,7 @@ process.load("Configuration.StandardSequences.Services_cff")
 process.load("SimGeneral.HepPDTESSource.pythiapdt_cfi")
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.load("Configuration.EventContent.EventContent_cff")
-process.load("SimGeneral.MixingModule.mixNoPU_cfi")
+#process.load("SimGeneral.MixingModule.mixNoPU_cfi")
 process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
 process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load("Configuration.StandardSequences.RawToDigi_cff")
@@ -24,10 +24,17 @@ process.load("Configuration.StandardSequences.RecoSim_cff")
 process.load("CommonTools.ParticleFlow.EITopPAG_cff")
 process.load("PhysicsTools.PatAlgos.slimming.metFilterPaths_cff")
 process.load("Configuration.StandardSequences.PATMC_cff")
-process.load("Configuration.StandardSequences.Validation_cff")
+#process.load("Configuration.StandardSequences.Validation_cff")
 process.load("DQMServices.Core.DQMStoreNonLegacy_cff")
 process.load("DQMOffline.Configuration.DQMOfflineMC_cff")
 process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
+process.load("RecoParticleFlow.PFProducer.particleFlowSimParticle_cff")
+#process.load("RecoParticleFlow.PFTracking.hgcalTrackCollection_cfi")
+#process.load("SimTracker.TrackerHitAssociation.tpClusterProducer_cfi")
+process.load("SimGeneral.TrackingAnalysis.simHitTPAssociation_cfi")
+process.load("SimTracker.TrackAssociatorProducers.trackAssociatorByHits_cfi")
+process.load("SimGeneral.MixingModule.trackingTruthProducer_cfi")
+process.load("RecoParticleFlow.PFProducer.simPFProducer_cfi")
 
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(10),
@@ -36,7 +43,7 @@ process.maxEvents = cms.untracked.PSet(
 
 # Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring("root://cms-xrd-global.cern.ch///store/relval/CMSSW_11_0_0_pre12/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/PU_110X_mcRun3_2021_realistic_v5-v1/20000/7CCD50E3-D786-4044-9CEF-793F6EC79183.root"),
+    fileNames = cms.untracked.vstring("file://./output_numEvent10.root"),
     secondaryFileNames = cms.untracked.vstring()
 )
 
@@ -165,8 +172,9 @@ process.DQMoutput = cms.OutputModule("DQMRootOutputModule",
 # Additional output definition
 
 # Other statements
-process.mix.playback = True
-process.mix.digitizers = cms.PSet()
+#process.mix.playback = True
+
+#process.mix.digitizers = cms.PSet()
 for a in process.aliases: delattr(process, a)
 process.RandomNumberGeneratorService.restoreStateLabel=cms.untracked.string("randomEngineStateProducer")
 from Configuration.AlCa.GlobalTag import GlobalTag
@@ -179,7 +187,13 @@ process.genParticlePlusGeant = cms.EDProducer("GenPlusSimParticleProducer",
     genParticles = cms.InputTag("genParticles")
 )
 
-process.genSequence = cms.Sequence(process.genParticlePlusGeant)
+process.genSequence = cms.Sequence(
+#    process.mix*
+    process.genParticlePlusGeant*
+    process.particleFlowSimParticle
+#    process.simHitTPAssocProducer*
+#    process.trackAssociatorByHits
+)
 
 # Path and EndPath definitions
 process.raw2digi_step = cms.Path(process.RawToDigi)
@@ -214,11 +228,11 @@ process.Flag_trkPOG_manystripclus53X = cms.Path(~process.manystripclus53X)
 process.Flag_BadPFMuonSummer16Filter = cms.Path(process.BadPFMuonSummer16Filter)
 process.Flag_muonBadTrackFilter = cms.Path(process.muonBadTrackFilter)
 process.Flag_CSCTightHalo2015Filter = cms.Path(process.CSCTightHalo2015Filter)
-process.prevalidation_step = cms.Path(process.prevalidationNoHLT)
-process.prevalidation_step1 = cms.Path(process.prevalidationMiniAOD)
+#process.prevalidation_step = cms.Path(process.prevalidationNoHLT)
+#process.prevalidation_step1 = cms.Path(process.prevalidationMiniAOD)
 
-process.validation_step = cms.EndPath(process.validationNoHLT)
-process.validation_step1 = cms.EndPath(process.validationMiniAOD)
+#process.validation_step = cms.EndPath(process.validationNoHLT)
+#process.validation_step1 = cms.EndPath(process.validationMiniAOD)
 process.dqmoffline_step = cms.EndPath(process.DQMOfflineFakeHLT)
 process.dqmoffline_1_step = cms.EndPath(process.DQMOfflineMiniAOD)
 process.dqmofflineOnPAT_step = cms.EndPath(process.PostDQMOffline)
@@ -228,7 +242,7 @@ process.MINIAODSIMoutput_step = cms.EndPath(process.MINIAODSIMoutput)
 process.DQMoutput_step = cms.EndPath(process.DQMoutput)
 
 # Schedule definition
-process.schedule = cms.Schedule(process.raw2digi_step,process.L1Reco_step,process.reconstruction_step,process.recosim_step,process.eventinterpretaion_step,process.Flag_HBHENoiseFilter,process.Flag_HBHENoiseIsoFilter,process.Flag_CSCTightHaloFilter,process.Flag_CSCTightHaloTrkMuUnvetoFilter,process.Flag_CSCTightHalo2015Filter,process.Flag_globalTightHalo2016Filter,process.Flag_globalSuperTightHalo2016Filter,process.Flag_HcalStripHaloFilter,process.Flag_hcalLaserEventFilter,process.Flag_EcalDeadCellTriggerPrimitiveFilter,process.Flag_EcalDeadCellBoundaryEnergyFilter,process.Flag_ecalBadCalibFilter,process.Flag_goodVertices,process.Flag_eeBadScFilter,process.Flag_ecalLaserCorrFilter,process.Flag_trkPOGFilters,process.Flag_chargedHadronTrackResolutionFilter,process.Flag_muonBadTrackFilter,process.Flag_BadChargedCandidateFilter,process.Flag_BadPFMuonFilter,process.Flag_BadChargedCandidateSummer16Filter,process.Flag_BadPFMuonSummer16Filter,process.Flag_trkPOG_manystripclus53X,process.Flag_trkPOG_toomanystripclus53X,process.Flag_trkPOG_logErrorTooManyClusters,process.Flag_METFilters,process.prevalidation_step,process.prevalidation_step1,process.validation_step,process.validation_step1,process.dqmoffline_step,process.dqmoffline_1_step,process.dqmofflineOnPAT_step,process.dqmofflineOnPAT_1_step,process.RECOSIMoutput_step,process.MINIAODSIMoutput_step,process.DQMoutput_step)
+process.schedule = cms.Schedule(process.raw2digi_step,process.L1Reco_step,process.reconstruction_step,process.recosim_step,process.eventinterpretaion_step,process.Flag_HBHENoiseFilter,process.Flag_HBHENoiseIsoFilter,process.Flag_CSCTightHaloFilter,process.Flag_CSCTightHaloTrkMuUnvetoFilter,process.Flag_CSCTightHalo2015Filter,process.Flag_globalTightHalo2016Filter,process.Flag_globalSuperTightHalo2016Filter,process.Flag_HcalStripHaloFilter,process.Flag_hcalLaserEventFilter,process.Flag_EcalDeadCellTriggerPrimitiveFilter,process.Flag_EcalDeadCellBoundaryEnergyFilter,process.Flag_ecalBadCalibFilter,process.Flag_goodVertices,process.Flag_eeBadScFilter,process.Flag_ecalLaserCorrFilter,process.Flag_trkPOGFilters,process.Flag_chargedHadronTrackResolutionFilter,process.Flag_muonBadTrackFilter,process.Flag_BadChargedCandidateFilter,process.Flag_BadPFMuonFilter,process.Flag_BadChargedCandidateSummer16Filter,process.Flag_BadPFMuonSummer16Filter,process.Flag_trkPOG_manystripclus53X,process.Flag_trkPOG_toomanystripclus53X,process.Flag_trkPOG_logErrorTooManyClusters,process.Flag_METFilters,process.dqmoffline_step,process.dqmoffline_1_step,process.dqmofflineOnPAT_step,process.dqmofflineOnPAT_1_step,process.RECOSIMoutput_step,process.MINIAODSIMoutput_step,process.DQMoutput_step)
 process.schedule.associate(process.patTask)
 from PhysicsTools.PatAlgos.tools.helpers import associatePatAlgosToolsTask
 associatePatAlgosToolsTask(process)
@@ -236,10 +250,9 @@ associatePatAlgosToolsTask(process)
 # customisation of the process.
 
 # Automatic addition of the customisation function from SimGeneral.MixingModule.fullMixCustomize_cff
-from SimGeneral.MixingModule.fullMixCustomize_cff import setCrossingFrameOn 
-
+#from SimGeneral.MixingModule.fullMixCustomize_cff import setCrossingFrameOn 
 #call to customisation function setCrossingFrameOn imported from SimGeneral.MixingModule.fullMixCustomize_cff
-process = setCrossingFrameOn(process)
+#process = setCrossingFrameOn(process)
 
 # End of customisation functions
 #do not add changes to your config after this point (unless you know what you are doing)
@@ -282,9 +295,13 @@ extra_keeps = [
   "keep recoGenParticles_prunedGenParticles_*_*",
   "keep recoPFBlocks_particleFlowBlock_*_*",
   "keep recoMuons_*_*_*",
-  "keep *_genParticlePlusGeant_*_*",
   "keep *_pileupInformation_*_*",
-  "keep *_g4SimHits_*_*"
+  "keep *_g4SimHits_*_*",
+  "keep *_genParticlePlusGeant_*_*",
+  "keep *_particleFlowSimParticle_*_*",
+  "keep *_simPFProducer_*_*",
+  "keep *_mix_*_*",
+  "keep *_trackAssociatorByHits_*_*",
 ]
 process.genPath = cms.Path(process.genSequence)
 process.schedule.insert(0, process.genPath)
@@ -300,3 +317,20 @@ process.AODSIMoutput = cms.OutputModule("PoolOutputModule",
 )
 process.AODSIMoutput_step = cms.EndPath(process.AODSIMoutput)
 process.schedule.insert(-1, process.AODSIMoutput_step)
+
+#process.caloParticles.simHitCollections = cms.PSet(
+#    hcal = cms.VInputTag(cms.InputTag('g4SimHits','HcalHits')),
+#    ecal = cms.VInputTag(
+#        cms.InputTag('g4SimHits','EcalHitsEE'),
+#        cms.InputTag('g4SimHits','EcalHitsEB'),
+#        cms.InputTag('g4SimHits','EcalHitsES')
+#    )
+#)
+#process.trackingParticles.ignoreTracksOutsideVolume = True
+#process.trackingParticles.alwaysAddAncestors = False
+#process.mix.digitizers = cms.PSet(
+#    #crashes as it's HGCAL-specific
+#    #calotruth=cms.PSet(process.caloParticles),
+#    mergedtruth=cms.PSet(process.trackingParticles)
+#)
+#process.MessageLogger.cerr.INFO = cms.untracked.PSet(limit = cms.untracked.int32(1000000))
