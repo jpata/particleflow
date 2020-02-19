@@ -14,7 +14,7 @@ process.load("Configuration.StandardSequences.Services_cff")
 process.load("SimGeneral.HepPDTESSource.pythiapdt_cfi")
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.load("Configuration.EventContent.EventContent_cff")
-#process.load("SimGeneral.MixingModule.mixNoPU_cfi")
+process.load("SimGeneral.MixingModule.mix_Run3_Flat55To75_PoissonOOTPU_cfi")
 process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
 process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load("Configuration.StandardSequences.RawToDigi_cff")
@@ -172,9 +172,7 @@ process.DQMoutput = cms.OutputModule("DQMRootOutputModule",
 # Additional output definition
 
 # Other statements
-#process.mix.playback = True
-
-#process.mix.digitizers = cms.PSet()
+process.mix.playback = True
 for a in process.aliases: delattr(process, a)
 process.RandomNumberGeneratorService.restoreStateLabel=cms.untracked.string("randomEngineStateProducer")
 from Configuration.AlCa.GlobalTag import GlobalTag
@@ -188,7 +186,7 @@ process.genParticlePlusGeant = cms.EDProducer("GenPlusSimParticleProducer",
 )
 
 process.genSequence = cms.Sequence(
-#    process.mix*
+    process.mix*
     process.genParticlePlusGeant*
     process.particleFlowSimParticle
 #    process.simHitTPAssocProducer*
@@ -302,6 +300,7 @@ extra_keeps = [
   "keep *_simPFProducer_*_*",
   "keep *_mix_*_*",
   "keep *_trackAssociatorByHits_*_*",
+  "keep *_generatorSmeared_*_*",
 ]
 process.genPath = cms.Path(process.genSequence)
 process.schedule.insert(0, process.genPath)
@@ -328,6 +327,7 @@ process.schedule.insert(-1, process.AODSIMoutput_step)
 #)
 #process.trackingParticles.ignoreTracksOutsideVolume = True
 #process.trackingParticles.alwaysAddAncestors = False
+#seems like the reliable way to run digitizers is in step2
 #process.mix.digitizers = cms.PSet(
 #    #crashes as it's HGCAL-specific
 #    #calotruth=cms.PSet(process.caloParticles),
