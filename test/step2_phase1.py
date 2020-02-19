@@ -2,7 +2,7 @@
 # using: 
 # Revision: 1.19 
 # Source: /local/reps/CMSSW/CMSSW/Configuration/Applications/python/ConfigBuilder.py,v 
-# with command line options: TTbar_14TeV_TuneCUETP8M1_cfi --conditions auto:phase1_2021_realistic -n 10 --era Run3 --eventcontent FEVTDEBUGHLT -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT --datatier GEN-SIM --geometry DB:Extended --pileup Run3_Flat55To75_PoissonOOTPU --pileup_input das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM --no_exec --python_filename=step2_phase1.py
+# with command line options: TTbar_14TeV_TuneCUETP8M1_cfi --conditions auto:phase1_2021_realistic -n 100 --era Run3 --eventcontent FEVTDEBUGHLT -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT --datatier GEN-SIM --geometry DB:Extended --pileup Run3_Flat55To75_PoissonOOTPU --pileup_input das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM --no_exec --fileout step2_phase1.root --customise RecoNtuples/HGCalAnalysis/step2_customise.customise --python_filename=step2_phase1.py
 import FWCore.ParameterSet.Config as cms
 
 from Configuration.Eras.Era_Run3_cff import Run3
@@ -30,7 +30,7 @@ process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1000),
+    input = cms.untracked.int32(100),
     output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
 )
 
@@ -66,7 +66,7 @@ process.options = cms.untracked.PSet(
 
 # Production Info
 process.configurationMetadata = cms.untracked.PSet(
-    annotation = cms.untracked.string('TTbar_14TeV_TuneCUETP8M1_cfi nevts:10'),
+    annotation = cms.untracked.string('TTbar_14TeV_TuneCUETP8M1_cfi nevts:100'),
     name = cms.untracked.string('Applications'),
     version = cms.untracked.string('$Revision: 1.19 $')
 )
@@ -81,7 +81,7 @@ process.FEVTDEBUGHLToutput = cms.OutputModule("PoolOutputModule",
         dataTier = cms.untracked.string('GEN-SIM'),
         filterName = cms.untracked.string('')
     ),
-    fileName = cms.untracked.string('step2_phase1_ev1000.root'),
+    fileName = cms.untracked.string('step2_phase1.root'),
     outputCommands = process.FEVTDEBUGHLTEventContent.outputCommands,
     splitLevel = cms.untracked.int32(0)
 )
@@ -158,6 +158,12 @@ for path in process.paths:
 
 # customisation of the process.
 
+# Automatic addition of the customisation function from RecoNtuples.HGCalAnalysis.step2_customise
+from RecoNtuples.HGCalAnalysis.step2_customise import customise 
+
+#call to customisation function customise imported from RecoNtuples.HGCalAnalysis.step2_customise
+process = customise(process)
+
 # Automatic addition of the customisation function from HLTrigger.Configuration.customizeHLTforMC
 from HLTrigger.Configuration.customizeHLTforMC import customizeHLTforMC 
 
@@ -172,13 +178,3 @@ process = customizeHLTforMC(process)
 from Configuration.StandardSequences.earlyDeleteSettings_cff import customiseEarlyDelete
 process = customiseEarlyDelete(process)
 # End adding early deletion
-
-process.mix.digitizers.mergedtruth.ignoreTracksOutsideVolume = True
-process.mix.digitizers.mergedtruth.allowDifferentSimHitProcesses = True
-
-#Keep tracks from pileup
-process.mix.digitizers.mergedtruth.select.signalOnlyTP = False
-
-#For Track reco to sim matching
-process.FEVTDEBUGHLToutput.outputCommands.append('keep *_simSiStripDigis_*_*')
-process.FEVTDEBUGHLToutput.outputCommands.append('keep *_simSiPixelDigis_*_*')
