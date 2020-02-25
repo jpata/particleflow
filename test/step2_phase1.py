@@ -31,7 +31,7 @@ process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 process.load('SimGeneral.MixingModule.caloTruthProducer_cfi')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1),
+    input = cms.untracked.int32(100),
     output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
 )
 
@@ -82,7 +82,7 @@ process.FEVTDEBUGHLToutput = cms.OutputModule("PoolOutputModule",
         dataTier = cms.untracked.string('GEN-SIM'),
         filterName = cms.untracked.string('')
     ),
-    fileName = cms.untracked.string('step2_phase1_ev1.root'),
+    fileName = cms.untracked.string('step2_phase1.root'),
     outputCommands = process.FEVTDEBUGHLTEventContent.outputCommands,
     splitLevel = cms.untracked.int32(0)
 )
@@ -92,12 +92,19 @@ process.FEVTDEBUGHLToutput = cms.OutputModule("PoolOutputModule",
 # Other statements
 process.caloParticles.simHitCollections = cms.PSet(
     hcal = cms.VInputTag(cms.InputTag('g4SimHits','HcalHits')),
+#    hgc = cms.VInputTag(
+#        cms.InputTag('g4SimHits','HGCHitsEE'),
+#        cms.InputTag('g4SimHits','HGCHitsHEfront'),
+#        cms.InputTag('g4SimHits','HcalHits')
+#    ),
     ecal = cms.VInputTag(
         cms.InputTag('g4SimHits','EcalHitsEE'),
         cms.InputTag('g4SimHits','EcalHitsEB'),
-        cms.InputTag('g4SimHits','EcalHitsES')
+        cms.InputTag('g4SimHits','EcalHitsES'),
     )
 )
+process.caloParticles.allowDifferentSimHitProcesses = True
+
 process.mix.digitizers.caloParticles = process.caloParticles
 
 process.mix.input.fileNames = cms.untracked.vstring(['/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/DF6784EE-E9E0-2B4A-9A4A-D2C7F8FD8CD6.root', '/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/0334A557-4FEF-B940-9A73-B78C4421D53B.root', '/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/40BABF7C-A1A6-EC44-98C3-5775528DBA15.root', '/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/ED0B6A22-3C60-6A45-B0F3-0E4D9111F899.root', '/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/0F3627E9-25DE-D147-BD84-00CE7D2183AA.root', '/store/relval/CMSSW_11_0_0_pre12/RelValMinBias_14TeV/GEN-SIM/110X_mcRun3_2021_realistic_v5-v1/20000/298060BF-60DD-9840-9C87-992106033ED6.root'])
