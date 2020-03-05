@@ -1,6 +1,5 @@
 #!/bin/bash
 
-SINGULARITY_IMAGE=/storage/user/jpata/gpuservers/singularity/images/over_edge.simg
-
-#singularity exec --nv -B /storage $SINGULARITY_IMAGE python3 test/train_clustering.py
-singularity exec --nv -B /storage $SINGULARITY_IMAGE python3 test/train_regression.py
+singularity exec --nv -B /storage ~jpata/gpuservers/singularity/images/pytorch.simg python3 \
+    test/train_end2end.py --model PFNet6 --n_train 200 \
+    --batch_size 2 --n_epoch 100 --lr 0.0001 --hidden_dim 512

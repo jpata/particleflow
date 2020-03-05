@@ -3,6 +3,8 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 # Overview
 
 - [x] set up datasets and ntuples for detailed PF analysis
+  - [x] simple python version in [test/ntuplizer.py](test/ntuplizer.py)
+  - [ ] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
@@ -18,7 +20,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
     - [ ] further reduce bias in end-to-end training (muons, electrons, momentum tails)
 - [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
   - [x] set up datasets for regression genparticles from elements
-    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN?
+    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
 
 ## Presentations
 
@@ -40,49 +42,29 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 - https://github.com/jpata/cmssw/issues/56
 
 ## Setting up the code
+
+From [setup.sh](test/setup.sh):
+
 ```bash
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 export SCRAM_ARCH=slc7_amd64_gcc820
+git clone https://github.com/jpata/particleflow
+cd particleflow
+
 scramv1 project CMSSW CMSSW_11_0_1
 cd CMSSW_11_0_1/src
 eval `scramv1 runtime -sh`
 git cms-init
-mkdir workspace
-git clone https://github.com/jpata/particleflow.git workspace/particleflow 
-```
 
-## Running the RECO step with particle flow
-```
-#Run 3
-cmsDriver.py step3  --datatier GEN-SIM-RECO,MINIAODSIM,DQMIO --runUnscheduled  --conditions auto:phase1_2021_realistic -s RAW2DIGI,L1Reco,RECO,RECOSIM,EI,PAT,VALIDATION:@standardValidationNoHLT+@miniAODValidation,DQM:@standardDQMFakeHLT+@miniAODDQM --eventcontent RECOSIM,MINIAODSIM,DQM -n 100  --filein  file:step2.root  --fileout file:step3.root --no_exec --era Run3 --scenario pp --geometry DB:Extended --mc
-```
+git remote add -f jpata https://github.com/jpata/cmssw
+git fetch -a jpata
 
-## Small standalone example
-```bash
-cmsRun test/step3.py
+git cms-addpkg Validation/RecoParticleFlow
+git cms-addpkg SimGeneral/CaloAnalysis/
+git checkout -b jpata_pfntuplizer --track jpata/jpata_pfntuplizer
 
-#Produce the flat root ntuple
-python3 test/ntuplizer.py ./data step3_AOD.root
-root -l ./data/step3_AOD.root
-
-#Produce the numpy datasets
-python3 test/graph.py ./data/step3_AOD.root
-ls ./data/step3_AOD_*.npz
-
-```
-
-## Running on grid
-```bash
-#Run the crab jobs
-cd test
-python multicrab.py
-cd ..
-
-#Make the ROOT ntuple (edit Makefile first)
-make ntuples
-
-#make the numpy cache
-make cache
+scram b
+cd ../..
 ```
 
 ## Datasets
@@ -95,6 +77,16 @@ make cache
     - EDM: `/mnt/hadoop/store/user/jpata/RelValTTbar_14TeV/pfvalidation/191126_233751/0000/step3_AOD*.root`
     - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.root` or `/eos/user/j/jpata/particleflow/TTbar_run3/step3_AOD*.root`
     - npy: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.npz`
+
+## Running step3 on grid
+
+PF reconstruction from `GEN-SIM-DIGI-RAW` needs to be run on the grid:
+```bash
+#Run the crab jobs
+cd test
+edmConfigDump step3.py > step3_dump.py
+python multicrab.py
+```
 
 ## Contents of the flat ROOT output ntuple
 
