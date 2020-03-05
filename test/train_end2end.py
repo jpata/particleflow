@@ -39,8 +39,6 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
 from graph_data import PFGraphDataset
 
-import sinkhorn_pointcloud as spc
-
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -55,15 +53,15 @@ elem_labels = [ 1.,  2.,  3.,  4.,  5.,  8.,  9., 11.]
 #map these to ids 0...Nclass
 class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
 
-#map these to ids 0...Nclass
+# map these to ids 0...Nclass
 elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
 
-#Data normalization constants for faster convergence.
-#These are just estimated with a printout and rounding, don't need to be super accurate
-#x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
-#x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
-#y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
-#y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
+# Data normalization constants for faster convergence.
+# These are just estimated with a printout and rounding, don't need to be super accurate
+# x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
+# x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
+# y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
+# y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
 
 def get_model_fname(model, n_train, lr):
     model_name = type(model).__name__
@@ -71,7 +69,7 @@ def get_model_fname(model, n_train, lr):
     import hashlib
     model_cfghash = hashlib.blake2b(repr(model).encode()).hexdigest()[:10]
     model_user = os.environ['USER']
-    
+
     model_fname = '{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}__{}'.format(
         model_name,
         model_params,
@@ -329,6 +327,7 @@ class PFNetOnlyID(nn.Module):
         cand_p4 = torch.zeros((data.x.shape[0], 3)).to(device=device)
         return edge_weight, cand_ids, cand_p4
 
+#Baseline model with graph attention
 class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet6, self).__init__()
@@ -346,7 +345,7 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
         )
         self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
-        
+
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
@@ -362,7 +361,7 @@ class PFNet6(nn.Module):
             nn.Sigmoid(),
         )
         self.conv2 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
-        
+
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
@@ -392,7 +391,7 @@ class PFNet6(nn.Module):
 
     def forward(self, data):
         batch = data.batch
-        
+
         #encode the inputs
         x = self.inp(data.x)
         edge_index = data.edge_index
@@ -403,7 +402,7 @@ class PFNet6(nn.Module):
 
         #Run a graph convolution to embed the nodes
         x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
-        
+
         #Compute new edge weights based on embedded node pairs
         xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight2 = self.edgenet(xpairs).squeeze(-1)
@@ -413,7 +412,7 @@ class PFNet6(nn.Module):
 
         #Run a second convolution with the new edges
         x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
-       
+
         #concatenate hidden layer with inputs 
         up = torch.cat([data.x, x], axis=-1)
 
@@ -423,7 +422,7 @@ class PFNet6(nn.Module):
 
         return edge_weight2, cand_ids, cand_p4
 
-#Simplified model
+#Simplified model with SGConv
 class PFNet7(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet7, self).__init__()
@@ -479,12 +478,11 @@ def parse_args():
     parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
-    parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use")
+    parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
-    parser.add_argument("--l4", type=float, default=1.0, help="Loss multiplier for Sinkhorn")
     args = parser.parse_args()
     return args
 
@@ -578,10 +576,10 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, batch_size, epoch, l1m, l2m, l3m, l4m):
-    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m, l4m)
+def test(model, loader, batch_size, epoch, l1m, l2m, l3m):
+    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m)
 
-def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
+def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
 
     is_train = not (optimizer is None)
 
@@ -625,18 +623,11 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, l4m):
         else:
             l3 = torch.tensor(0.0).to(device=device)
 
-        if l4m > 0.0:
-            rperm = torch.randperm(int(msk.sum()))
-            n = len(rperm)
-            l4 = l4m*spc.sinkhorn_loss(cand_momentum[msk, 1:][rperm], data.y_candidates[msk, 1:][rperm], 0.01, n, 100, device)
-        else:
-            l4 = torch.tensor(0.0).to(device=device)
 
-        batch_loss = l1 + l2 + l3 + l4
+        batch_loss = l1 + l2 + l3
         losses[i, 0] = l1.item()
         losses[i, 1] = l2.item()
         losses[i, 2] = l3.item()
-        losses[i, 3] = l4.item()
         
         if is_train:
             batch_loss.backward()
@@ -924,14 +915,14 @@ if __name__ == "__main__":
             break
 
         model.train()
-        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3, args.l4)
+        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
         accuracies += [acc]
 
         model.eval()
-        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3, args.l4)
+        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
@@ -943,9 +934,11 @@ if __name__ == "__main__":
         else:
             stale_epochs += 1
         if j > 0 and j%args.n_plot == 0:
-            make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
-                losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
-        
+            make_plots(
+                model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+                losses_train, losses_test, corrs, corrs_t,
+                accuracies, accuracies_t, test_loader)
+
         t1 = time.time()
         epochs_remaining = args.n_epochs - j
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
@@ -957,5 +950,7 @@ if __name__ == "__main__":
             t1 - t0, l, l_t, c, c_t, acc, acc_t,
             losses_str, stale_epochs, eta))
 
-    make_plots(model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
-        losses_train, losses_test, corrs, corrs_t, accuracies, accuracies_t, test_loader)
+    make_plots(
+        model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+        losses_train, losses_test, corrs, corrs_t,
+        accuracies, accuracies_t, test_loader)
