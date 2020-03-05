@@ -127,12 +127,16 @@ python3 test/graph.py ./data/QCD_run3/step3_AOD_1.root
 
 ## Model training
 
+On iBanks:
 ```bash
-python3 test/train_end2end.py --model PFNet6 --n_train 7000 --batch_size 1000 --n_epoch 100 --lr 0.0001 --hidden_dim 64 --batch_size 1
-
-#On iBanks
-singularity exec --nv -B /storage ~/gpuservers/singularity/images/pytorch.simg 
+singularity exec --nv -B /storage ~jpata/gpuservers/singularity/images/pytorch.simg python3 \
+    test/train_end2end.py --model PFNet6 --n_train 200 \
+    --batch_size 2 --n_epoch 100 --lr 0.0001 --hidden_dim 512
 ```
+
+## Model validation
+
+Notebook: [test_end2end](notebooks/test_end2end.ipynb)
 
 ## Acknowledgements
 
