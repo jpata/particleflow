@@ -88,13 +88,13 @@ make cache
 ## Datasets
 - February 2020
   - /RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
-    - EDM: /mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD*.root
-    - flat ROOT: /storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.root or /eos/user/j/jpata/particleflow/QCD_run3/step3_AOD*.root
-    - npy: /storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.npz
+    - EDM: `/mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD*.root`
+    - flat ROOT: `/storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.root` or `/eos/user/j/jpata/particleflow/QCD_run3/step3_AOD*.root`
+    - npy: `/storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.npz`
   - /RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
-    - EDM: /mnt/hadoop/store/user/jpata/RelValTTbar_14TeV/pfvalidation/191126_233751/0000/step3_AOD*.root
-    - flat ROOT: /storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.root or /eos/user/j/jpata/particleflow/TTbar_run3/step3_AOD*.root
-    - npy: /storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.npz
+    - EDM: `/mnt/hadoop/store/user/jpata/RelValTTbar_14TeV/pfvalidation/191126_233751/0000/step3_AOD*.root`
+    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.root` or `/eos/user/j/jpata/particleflow/TTbar_run3/step3_AOD*.root`
+    - npy: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.npz`
 
 ## Contents of the flat ROOT output ntuple
 
@@ -118,12 +118,12 @@ Produced using
 ```bash
 python3 test/graph.py ./data/QCD_run3/step3_AOD_1.root
 ```
-- step3_AOD_1_ev.npz: PF elements, candidates, and the block associations via a numerical ID
-  - elements: [Nelem, Nelem_feat] for the input PFElement data
-  - element_block_id: [Nelem, ] for the PFAlgo-based block id
-  - candidates: [Ncand, Ncand_feat] for the output PFCandidate data
-  - candidate_block_id: [Ncand, ] for the PFAlgo-based block id 
-- step3_AOD_1_dist.npz: sparse [Nelem, Nelem] distance matrix from PFBlockAlgo between the candidates
+- `step3_AOD_1_ev.npz`: PF elements, candidates, and the block associations via a numerical ID
+  - `elements: [Nelem, Nelem_features]` for the input PFElement data
+  - `element_block_id: [Nelem, ]` for the PFAlgo-based block id
+  - `candidates: [Ncand, Ncand_features]` for the output PFCandidate data
+  - `candidate_block_id: [Ncand, ]` for the PFAlgo-based block id 
+- `step3_AOD_1_dist.npz`: sparse `[Nelem, Nelem]` distance matrix from PFBlockAlgo between the candidates
 
 ## Model training
 
