@@ -5,7 +5,7 @@ set -e
 #Generate the MC
 cmsDriver.py TTbar_14TeV_TuneCUETP8M1_cfi \
   --conditions auto:phase1_2021_realistic \
-  -n 1 \
+  -n 100 \
   --era Run3 \
   --eventcontent FEVTDEBUGHLT \
   -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
@@ -33,6 +33,6 @@ cmsDriver.py step3 \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step3 \
   --python_filename=step3_phase1_new.py
 
-cmsRun step2_phase1.py &> log_step2.txt
-cmsRun step3_phase1.py &> log_step3.txt
-cmsRun CMSSW_11_0_0_pre12/src/RecoNtuples/HGCalAnalysis/test/pfntuple.py
+cmsRun step2_phase1_new.py &> log_step2.txt
+cmsRun step3_phase1_new.py &> log_step3.txt
+cmsRun CMSSW_11_0_0_pre12/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
