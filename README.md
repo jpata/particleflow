@@ -68,6 +68,12 @@ cd ../..
 ```
 
 ## Datasets
+
+The data flow is as follows:
+```
+GEN-SIM-DIGI-RAW -> [step3.py] -> EDM -> [ntuplizer.py] -> flat ROOT -> [graph.py] -> npy
+```
+
 - February 2020
   - /RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
     - EDM: `/mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD*.root`
