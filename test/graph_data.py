@@ -2,6 +2,8 @@ import numpy as np
 import os
 import os.path as osp
 import torch
+import torch_geometric
+import torch_geometric.utils
 from torch_geometric.data import Dataset, Data
 import itertools
 from glob import glob
@@ -41,7 +43,8 @@ def regularize_X_y(X_elements, y_candidates, X_element_block_id, y_candidate_blo
 
         #we should always have more elements than candidates, this is a temporary workaround
         if len(y) > len(x):
-            print("ERROR: dropping candidates", len(y), len(x))
+            print("ERROR: dropping candidates: ")
+            print(y[len(x):])
             num_dropped += (len(y) - len(x))
             #More candidates than elements, drop the remaining candidates
             y = y[:len(x)]
@@ -160,8 +163,7 @@ class PFGraphDataset(Dataset):
         pass
 
     def process(self):
-        feature_scale = np.array([1., 1., 1., 1., 1., 1., 1., 1.])
-        i = 0
+        idx_file = 0
         for raw_file_name in self.raw_file_names:
             dist_file_name = raw_file_name.replace('ev','dist')
             print("loading data from files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
@@ -203,33 +205,47 @@ class PFGraphDataset(Dataset):
             edge_attr[num_edges:,0] = edge_data
             edge_attr = torch.tensor(edge_attr, dtype=torch.float)
 
-            x = torch.tensor(X_elements/feature_scale, dtype=torch.float)
+            x = torch.tensor(X_elements, dtype=torch.float)
 
             y = [block_id[i]==block_id[j] for (i,j) in edge_index.t().contiguous()]
             y = torch.tensor(y, dtype=torch.float)
 
             data = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr,
                 y_candidates=torch.tensor(y_candidates, dtype=torch.float),
-                block_ids = torch.tensor(y_candidate_block_id, dtype=torch.float)
+                block_ids = torch.tensor(block_id, dtype=torch.float)
             )
+            perm = torch.randperm(x.shape[0])[:1000]
+            new_edge_index, new_edge_attr = torch_geometric.utils.subgraph(perm, edge_index, edge_attr=edge_attr, relabel_nodes=True, num_nodes=x.shape[0])
+            y = [block_id[perm][i]==block_id[perm][j] for (i,j) in new_edge_index.t().contiguous()]
+            y = torch.tensor(y, dtype=torch.float)
+            data_small = Data(x=x[perm], edge_index=new_edge_index, y=y, edge_attr=new_edge_attr,
+                y_candidates=torch.tensor(y_candidates[perm], dtype=torch.float),
+                block_ids = torch.tensor(block_id[perm], dtype=torch.float)
+            )
+            torch.save(data_small, osp.join(self.processed_dir, 'data_small_{}.pt'.format(idx_file)))
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
             if self.pre_transform is not None:
                 data = self.pre_transform(data)
-            p = osp.join(self.processed_dir, 'data_{}.pt'.format(i))
+            p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
             print(p)
             torch.save(data, p)
-            i += 1
+            idx_file += 1
 
     def get(self, idx):
         data = torch.load(osp.join(self.processed_dir, 'data_{}.pt'.format(idx)))
+        return data
+    
+    def get_small(self, idx):
+        data = torch.load(osp.join(self.processed_dir, 'data_small_{}.pt'.format(idx)))
         return data
 
 
 if __name__ == "__main__":
 
-    pfgraphdataset = PFGraphDataset(root='data/TTbar_run3/')
-    pfgraphdataset.raw_dir = "data/QCD_run3"
-    pfgraphdataset.processed_dir = "data/QCD_run3/processed"
+    dataset = "TTbar_run3"
+    pfgraphdataset = PFGraphDataset(root='data/{}/'.format(dataset))
+    pfgraphdataset.raw_dir = "data/{}".format(dataset)
+    pfgraphdataset.processed_dir = "data/{}/processed".format(dataset)
     pfgraphdataset.process()
