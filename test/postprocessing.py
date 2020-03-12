@@ -1,6 +1,8 @@
 import numpy as np
 import pandas
 import ROOT
+import scipy
+import scipy.sparse
 
 map_candid_to_pdgid = {
     0: [0],
@@ -277,22 +279,24 @@ if __name__ == "__main__":
             idx_go = cand_objects.index(go)
             mat_reco_to_cand[idx_ro, idx_go] += comp
         print("reco-cand", len(reco_objects), len(pfcandidates_pid), len(cand_objects), len(map_reco_to_cand))
- 
-#        #np.savez("ev.npz", reco_to_gen=mat_reco_to_gen)
-#        #reco_df.to_csv("reco.csv")
-#        #gen_df.to_csv("gen.csv")
-#
+
+        if iev == 0: 
+            reco_df.to_csv("reco_{}.csv".format(iev))
+            gen_df.to_csv("gen_{}.csv".format(iev))
+
         #loop over all genparticles in pt-descending order, find the best-matched reco-particle
         highest_pt_idx = np.argsort(gen_df["pt"].values)[::-1]
+        remaining_indices = np.ones(len(reco_objects), dtype=np.float32)
         pairs_reco_gen = {}
         for igen in highest_pt_idx:
             #skip genparticle below an energy and pT threshold
-            if gen_df.loc[igen, "e"] < 1 or gen_df.loc[igen, "pt"]<0.2:
-                continue
+            #if gen_df.loc[igen, "e"] < 0.1:
+            #    continue
 
-            best_reco_idx = np.argmax(mat_reco_to_gen[:, igen])
-            #require at least 0.5 GeV energy from simcluster to be matched to reco object
-            if best_reco_idx != 0 and mat_reco_to_gen[:, igen].sum() > 1.0:
+            temp = remaining_indices*mat_reco_to_gen[:, igen]
+            best_reco_idx = np.argmax(temp)
+            if best_reco_idx != 0 and mat_reco_to_gen[best_reco_idx, igen] > 0.0:
+                remaining_indices[best_reco_idx] = 0.0
                 if not (best_reco_idx in pairs_reco_gen):
                     pairs_reco_gen[best_reco_idx] = []
                 pairs_reco_gen[best_reco_idx] += [(igen, mat_reco_to_gen[best_reco_idx, igen])]
@@ -376,7 +380,7 @@ if __name__ == "__main__":
                     else:
                         count_had += 1
 
-                if count_em > count_had:
+                if count_had > count_em:
                     pid = 1
                 else:
                     pid = 2
@@ -433,4 +437,16 @@ if __name__ == "__main__":
         for idx_cnd in unmatched_candidates:
             print("unmatched pfcandidate", cand_df.loc[idx_cnd, "pid"], cand_df.loc[idx_cnd, "pt"]) 
 
-        np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand, reco_gen=mat_reco_to_gen, reco_cand=mat_reco_to_cand)
+        di = np.array(list(ev.element_distance_i))
+        dj = np.array(list(ev.element_distance_j))
+        d = np.array(list(ev.element_distance_d))
+        n = len(X)
+        dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n))
+
+        with open("dist_{}.npz".format(iev), "wb") as fi:
+            scipy.sparse.save_npz(fi, dm)
+
+        if iev == 0: 
+            np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand, reco_gen=mat_reco_to_gen, reco_cand=mat_reco_to_cand)
+        else: 
+            np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand)
