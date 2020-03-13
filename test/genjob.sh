@@ -17,6 +17,9 @@ eval `scramv1 runtime -sh`
 
 cd $WORKDIR
 
+mkdir testjob
+cd testjob
+
 cp $CMSSWDIR/../step2_phase1_new.py ./
 cp $CMSSWDIR/../step3_phase1_new.py ./
 cp $CMSSWDIR/../110X_mcRun3_2021_realistic_v8.db ./

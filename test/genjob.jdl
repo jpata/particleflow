@@ -16,6 +16,7 @@ x509userproxy = $ENV(X509_USER_PROXY)
 RequestDisk = 4
 RequestCpus = 1
 RequestMemory = 1*2500
+should_transfer_files = no
 
 Environment = USER=$ENV(USER);CONDORJOBID=$(Process)
 
