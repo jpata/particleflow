@@ -169,82 +169,52 @@ class PFGraphDataset(Dataset):
             print("loading data from files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
             try:
                 fi = np.load(osp.join(self.raw_dir, raw_file_name))
-                fi_dist = np.load(osp.join(self.raw_dir, dist_file_name))
+                mat = scipy.sparse.load_npz(osp.join(self.raw_dir, dist_file_name))
             except Exception as e:
                 print("Could not open files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
                 continue
-            X_elements = fi['elements'][:self._max_elements]
-            X_element_block_id = fi['element_block_id'][:self._max_elements]
-            y_candidates = fi['candidates'][:self._max_candidates]
-            y_candidate_block_id = fi['candidate_block_id'][:self._max_candidates]
-            row_index = fi_dist['row']
-            col_index = fi_dist['col']
-            mat = scipy.sparse.coo_matrix((fi_dist["data"], (row_index, col_index)), shape=(len(X_elements), len(X_elements))).todense()
-            #Add additional edges to create more initial connectivity
-            #compute_distances(X_elements, mat)
-
-            mat = scipy.sparse.coo_matrix(mat)
+            X = fi['X']
+            ygen = fi['ygen']
+            ycand = fi['ycand']
             row_index, col_index, dm_data = mat.row, mat.col, mat.data
 
-            #Sort elements such that blocks are contiguous and Ncand == Nelem
-            inds, X_elements, y_candidates, block_id, row_index, col_index = regularize_X_y(
-                X_elements, y_candidates, X_element_block_id, y_candidate_block_id, row_index, col_index)
-            num_elements = X_elements.shape[0]
+            num_elements = X.shape[0]
             num_edges = row_index.shape[0]
 
             edge_index = np.zeros((2, 2*num_edges))
-            edge_index[0,:num_edges] = row_index
-            edge_index[1,:num_edges] = col_index
-            edge_index[0,num_edges:] = col_index
-            edge_index[1,num_edges:] = row_index
+            edge_index[0, :num_edges] = row_index
+            edge_index[1, :num_edges] = col_index
+            edge_index[0, num_edges:] = col_index
+            edge_index[1, num_edges:] = row_index
             edge_index = torch.tensor(edge_index, dtype=torch.long)
 
             edge_data = dm_data
-            edge_attr = np.zeros((2*num_edges,1))
+            edge_attr = np.zeros((2*num_edges, 1))
             edge_attr[:num_edges,0] = edge_data
             edge_attr[num_edges:,0] = edge_data
             edge_attr = torch.tensor(edge_attr, dtype=torch.float)
 
-            x = torch.tensor(X_elements, dtype=torch.float)
+            x = torch.tensor(X, dtype=torch.float)
+            ygen = torch.tensor(ygen, dtype=torch.float)
+            ycand = torch.tensor(ycand, dtype=torch.float)
 
-            y = [block_id[i]==block_id[j] for (i,j) in edge_index.t().contiguous()]
-            y = torch.tensor(y, dtype=torch.float)
-
-            data = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr,
-                y_candidates=torch.tensor(y_candidates, dtype=torch.float),
-                block_ids = torch.tensor(block_id, dtype=torch.float)
+            data = Data(x=x,
+                edge_index=edge_index,
+                edge_attr=edge_attr,
+                ygen=ygen, ycand=ycand,
             )
-            perm = torch.randperm(x.shape[0])[:1000]
-            new_edge_index, new_edge_attr = torch_geometric.utils.subgraph(perm, edge_index, edge_attr=edge_attr, relabel_nodes=True, num_nodes=x.shape[0])
-            y = [block_id[perm][i]==block_id[perm][j] for (i,j) in new_edge_index.t().contiguous()]
-            y = torch.tensor(y, dtype=torch.float)
-            data_small = Data(x=x[perm], edge_index=new_edge_index, y=y, edge_attr=new_edge_attr,
-                y_candidates=torch.tensor(y_candidates[perm], dtype=torch.float),
-                block_ids = torch.tensor(block_id[perm], dtype=torch.float)
-            )
-            torch.save(data_small, osp.join(self.processed_dir, 'data_small_{}.pt'.format(idx_file)))
-
-            if self.pre_filter is not None and not self.pre_filter(data):
-                continue
-            if self.pre_transform is not None:
-                data = self.pre_transform(data)
             p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
-            print(p)
             torch.save(data, p)
             idx_file += 1
 
     def get(self, idx):
         data = torch.load(osp.join(self.processed_dir, 'data_{}.pt'.format(idx)))
         return data
-    
-    def get_small(self, idx):
-        data = torch.load(osp.join(self.processed_dir, 'data_small_{}.pt'.format(idx)))
-        return data
 
 
 if __name__ == "__main__":
 
-    dataset = "TTbar_run3"
+    dataset = "TTbar_gen_phase1"
     pfgraphdataset = PFGraphDataset(root='data/{}/'.format(dataset))
     pfgraphdataset.raw_dir = "data/{}".format(dataset)
     pfgraphdataset.processed_dir = "data/{}/processed".format(dataset)

@@ -258,75 +258,6 @@ class PFDenseAllToAllNet(nn.Module):
         cand_p4 = r[:, n_onehot:]
         return edges, cand_ids, cand_p4
 
-#Based on GraphUNet
-class PFGraphUNet(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
-        super(PFGraphUNet, self).__init__()
-        self.unet = GraphUNet(input_dim, hidden_dim, hidden_dim,
-                              depth=2, pool_ratios=0.2)
-        self.outnetwork = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=0.4),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(p=0.4),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
-        self.batchnorm1 = nn.BatchNorm1d(hidden_dim)
-
-    def reset_parameters(self):
-        self.unet.reset_parameters()
-        self.outnetwork.reset_parameters()
-        self.batchnorm1.reset_parameters()
-
-    def forward(self, data):
-        r = self.unet(data.x, data.edge_index, data.batch)
-        r = self.outnetwork(self.batchnorm1(r))
-        r1 = torch.sigmoid(r[:, 0])
-        r[:, 0] = r1
-        return r
-
-#Predict only particle id
-class PFNetOnlyID(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=None):
-        super(PFNetOnlyID, self).__init__()
-
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=8, concat=False)
-        self.nn1 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, output_dim),
-        )
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-
-    def forward(self, data):
-        edge_weight = data.edge_attr.squeeze(-1)
-
-        x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
-        r = torch.sigmoid(self.nn1(x))
-
-        n_onehot = len(class_to_id)
-        cand_ids = r[:, :n_onehot]
-        cand_p4 = torch.zeros((data.x.shape[0], 3)).to(device=device)
-        return edge_weight, cand_ids, cand_p4
-
 #Baseline model with graph attention
 class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
@@ -462,9 +393,6 @@ class PFNet7(nn.Module):
 
 model_classes = {
     "PFDenseNet": PFDenseNet,
-    "PFDenseAllToAllNet": PFDenseAllToAllNet,
-    "PFGraphUNet": PFGraphUNet,
-    "PFNetOnlyID": PFNetOnlyID,
     "PFNet6": PFNet6,
     "PFNet7": PFNet7,
 }
@@ -527,11 +455,11 @@ def data_prep(data, device=device):
     data.x[:, 0] = new_ids
 
     #Convert pdg-ids to consecutive class labels
-    new_ids = torch.zeros_like(data.y_candidates[:, 0])
+    new_ids = torch.zeros_like(data.ycand[:, 0])
     for k, v in class_to_id.items():
-        m = data.y_candidates[:, 0] == v
+        m = data.ycand[:, 0] == v
         new_ids[m] = k
-    data.y_candidates[:, 0] = new_ids
+    data.ycand[:, 0] = new_ids
   
     #randomize the target order - then we should not be able to predict anything!
     #perm = torch.randperm(len(data.y_candidates))
@@ -541,14 +469,14 @@ def data_prep(data, device=device):
     #data.x /= x_stds.to(device=device)
 
     #Create a one-hot encoded vector of the class labels
-    id_onehot = torch.nn.functional.one_hot(data.y_candidates[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
+    id_onehot = torch.nn.functional.one_hot(data.ycand[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
 
     #one-hot encode the input categorical
     elem_id_onehot = torch.nn.functional.one_hot(data.x[:, 0].to(dtype=torch.long), num_classes=len(elem_to_id))
     data.x = torch.cat([elem_id_onehot.to(dtype=torch.float), data.x[:, 1:]], axis=-1)
 
     #Extract the ids and momenta
-    data.y_candidates_id = data.y_candidates[:, 0].to(dtype=torch.long)
+    data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
     vs, cs = torch.unique(data.y_candidates_id, return_counts=True)
     #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
     #for k, v in zip(vs, cs):
@@ -561,13 +489,13 @@ def data_prep(data, device=device):
     #for u, c in zip(uniqs, counts):
     #    data.y_candidates_weights[u] = 1.0/float(c)
 
-    data.y_candidates = data.y_candidates[:, 1:]
+    data.ycand = data.ycand[:, 1:]
     #normalize and center the target momenta (roughly)
     #data.y_candidates -= y_candidates_means.to(device=device)
     #data.y_candidates /= y_candidates_stds.to(device=device)
     
     data.x[torch.isnan(data.x)] = 0.0
-    data.y_candidates[torch.isnan(data.y_candidates)] = 0.0
+    data.ycand[torch.isnan(data.ycand)] = 0.0
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2)
@@ -615,7 +543,7 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.y_candidates)
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.ycand)
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
@@ -717,7 +645,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         _, cand_ids_pred_batch = torch.max(cand_id_onehot, -1)
         cand_momentum[cand_ids_pred_batch==0] = 0.0
         sumpt_pred = cand_momentum[:, 0].sum().detach().cpu().numpy()
-        sumpt_true = data.y_candidates[:, 0].sum().detach().cpu().numpy()
+        sumpt_true = data.ycand[:, 0].sum().detach().cpu().numpy()
 
         cand_ids_batched = torch_geometric.utils.to_dense_batch(cand_ids_pred_batch, batch=data.batch)
         num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
@@ -853,7 +781,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     plt.close("all")
 
 if __name__ == "__main__":
-    dataset = "TTbar_run3"
+    dataset = "TTbar_gen_phase1"
     full_dataset = PFGraphDataset(root='data/{}/'.format(dataset))
     full_dataset.raw_dir = "data/{}".format(dataset)
     full_dataset.processed_dir = "data/{}/processed".format(dataset)

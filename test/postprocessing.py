@@ -3,6 +3,7 @@ import pandas
 import ROOT
 import scipy
 import scipy.sparse
+import sys
 
 map_candid_to_pdgid = {
     0: [0],
@@ -15,27 +16,21 @@ map_candid_to_pdgid = {
      13: [13],
      -13: [-13]
 }
+
 map_pdgid_to_candid = {}
+
 for candid, pdgids in map_candid_to_pdgid.items():
     for p in pdgids:
         map_pdgid_to_candid[p] = candid
 
-def prepare_reco_df(reco_objects, elements):
+def prepare_df(reco_objects, elements):
     ret = pandas.DataFrame()
-
     all_keys = list(elements.keys())
+
+    inds = np.array([ro[1] for ro in reco_objects])
+    for k in all_keys:
+        ret[k] = np.array(elements[k])[inds]
     
-    data_vecs = {k: [] for k in all_keys}
-
-    for ro in reco_objects:
-        tp, i = ro
-        ntype = -1
-       
-        for k in all_keys:
-           data_vecs[k] += [elements[k][i]]
-
-    for k in data_vecs.keys():
-        ret[k] = data_vecs[k]
     return ret
 
 def prepare_gen_df(gen_objects, trackingparticles, simclusters):
@@ -45,8 +40,6 @@ def prepare_gen_df(gen_objects, trackingparticles, simclusters):
     
     data_vecs = {k: [] for k in all_keys}
     data_vecs["type"] = []
-    data_vecs["idx_original"] = []
-    data_vecs["idx_original2"] = []
 
     for go in gen_objects:
         tp, i, j = go
@@ -63,32 +56,16 @@ def prepare_gen_df(gen_objects, trackingparticles, simclusters):
         for k in all_keys:
            data_vecs[k] += [coll[k][i]]
         data_vecs["type"] += [ntype]
-        data_vecs["idx_original"] += [i]
-        data_vecs["idx_original2"] += [j]
-
-    for k in data_vecs.keys():
-        ret[k] = data_vecs[k]
-    return ret
-
-def prepare_cand_df(cand_objects, candidates):
-    ret = pandas.DataFrame()
-
-    all_keys = list(trackingparticles.keys())
-    
-    data_vecs = {k: [] for k in all_keys}
-
-    for go in cand_objects:
-        tp, i = go
- 
-        for k in all_keys:
-           data_vecs[k] += [candidates[k][i]]
 
     for k in data_vecs.keys():
         ret[k] = data_vecs[k]
     return ret
 
 if __name__ == "__main__":
-    tf = ROOT.TFile("pfntuple.root")
+
+    infile = sys.argv[1]
+    outpath = infile.split(".")[0]
+    tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
     
     for iev, ev in enumerate(tt):
@@ -230,7 +207,7 @@ if __name__ == "__main__":
 #            print("unmatched candidate", idx_cnd, pfcandidates_pid[idx_cnd])
 # 
         #reco_objects = sorted(reco_objects)
-        #gen_objects = sorted(gen_objects)
+        gen_objects = sorted(gen_objects)
  
         elements = {
             "eta": element_eta,
@@ -262,27 +239,42 @@ if __name__ == "__main__":
             "e": pfcandidates_e 
         }
     
-        reco_df = prepare_reco_df(reco_objects, elements)
-        gen_df = prepare_gen_df(gen_objects, trackingparticles, simclusters)
-        cand_df = prepare_cand_df(cand_objects, candidates)
+        reco_df = prepare_df(reco_objects, elements)
+        gen_objects_sc = [go for go in gen_objects if go[0] == "simcluster"]
+        gen_objects_tp = [go for go in gen_objects if go[0] == "trackingparticle"]
+        gen_df_sc = prepare_df(gen_objects_sc, simclusters)
+        gen_df_tp = prepare_df(gen_objects_tp, trackingparticles)
+        gen_df = pandas.concat([gen_df_sc, gen_df_tp], ignore_index=True)
+        #gen_df.index = np.arange(len(gen_df))
+        cand_df = prepare_df(cand_objects, candidates)
  
         mat_reco_to_gen = np.zeros((len(reco_objects), len(gen_objects)), dtype=np.float64)
+
+        reco_objects_d = {}
+        for i in range(len(reco_objects)):
+            reco_objects_d[reco_objects[i]] = i
+        gen_objects_d = {}
+        for i in range(len(gen_objects)):
+            gen_objects_d[gen_objects[i]] = i
+        cand_objects_d = {}
+        for i in range(len(cand_objects)):
+            cand_objects_d[cand_objects[i]] = i
+
         for ro, go, comp in map_reco_to_gen:
-            idx_ro = reco_objects.index(ro)
-            idx_go = gen_objects.index(go)
+            idx_ro = reco_objects_d[ro]
+            idx_go = gen_objects_d[go]
             mat_reco_to_gen[idx_ro, idx_go] += comp
-        print("reco-gen", len(reco_objects), len(gen_objects), len(map_reco_to_gen))
+        #print("reco-gen", len(reco_objects), len(gen_objects), len(map_reco_to_gen))
         
         mat_reco_to_cand = np.zeros((len(reco_objects), len(cand_objects)), dtype=np.float64)
         for ro, go, comp in map_reco_to_cand:
-            idx_ro = reco_objects.index(ro)
-            idx_go = cand_objects.index(go)
+            idx_ro = reco_objects_d[ro]
+            idx_go = cand_objects_d[go]
             mat_reco_to_cand[idx_ro, idx_go] += comp
-        print("reco-cand", len(reco_objects), len(pfcandidates_pid), len(cand_objects), len(map_reco_to_cand))
+        #print("reco-cand", len(reco_objects), len(pfcandidates_pid), len(cand_objects), len(map_reco_to_cand))
 
-        if iev == 0: 
-            reco_df.to_csv("reco_{}.csv".format(iev))
-            gen_df.to_csv("gen_{}.csv".format(iev))
+        #reco_df.to_csv("reco_{}.csv".format(iev))
+        #gen_df.to_csv("gen_{}.csv".format(iev))
 
         #loop over all genparticles in pt-descending order, find the best-matched reco-particle
         highest_pt_idx = np.argsort(gen_df["pt"].values)[::-1]
@@ -345,35 +337,28 @@ if __name__ == "__main__":
         ygen = np.zeros((len(pairs_reco_gen), 6), dtype=np.float32)
         ycand = np.zeros((len(pairs_reco_gen), 5), dtype=np.float32)
 
+        reco_arr = reco_df[["pt", "eta", "phi", "e", "type", "layer"]].values
+        gen_arr = gen_df[["pt", "eta", "phi", "e", "pid"]].values
+        cand_arr = cand_df[["pt", "eta", "phi", "e", "pid"]].values
         #loop over all reco-gen pairs
         for ireco, (reco, gens) in enumerate(pairs_reco_gen.items()):
-            print("---")
-            reco_arr = reco_df.loc[reco, ["pt", "eta", "phi", "e", "type", "layer"]]
-            print("reco {} pt={:.5f} eta={:.5f} phi={:.5f} e={:.5f} l={} type={}".format(
-                reco,
-                reco_arr["pt"], reco_arr["eta"], reco_arr["phi"], reco_arr["e"], reco_arr["layer"], reco_arr["type"]
-            ))
+            #print("---")
 
             #get all the genparticles associated to this reco particle
             igens = [g[0] for g in gens]
-            gen_arr = gen_df.loc[igens, ["pt", "eta", "phi", "e", "pid"]]
 
             pid = 0
 
             #In case we have a single genparticle, use it's PID
             if len(gens) == 1:
-                if gen_df.loc[igens[0], "pid"] in map_pdgid_to_candid:
-                    pid = map_pdgid_to_candid[gen_df.loc[igens[0], "pid"]]
-                else:
-                    print("unknown or unhandled pid={}".format(gen_df.loc[igens[0], "pid"]))
-                    pid = 0
+                pid = map_pdgid_to_candid.get(gen_arr[igens[0], -1], 0)
             #In case of multiple genparticles overlapping, use a placeholder constant
             elif len(gens) > 1:
                 count_em = 0
                 count_had = 0
 
                 for ig in igens:
-                    pid = abs(gen_df.loc[ig, "pid"])
+                    pid = abs(gen_arr[ig, -1])
 
                     if pid in [11, 22]:
                         count_em += 1
@@ -385,31 +370,24 @@ if __name__ == "__main__":
                 else:
                     pid = 2
 
-            all_pids = [gen_df.loc[i, "pid"] for i in igens]
-
             #add up the momentum vectors of the genparticles
             lvs = []
             for igen in igens:
                 lv = ROOT.TLorentzVector()
                 lv.SetPtEtaPhiE(
-                    gen_df.loc[igen, "pt"],
-                    gen_df.loc[igen, "eta"],
-                    gen_df.loc[igen, "phi"],
-                    gen_df.loc[igen, "e"]
+                    gen_arr[igen, 0],
+                    gen_arr[igen, 1],
+                    gen_arr[igen, 2],
+                    gen_arr[igen, 3]
                 )
                 lvs += [lv]
             lv = sum(lvs, ROOT.TLorentzVector())
-            if len(igens) > 0:
-                print("gen pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} ngen={} all_pids={}".format(
-                    lv.Pt(), lv.Eta(), lv.Phi(), lv.E(), pid, len(gens), all_pids
-                ))
+            #if len(igens) > 0:
+            #    print("gen pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} ngen={} all_pids={}".format(
+            #        lv.Pt(), lv.Eta(), lv.Phi(), lv.E(), pid, len(gens), all_pids
+            #    ))
 
-            X[ireco, 0] = reco_arr["type"]
-            X[ireco, 1] = reco_arr["pt"]
-            X[ireco, 2] = reco_arr["eta"]
-            X[ireco, 3] = reco_arr["phi"]
-            X[ireco, 4] = reco_arr["e"]
-            X[ireco, 5] = reco_arr["layer"]
+            X[ireco, :] = reco_arr[reco, :]
             
             ygen[ireco, 0] = pid
             ygen[ireco, 1] = lv.Pt()
@@ -422,20 +400,16 @@ if __name__ == "__main__":
             if len(cands) > 1:
                 print("ERROR! more than one candidate found for reco object {}".format(ireco))
             for icand, comp in cands: 
-                print("cand pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} comp={}".format(
-                    cand_df.loc[icand, "pt"], cand_df.loc[icand, "eta"], cand_df.loc[icand, "phi"], cand_df.loc[icand, "e"], cand_df.loc[icand, "pid"], comp
-                ))
+            #    print("cand pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} comp={}".format(
+            #        cand_df.loc[icand, "pt"], cand_df.loc[icand, "eta"], cand_df.loc[icand, "phi"], cand_df.loc[icand, "e"], cand_df.loc[icand, "pid"], comp
+            #    ))
             
-                ycand[ireco, 0] = cand_df.loc[icand, "pid"]
-                ycand[ireco, 1] = cand_df.loc[icand, "pt"]
-                ycand[ireco, 2] = cand_df.loc[icand, "eta"]
-                ycand[ireco, 3] = cand_df.loc[icand, "phi"]
-                ycand[ireco, 4] =  cand_df.loc[icand, "e"]
+                ycand[ireco, :] = cand_arr[icand, :]
 
         #Mostly soft photons, a few neutral hadrons - we will need to solve this later
-        print("unmatched pfcandidates", len(unmatched_candidates))
-        for idx_cnd in unmatched_candidates:
-            print("unmatched pfcandidate", cand_df.loc[idx_cnd, "pid"], cand_df.loc[idx_cnd, "pt"]) 
+        #print("unmatched pfcandidates", len(unmatched_candidates))
+        #for idx_cnd in unmatched_candidates:
+        #    print("unmatched pfcandidate", cand_df.loc[idx_cnd, "pid"], cand_df.loc[idx_cnd, "pt"]) 
 
         di = np.array(list(ev.element_distance_i))
         dj = np.array(list(ev.element_distance_j))
@@ -443,10 +417,8 @@ if __name__ == "__main__":
         n = len(X)
         dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n))
 
-        with open("dist_{}.npz".format(iev), "wb") as fi:
+        with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
             scipy.sparse.save_npz(fi, dm)
 
-        if iev == 0: 
-            np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand, reco_gen=mat_reco_to_gen, reco_cand=mat_reco_to_cand)
-        else: 
-            np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand)
+        #np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand, reco_gen=mat_reco_to_gen, reco_cand=mat_reco_to_cand)
+        np.savez("{}_ev_{}.npz".format(outpath, iev), X=X, ygen=ygen, ycand=ycand)

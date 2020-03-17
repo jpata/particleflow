@@ -5,7 +5,7 @@ set -x
 WORKDIR=`pwd`
 
 #seed must be greater than 0
-export SEED=$((CONDORJOBID + 1))
+SEED=$((CONDORJOBID + 1))
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -33,4 +33,5 @@ cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 
-cp pfntuple.root $CMSSW_DIR/pfntuple_$IJOB.root
+cp pfntuple.root $CMSSWDIR/../pfntuple_$SEED.root
+rm -Rf testjob
