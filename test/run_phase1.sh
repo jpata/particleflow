@@ -3,7 +3,7 @@
 set -e
 
 #Generate the MC
-cmsDriver.py TTbar_14TeV_TuneCUETP8M1_cfi \
+cmsDriver.py SinglePiPt1_pythia8_cfi \
   --conditions auto:phase1_2021_realistic \
   -n 100 \
   --era Run3 \

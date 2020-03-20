@@ -19,4 +19,5 @@ RequestMemory = 1*2500
 
 Environment = USER=$ENV(USER);CONDORJOBID=$(Process)
 
-Queue 100
+#Queue 10
+Queue arguments from args.txt

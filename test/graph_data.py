@@ -176,6 +176,7 @@ class PFGraphDataset(Dataset):
             X = fi['X']
             ygen = fi['ygen']
             ycand = fi['ycand']
+            node_sel = X[:, 4] > 0.2
             row_index, col_index, dm_data = mat.row, mat.col, mat.data
 
             num_elements = X.shape[0]
@@ -193,16 +194,20 @@ class PFGraphDataset(Dataset):
             edge_attr[:num_edges,0] = edge_data
             edge_attr[num_edges:,0] = edge_data
             edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+            edge_index, edge_attr = torch_geometric.utils.subgraph(torch.tensor(node_sel, dtype=torch.bool),
+                edge_index, edge_attr, relabel_nodes=True, num_nodes=len(X))
 
-            x = torch.tensor(X, dtype=torch.float)
-            ygen = torch.tensor(ygen, dtype=torch.float)
-            ycand = torch.tensor(ycand, dtype=torch.float)
+            x = torch.tensor(X[node_sel], dtype=torch.float)
+            ygen = torch.tensor(ygen[node_sel], dtype=torch.float)
+            ycand = torch.tensor(ycand[node_sel], dtype=torch.float)
 
-            data = Data(x=x,
+            data = Data(
+                x=x,
                 edge_index=edge_index,
                 edge_attr=edge_attr,
                 ygen=ygen, ycand=ycand,
             )
+            print("x={} ygen={} ycand={} edge_attr={}".format(x.shape, ygen.shape, ycand.shape, edge_attr.shape))
             p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
             torch.save(data, p)
             idx_file += 1

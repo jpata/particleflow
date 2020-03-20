@@ -43,12 +43,13 @@ from graph_data import PFGraphDataset
 np.seterr(divide='ignore', invalid='ignore')
 
 device = torch.device('cuda' if use_gpu else 'cpu')
+#device = torch.device('cpu')
 
 #all candidate pdg-ids (multiclass labels)
 class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 
 #detector element labels
-elem_labels = [ 1.,  2.,  3.,  4.,  5.,  8.,  9., 11.]
+elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 
 #map these to ids 0...Nclass
 class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
@@ -63,15 +64,16 @@ elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
 # y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
 # y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
 
-def get_model_fname(model, n_train, lr):
+def get_model_fname(model, n_train, lr, target_type):
     model_name = type(model).__name__
     model_params = sum(p.numel() for p in model.parameters())
     import hashlib
     model_cfghash = hashlib.blake2b(repr(model).encode()).hexdigest()[:10]
     model_user = os.environ['USER']
 
-    model_fname = '{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}__{}'.format(
+    model_fname = '{}_{}__npar_{}__cfg_{}__user_{}__ntrain_{}__lr_{}__{}'.format(
         model_name,
+        target_type,
         model_params,
         model_cfghash,
         model_user,
@@ -315,7 +317,7 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 3),
+            nn.Linear(hidden_dim, 4),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -372,7 +374,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             nn.LeakyReLU(),
-            nn.Linear(hidden_dim, len(class_to_id) + 3),
+            nn.Linear(hidden_dim, len(class_to_id) + 4),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -400,13 +402,14 @@ model_classes = {
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_train", type=int, default=100, help="number of training events")
+    parser.add_argument("--n_train", type=int, default=80, help="number of training events")
     parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regresso to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
@@ -460,7 +463,29 @@ def data_prep(data, device=device):
         m = data.ycand[:, 0] == v
         new_ids[m] = k
     data.ycand[:, 0] = new_ids
+    
+    new_ids = torch.zeros_like(data.ygen[:, 0])
+    for k, v in class_to_id.items():
+        m = data.ygen[:, 0] == v
+        new_ids[m] = k
+    data.ygen[:, 0] = new_ids
+
+    #transform pt and energy to log scale
+    m = data.x[:, 1] > 0
+    data.x[m, 1] = data.x[m, 1].log()  
+    m = data.x[:, 4] > 0
+    data.x[m, 4] = data.x[m, 4].log()
   
+    m = data.ycand[:, 1] > 0
+    data.ycand[m, 1] = data.ycand[m, 1].log()  
+    m = data.ycand[:, 4] > 0
+    data.ycand[m, 4] = data.ycand[m, 4].log()  
+    
+    m = data.ygen[:, 1] > 0
+    data.ygen[m, 1] = data.ygen[m, 1].log()  
+    m = data.ygen[:, 4] > 0
+    data.ygen[m, 4] = data.ygen[m, 4].log()
+ 
     #randomize the target order - then we should not be able to predict anything!
     #perm = torch.randperm(len(data.y_candidates))
     #data.y_candidates = data.y_candidates[perm]
@@ -469,20 +494,22 @@ def data_prep(data, device=device):
     #data.x /= x_stds.to(device=device)
 
     #Create a one-hot encoded vector of the class labels
-    id_onehot = torch.nn.functional.one_hot(data.ycand[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
+    #data.y_candidates_id = torch.nn.functional.one_hot(data.ycand[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
+    #data.y_gen_id = torch.nn.functional.one_hot(data.ygen[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
+    data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
+    data.y_gen_id = data.ygen[:, 0].to(dtype=torch.long)
 
-    #one-hot encode the input categorical
+    #one-hot encode the input categorical of the input
     elem_id_onehot = torch.nn.functional.one_hot(data.x[:, 0].to(dtype=torch.long), num_classes=len(elem_to_id))
     data.x = torch.cat([elem_id_onehot.to(dtype=torch.float), data.x[:, 1:]], axis=-1)
 
-    #Extract the ids and momenta
-    data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
-    vs, cs = torch.unique(data.y_candidates_id, return_counts=True)
+    #vs, cs = torch.unique(data.y_candidates_id, return_counts=True)
     #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
     #for k, v in zip(vs, cs):
     #    data.y_candidates_weights[k] = 1.0/float(v)
+
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
-    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
+    data.y_gen_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
 
     #Give the pions higher weight in the training
     #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
@@ -490,12 +517,15 @@ def data_prep(data, device=device):
     #    data.y_candidates_weights[u] = 1.0/float(c)
 
     data.ycand = data.ycand[:, 1:]
-    #normalize and center the target momenta (roughly)
-    #data.y_candidates -= y_candidates_means.to(device=device)
-    #data.y_candidates /= y_candidates_stds.to(device=device)
-    
+    data.ygen = data.ygen[:, 1:-1]
+
     data.x[torch.isnan(data.x)] = 0.0
     data.ycand[torch.isnan(data.ycand)] = 0.0
+    data.ygen[torch.isnan(data.ygen)] = 0.0
+    data.ygen[data.ygen.abs()>1e4] = 0
+
+    data.cand = (data.y_candidates_id, data.ycand)
+    data.gen = (data.y_gen_id, data.ygen)
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2)
@@ -504,20 +534,22 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, batch_size, epoch, l1m, l2m, l3m):
-    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m)
+def test(model, loader, batch_size, epoch, l1m, l2m, l3m, target_type):
+    return train(model, loader, batch_size, epoch, None, l1m, l2m, l3m, target_type)
 
-def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
+def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, target_type):
 
     is_train = not (optimizer is None)
 
-    losses = np.zeros((len(loader), 4))
+    losses = np.zeros((len(loader), 3))
     corrs_batch = np.zeros(len(loader))
     accuracies_batch = np.zeros(len(loader))
 
     for i, data in enumerate(loader):
         data = data.to(device)
         data_prep(data)
+        
+        target = getattr(data, target_type)
 
         if is_train:
             optimizer.zero_grad()
@@ -525,17 +557,15 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         edges, cand_id_onehot, cand_momentum = model(data)
         _, indices = torch.max(cand_id_onehot, -1)
 
-        accuracies_batch[i] = accuracy_score(data.y_candidates_id.detach().cpu().numpy(), indices.detach().cpu().numpy())
+        accuracies_batch[i] = accuracy_score(target[0].detach().cpu().numpy(), indices.detach().cpu().numpy())
         
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
-        msk = (indices != 0) & (data.y_candidates_id != 0)
+        msk = (indices != 0) & (target[0] != 0)
 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
-            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, data.y_candidates_id, weight=data.y_candidates_weights)
-            n_pred = torch_geometric.utils.to_dense_batch((indices != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
-            n_true = torch_geometric.utils.to_dense_batch((data.y_candidates_id != 0), data.batch)[0].sum(axis=1).to(dtype=torch.float)
+            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target[0], weight=data.y_candidates_weights)
             #l1 += torch.nn.functional.mse_loss(n_pred, n_true)/10000-0.0
         else:
             l1 = torch.tensor(0.0).to(device=device)
@@ -543,11 +573,11 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, data.ycand)
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
-            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.y)
+            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.edge_attr[:, 0])
         else:
             l3 = torch.tensor(0.0).to(device=device)
 
@@ -569,7 +599,7 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m):
         if msk.sum()>0:
             corr_pt = np.corrcoef(
                 cand_momentum[msk, 0].detach().cpu().numpy(),
-                data.y_candidates[msk, 0].detach().cpu().numpy())[0,1]
+                target[1][msk, 0].detach().cpu().numpy())[0,1]
 
         corrs_batch[i] = corr_pt
 
@@ -636,6 +666,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     for i, data in enumerate(test_loader):
         d = data.to(device=device)
         data_prep(data)
+        target = data.cand
 
         edges, cand_id_onehot, cand_momentum = model(d)
         #undo the normalization and centering
@@ -645,17 +676,17 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         _, cand_ids_pred_batch = torch.max(cand_id_onehot, -1)
         cand_momentum[cand_ids_pred_batch==0] = 0.0
         sumpt_pred = cand_momentum[:, 0].sum().detach().cpu().numpy()
-        sumpt_true = data.ycand[:, 0].sum().detach().cpu().numpy()
+        sumpt_true = target[1][:, 0].sum().detach().cpu().numpy()
 
         cand_ids_batched = torch_geometric.utils.to_dense_batch(cand_ids_pred_batch, batch=data.batch)
         num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
-        num_true = (torch_geometric.utils.to_dense_batch(data.y_candidates_id, batch=data.batch)[0]!=0).sum(axis=1)
+        num_true = (torch_geometric.utils.to_dense_batch(target[0], batch=data.batch)[0]!=0).sum(axis=1)
         num_preds += list(num_pred.cpu().numpy())
         num_trues += list(num_true.cpu().numpy())
-        cand_ids_true += list(data.y_candidates_id.detach().cpu().numpy())
+        cand_ids_true += list(target[0].detach().cpu().numpy())
         cand_ids_pred += list(cand_ids_pred_batch.detach().cpu().numpy())
         
-        msk = (cand_ids_pred_batch != 0) & (data.y_candidates_id != 0)
+        msk = (cand_ids_pred_batch != 0) & (target[0] != 0)
         if i>5:
             break
 
@@ -667,7 +698,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
             break 
 
         fig = plt.figure(figsize=(5,5))
-        v1 = data.y_candidates[inds2, 0].detach().cpu().numpy()[:, 0]
+        v1 = target[1][inds2, 0].detach().cpu().numpy()[:, 0]
         v2 = cand_momentum[inds2, 0].detach().cpu().numpy()[:, 0]
         c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
@@ -675,10 +706,10 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
             v2[:1000],
             marker=".", alpha=0.5)
         plt.plot([0,2],[0,2])
-        plt.xlim(0,2)
-        plt.ylim(0,2)
-        plt.xlabel("pt_true")
-        plt.ylabel("pt_pred")
+        plt.xlim(-2, 2)
+        plt.ylim(-2, 2)
+        plt.xlabel("log pt_true")
+        plt.ylabel("log pt_pred")
         plt.title("corr = {:.2f}".format(c))
         plt.tight_layout()
         plt.savefig(path + "pt_corr_{0}.pdf".format(i))
@@ -686,7 +717,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         plt.clf()
  
         fig = plt.figure(figsize=(5,5))
-        v1 = data.y_candidates[inds2, 1].detach().cpu().numpy()[:, 0]
+        v1 = target[1][inds2, 1].detach().cpu().numpy()[:, 0]
         v2 = cand_momentum[inds2, 1].detach().cpu().numpy()[:, 0]
         c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
@@ -705,7 +736,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         plt.clf()
  
         fig = plt.figure(figsize=(5,5))
-        v1 = data.y_candidates[inds2, 2].detach().cpu().numpy()[:, 0]
+        v1 = target[1][inds2, 2].detach().cpu().numpy()[:, 0]
         v2 = cand_momentum[inds2, 2].detach().cpu().numpy()[:, 0]
         c = np.corrcoef(v1, v2)[0,1]
         plt.scatter(
@@ -724,10 +755,10 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         plt.clf()
     
         fig = plt.figure(figsize=(5,5))
-        b = np.linspace(0,2,60)
-        plt.hist(data.y_candidates[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        b = np.linspace(-2,2,60)
+        plt.hist(target[1][msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 0].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
-        plt.xlabel("pt")
+        plt.xlabel("log pt")
         plt.tight_layout()
         plt.savefig(path + "pt_{0}.pdf".format(i))
         del fig
@@ -735,7 +766,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
  
         fig = plt.figure(figsize=(5,5))
         b = np.linspace(-5,5,60)
-        plt.hist(data.y_candidates[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.hist(target[1][msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 1].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("eta")
         plt.tight_layout()
@@ -745,7 +776,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         
         fig = plt.figure(figsize=(5,5))
         b = np.linspace(-5,5,60)
-        plt.hist(data.y_candidates[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
+        plt.hist(target[1][msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.hist(cand_momentum[msk, 2].detach().cpu().numpy(), bins=b, lw=2, histtype="step");
         plt.xlabel("phi")
         plt.tight_layout()
@@ -789,7 +820,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     #one-hot encoded element ID + element parameters
-    input_dim = 15
+    input_dim = 23
 
     #one-hot particle ID and 3 momentum components
     output_dim = len(class_to_id) + 3
@@ -806,7 +837,7 @@ if __name__ == "__main__":
 
     model_class = model_classes[args.model]
     model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim).to(device)
-    model_fname = get_model_fname(model, args.n_train, args.lr)
+    model_fname = get_model_fname(model, args.n_train, args.lr, args.target)
     if os.path.isdir("data/" + model_fname):
         print("model output data/{} already exists, please delete it".format(model_fname))
         sys.exit(0)
@@ -823,8 +854,8 @@ if __name__ == "__main__":
     
     model.train()
     
-    losses_train = np.zeros((args.n_epochs, 4))
-    losses_test = np.zeros((args.n_epochs, 4))
+    losses_train = np.zeros((args.n_epochs, 3))
+    losses_test = np.zeros((args.n_epochs, 3))
 
     corrs = []
     corrs_t = []
@@ -843,14 +874,14 @@ if __name__ == "__main__":
             break
 
         model.train()
-        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3)
+        losses, c, acc = train(model, train_loader, args.batch_size, j, optimizer, args.l1, args.l2, args.l3, args.target)
         l = sum(losses)
         losses_train[j] = losses
         corrs += [c]
         accuracies += [acc]
 
         model.eval()
-        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3)
+        losses_t, c_t, acc_t = test(model, test_loader, args.batch_size, j, args.l1, args.l2, args.l3, args.target)
         l_t = sum(losses_t)
         losses_test[j] = losses_t
         corrs_t += [c_t]
@@ -872,8 +903,8 @@ if __name__ == "__main__":
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
-        losses_str = " ".join(["{:.4f}".format(x) for x in losses_t])
-        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} {} stale={} eta={:.1f}m".format(
+        losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_t]) + "]"
+        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m".format(
             model_fname, j, args.n_epochs,
             t1 - t0, l, l_t, c, c_t, acc, acc_t,
             losses_str, stale_epochs, eta))

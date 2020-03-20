@@ -92,7 +92,14 @@ if __name__ == "__main__":
         element_eta = ev.element_eta
         element_phi = ev.element_phi
         element_layer = ev.element_layer
+        element_depth = ev.element_depth
+        element_charge = ev.element_charge
+        element_eta_ecal = ev.element_eta_ecal
+        element_phi_ecal = ev.element_phi_ecal
+        element_eta_hcal = ev.element_eta_hcal
+        element_phi_hcal = ev.element_phi_hcal
         element_type = ev.element_type
+        element_trajpoint = ev.element_trajpoint
         nelements = len(element_e)
         
         pfcandidates_pt = ev.pfcandidate_pt
@@ -134,12 +141,12 @@ if __name__ == "__main__":
         for ielem in range(nelements):
             #print("track {} pt={} eta={} phi={}".format(itrack, tracks_pt[itrack], tracks_eta[itrack], tracks_phi[itrack]))
             ro = ("elem", ielem)
-            reco_objects += [ro]
             elem_e = element_e[ielem]
-    
+            #print("ielem={} elem_e={} type={}".format(ielem, elem_e, element_type[ielem]))
+            reco_objects += [ro]
+ 
             idx_tps = element_to_trackingparticle_d.get(ielem, [])
             idx_scs = element_to_simcluster_d.get(ielem, [])
-            #print(ielem, element_type[ielem], idx_tps, idx_scs)
             for idx_tp in idx_tps:
                 go = ("trackingparticle", idx_tp, -1)
                 if not (go in gen_objects): 
@@ -149,11 +156,18 @@ if __name__ == "__main__":
                 sc_idx_tp = simclusters_idx_trackingparticle[idx_sc]
                 if sc_idx_tp != -1:
                     go = ("trackingparticle", sc_idx_tp, idx_sc)
+                    gen_pid = trackingparticles_pid[sc_idx_tp]
+                    gen_e = trackingparticles_e[sc_idx_tp]
                 else:
                     go = ("simcluster", idx_sc, -1)
-                if not (go in gen_objects): 
-                    gen_objects += [go]
-                map_reco_to_gen += [(ro, go, comp)]
+                    gen_pid = simclusters_pid[idx_sc]
+                    gen_e = simclusters_e[idx_sc]
+                #if comp > 0.1*elem_e and comp > 0.1*gen_e:
+                if True:
+                    if not (go in gen_objects): 
+                        gen_objects += [go]
+                    #print("gen pid={} e={} comp={}".format(gen_pid, gen_e, comp))
+                    map_reco_to_gen += [(ro, go, comp)]
             
             idx_cnds = element_to_candidate_d.get(ielem, [])
             for idx_cnd in idx_cnds:
@@ -215,7 +229,14 @@ if __name__ == "__main__":
             "e": element_e,
             "pt": element_pt, 
             "layer": element_layer,
+            "trajpoint": element_trajpoint,
+            "depth": element_depth,
             "type": element_type,
+            "charge": element_charge,
+            "eta_ecal": element_eta_ecal,
+            "phi_ecal": element_phi_ecal,
+            "eta_hcal": element_eta_hcal,
+            "phi_hcal": element_phi_hcal,
         }
         trackingparticles = {
             "pid": trackingparticles_pid,
@@ -281,8 +302,15 @@ if __name__ == "__main__":
         remaining_indices = np.ones(len(reco_objects), dtype=np.float32)
         pairs_reco_gen = {}
         for igen in highest_pt_idx:
-            #skip genparticle below an energy and pT threshold
-            #if gen_df.loc[igen, "e"] < 0.1:
+
+            gen_e = gen_df.loc[igen, "e"]  
+            gen_type = map_pdgid_to_candid.get(gen_df.loc[igen, "pid"], 0)
+  
+            #skip genparticle below an energy threshold
+            #if gen_type == 22:
+            #    if gen_e < 0.3:
+            #        continue
+            #elif gen_e < 0.1:
             #    continue
 
             temp = remaining_indices*mat_reco_to_gen[:, igen]
@@ -316,6 +344,7 @@ if __name__ == "__main__":
             best_reco_idx = np.argmax(temp)
 
             if best_reco_idx != 0 and mat_reco_to_cand[best_reco_idx, icand] > 0.0:
+                #no other pfcandidate can be matched to this reco object
                 remaining_indices[best_reco_idx] = 0.0
                 if not (best_reco_idx in pairs_reco_cand):
                     pairs_reco_cand[best_reco_idx] = []
@@ -333,52 +362,46 @@ if __name__ == "__main__":
             pairs_reco_cand_sorted[k] = v
         pairs_reco_cand = pairs_reco_cand_sorted
 
-        X = np.zeros((len(pairs_reco_gen), 6), dtype=np.float32)
+        reco_arr = reco_df[[
+            "type", "pt", "eta", "phi", "e",
+            "layer", "depth", "charge", "trajpoint", 
+            "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal"]].values
+
+        X = np.zeros((len(pairs_reco_gen), reco_arr.shape[1]), dtype=np.float32)
+        gen_arr = gen_df[["pid", "pt", "eta", "phi", "e"]].values
+        cand_arr = cand_df[["pid", "pt", "eta", "phi", "e"]].values
         ygen = np.zeros((len(pairs_reco_gen), 6), dtype=np.float32)
         ycand = np.zeros((len(pairs_reco_gen), 5), dtype=np.float32)
 
-        reco_arr = reco_df[["pt", "eta", "phi", "e", "type", "layer"]].values
-        gen_arr = gen_df[["pt", "eta", "phi", "e", "pid"]].values
-        cand_arr = cand_df[["pt", "eta", "phi", "e", "pid"]].values
         #loop over all reco-gen pairs
         for ireco, (reco, gens) in enumerate(pairs_reco_gen.items()):
-            #print("---")
+            reco_type = reco_arr[ireco, 0]
 
             #get all the genparticles associated to this reco particle
             igens = [g[0] for g in gens]
 
             pid = 0
+            if len(igens) > 0:
+                pid = map_pdgid_to_candid.get(gen_arr[igens[0], 0], 0)
 
-            #In case we have a single genparticle, use it's PID
-            if len(gens) == 1:
-                pid = map_pdgid_to_candid.get(gen_arr[igens[0], -1], 0)
-            #In case of multiple genparticles overlapping, use a placeholder constant
-            elif len(gens) > 1:
-                count_em = 0
-                count_had = 0
-
-                for ig in igens:
-                    pid = abs(gen_arr[ig, -1])
-
+                #Assign HF PID in the forward region
+                if abs(reco_arr[ireco, 2]) > 3.0:
                     if pid in [11, 22]:
-                        count_em += 1
+                        pid = 1
                     else:
-                        count_had += 1
-
-                if count_had > count_em:
-                    pid = 1
-                else:
-                    pid = 2
+                        pid = 2
+                if reco_type == 5 and (abs(pid) == 211 or pid == 22 or abs(pid) == 11):
+                    pid = 130
 
             #add up the momentum vectors of the genparticles
             lvs = []
             for igen in igens:
                 lv = ROOT.TLorentzVector()
                 lv.SetPtEtaPhiE(
-                    gen_arr[igen, 0],
                     gen_arr[igen, 1],
                     gen_arr[igen, 2],
-                    gen_arr[igen, 3]
+                    gen_arr[igen, 3],
+                    gen_arr[igen, 4]
                 )
                 lvs += [lv]
             lv = sum(lvs, ROOT.TLorentzVector())

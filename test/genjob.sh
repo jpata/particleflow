@@ -5,7 +5,7 @@ set -x
 WORKDIR=`pwd`
 
 #seed must be greater than 0
-SEED=$((CONDORJOBID + 1))
+SEED=$1
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
