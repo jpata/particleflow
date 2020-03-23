@@ -337,7 +337,7 @@ class PFNet6(nn.Module):
         x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
 
         #Compute new edge weights based on embedded node pairs
-        xpairs = torch.cat([x[edge_index[0]], x[edge_index[1]], edge_weight.unsqueeze(-1)], axis=-1)
+        xpairs = torch.cat([x[edge_index[0, :]], x[edge_index[1, :]], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight2 = self.edgenet(xpairs).squeeze(-1)
         edge_mask = edge_weight > 0.5
         row, col = data.edge_index
@@ -524,8 +524,8 @@ def data_prep(data, device=device):
     data.ygen[torch.isnan(data.ygen)] = 0.0
     data.ygen[data.ygen.abs()>1e4] = 0
 
-    data.cand = (data.y_candidates_id, data.ycand)
-    data.gen = (data.y_gen_id, data.ygen)
+    data.cand = (data.y_candidates_id, data.ycand, data.target_edge_attr_cand)
+    data.gen = (data.y_gen_id, data.ygen, data.target_edge_attr_gen)
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2)
@@ -577,7 +577,7 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, target_typ
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
-            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, data.edge_attr[:, 0])
+            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, target[2])
         else:
             l3 = torch.tensor(0.0).to(device=device)
 

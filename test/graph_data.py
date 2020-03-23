@@ -114,22 +114,6 @@ def regularize_X_y(X_elements, y_candidates, X_element_block_id, y_candidate_blo
     return inds, ret_x, ret_y, ret_id, edge_rows_new, edge_cols_new
 
 @numba.njit
-def compute_distances(elements, dm):
-    nel = len(elements)
-    ndist = 0
-    for i in range(nel):
-        tp1 = elements[i, 0]
-        for j in range(i+1, nel):
-            tp2 = elements[j, 0]
-            d = dist(elements[i, :], elements[j, :])
-            if d < 0.02 and dm[i,j]==0:
-                d = np.sqrt(d)
-                dm[i,j] = d
-                dm[j,i] = d
-                ndist += 1
-    #print("computed", ndist)
-
-@numba.njit
 def dist(el1, el2):
     if el1[0] > el2[0]:
         el = el1
@@ -165,49 +149,64 @@ class PFGraphDataset(Dataset):
     def process(self):
         idx_file = 0
         for raw_file_name in self.raw_file_names:
+
             dist_file_name = raw_file_name.replace('ev','dist')
+            reco_cand_adj_file_name = raw_file_name.replace('ev','cand')
+            reco_gen_adj_file_name = raw_file_name.replace('ev','gen')
             print("loading data from files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
-            try:
-                fi = np.load(osp.join(self.raw_dir, raw_file_name))
-                mat = scipy.sparse.load_npz(osp.join(self.raw_dir, dist_file_name))
-            except Exception as e:
-                print("Could not open files: {0}, {1}".format(osp.join(self.raw_dir, raw_file_name), osp.join(self.raw_dir, dist_file_name)))
-                continue
+            fi = np.load(osp.join(self.raw_dir, raw_file_name))
+            mat = scipy.sparse.load_npz(osp.join(self.raw_dir, dist_file_name))
+            mat_reco_cand = scipy.sparse.load_npz(osp.join(self.raw_dir, reco_cand_adj_file_name))
+            mat_reco_gen = scipy.sparse.load_npz(osp.join(self.raw_dir, reco_gen_adj_file_name))
+            mul1 = mat.multiply(mat_reco_cand)
+            mul2 = mat.multiply(mat_reco_gen)
+            mul1 = mul1>0
+            mul2 = mul2>0
+            mat_reco_cand = scipy.sparse.coo_matrix((np.array(mul1[mat.row, mat.col]).squeeze(), (mat.row, mat.col)), shape=(mat.shape[0], mat.shape[1]))
+            mat_reco_gen = scipy.sparse.coo_matrix((np.array(mul2[mat.row, mat.col]).squeeze(), (mat.row, mat.col)), shape=(mat.shape[0], mat.shape[1]))
+
             X = fi['X']
             ygen = fi['ygen']
             ycand = fi['ycand']
-            node_sel = X[:, 4] > 0.2
-            row_index, col_index, dm_data = mat.row, mat.col, mat.data
+            #node_sel = X[:, 4] > 0.2
+            #row_index, col_index, dm_data = mat.row, mat.col, mat.data
 
-            num_elements = X.shape[0]
-            num_edges = row_index.shape[0]
+            #num_elements = X.shape[0]
+            #num_edges = row_index.shape[0]
 
-            edge_index = np.zeros((2, 2*num_edges))
-            edge_index[0, :num_edges] = row_index
-            edge_index[1, :num_edges] = col_index
-            edge_index[0, num_edges:] = col_index
-            edge_index[1, num_edges:] = row_index
-            edge_index = torch.tensor(edge_index, dtype=torch.long)
+            #edge_index = np.zeros((2, 2*num_edges))
+            #edge_index[0, :num_edges] = row_index
+            #edge_index[1, :num_edges] = col_index
+            #edge_index[0, num_edges:] = col_index
+            #edge_index[1, num_edges:] = row_index
+            #edge_index = torch.tensor(edge_index, dtype=torch.long)
 
-            edge_data = dm_data
-            edge_attr = np.zeros((2*num_edges, 1))
-            edge_attr[:num_edges,0] = edge_data
-            edge_attr[num_edges:,0] = edge_data
-            edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-            edge_index, edge_attr = torch_geometric.utils.subgraph(torch.tensor(node_sel, dtype=torch.bool),
-                edge_index, edge_attr, relabel_nodes=True, num_nodes=len(X))
+            #edge_data = dm_data
+            #edge_attr = np.zeros((2*num_edges, 1))
+            #edge_attr[:num_edges,0] = edge_data
+            #edge_attr[num_edges:,0] = edge_data
+            #edge_attr = torch.tensor(edge_attr, dtype=torch.float)
 
-            x = torch.tensor(X[node_sel], dtype=torch.float)
-            ygen = torch.tensor(ygen[node_sel], dtype=torch.float)
-            ycand = torch.tensor(ycand[node_sel], dtype=torch.float)
+            r = torch_geometric.utils.from_scipy_sparse_matrix(mat)
+            rc = torch_geometric.utils.from_scipy_sparse_matrix(mat_reco_cand)
+            rg = torch_geometric.utils.from_scipy_sparse_matrix(mat_reco_gen)
+
+            #edge_index, edge_attr = torch_geometric.utils.subgraph(torch.tensor(node_sel, dtype=torch.bool),
+            #    edge_index, edge_attr, relabel_nodes=True, num_nodes=len(X))
+
+            x = torch.tensor(X, dtype=torch.float)
+            ygen = torch.tensor(ygen, dtype=torch.float)
+            ycand = torch.tensor(ycand, dtype=torch.float)
 
             data = Data(
                 x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
+                edge_index=r[0].to(dtype=torch.long),
+                edge_attr=r[1].to(dtype=torch.float),
                 ygen=ygen, ycand=ycand,
+                target_edge_attr_cand = rc[1].to(dtype=torch.float),
+                target_edge_attr_gen = rg[1].to(dtype=torch.float),
             )
-            print("x={} ygen={} ycand={} edge_attr={}".format(x.shape, ygen.shape, ycand.shape, edge_attr.shape))
+            print("x={} ygen={} ycand={} edge_attr={}".format(x.shape, ygen.shape, ycand.shape, r[0].shape))
             p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
             torch.save(data, p)
             idx_file += 1

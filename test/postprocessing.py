@@ -4,6 +4,10 @@ import ROOT
 import scipy
 import scipy.sparse
 import sys
+import networkx as nx
+import numba
+
+debug = False
 
 map_candid_to_pdgid = {
     0: [0],
@@ -27,38 +31,14 @@ def prepare_df(reco_objects, elements):
     ret = pandas.DataFrame()
     all_keys = list(elements.keys())
 
-    inds = np.array([ro[1] for ro in reco_objects])
-    for k in all_keys:
-        ret[k] = np.array(elements[k])[inds]
-    
-    return ret
-
-def prepare_gen_df(gen_objects, trackingparticles, simclusters):
-    ret = pandas.DataFrame()
-
-    all_keys = list(trackingparticles.keys())
-    
-    data_vecs = {k: [] for k in all_keys}
-    data_vecs["type"] = []
-
-    for go in gen_objects:
-        tp, i, j = go
- 
-        if tp == "trackingparticle":
-            coll = trackingparticles
-            ntype = 1 
-        elif tp == "simcluster":
-            coll = simclusters 
-            ntype = 0 
-        else:
-            raise Exception()
-       
+    if len(reco_objects) > 0:
+        inds = np.array([ro[1] for ro in reco_objects])
         for k in all_keys:
-           data_vecs[k] += [coll[k][i]]
-        data_vecs["type"] += [ntype]
-
-    for k in data_vecs.keys():
-        ret[k] = data_vecs[k]
+            ret[k] = np.array(elements[k])[inds]
+    else:
+        for k in all_keys:
+            ret[k] = np.array([], dtype=np.float64)
+ 
     return ret
 
 if __name__ == "__main__":
@@ -139,7 +119,6 @@ if __name__ == "__main__":
         map_reco_to_cand = []
 
         for ielem in range(nelements):
-            #print("track {} pt={} eta={} phi={}".format(itrack, tracks_pt[itrack], tracks_eta[itrack], tracks_phi[itrack]))
             ro = ("elem", ielem)
             elem_e = element_e[ielem]
             #print("ielem={} elem_e={} type={}".format(ielem, elem_e, element_type[ielem]))
@@ -147,23 +126,25 @@ if __name__ == "__main__":
  
             idx_tps = element_to_trackingparticle_d.get(ielem, [])
             idx_scs = element_to_simcluster_d.get(ielem, [])
+
             for idx_tp in idx_tps:
-                go = ("trackingparticle", idx_tp, -1)
+                go = ("trackingparticle", idx_tp)
                 if not (go in gen_objects): 
                     gen_objects += [go]
                 map_reco_to_gen += [(ro, go, 1000.0)]
+
             for idx_sc, comp in idx_scs:
                 sc_idx_tp = simclusters_idx_trackingparticle[idx_sc]
                 if sc_idx_tp != -1:
-                    go = ("trackingparticle", sc_idx_tp, idx_sc)
+                    go = ("trackingparticle", sc_idx_tp)
                     gen_pid = trackingparticles_pid[sc_idx_tp]
                     gen_e = trackingparticles_e[sc_idx_tp]
                 else:
-                    go = ("simcluster", idx_sc, -1)
+                    go = ("simcluster", idx_sc)
                     gen_pid = simclusters_pid[idx_sc]
                     gen_e = simclusters_e[idx_sc]
-                #if comp > 0.1*elem_e and comp > 0.1*gen_e:
-                if True:
+
+                if comp > 0.2*gen_e and comp > 0.2*elem_e:
                     if not (go in gen_objects): 
                         gen_objects += [go]
                     #print("gen pid={} e={} comp={}".format(gen_pid, gen_e, comp))
@@ -259,7 +240,8 @@ if __name__ == "__main__":
             "phi": pfcandidates_phi,
             "e": pfcandidates_e 
         }
-    
+   
+        assert(len(reco_objects) > 0) 
         reco_df = prepare_df(reco_objects, elements)
         gen_objects_sc = [go for go in gen_objects if go[0] == "simcluster"]
         gen_objects_tp = [go for go in gen_objects if go[0] == "trackingparticle"]
@@ -296,16 +278,26 @@ if __name__ == "__main__":
 
         #reco_df.to_csv("reco_{}.csv".format(iev))
         #gen_df.to_csv("gen_{}.csv".format(iev))
+        
+        reco_graph_gen = nx.Graph()
+        for ireco in range(len(reco_objects)):
+            reco_graph_gen.add_node(ireco)
 
         #loop over all genparticles in pt-descending order, find the best-matched reco-particle
         highest_pt_idx = np.argsort(gen_df["pt"].values)[::-1]
         remaining_indices = np.ones(len(reco_objects), dtype=np.float32)
         pairs_reco_gen = {}
         for igen in highest_pt_idx:
+            
+            inds_elem = np.nonzero(mat_reco_to_gen[:, igen])[0]
+            for i1 in inds_elem:
+                for i2 in inds_elem:
+                    if i1 != i2:
+                        reco_graph_gen.add_edge(i1, i2)
 
             gen_e = gen_df.loc[igen, "e"]  
             gen_type = map_pdgid_to_candid.get(gen_df.loc[igen, "pid"], 0)
-  
+
             #skip genparticle below an energy threshold
             #if gen_type == 22:
             #    if gen_e < 0.3:
@@ -316,7 +308,7 @@ if __name__ == "__main__":
             temp = remaining_indices*mat_reco_to_gen[:, igen]
             best_reco_idx = np.argmax(temp)
             if best_reco_idx != 0 and mat_reco_to_gen[best_reco_idx, igen] > 0.0:
-                remaining_indices[best_reco_idx] = 0.0
+                #remaining_indices[best_reco_idx] = 0.0
                 if not (best_reco_idx in pairs_reco_gen):
                     pairs_reco_gen[best_reco_idx] = []
                 pairs_reco_gen[best_reco_idx] += [(igen, mat_reco_to_gen[best_reco_idx, igen])]
@@ -333,13 +325,26 @@ if __name__ == "__main__":
        
         #all the PFCandidates that could not be matched one-to-one to a reco object (one reco object had multiple pfcandidates?)
         unmatched_candidates = []
-        #reco objects that were already matched to a candidate
+
+        #mask of reco objects that were already matched to a candidate
         remaining_indices = np.ones(len(reco_objects), dtype=np.float32)
+       
+        #reco index - candidate index 
         pairs_reco_cand = {}
-        
+      
+        reco_graph_cand = nx.Graph()
+        for ireco in range(len(reco_objects)):
+            reco_graph_cand.add_node(ireco)
+ 
         #find reco to candidate matches 
         highest_pt_idx = np.argsort(cand_df["pt"].values)[::-1]
         for icand in highest_pt_idx:
+            inds_elem = np.nonzero(mat_reco_to_cand[:, icand])[0]
+            for i1 in inds_elem:
+                for i2 in inds_elem:
+                    if i1 != i2:
+                        reco_graph_cand.add_edge(i1, i2)
+
             temp = remaining_indices*mat_reco_to_cand[:, icand]
             best_reco_idx = np.argmax(temp)
 
@@ -376,13 +381,24 @@ if __name__ == "__main__":
         #loop over all reco-gen pairs
         for ireco, (reco, gens) in enumerate(pairs_reco_gen.items()):
             reco_type = reco_arr[ireco, 0]
+            if debug:
+                print("---")
+                print("rec i={:<5} typ={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f}".format(ireco,
+                    reco_df.loc[ireco, "type"],
+                    reco_df.loc[ireco, "pt"],
+                    reco_df.loc[ireco, "e"],
+                    reco_df.loc[ireco, "eta"],
+                    reco_df.loc[ireco, "phi"],
+                ))
 
             #get all the genparticles associated to this reco particle
             igens = [g[0] for g in gens]
+            igens = sorted(igens, key=lambda x, gen_arr=gen_arr: gen_arr[x, 4])
 
             pid = 0
             if len(igens) > 0:
-                pid = map_pdgid_to_candid.get(gen_arr[igens[0], 0], 0)
+                #get the PID of the highest-energy particle
+                pid = map_pdgid_to_candid.get(gen_arr[igens[-1], 0], 0)
 
                 #Assign HF PID in the forward region
                 if abs(reco_arr[ireco, 2]) > 3.0:
@@ -392,6 +408,8 @@ if __name__ == "__main__":
                         pid = 2
                 if reco_type == 5 and (abs(pid) == 211 or pid == 22 or abs(pid) == 11):
                     pid = 130
+                if reco_type == 4 and (abs(pid) == 11):
+                    pid = 22
 
             #add up the momentum vectors of the genparticles
             lvs = []
@@ -404,11 +422,25 @@ if __name__ == "__main__":
                     gen_arr[igen, 4]
                 )
                 lvs += [lv]
+                if debug:
+                    print("gen i={:<5} pid={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f} c={:.2f}".format(igen,
+                        gen_df.loc[igen, "pid"],
+                        gen_df.loc[igen, "pt"],
+                        gen_df.loc[igen, "e"],
+                        gen_df.loc[igen, "eta"],
+                        gen_df.loc[igen, "phi"],
+                        mat_reco_to_gen[ireco, igen],
+                    ))
             lv = sum(lvs, ROOT.TLorentzVector())
-            #if len(igens) > 0:
-            #    print("gen pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} ngen={} all_pids={}".format(
-            #        lv.Pt(), lv.Eta(), lv.Phi(), lv.E(), pid, len(gens), all_pids
-            #    ))
+            if len(igens) > 0:
+                if debug:
+                    print("Gen i={:<5} pid={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f}".format(igens[0],
+                        pid,
+                        lv.Pt(),
+                        lv.E(),
+                        lv.Eta(),
+                        lv.Phi(),
+                    ))
 
             X[ireco, :] = reco_arr[reco, :]
             
@@ -423,16 +455,23 @@ if __name__ == "__main__":
             if len(cands) > 1:
                 print("ERROR! more than one candidate found for reco object {}".format(ireco))
             for icand, comp in cands: 
-            #    print("cand pt={:.2f} eta={:.2f} phi={:.2f} e={:.2f} pid={} comp={}".format(
-            #        cand_df.loc[icand, "pt"], cand_df.loc[icand, "eta"], cand_df.loc[icand, "phi"], cand_df.loc[icand, "e"], cand_df.loc[icand, "pid"], comp
-            #    ))
-            
                 ycand[ireco, :] = cand_arr[icand, :]
+                if debug:
+                    print("cnd i={:<5} pid={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f}".format(ireco,
+                        cand_df.loc[icand, "pid"],
+                        cand_df.loc[icand, "pt"],
+                        cand_df.loc[icand, "e"],
+                        cand_df.loc[icand, "eta"],
+                        cand_df.loc[icand, "phi"],
+                    ))
 
         #Mostly soft photons, a few neutral hadrons - we will need to solve this later
-        #print("unmatched pfcandidates", len(unmatched_candidates))
-        #for idx_cnd in unmatched_candidates:
-        #    print("unmatched pfcandidate", cand_df.loc[idx_cnd, "pid"], cand_df.loc[idx_cnd, "pt"]) 
+        print("unmatched pfcandidates n={}".format(len(unmatched_candidates)))
+        for idx_cnd in unmatched_candidates:
+            print("unmatched pfcandidate idx={:<5} pid={} pt={:.2f} e={:.2f}".format(
+                idx_cnd, cand_df.loc[idx_cnd, "pid"],
+                cand_df.loc[idx_cnd, "pt"], cand_df.loc[idx_cnd, "e"])
+            ) 
 
         di = np.array(list(ev.element_distance_i))
         dj = np.array(list(ev.element_distance_j))
@@ -441,6 +480,14 @@ if __name__ == "__main__":
         dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n))
 
         with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
+            scipy.sparse.save_npz(fi, dm)
+        
+        with open("{}_cand_{}.npz".format(outpath, iev), "wb") as fi:
+            dm = scipy.sparse.coo_matrix(nx.to_numpy_matrix(reco_graph_cand))
+            scipy.sparse.save_npz(fi, dm)
+        
+        with open("{}_gen_{}.npz".format(outpath, iev), "wb") as fi:
+            dm = scipy.sparse.coo_matrix(nx.to_numpy_matrix(reco_graph_gen))
             scipy.sparse.save_npz(fi, dm)
 
         #np.savez("ev_{}.npz".format(iev), X=X, ygen=ygen, ycand=ycand, reco_gen=mat_reco_to_gen, reco_cand=mat_reco_to_cand)

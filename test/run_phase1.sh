@@ -11,8 +11,7 @@ cmsDriver.py SinglePiPt1_pythia8_cfi \
   -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
   --datatier GEN-SIM \
   --geometry DB:Extended \
-  --pileup Run3_Flat55To75_PoissonOOTPU \
-  --pileup_input das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM \
+  --pileup NoPileUp \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
@@ -22,6 +21,7 @@ cmsDriver.py SinglePiPt1_pythia8_cfi \
 cmsDriver.py step3 \
   --conditions auto:phase1_2021_realistic \
   --era Run3 \
+  -n 100 \
   --eventcontent FEVTDEBUGHLT \
   --runUnscheduled \
   -s RAW2DIGI,L1Reco,RECO,RECOSIM \
