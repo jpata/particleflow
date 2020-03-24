@@ -2,8 +2,13 @@
 
 set -e
 
+#sample=SinglePiPt1_pythia8_cfi
+#pileup=NoPileUp
+sample=TTbar_14TeV_TuneCUETP8M1_cfi
+pileup=Run3_Flat55To75_PoissonOOTPU
+
 #Generate the MC
-cmsDriver.py SinglePiPt1_pythia8_cfi \
+cmsDriver.py $sample \
   --conditions auto:phase1_2021_realistic \
   -n 100 \
   --era Run3 \
@@ -11,7 +16,7 @@ cmsDriver.py SinglePiPt1_pythia8_cfi \
   -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
   --datatier GEN-SIM \
   --geometry DB:Extended \
-  --pileup NoPileUp \
+  --pileup $pileup \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
