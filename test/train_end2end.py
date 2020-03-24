@@ -472,19 +472,19 @@ def data_prep(data, device=device):
 
     #transform pt and energy to log scale
     m = data.x[:, 1] > 0
-    data.x[m, 1] = data.x[m, 1].log()  
+    data.x[m, 1] = data.x[m, 1].log10()  
     m = data.x[:, 4] > 0
-    data.x[m, 4] = data.x[m, 4].log()
+    data.x[m, 4] = data.x[m, 4].log10()
   
     m = data.ycand[:, 1] > 0
-    data.ycand[m, 1] = data.ycand[m, 1].log()  
+    data.ycand[m, 1] = data.ycand[m, 1].log10()  
     m = data.ycand[:, 4] > 0
-    data.ycand[m, 4] = data.ycand[m, 4].log()  
+    data.ycand[m, 4] = data.ycand[m, 4].log10()  
     
     m = data.ygen[:, 1] > 0
-    data.ygen[m, 1] = data.ygen[m, 1].log()  
+    data.ygen[m, 1] = data.ygen[m, 1].log10()  
     m = data.ygen[:, 4] > 0
-    data.ygen[m, 4] = data.ygen[m, 4].log()
+    data.ygen[m, 4] = data.ygen[m, 4].log10()
  
     #randomize the target order - then we should not be able to predict anything!
     #perm = torch.randperm(len(data.y_candidates))
@@ -705,7 +705,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
             v1[:1000],
             v2[:1000],
             marker=".", alpha=0.5)
-        plt.plot([0,2],[0,2])
+        plt.plot([-2,2],[-2,2])
         plt.xlim(-2, 2)
         plt.ylim(-2, 2)
         plt.xlabel("log pt_true")
