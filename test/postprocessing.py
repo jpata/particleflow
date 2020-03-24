@@ -47,10 +47,10 @@ if __name__ == "__main__":
     outpath = infile.split(".")[0]
     tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
-    
+
     for iev, ev in enumerate(tt):
         print("processing event {}".format(iev))
-        
+
         trackingparticles_pt = ev.trackingparticle_pt
         trackingparticles_e = ev.trackingparticle_energy
         trackingparticles_eta = ev.trackingparticle_eta
@@ -66,7 +66,7 @@ if __name__ == "__main__":
             if not (t in element_to_trackingparticle_d):
                 element_to_trackingparticle_d[t] = []
             element_to_trackingparticle_d[t] += [tp]
-     
+
         element_pt = ev.element_pt
         element_e = ev.element_energy
         element_eta = ev.element_eta
@@ -81,13 +81,13 @@ if __name__ == "__main__":
         element_type = ev.element_type
         element_trajpoint = ev.element_trajpoint
         nelements = len(element_e)
-        
+
         pfcandidates_pt = ev.pfcandidate_pt
         pfcandidates_e = ev.pfcandidate_energy
         pfcandidates_eta = ev.pfcandidate_eta
         pfcandidates_phi = ev.pfcandidate_phi
         pfcandidates_pid = ev.pfcandidate_pdgid
-        
+
         simclusters_e = ev.simcluster_energy
         simclusters_pid = ev.simcluster_pid
         simclusters_pt = ev.simcluster_pt
@@ -103,7 +103,7 @@ if __name__ == "__main__":
             if not (cl in element_to_simcluster_d):
                 element_to_simcluster_d[cl] = []
             element_to_simcluster_d[cl] += [(sc, comp)]
-       
+
         element_to_candidate = ev.element_to_candidate
 
         element_to_candidate_d = {}
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             if not (cl in element_to_candidate_d):
                 element_to_candidate_d[cl] = []
             element_to_candidate_d[cl] += [cnd]
- 
+
         reco_objects = []
         gen_objects = []
         cand_objects = []
@@ -161,49 +161,11 @@ if __name__ == "__main__":
                     cand_objects += [go]
                 #print("track {} candidate {} match".format(itrack, idx_cnd))
                 map_reco_to_cand += [(ro, go, elem_e)]
- 
-#        for icluster in range(nclusters):
-#            ro = ("cluster", icluster)
-#            #print("cluster {} e={} eta={} phi={}".format(icluster, clusters_e[icluster], clusters_eta[icluster], clusters_phi[icluster]))
-#            reco_objects += [ro]
-#            reco_energy = clusters_e[icluster]
-#
-#            idx_scs = cluster_to_simcluster_d.get(icluster, [])
-#            for idx_sc, comp in sorted(idx_scs): 
-#                sc_idx_tp = simclusters_idx_trackingparticle[idx_sc]
-#                if sc_idx_tp != -1:
-#                    go = ("trackingparticle", sc_idx_tp, idx_sc)
-#                    if ("track", sc_idx_tp) in reco_objects:
-#                        continue
-#                else:
-#                    go = ("simcluster", idx_sc, -1)
-#
-#                if not (go in gen_objects): 
-#                    gen_objects += [go]
-#                #print("cluster={} simcluster={} sc_idx_tp={} igen={} comp={}".format(
-#                #    icluster, idx_sc, sc_idx_tp, gen_objects.index(go), comp))
-#                map_reco_to_gen += [(ro, go, comp)]
-#            
-#            idx_cnds = cluster_to_candidate_d.get(icluster, [])
-#            for idx_cnd in idx_cnds:
-#                #print("candidate {} pt={} eta={} phi={}".format(idx_cnd, pfcandidates_pt[idx_cnd], pfcandidates_eta[idx_cnd], pfcandidates_phi[idx_cnd], pfcandidates_pid[idx_cnd]))
-#                if idx_cnd in idx_all_candidates:
-#                    idx_all_candidates.remove(idx_cnd)
-#                else:
-#                    #print("candidate {} already removed".format(idx_cnd))
-#                    continue
-#                go = ("candidate", idx_cnd)
-#                if not (go in cand_objects): 
-#                    cand_objects += [go]
-#                map_reco_to_cand += [(ro, go, reco_energy)]
-#
-#        #candidates that were not matched to reco objects  
-#        for idx_cnd in idx_all_candidates:
-#            print("unmatched candidate", idx_cnd, pfcandidates_pid[idx_cnd])
-# 
-        #reco_objects = sorted(reco_objects)
+
+
+        #sort gen objects by index
         gen_objects = sorted(gen_objects)
- 
+
         elements = {
             "eta": element_eta,
             "phi": element_phi, 
@@ -240,7 +202,8 @@ if __name__ == "__main__":
             "phi": pfcandidates_phi,
             "e": pfcandidates_e 
         }
-   
+
+        #create dataframes
         assert(len(reco_objects) > 0) 
         reco_df = prepare_df(reco_objects, elements)
         gen_objects_sc = [go for go in gen_objects if go[0] == "simcluster"]
@@ -250,9 +213,9 @@ if __name__ == "__main__":
         gen_df = pandas.concat([gen_df_sc, gen_df_tp], ignore_index=True)
         #gen_df.index = np.arange(len(gen_df))
         cand_df = prepare_df(cand_objects, candidates)
- 
-        mat_reco_to_gen = np.zeros((len(reco_objects), len(gen_objects)), dtype=np.float64)
 
+        #create a matrix of reco to gen associations
+        mat_reco_to_gen = np.zeros((len(reco_objects), len(gen_objects)), dtype=np.float64)
         reco_objects_d = {}
         for i in range(len(reco_objects)):
             reco_objects_d[reco_objects[i]] = i
@@ -267,14 +230,13 @@ if __name__ == "__main__":
             idx_ro = reco_objects_d[ro]
             idx_go = gen_objects_d[go]
             mat_reco_to_gen[idx_ro, idx_go] += comp
-        #print("reco-gen", len(reco_objects), len(gen_objects), len(map_reco_to_gen))
-        
+       
+        #create a matrix of reco to candidate associations
         mat_reco_to_cand = np.zeros((len(reco_objects), len(cand_objects)), dtype=np.float64)
         for ro, go, comp in map_reco_to_cand:
             idx_ro = reco_objects_d[ro]
             idx_go = cand_objects_d[go]
             mat_reco_to_cand[idx_ro, idx_go] += comp
-        #print("reco-cand", len(reco_objects), len(pfcandidates_pid), len(cand_objects), len(map_reco_to_cand))
 
         #reco_df.to_csv("reco_{}.csv".format(iev))
         #gen_df.to_csv("gen_{}.csv".format(iev))
@@ -431,7 +393,14 @@ if __name__ == "__main__":
                         gen_df.loc[igen, "phi"],
                         mat_reco_to_gen[ireco, igen],
                     ))
-            lv = sum(lvs, ROOT.TLorentzVector())
+            #lv = sum(lvs, ROOT.TLorentzVector())
+            lv = ROOT.TLorentzVector()
+            lv.SetPtEtaPhiE(
+                gen_arr[igens[-1], 1],
+                gen_arr[igens[-1], 2],
+                gen_arr[igens[-1], 3],
+                gen_arr[igens[-1], 4]
+            )
             if len(igens) > 0:
                 if debug:
                     print("Gen i={:<5} pid={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f}".format(igens[0],
@@ -443,14 +412,14 @@ if __name__ == "__main__":
                     ))
 
             X[ireco, :] = reco_arr[reco, :]
-            
+
             ygen[ireco, 0] = pid
             ygen[ireco, 1] = lv.Pt()
             ygen[ireco, 2] = lv.Eta()
             ygen[ireco, 3] = lv.Phi()
             ygen[ireco, 4] = lv.E()
             ygen[ireco, 5] = len(gens)
-            
+
             cands = pairs_reco_cand[reco]
             if len(cands) > 1:
                 print("ERROR! more than one candidate found for reco object {}".format(ireco))
@@ -481,11 +450,11 @@ if __name__ == "__main__":
 
         with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
             scipy.sparse.save_npz(fi, dm)
-        
+
         with open("{}_cand_{}.npz".format(outpath, iev), "wb") as fi:
             dm = scipy.sparse.coo_matrix(nx.to_numpy_matrix(reco_graph_cand))
             scipy.sparse.save_npz(fi, dm)
-        
+
         with open("{}_gen_{}.npz".format(outpath, iev), "wb") as fi:
             dm = scipy.sparse.coo_matrix(nx.to_numpy_matrix(reco_graph_gen))
             scipy.sparse.save_npz(fi, dm)
