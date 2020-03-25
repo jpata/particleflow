@@ -364,10 +364,15 @@ if __name__ == "__main__":
 
                 #Assign HF PID in the forward region
                 if abs(reco_arr[ireco, 2]) > 3.0:
-                    if pid in [11, 22]:
+                    #HFHAD -> always produce hadronic
+                    if reco_type == 9:
                         pid = 1
-                    else:
-                        pid = 2
+                    elif reco_type == 8:
+                        if abs(pid) in [11, 22]:
+                            pid = 1
+                        else:
+                            pid = 2
+                #remap PID in case of HCAL or ECAL cluster
                 if reco_type == 5 and (abs(pid) == 211 or pid == 22 or abs(pid) == 11):
                     pid = 130
                 if reco_type == 4 and (abs(pid) == 11):
@@ -393,14 +398,18 @@ if __name__ == "__main__":
                         gen_df.loc[igen, "phi"],
                         mat_reco_to_gen[ireco, igen],
                     ))
+
             #lv = sum(lvs, ROOT.TLorentzVector())
+
             lv = ROOT.TLorentzVector()
-            lv.SetPtEtaPhiE(
-                gen_arr[igens[-1], 1],
-                gen_arr[igens[-1], 2],
-                gen_arr[igens[-1], 3],
-                gen_arr[igens[-1], 4]
-            )
+            if len(igens) > 0:
+                lv.SetPtEtaPhiE(
+                    gen_arr[igens[-1], 1],
+                    gen_arr[igens[-1], 2],
+                    gen_arr[igens[-1], 3],
+                    gen_arr[igens[-1], 4]
+                )
+
             if len(igens) > 0:
                 if debug:
                     print("Gen i={:<5} pid={:<5} pt={:.2f} e={:.2f} eta={:.2f} phi={:.2f}".format(igens[0],

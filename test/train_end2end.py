@@ -18,7 +18,7 @@ from torch_geometric.nn import TopKPooling, SAGPooling, SGConv
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 from torch_scatter import scatter_mean
 from torch_geometric.nn.inits import reset
-from torch_geometric.data import Dataset, Data, DataLoader
+from torch_geometric.data import Data, DataLoader
 
 from glob import glob
 import numpy as np
@@ -603,6 +603,8 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, target_typ
 
         corrs_batch[i] = corr_pt
 
+        i += 1
+
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
     losses = losses.sum(axis=0)
@@ -814,8 +816,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 if __name__ == "__main__":
     dataset = "TTbar_gen_phase1"
     full_dataset = PFGraphDataset(root='data/{}/'.format(dataset))
-    full_dataset.raw_dir = "data/{}".format(dataset)
-    full_dataset.processed_dir = "data/{}/processed".format(dataset)
+    #full_dataset.raw_dir = "data/{}".format(dataset)
+    #full_dataset.processed_dir = "data/{}/processed".format(dataset)
 
     args = parse_args()
 
@@ -831,7 +833,9 @@ if __name__ == "__main__":
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    #train_loader.index = list(train_loader.index)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    #test_loader.index = list(test_loader.index)
     print("train_loader", len(train_loader))
     print("test_loader", len(test_loader))
 

@@ -74,9 +74,10 @@ cd ../..
 - March 2020
   - TTbar with PU for PhaseI, privately generated, ~10k events 
     - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/pfntuple_*.root`
-    - npy: `/storage/user/jpata/particleflow/data/TTbar_run3/pfntuple_*.npz`
+    - npy: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/raw/pfntuple_*.npz`
+    - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/processed/*.pt`
 
-## Creating the dataset
+## Creating the datasets
 
 ```bash
 cd test
@@ -85,6 +86,18 @@ condor_submit genjob.jdl
 ```
 
 ## Contents of the flat ROOT output ntuple
+
+See [postprocessing.py](test/postprocessing.py) for examples how to interpret the ROOT files.
+
+## Contents of the numpy ntuple
+
+```python
+fi = np.load("pfntuple_1_ev_0.npz")
+X = fi["X"] #PF elements
+ycandidates = fi["ycand"] #target PF candidates`
+ygenparticles = fi["ygen"] #target GenParticles
+```
+For more details, see [simrec.ipynb](notebooks/simrec.ipynb) or [graph_data.py](test/graph_data.py) on how to interpret the numpy file. 
 
 ## Model validation
 

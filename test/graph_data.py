@@ -215,11 +215,12 @@ class PFGraphDataset(Dataset):
         data = torch.load(osp.join(self.processed_dir, 'data_{}.pt'.format(idx)))
         return data
 
+    def __getitem__(self, idx):
+        return self.get(idx)
+
 
 if __name__ == "__main__":
 
     dataset = "TTbar_gen_phase1"
     pfgraphdataset = PFGraphDataset(root='data/{}/'.format(dataset))
-    pfgraphdataset.raw_dir = "data/{}".format(dataset)
-    pfgraphdataset.processed_dir = "data/{}/processed".format(dataset)
     pfgraphdataset.process()
