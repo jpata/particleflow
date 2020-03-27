@@ -35,6 +35,7 @@ import sklearn
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import mplhep
 
 from sklearn.metrics import accuracy_score
 from graph_data import PFGraphDataset
@@ -265,16 +266,18 @@ class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet6, self).__init__()
 
+        act = nn.LeakyReLU
+
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
         )
         self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
@@ -283,13 +286,13 @@ class PFNet6(nn.Module):
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
@@ -298,25 +301,25 @@ class PFNet6(nn.Module):
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, 4),
         )
         self.input_dim = input_dim
@@ -359,21 +362,43 @@ class PFNet6(nn.Module):
 class PFNet7(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet7, self).__init__()
-   
-        self.conv1 = SGConv(input_dim, hidden_dim) 
+  
+        act = nn.LeakyReLU 
         self.nn1 = nn.Sequential(
-            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Linear(input_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
-            nn.LeakyReLU(),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        self.conv1 = SGConv(hidden_dim, hidden_dim) 
+        self.nn2 = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
             nn.Linear(hidden_dim, len(class_to_id) + 4),
         )
         self.input_dim = input_dim
@@ -383,11 +408,12 @@ class PFNet7(nn.Module):
         batch = data.batch
         edge_weight = data.edge_attr.squeeze(-1)
         
-        #Run a second convolution with the new edges
-        x = torch.nn.functional.leaky_relu(self.conv1(data.x, data.edge_index))
+        #Run a convolution
+        x = self.nn1(data.x)
+        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
 
-        up = torch.cat([data.x, x], axis=-1)
-        r = self.nn1(up)
+        #up = torch.cat([data.x, x], axis=-1)
+        r = self.nn2(x)
         cand_ids = r[:, :len(class_to_id)]
         cand_p4 = r[:, len(class_to_id):]
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
@@ -509,7 +535,7 @@ def data_prep(data, device=device):
     #    data.y_candidates_weights[k] = 1.0/float(v)
 
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
-    data.y_gen_weights = torch.zeros(len(class_to_id)).to(device=device, dtype=torch.float)
+    data.y_gen_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
 
     #Give the pions higher weight in the training
     #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
@@ -565,8 +591,11 @@ def train(model, loader, batch_size, epoch, optimizer, l1m, l2m, l3m, target_typ
 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
-            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target[0], weight=data.y_candidates_weights)
-            #l1 += torch.nn.functional.mse_loss(n_pred, n_true)/10000-0.0
+            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target[0])
+            #l1 += 5*l1m * torch.nn.functional.binary_cross_entropy(
+            #    (indices!=0).to(dtype=torch.float),
+            #    (target[0]!=0).to(dtype=torch.float)
+            #)
         else:
             l1 = torch.tensor(0.0).to(device=device)
 
@@ -677,8 +706,6 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 
         _, cand_ids_pred_batch = torch.max(cand_id_onehot, -1)
         cand_momentum[cand_ids_pred_batch==0] = 0.0
-        sumpt_pred = cand_momentum[:, 0].sum().detach().cpu().numpy()
-        sumpt_true = target[1][:, 0].sum().detach().cpu().numpy()
 
         cand_ids_batched = torch_geometric.utils.to_dense_batch(cand_ids_pred_batch, batch=data.batch)
         num_pred = (cand_ids_batched[0]!=0).sum(axis=1) 
@@ -692,66 +719,35 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
         if i>5:
             break
 
-        #Get the first 1000 candidates in the batch
-        inds2 = torch.nonzero(msk)
-        perm = torch.randperm(len(inds2))
-        inds2 = inds2[perm[:1000]]
-        if len(inds2) == 0:
-            break 
-
         fig = plt.figure(figsize=(5,5))
-        v1 = target[1][inds2, 0].detach().cpu().numpy()[:, 0]
-        v2 = cand_momentum[inds2, 0].detach().cpu().numpy()[:, 0]
-        c = np.corrcoef(v1, v2)[0,1]
-        plt.scatter(
-            v1[:1000],
-            v2[:1000],
-            marker=".", alpha=0.5)
-        plt.plot([-2,2],[-2,2])
-        plt.xlim(-2, 2)
-        plt.ylim(-2, 2)
-        plt.xlabel("log pt_true")
-        plt.ylabel("log pt_pred")
-        plt.title("corr = {:.2f}".format(c))
-        plt.tight_layout()
+        b = np.linspace(-1,2,100)
+        h = np.histogram2d(target[1][msk, 0].detach().cpu().numpy(), cand_momentum[msk, 0].detach().cpu().numpy(), bins=[b,b])
+        plt.title("log pT/GeV")
+        plt.xlabel("Reco")
+        plt.ylabel("Gen")
+        mplhep.hist2dplot(h[0], h[1], h[2], cmap="Blues")
         plt.savefig(path + "pt_corr_{0}.pdf".format(i))
         del fig
         plt.clf()
- 
+        
         fig = plt.figure(figsize=(5,5))
-        v1 = target[1][inds2, 1].detach().cpu().numpy()[:, 0]
-        v2 = cand_momentum[inds2, 1].detach().cpu().numpy()[:, 0]
-        c = np.corrcoef(v1, v2)[0,1]
-        plt.scatter(
-            v1[:1000],
-            v2[:1000],
-            marker=".", alpha=0.5)
-        plt.plot([-5,5],[-5,5])
-        plt.xlim(-5,5)
-        plt.ylim(-5,5)
-        plt.xlabel("eta_true")
-        plt.ylabel("eta_pred")
-        plt.title("corr = {:.2f}".format(c))
-        plt.tight_layout()
+        b = np.linspace(-6,6,100)
+        h = np.histogram2d(target[1][msk, 1].detach().cpu().numpy(), cand_momentum[msk, 1].detach().cpu().numpy(), bins=[b,b])
+        plt.title("eta")
+        plt.xlabel("Reco")
+        plt.ylabel("Gen")
+        mplhep.hist2dplot(h[0], h[1], h[2], cmap="Blues")
         plt.savefig(path + "eta_corr_{0}.pdf".format(i))
         del fig
         plt.clf()
- 
+        
         fig = plt.figure(figsize=(5,5))
-        v1 = target[1][inds2, 2].detach().cpu().numpy()[:, 0]
-        v2 = cand_momentum[inds2, 2].detach().cpu().numpy()[:, 0]
-        c = np.corrcoef(v1, v2)[0,1]
-        plt.scatter(
-            v1[:1000],
-            v2[:1000],
-            marker=".", alpha=0.5)
-        plt.plot([-5,5],[-5,5])
-        plt.xlim(-5,5)
-        plt.ylim(-5,5)
-        plt.xlabel("phi_true")
-        plt.ylabel("phi_pred")
-        plt.title("corr = {:.2f}".format(c))
-        plt.tight_layout()
+        b = np.linspace(-3,3,100)
+        h = np.histogram2d(target[1][msk, 2].detach().cpu().numpy(), cand_momentum[msk, 2].detach().cpu().numpy(), bins=[b,b])
+        plt.title("phi")
+        plt.xlabel("Reco")
+        plt.ylabel("Gen")
+        mplhep.hist2dplot(h[0], h[1], h[2], cmap="Blues")
         plt.savefig(path + "phi_corr_{0}.pdf".format(i))
         del fig
         plt.clf()

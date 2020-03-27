@@ -52,6 +52,9 @@ if __name__ == "__main__":
         print("processing event {}".format(iev))
 
         trackingparticles_pt = ev.trackingparticle_pt
+        trackingparticles_px = ev.trackingparticle_px
+        trackingparticles_py = ev.trackingparticle_py
+        trackingparticles_pz = ev.trackingparticle_pz
         trackingparticles_e = ev.trackingparticle_energy
         trackingparticles_eta = ev.trackingparticle_eta
         trackingparticles_phi = ev.trackingparticle_phi
@@ -68,6 +71,9 @@ if __name__ == "__main__":
             element_to_trackingparticle_d[t] += [tp]
 
         element_pt = ev.element_pt
+        element_px = ev.element_px
+        element_py = ev.element_py
+        element_pz = ev.element_pz
         element_e = ev.element_energy
         element_eta = ev.element_eta
         element_phi = ev.element_phi
@@ -83,6 +89,9 @@ if __name__ == "__main__":
         nelements = len(element_e)
 
         pfcandidates_pt = ev.pfcandidate_pt
+        pfcandidates_px = ev.pfcandidate_px
+        pfcandidates_py = ev.pfcandidate_py
+        pfcandidates_pz = ev.pfcandidate_pz
         pfcandidates_e = ev.pfcandidate_energy
         pfcandidates_eta = ev.pfcandidate_eta
         pfcandidates_phi = ev.pfcandidate_phi
@@ -91,6 +100,9 @@ if __name__ == "__main__":
         simclusters_e = ev.simcluster_energy
         simclusters_pid = ev.simcluster_pid
         simclusters_pt = ev.simcluster_pt
+        #simclusters_px = ev.simcluster_px
+        #simclusters_py = ev.simcluster_py
+        #simclusters_pz = ev.simcluster_pz
         simclusters_eta = ev.simcluster_eta
         simclusters_phi = ev.simcluster_phi
         simclusters_idx_trackingparticle = ev.simcluster_idx_trackingparticle
@@ -162,6 +174,9 @@ if __name__ == "__main__":
                 #print("track {} candidate {} match".format(itrack, idx_cnd))
                 map_reco_to_cand += [(ro, go, elem_e)]
 
+        #All PFCandidates must be associated to something
+        if len(cand_objects) != len(pfcandidates_pt):
+            print("cand_objects != pfcandidates", len(cand_objects), len(pfcandidates_pt))
 
         #sort gen objects by index
         gen_objects = sorted(gen_objects)
@@ -367,16 +382,17 @@ if __name__ == "__main__":
                     #HFHAD -> always produce hadronic
                     if reco_type == 9:
                         pid = 1
+                    #HFEM -> decide based on pid
                     elif reco_type == 8:
                         if abs(pid) in [11, 22]:
-                            pid = 1
+                            pid = 2 #produce EM candidate 
                         else:
-                            pid = 2
+                            pid = 1 #produce hadronic
                 #remap PID in case of HCAL or ECAL cluster
-                if reco_type == 5 and (abs(pid) == 211 or pid == 22 or abs(pid) == 11):
+                if reco_type == 5 and (pid == 22 or abs(pid) == 11):
                     pid = 130
-                if reco_type == 4 and (abs(pid) == 11):
-                    pid = 22
+                #if reco_type == 4 and (abs(pid) == 11):
+                #    pid = 22
 
             #add up the momentum vectors of the genparticles
             lvs = []
@@ -444,7 +460,7 @@ if __name__ == "__main__":
                     ))
 
         #Mostly soft photons, a few neutral hadrons - we will need to solve this later
-        print("unmatched pfcandidates n={}".format(len(unmatched_candidates)))
+        print("unmatched pfcandidates n={}/{}/{}".format(len(unmatched_candidates), len(cand_df), len(pfcandidates_pt)))
         for idx_cnd in unmatched_candidates:
             print("unmatched pfcandidate idx={:<5} pid={} pt={:.2f} e={:.2f}".format(
                 idx_cnd, cand_df.loc[idx_cnd, "pid"],
