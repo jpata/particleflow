@@ -412,10 +412,12 @@ class PFNet7(nn.Module):
         x = self.nn1(data.x)
         x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
 
-        #up = torch.cat([data.x, x], axis=-1)
         r = self.nn2(x)
         cand_ids = r[:, :len(class_to_id)]
         cand_p4 = r[:, len(class_to_id):]
+
+        #cand_ids = self.nn2_id(x)
+        #cand_p4 = self.nn2_p4(x)
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 
