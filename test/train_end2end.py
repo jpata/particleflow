@@ -279,12 +279,18 @@ class PFNet6(nn.Module):
             nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
         )
         self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
 
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -308,10 +314,16 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -384,7 +396,7 @@ class PFNet7(nn.Module):
         )
         self.conv1 = SGConv(hidden_dim, hidden_dim) 
         self.nn2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -412,7 +424,8 @@ class PFNet7(nn.Module):
         x = self.nn1(data.x)
         x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
 
-        r = self.nn2(x)
+        up = torch.cat([data.x, x], axis=-1)
+        r = self.nn2(up)
         cand_ids = r[:, :len(class_to_id)]
         cand_p4 = r[:, len(class_to_id):]
 
@@ -442,6 +455,7 @@ def parse_args():
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
+    parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     args = parser.parse_args()
     return args
 
@@ -838,7 +852,7 @@ if __name__ == "__main__":
     print("test_loader", len(test_loader))
 
     model_class = model_classes[args.model]
-    model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim).to(device)
+    model = model_class(input_dim=input_dim, hidden_dim=args.hidden_dim, output_dim=output_dim, dropout_rate=args.dropout).to(device)
     model_fname = get_model_fname(model, args.n_train, args.lr, args.target)
     if os.path.isdir("data/" + model_fname):
         print("model output data/{} already exists, please delete it".format(model_fname))

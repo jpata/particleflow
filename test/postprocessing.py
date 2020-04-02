@@ -27,6 +27,21 @@ for candid, pdgids in map_candid_to_pdgid.items():
     for p in pdgids:
         map_pdgid_to_candid[p] = candid
 
+@numba.njit
+def deltaphi(phi1, phi2):
+    return np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
+
+@numba.njit
+def associate_deltar(etaphi, dr2cut, ret):
+    for i in range(len(etaphi)):
+        for j in range(i+1, len(etaphi)):
+            dphi = deltaphi(etaphi[i, 1], etaphi[j, 1])
+            deta = etaphi[i, 0] - etaphi[j, 0]
+            dr2 = dphi**2 + deta**2
+            #dr = np.sqrt(dphi**2 + deta**2)
+            if dr2 < dr2cut:
+                ret[i,j] += np.sqrt(dr2)                   
+
 def prepare_df(reco_objects, elements):
     ret = pandas.DataFrame()
     all_keys = list(elements.keys())
@@ -156,11 +171,10 @@ if __name__ == "__main__":
                     gen_pid = simclusters_pid[idx_sc]
                     gen_e = simclusters_e[idx_sc]
 
-                if comp > 0.2*gen_e and comp > 0.2*elem_e:
-                    if not (go in gen_objects): 
-                        gen_objects += [go]
-                    #print("gen pid={} e={} comp={}".format(gen_pid, gen_e, comp))
-                    map_reco_to_gen += [(ro, go, comp)]
+                if not (go in gen_objects): 
+                    gen_objects += [go]
+                #print("gen pid={} e={} comp={}".format(gen_pid, gen_e, comp))
+                map_reco_to_gen += [(ro, go, comp)]
             
             idx_cnds = element_to_candidate_d.get(ielem, [])
             for idx_cnd in idx_cnds:
@@ -285,7 +299,7 @@ if __name__ == "__main__":
             temp = remaining_indices*mat_reco_to_gen[:, igen]
             best_reco_idx = np.argmax(temp)
             if best_reco_idx != 0 and mat_reco_to_gen[best_reco_idx, igen] > 0.0:
-                #remaining_indices[best_reco_idx] = 0.0
+                remaining_indices[best_reco_idx] = 0.0
                 if not (best_reco_idx in pairs_reco_gen):
                     pairs_reco_gen[best_reco_idx] = []
                 pairs_reco_gen[best_reco_idx] += [(igen, mat_reco_to_gen[best_reco_idx, igen])]
@@ -470,8 +484,16 @@ if __name__ == "__main__":
         di = np.array(list(ev.element_distance_i))
         dj = np.array(list(ev.element_distance_j))
         d = np.array(list(ev.element_distance_d))
+        etas = np.array(list(ev.element_eta), dtype=np.float32)
+        phis = np.array(list(ev.element_phi), dtype=np.float32)
+        etaphis = np.vstack([etas, phis]).T
+        dm_dr = np.zeros((etaphis.shape[0], etaphis.shape[0]), dtype=np.float32)
+        associate_deltar(etaphis, 0.2**2, dm_dr)
         n = len(X)
-        dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n))
+        dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n)).todense()
+        dm += dm_dr 
+        dm += dm.T
+        dm = scipy.sparse.coo_matrix(dm)
 
         with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
             scipy.sparse.save_npz(fi, dm)

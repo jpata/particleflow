@@ -2,13 +2,13 @@
 
 set -e
 
-#SAMPLE=SinglePiPt1_pythia8_cfi
-#PILEUP=NoPileUp
-#PILEUP_INPUT=
-SAMPLE=TTbar_14TeV_TuneCUETP8M1_cfi
-PILEUP=Run3_Flat55To75_PoissonOOTPU
-PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
-N=10
+SAMPLE=SingleElectronFlatPt1To100_pythia8_cfi
+PILEUP=NoPileUp
+PILEUP_INPUT=
+#SAMPLE=TTbar_14TeV_TuneCUETP8M1_cfi
+#PILEUP=Run3_Flat55To75_PoissonOOTPU
+#PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
+N=1
 
 #Generate the MC
 cmsDriver.py $SAMPLE \
@@ -20,7 +20,6 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
-  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
