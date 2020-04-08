@@ -4,11 +4,19 @@ set -x
 
 WORKDIR=`pwd`
 
+#sleep randomly up to 120s to stagger job start times
+sleep $((RANDOM % 120))
+
 #seed must be greater than 0
 SAMPLE=$1
 SEED=$2
-PILEUP=NoPileUp
-N=100
+
+#PILEUP=NoPileUp
+PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
+#--pileup_input $PILEUP_INPUT \
+
+N=10
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -33,6 +41,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \

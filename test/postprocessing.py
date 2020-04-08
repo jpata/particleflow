@@ -59,7 +59,7 @@ def prepare_df(reco_objects, elements):
 if __name__ == "__main__":
 
     infile = sys.argv[1]
-    outpath = infile.split(".")[0]
+    outpath = "raw/" + infile.split(".")[0]
     tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
 

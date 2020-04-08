@@ -295,7 +295,8 @@ def prepare_normalized_table(g):
     Xelem = np.zeros((len(all_elements), len(elem_branches)), dtype=np.float32)
     ygen = np.zeros((len(all_elements), len(target_branches)), dtype=np.float32)
     ycand = np.zeros((len(all_elements), len(target_branches)), dtype=np.float32)
-  
+ 
+    #find which elements should be linked together in the output when regressing to PFCandidates or GenParticles
     graph_elem_cand = nx.Graph()  
     graph_elem_gen = nx.Graph()  
     for elem in all_elements:
@@ -359,12 +360,6 @@ def prepare_normalized_table(g):
             if not (candidate is None):
                 ycand[ielem, j] = g.nodes[candidate][target_branches[j]]
             ygen[ielem, j] = gp[target_branches[j]]
-    
-#        print("---")
-#        print("elem type={typ} e={e:.2f} eta={eta:.2f} phi={phi:.2f}".format(ngen=len(genparticles), **g.nodes[elem]))
-#        print("gen pid={} e={:.2f} eta={:.2f} phi={:.2f}".format(pid, lv.E(), lv.Eta(), lv.Phi()))
-#        if not (candidate is None):
-#            print("cand pid={typ} e={e:.2f} eta={eta:.2f} phi={phi:.2f}".format(**g.nodes[candidate]))
 
     dm_elem_cand = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_cand, nodelist=all_elements))
     dm_elem_gen = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_gen, nodelist=all_elements))
@@ -378,6 +373,7 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--event", type=int, default=None, help="event to process, omit to process all")
     parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot")
+    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file")
     args = parser.parse_args()
 
     infile = args.input
@@ -389,6 +385,8 @@ if __name__ == "__main__":
     if not (args.event is None):
         events_to_process = [args.event]
 
+    all_data = []
+    ifile = 0
     for iev, ev in enumerate(tt):
         if not (iev in events_to_process):
             continue
@@ -543,20 +541,23 @@ if __name__ == "__main__":
 
         Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen = prepare_normalized_table(g)
         dm = prepare_elem_distance_matrix(ev)
+        data = {
+            "Xelem": Xelem,
+            "ycand": ycand,
+            "ygen": ygen,
+            "dm": dm,
+            "dm_elem_cand": dm_elem_cand,
+            "dm_elem_gen": dm_elem_gen
+        }
+        all_data += [data]
 
-        print(Xelem.shape, ycand.shape, ygen.shape, dm.shape, dm_elem_cand.shape, dm_elem_gen.shape)
-        with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
-            scipy.sparse.save_npz(fi, dm)
+        if args.events_per_file > 0:
+            if len(all_data) == args.events_per_file:
+                with open(outpath + "_{}.pkl".format(ifile), "wb") as fi:
+                    pickle.dump(all_data, fi)
+                ifile += 1
+                all_data = []
 
-        with open("{}_cand_{}.npz".format(outpath, iev), "wb") as fi:
-            scipy.sparse.save_npz(fi, dm_elem_cand)
-
-        with open("{}_gen_{}.npz".format(outpath, iev), "wb") as fi:
-            scipy.sparse.save_npz(fi, dm_elem_gen)
-
-        np.savez("{}_ev_{}.npz".format(outpath, iev), X=Xelem, ygen=ygen, ycand=ycand)
-
-        print("Final graph: {} nodes, {} edges".format(len(g.nodes), len(g.edges)))
-        fn = outpath + "_ev_{}.pkl".format(iev)
-        print("saving to {}".format(fn))
-        nx.readwrite.write_gpickle(g, fn)
+    if args.events_per_file == -1:
+        with open(outpath + ".pkl", "wb") as fi:
+            pickle.dump(all_data, fi)
