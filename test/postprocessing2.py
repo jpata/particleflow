@@ -338,16 +338,21 @@ def prepare_normalized_table(g):
             lvs += [lv]
         lv = sum(lvs, ROOT.TLorentzVector())
 
-        if abs(elem_eta) > 3.0:
-            #HFHAD -> always produce hadronic
-            if elem_type == 9:
-                pid = 1
-            #HFEM -> decide based on pid
-            elif elem_type == 8:
-                if abs(pid) in [11, 22]:
-                    pid = 2 #produce EM candidate 
-                else:
-                    pid = 1 #produce hadronic
+        if len(genparticles) > 0:
+            if abs(elem_eta) > 3.0:
+                #HFHAD -> always produce hadronic
+                if elem_type == 9:
+                    pid = 1
+                #HFEM -> decide based on pid
+                elif elem_type == 8:
+                    if abs(pid) in [11, 22]:
+                        pid = 2 #produce EM candidate 
+                    else:
+                        pid = 1 #produce hadronic
+
+            #remap PID in case of HCAL cluster
+            if elem_type == 5 and (pid == 22 or abs(pid) == 11):
+                pid = 130
 
         gp = {
             "pt": lv.Pt(), "eta": lv.Eta(), "phi": lv.Phi(), "e": lv.E(), "typ": pid, "px": lv.Px(), "py": lv.Py(), "pz": lv.Pz()

@@ -50,11 +50,15 @@ device = torch.device('cuda' if use_gpu else 'cpu')
 
 def prepare_dataframe(model, loader):
     dfs = []
+    eval_time = 0
     for i, data in enumerate(loader):
         data = data.to(device)
 
+        t0 = time.time()
         _, pred_id_onehot, pred_momentum = model(data)
         _, pred_id = torch.max(pred_id_onehot, -1)
+        t1 = time.time()
+        eval_time += (t1 - t0)
         pred_momentum[pred_id==0] = 0
 
         df = pandas.DataFrame()
@@ -80,6 +84,9 @@ def prepare_dataframe(model, loader):
         df["pred_e"] = pred_momentum[:, 3].detach().cpu().numpy()
 
         dfs += [df]
+
+    print("eval_time {:.2f} ms/batch".format(1000.0*eval_time/len(loader)))
+
     df = pandas.concat(dfs, ignore_index=True)
     return df
 
