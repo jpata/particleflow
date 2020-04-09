@@ -12,17 +12,19 @@ import pickle
 import graph_data
 import train_end2end
 import time
+
 def collate(batch):
+    print(batch)
     return batch
         
 if __name__ == "__main__":
     device = torch.device("cuda")
    
-    epoch = 30 
-    model = "PFNet7_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_2922514__cfg_0acd46a859__user_jpata__ntrain_650__lr_0.0002__1586305714"
+    epoch = 40 
+    model = "PFNet6_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_425491__cfg_36ec608897__user_jpata__ntrain_100__lr_0.0002__1586359112"
     weights = torch.load("data/{}/epoch_{}/weights.pth".format(model, epoch))
     
-    model = train_end2end.PFNet7(23, 512, 7, dropout_rate=0.2)
+    model = train_end2end.PFNet6(23, 128, 7, dropout_rate=0.2)
     model.load_state_dict(weights)
     model = model.to(device)
     model.eval()
@@ -31,7 +33,7 @@ if __name__ == "__main__":
         #("test/SinglePiFlatPt0p7To10_cfi", 900, 1000),
         #("test/SingleElectronFlatPt1To100_pythia8_cfi", 0, 100),
         #("test/SingleGammaFlatPt10To100_pythia8_cfi", 0, 100),
-        ("test/TTbar_14TeV_TuneCUETP8M1_cfi", 650, 700),
+        ("test/TTbar_14TeV_TuneCUETP8M1_cfi", 9000, 10000),
         ]:
         print(dataset)    
         full_dataset = graph_data.PFGraphDataset(root=dataset)

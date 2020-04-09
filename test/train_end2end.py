@@ -232,7 +232,7 @@ class PFNet6(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet6, self).__init__()
 
-        act = nn.LeakyReLU
+        act = nn.SELU
 
         self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -249,7 +249,7 @@ class PFNet6(nn.Module):
             act(),
             nn.Linear(hidden_dim, hidden_dim),
         )
-        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
+        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False)
 
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
@@ -268,7 +268,7 @@ class PFNet6(nn.Module):
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GATConv(hidden_dim, hidden_dim, heads=4, concat=False)
+        self.conv2 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False)
 
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
@@ -341,7 +341,7 @@ class PFNet7(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
         super(PFNet7, self).__init__()
   
-        act = nn.LeakyReLU 
+        act = nn.SELU
         self.nn1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.Dropout(p=dropout_rate),
@@ -450,6 +450,11 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         target = getattr(data, target_type)
         target = (target[0].to(device), target[1].to(device), target[2].to(device))
 
+        #vs, cs = torch.unique(target[0], return_counts=True)
+        #weights = torch.zeros(len(class_to_id)).to(device=device)
+        #for k, v in zip(vs, cs):
+        #    weights[k] = 1.0/float(v)
+
         if is_train:
             optimizer.zero_grad()
 
@@ -460,7 +465,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
-        msk = (indices != 0) & (target[0] != 0)
+        #msk = (indices != 0) & (target[0] != 0)
+        msk = (indices != 0)
 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
@@ -475,7 +481,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk, :4], target[1][msk, :4])
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
@@ -642,8 +648,8 @@ if __name__ == "__main__":
         eta = epochs_remaining*time_per_epoch/60
 
         losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_t]) + "]"
-        print("{} epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m".format(
-            model_fname, j, args.n_epochs,
+        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m".format(
+            j, args.n_epochs,
             t1 - t0, l, l_t, c, c_t, acc, acc_t,
             losses_str, stale_epochs, eta))
 

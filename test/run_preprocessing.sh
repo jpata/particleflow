@@ -22,3 +22,5 @@ mkdir -p processed
 
 cd ../..
 singularity exec --nv $IMG python test/graph_data.py --dataset test/$DATASET --num-files-merge $MERGE
+
+singularity exec --nv $IMG python test/train_end2end.py --lr 0.0001 --n_train 9000 --n_test 1000 --hidden_dim 512 --target gen --model PFNet7 --n_epochs 100 --dropout 0.2 --n_plot 10 --dataset test/TTbar_14TeV_TuneCUETP8M1_cfi --l3 0
