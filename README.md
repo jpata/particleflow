@@ -91,7 +91,7 @@ condor_submit genjob.jdl
 
 ## Contents of the flat ROOT output ntuple
 
-The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph:
+The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph data and a normalized data table:
 
 ```bash
 python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph
@@ -99,14 +99,21 @@ python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntupl
 
 ## Contents of the numpy ntuple
 
-For more details, see [data.ipynb](notebooks/data.ipynb).
+For more details, see [data.ipynb](notebooks/data.ipynb). 
 
 ## Model training
 
 Train with GenParticles as the target:
 ```
 singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
-odel PFNet6 --lr 0.001 --dropout 0.2 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target gen
+odel PFNet6 --lr 0.001 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target gen
+```
+
+
+Train with PFCandidates as the target:
+```
+singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
+odel PFNet6 --lr 0.001 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target cand
 ```
 
 ## Model validation
