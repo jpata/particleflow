@@ -259,34 +259,30 @@ class PFNet6(nn.Module):
 
         act = nn.LeakyReLU
 
-        self.inp = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-        )
-        self.conv1 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False)
+        #self.inp = nn.Sequential(
+        #    nn.Linear(input_dim, hidden_dim),
+        #    nn.BatchNorm1d(hidden_dim),
+        #    nn.Dropout(p=dropout_rate),
+        #    act(),
+        #    nn.Linear(hidden_dim, hidden_dim),
+        #    nn.BatchNorm1d(hidden_dim),
+        #    nn.Dropout(p=dropout_rate),
+        #    act(),
+        #    nn.Linear(hidden_dim, hidden_dim),
+        #    nn.BatchNorm1d(hidden_dim),
+        #    nn.Dropout(p=dropout_rate),
+        #    act(),
+        #    nn.Linear(hidden_dim, hidden_dim),
+        #    nn.BatchNorm1d(hidden_dim),
+        #    nn.Dropout(p=dropout_rate),
+        #    act(),
+        #    nn.Linear(hidden_dim, hidden_dim),
+        #)
+        self.conv1 = GATConv(input_dim, hidden_dim, heads=1, concat=False)
 
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.Dropout(p=dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.Dropout(p=dropout_rate),
             act(),
@@ -348,7 +344,8 @@ class PFNet6(nn.Module):
         batch = data.batch
 
         #encode the inputs
-        x = self.inp(data.x)
+        #x = self.inp(data.x)
+        x = data.x
         edge_index = data.edge_index
 
         if batch is None:
@@ -488,7 +485,9 @@ def weighted_mse_loss(input, target, weight):
 
 @torch.no_grad()
 def test(model, loader, epoch, l1m, l2m, l3m, target_type):
-    return train(model, loader, epoch, None, l1m, l2m, l3m, target_type)
+    with torch.no_grad(): 
+        ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type)
+    return ret
 
 def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
 
@@ -513,9 +512,9 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
             del data.gen
 
         data = data.to(device)
-        
+ 
         target = getattr(data, target_type)
-        target = (target[0].to(device), target[1].to(device), target[2].to(device))
+        target = (target[0].to(device), target[1][:, :4].to(device), target[2].to(device))
 
         vs, cs = torch.unique(target[0], return_counts=True)
         weights = torch.zeros(len(class_to_id)).to(device=device)
@@ -531,7 +530,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
         #msk = (indices != 0)
-        msk = (indices != 0) & (target[0] != 0)
+        msk = ((indices != 0) & (target[0] != 0)).detach().cpu()
 
         accuracies_batch[i] = accuracy_score(target[0][msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
 
@@ -544,11 +543,12 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0:
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 0], target[1][:, 0])
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 1], target[1][:, 1])
-            zs = torch.zeros_like(target[1][:, 2])
-            l2 += l2m*torch.nn.functional.mse_loss(torch.fmod(cand_momentum[:, 2] - target[1][:, 2] + np.pi, 2*np.pi) - np.pi, zs)
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 3], target[1][:, 3])
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
+            #modular loss for phi, seems to consume more memory
+            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 0], target[1][:, 0])
+            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 1], target[1][:, 1])
+            #l2 += l2m*torch.power(torch.fmod(cand_momentum[:, 2] - target[1][:, 2] + np.pi, 2*np.pi) - np.pi, 2)
+            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 3], target[1][:, 3])
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:

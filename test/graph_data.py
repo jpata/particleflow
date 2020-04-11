@@ -63,32 +63,7 @@ def data_prep(data, device=torch.device('cpu')):
         new_ids[m] = k
     data.ygen[:, 0] = new_ids
 
-    #transform pt and energy to log scale
-    #m = data.x[:, 1] > 0
-    #data.x[m, 1] = data.x[m, 1].log10()  
-    #m = data.x[:, 4] > 0
-    #data.x[m, 4] = data.x[m, 4].log10()
-  
-    #m = data.ycand[:, 1] > 0
-    #data.ycand[m, 1] = data.ycand[m, 1].log10()  
-    #m = data.ycand[:, 4] > 0
-    #data.ycand[m, 4] = data.ycand[m, 4].log10()  
-    #
-    #m = data.ygen[:, 1] > 0
-    #data.ygen[m, 1] = data.ygen[m, 1].log10()  
-    #m = data.ygen[:, 4] > 0
-    #data.ygen[m, 4] = data.ygen[m, 4].log10()
- 
-    #randomize the target order - then we should not be able to predict anything!
-    #perm = torch.randperm(len(data.y_candidates))
-    #data.y_candidates = data.y_candidates[perm]
-   
-    #data.x -= x_means.to(device=device)
-    #data.x /= x_stds.to(device=device)
-
     #Create a one-hot encoded vector of the class labels
-    #data.y_candidates_id = torch.nn.functional.one_hot(data.ycand[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
-    #data.y_gen_id = torch.nn.functional.one_hot(data.ygen[:, 0].to(dtype=torch.long), num_classes=len(class_to_id))
     data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
     data.y_gen_id = data.ygen[:, 0].to(dtype=torch.long)
 
@@ -96,18 +71,8 @@ def data_prep(data, device=torch.device('cpu')):
     elem_id_onehot = torch.nn.functional.one_hot(data.x[:, 0].to(dtype=torch.long), num_classes=len(elem_to_id))
     data.x = torch.cat([elem_id_onehot.to(dtype=torch.float), data.x[:, 1:]], axis=-1)
 
-    #vs, cs = torch.unique(data.y_candidates_id, return_counts=True)
-    #data.y_candidates_weights = torch.zeros(len(class_to_id)).to(device=device)
-    #for k, v in zip(vs, cs):
-    #    data.y_candidates_weights[k] = 1.0/float(v)
-
     data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
     data.y_gen_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
-
-    #Give the pions higher weight in the training
-    #uniqs, counts = torch.unique(data.y_candidates_id, return_counts=True)
-    #for u, c in zip(uniqs, counts):
-    #    data.y_candidates_weights[u] = 1.0/float(c)
 
     data.ycand = data.ycand[:, 1:]
     data.ygen = data.ygen[:, 1:]

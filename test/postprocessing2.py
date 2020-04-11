@@ -388,7 +388,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     infile = args.input
-    outpath = os.path.dirname(infile) + "/raw/" + os.path.basename(infile).split(".")[0]
+    outpath = os.path.join(os.path.dirname(infile), "raw", os.path.basename(infile).split(".")[0])
     tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
 
