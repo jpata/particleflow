@@ -283,16 +283,12 @@ class PFNet6(nn.Module):
         #pairs of embedded nodes + edge
         self.edgenet = nn.Sequential(
             nn.Linear(2*hidden_dim + 1, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
             act(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid(),
@@ -301,39 +297,23 @@ class PFNet6(nn.Module):
 
         self.nn1 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, len(class_to_id)),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(hidden_dim + len(class_to_id), hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
-            #nn.Dropout(p=dropout_rate),
             act(),
             nn.Linear(hidden_dim, 4),
         )
@@ -543,12 +523,12 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=device)
         if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
+            #l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
             #modular loss for phi, seems to consume more memory
-            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 0], target[1][:, 0])
-            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 1], target[1][:, 1])
-            #l2 += l2m*torch.power(torch.fmod(cand_momentum[:, 2] - target[1][:, 2] + np.pi, 2*np.pi) - np.pi, 2)
-            #l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 3], target[1][:, 3])
+            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 0], target[1][:, 0])
+            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 1], target[1][:, 1])
+            l2 += l2m*torch.pow(torch.fmod(cand_momentum[:, 2] - target[1][:, 2] + np.pi, 2*np.pi) - np.pi, 2).mean()
+            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 3], target[1][:, 3])
 
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
