@@ -507,11 +507,12 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
 
         if target_type == "gen":
             data.cand = None
+            del data.cand
         elif target_type == "cand":
             data.gen = None
+            del data.gen
 
         data = data.to(device)
-        #data_prep(data)
         
         target = getattr(data, target_type)
         target = (target[0].to(device), target[1].to(device), target[2].to(device))

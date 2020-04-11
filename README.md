@@ -24,6 +24,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 
 ## Presentations
 
+- ML4RECO meeting, 2020-04-09: https://indico.cern.ch/event/908361/contributions/3821957/attachments/2017888/3373038/2020_04_08.pdf
 - CMS PF group, 2020-03-13: https://indico.cern.ch/event/897397/contributions/3786360/attachments/2003108/3344534/2020_03_13.pdf
 - ML4RECO meeting, 2020-03-12: https://indico.cern.ch/event/897281/contributions/3784715/attachments/2002839/3343921/2020_03_12.pdf
 - ML4RECO meeting, 2020-03-04: https://indico.cern.ch/event/895228/contributions/3776739/attachments/1998928/3335497/2020_03_04.pdf
@@ -42,6 +43,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 ## Other relevant issues, repos, PR-s:
 
 - https://github.com/jpata/cmssw/issues/56
+- https://github.com/cms-sw/cmssw/pull/29361
 
 ## Setting up the code
 
@@ -73,32 +75,39 @@ cd ../..
 ## Datasets
 
 - March 2020
-  - TTbar with PU for PhaseI, privately generated, ~10k events 
-    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/pfntuple_*.root`
-    - npy: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/raw/pfntuple_*.npz`
-    - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_gen_phase1/processed/*.pt`
+  - TTbar with PU for PhaseI, privately generated, 10k events 
+    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
+    - pickled graph data: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
+    - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/processed/*.pt`
 
 ## Creating the datasets
 
 ```bash
 cd test
-./run_phase1.sh
+mkdir TTbar_14TeV_TuneCUETP8M1_cfi
+python prepare_args.py > args.txt
 condor_submit genjob.jdl
 ```
 
 ## Contents of the flat ROOT output ntuple
 
-See [postprocessing.py](test/postprocessing.py) for examples how to interpret the ROOT files.
+The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph:
+
+```bash
+python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph
+```
 
 ## Contents of the numpy ntuple
 
-```python
-fi = np.load("pfntuple_1_ev_0.npz")
-X = fi["X"] #PF elements
-ycandidates = fi["ycand"] #target PF candidates`
-ygenparticles = fi["ygen"] #target GenParticles
+For more details, see [data.ipynb](notebooks/data.ipynb).
+
+## Model training
+
+Train with GenParticles as the target:
 ```
-For more details, see [simrec.ipynb](notebooks/simrec.ipynb) or [graph_data.py](test/graph_data.py) on how to interpret the numpy file. 
+singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
+odel PFNet6 --lr 0.001 --dropout 0.2 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target gen
+```
 
 ## Model validation
 

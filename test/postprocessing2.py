@@ -4,6 +4,7 @@ import pickle
 import networkx as nx
 import numpy as np
 import numba
+import os
 
 import matplotlib
 matplotlib.use("Agg")
@@ -342,7 +343,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             lvs += [lv]
         lv = sum(lvs, ROOT.TLorentzVector())
 
-        if len(genparticles) > 0 and lv.E() > :
+        if len(genparticles) > 0:
             if abs(elem_eta) > 3.0:
                 #HFHAD -> always produce hadronic candidate
                 if elem_type == 9:
@@ -380,13 +381,14 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
-    parser.add_argument("--event", type=int, default=None, help="event to process, omit to process all")
-    parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot")
-    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file")
+    parser.add_argument("--event", type=int, default=None, help="event index to process, omit to process all")
+    parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot as trees in pt-descending order")
+    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file, -1 for all")
+    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph in addition to the normalized table")
     args = parser.parse_args()
 
     infile = args.input
-    outpath = "raw/" + infile.split(".")[0]
+    outpath = os.path.dirname(infile) + "/raw/" + os.path.basename(infile).split(".")[0]
     tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
 
@@ -560,6 +562,9 @@ if __name__ == "__main__":
             "dm_elem_cand": dm_elem_cand,
             "dm_elem_gen": dm_elem_gen
         }
+        if args.save_full_graph:
+            data["full_graph"] = g
+
         all_data += [data]
 
         if args.events_per_file > 0:
