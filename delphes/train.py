@@ -11,8 +11,6 @@ import os.path as osp
 use_gpu = True
 device = torch.device('cuda' if use_gpu else 'cpu')
 
-max_particles_per_tower = 5
-
 map_candid_to_pdgid = {
     0: [0],
     211: [211, 2212, 321, -3112, 3222, -3312, -3334],
@@ -178,12 +176,12 @@ if __name__ == "__main__":
     dataset = DelphesDataset(".", 5000)
     dataset.raw_dir = "raw2"
     dataset.processed_dir = "processed2"
-    dataset.process()
+    #dataset.process()
 
     loader = DataLoader(dataset, batch_size=1, pin_memory=True, shuffle=False)
-    model = PFNet(10, 512).to(device=device)
+    model = PFNet(10, 256).to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    n_epoch = 1001
+    n_epoch = 101
     n_train = int(0.8*len(loader))
     
     losses1 = np.zeros((n_epoch, len(loader)))

@@ -4,7 +4,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 
 - [x] set up datasets and ntuples for detailed PF analysis
   - [x] simple python version in [test/ntuplizer.py](test/ntuplizer.py)
-  - [ ] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
+  - [x] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
@@ -24,6 +24,9 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 
 ## Presentations
 
+- ML4RECO meeting, 2020-04-09: https://indico.cern.ch/event/908361/contributions/3821957/attachments/2017888/3373038/2020_04_08.pdf
+- CMS PF group, 2020-03-13: https://indico.cern.ch/event/897397/contributions/3786360/attachments/2003108/3344534/2020_03_13.pdf
+- ML4RECO meeting, 2020-03-12: https://indico.cern.ch/event/897281/contributions/3784715/attachments/2002839/3343921/2020_03_12.pdf
 - ML4RECO meeting, 2020-03-04: https://indico.cern.ch/event/895228/contributions/3776739/attachments/1998928/3335497/2020_03_04.pdf
 - CMS PF group, 2020-02-28: https://indico.cern.ch/event/892992/contributions/3766807/attachments/1995348/3328771/2020_02_28.pdf
 - CMS PF group, 2020-01-31: https://indico.cern.ch/event/885043/contributions/3730304/attachments/1979098/3295074/2020_01_30_pf.pdf
@@ -40,6 +43,7 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 ## Other relevant issues, repos, PR-s:
 
 - https://github.com/jpata/cmssw/issues/56
+- https://github.com/cms-sw/cmssw/pull/29361
 
 ## Setting up the code
 
@@ -51,8 +55,8 @@ export SCRAM_ARCH=slc7_amd64_gcc820
 git clone https://github.com/jpata/particleflow
 cd particleflow
 
-scramv1 project CMSSW CMSSW_11_0_1
-cd CMSSW_11_0_1/src
+scramv1 project CMSSW CMSSW_11_1_0_pre5
+cd CMSSW_11_1_0_pre5/src
 eval `scramv1 runtime -sh`
 git cms-init
 
@@ -61,6 +65,7 @@ git fetch -a jpata
 
 git cms-addpkg Validation/RecoParticleFlow
 git cms-addpkg SimGeneral/CaloAnalysis/
+git cms-addpkg SimGeneral/MixingModule/
 git checkout -b jpata_pfntuplizer --track jpata/jpata_pfntuplizer
 
 scram b
@@ -69,67 +74,39 @@ cd ../..
 
 ## Datasets
 
-The data flow is as follows:
-```
-GEN-SIM-DIGI-RAW -> [step3.py] -> EDM -> [ntuplizer.py] -> flat ROOT -> [graph.py] -> npy
-```
+- April 2020
+  - TTbar with PU for PhaseI, privately generated, 20k events 
+    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
+    - pickled graph data: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
+    - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/processed/*.pt`
 
-- February 2020
-  - /RelValQCD_FlatPt_15_3000HS_14/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
-    - EDM: `/mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD*.root`
-    - flat ROOT: `/storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.root` or `/eos/user/j/jpata/particleflow/QCD_run3/step3_AOD*.root`
-    - npy: `/storage/user/jpata/particleflow/data/QCD_run3/step3_ntuple_*.npz`
-  - /RelValTTbar_14TeV/CMSSW_11_0_0_pre12-PU_110X_mcRun3_2021_realistic_v5-v1/GEN-SIM-DIGI-RAW
-    - EDM: `/mnt/hadoop/store/user/jpata/RelValTTbar_14TeV/pfvalidation/191126_233751/0000/step3_AOD*.root`
-    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.root` or `/eos/user/j/jpata/particleflow/TTbar_run3/step3_AOD*.root`
-    - npy: `/storage/user/jpata/particleflow/data/TTbar_run3/step3_ntuple_*.npz`
+## Creating the datasets
 
-## Running step3 on grid
-
-PF reconstruction from `GEN-SIM-DIGI-RAW` needs to be run on the grid:
 ```bash
-#Run the crab jobs
 cd test
-edmConfigDump step3.py > step3_dump.py
-python multicrab.py
+mkdir TTbar_14TeV_TuneCUETP8M1_cfi
+python prepare_args.py > args.txt
+condor_submit genjob.jdl
 ```
 
 ## Contents of the flat ROOT output ntuple
 
-Produced using
-```bash
-python3 test/ntuplizer.py ./data/QCD_run3 /mnt/hadoop/store/user/jpata/RelValQCD_FlatPt_15_3000HS_14/pfvalidation/191126_233511/0000/step3_AOD_1.root
-```
-
-The TTree `pftree` contains the elements, candidates and genparticles:
-- [PFCluster](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowReco/interface/PFCluster.h)
-  - `PFBlockElement::(ECAL, PS1, PS2, HCAL, GSF, HO, HFHAD, HFEM)`           
-- [PFRecTrack](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowReco/interface/PFRecTrack.h) from
-  - `PFBlockElement::TRACK` or `PFBlockElement::BREM`
-- [PFCandidates](https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/interface/PFCandidate.h)
-- genparticles
-
-## Numpy training ntuples
-
-Produced using
+The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph:
 
 ```bash
-python3 test/graph.py ./data/QCD_run3/step3_AOD_1.root
+python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph
 ```
-- `step3_AOD_1_ev.npz`: PF elements, candidates, and the block associations via a numerical ID
-  - `elements: [Nelem, Nelem_features]` for the input PFElement data
-  - `element_block_id: [Nelem, ]` for the PFAlgo-based block id
-  - `candidates: [Ncand, Ncand_features]` for the output PFCandidate data
-  - `candidate_block_id: [Ncand, ]` for the PFAlgo-based block id 
-- `step3_AOD_1_dist.npz`: sparse `[Nelem, Nelem]` distance matrix from PFBlockAlgo between the candidates
+
+## Contents of the numpy ntuple
+
+For more details, see [data.ipynb](notebooks/data.ipynb).
 
 ## Model training
 
-On iBanks:
-```bash
-singularity exec --nv -B /storage ~jpata/gpuservers/singularity/images/pytorch.simg python3 \
-    test/train_end2end.py --model PFNet6 --n_train 200 \
-    --batch_size 2 --n_epoch 100 --lr 0.0001 --hidden_dim 512
+Train with GenParticles as the target:
+```
+singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
+odel PFNet6 --lr 0.001 --dropout 0.2 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target gen
 ```
 
 ## Model validation

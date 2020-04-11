@@ -1,0 +1,23 @@
+Universe = vanilla
+Executable = genjob.sh
+Log = logs/genjob.$(Cluster).log
+Output = logs/genjob.out.$(Cluster).$(Process)
+Error = logs/genjob.err.$(Cluster).$(Process)
+Requirements=(TARGET.OpSysAndVer=="CentOS7" && regexp("blade.*", TARGET.Machine) && TARGET.Machine!="blade-1.tier2")
++RunAsOwner = True
++InteractiveUser = true
++SingularityImage = "/cvmfs/singularity.opensciencegrid.org/bbockelm/cms:rhel7"
++SingularityBindCVMFS = True
++RequestWalltime = 6*3600
++PeriodicRemove = ((JobStatus =?= 2) && ((MemoryUsage =!= UNDEFINED && MemoryUsage > 1.1*RequestMemory)))
+
+run_as_owner = True
+x509userproxy = $ENV(X509_USER_PROXY)
+RequestDisk = 4
+RequestCpus = 1
+RequestMemory = 1*3500
+
+Environment = USER=$ENV(USER);CONDORJOBID=$(Process)
+
+#Queue 10
+Queue arguments from args.txt
