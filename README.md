@@ -74,8 +74,8 @@ cd ../..
 
 ## Datasets
 
-- March 2020
-  - TTbar with PU for PhaseI, privately generated, 10k events 
+- April 2020
+  - TTbar with PU for PhaseI, privately generated, 20k events 
     - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
     - pickled graph data: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
     - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/processed/*.pt`
