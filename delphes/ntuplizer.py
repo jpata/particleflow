@@ -186,9 +186,12 @@ if __name__ == "__main__":
         particles_matched_nelem_tower = np.zeros(len(pileupmix))
         particles_matched_nelem_track = np.zeros(len(pileupmix))
 
+        #Loop over all connected subgraphs
         for sg in nx.connected_components(graph):
             for node in sg:
                 graph.nodes[node]["iblock"] = isg
+
+            #get all the tracks, towers and particles in this subgraph
             track_nodes = [n for n in sg if n[0] == "track"]
             tower_nodes = [n for n in sg if n[0] == "tower"]
             particle_nodes = [n for n in sg if n[0] == "particle"]
@@ -199,6 +202,8 @@ if __name__ == "__main__":
             if len(track_nodes) + len(tower_nodes) > 0:
                 matched_gp_from_tracks = []
                 matched_gp_from_towers = []
+                
+                #get all the matched genparticles to the tracks
                 for t in track_nodes:
                     matched_gp = pileupmix_idxdict[tracks[t[1]].Particle.GetObject()]
                     all_sources_trk += [t]
@@ -209,7 +214,7 @@ if __name__ == "__main__":
                     #find particles matched to tower
                     matched_gps = [pileupmix_idxdict[p] for p in towers[t[1]].Particles]
 
-                    #remove particles that were already matched to tracks
+                    #remove genparticles that were already matched to tracks
                     matched_gps = [p for p in matched_gps if not (p in matched_gp_from_tracks)]
 
                     #sort according to energy
@@ -260,7 +265,7 @@ if __name__ == "__main__":
                 track.D0, track.DZ
             ])
 
-        #Target array conversion
+        #Target array conversion, choose the first genparticle in the tower
         for i, targets_per_source in enumerate(all_targets_tower):
             nt = len(targets_per_source)
             if nt > 0:
