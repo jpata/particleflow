@@ -170,7 +170,8 @@ def cleanup_graph(g, edge_energy_threshold=0.01, edge_fraction_threshold=0.05, g
             #            rg.nodes[by_eta_phi[k][0]]["e"] += sum(rg.nodes[n]["e"] for n in by_eta_phi[k][1:])
             #            rg.nodes[by_eta_phi[k][0]]["pt"] = 0 #fixme
             #            nodes_to_remove += by_eta_phi[k][1:]
-                    
+            
+            #remove links that don't contribute above a threshold 
             ew = [((node, node2), rg.edges[node, node2]["weight"]) for node2 in rg.neighbors(node)]
             ew = filter(lambda x: x[1] != 1.0, ew)
             ew = sorted(ew, key=lambda x: x[1], reverse=True)
@@ -192,7 +193,8 @@ def cleanup_graph(g, edge_energy_threshold=0.01, edge_fraction_threshold=0.05, g
             if deg==0:
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
-    
+   
+    #compute number of children and parents, save on node for visualization 
     for node in g.nodes:
         g.nodes[node]["children"] = len(list(g.neighbors(node)))
     
@@ -204,7 +206,7 @@ def cleanup_graph(g, edge_energy_threshold=0.01, edge_fraction_threshold=0.05, g
 
     return g
 
-def prepare_normalized_table(g):
+def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     rg = g.reverse()
 
     all_genparticles = []
@@ -249,6 +251,7 @@ def prepare_normalized_table(g):
     #assign unmatched genparticles to best element, allowing for overlaps
     for gp in sorted(unmatched_gp, key=lambda x: g.nodes[x]["pt"], reverse=True):
         elems = [e for e in g.neighbors(gp)]
+        #we don't want to assign any genparticles to PS, BREM or SC - links are not reliable
         elems = [e for e in elems if not (g.nodes[e]["typ"] in [2,3,7,10])]
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
         _, elem = elems_sorted[0]
@@ -318,7 +321,8 @@ def prepare_normalized_table(g):
     for ielem, elem in enumerate(all_elements):
         elem_type = g.nodes[elem]["typ"]
         elem_eta = g.nodes[elem]["eta"]
-        genparticles = sorted(elem_to_gp.get(elem, []), key=lambda x: g.nodes[x]["pt"], reverse=True)
+        genparticles = sorted(elem_to_gp.get(elem, []), key=lambda x: g.nodes[x]["e"], reverse=True)
+        genparticles = [gp for gp in genparticles if g.nodes[gp]["e"] > genparticle_energy_threshold]
         candidate = elem_to_cand.get(elem, None)
        
         lvs = []
@@ -338,9 +342,9 @@ def prepare_normalized_table(g):
             lvs += [lv]
         lv = sum(lvs, ROOT.TLorentzVector())
 
-        if len(genparticles) > 0:
+        if len(genparticles) > 0 and lv.E() > :
             if abs(elem_eta) > 3.0:
-                #HFHAD -> always produce hadronic
+                #HFHAD -> always produce hadronic candidate
                 if elem_type == 9:
                     pid = 1
                 #HFEM -> decide based on pid
@@ -527,9 +531,10 @@ if __name__ == "__main__":
             g.add_edge(("elem", obj.first), ("pfcand", obj.second), weight=1.0)
         print("Graph created: {} nodes, {} edges".format(len(g.nodes), len(g.edges)))
  
-        g =  cleanup_graph(g)
+        g = cleanup_graph(g)
         rg = g.reverse()
 
+        #make tree visualizations for PFCandidates
         ncand = 0 
         for node in sorted(filter(lambda x: x[0]=="pfcand", g.nodes), key=lambda x: g.nodes[x]["pt"], reverse=True):
             if ncand < args.plot_candidates:
@@ -544,6 +549,7 @@ if __name__ == "__main__":
         #plt.savefig(outpath + "_ev_{}.pdf".format(iev))
         #plt.clf()
 
+        #do one-to-one associations
         Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen = prepare_normalized_table(g)
         dm = prepare_elem_distance_matrix(ev)
         data = {

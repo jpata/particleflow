@@ -484,16 +484,16 @@ if __name__ == "__main__":
         di = np.array(list(ev.element_distance_i))
         dj = np.array(list(ev.element_distance_j))
         d = np.array(list(ev.element_distance_d))
-        etas = np.array(list(ev.element_eta), dtype=np.float32)
-        phis = np.array(list(ev.element_phi), dtype=np.float32)
-        etaphis = np.vstack([etas, phis]).T
-        dm_dr = np.zeros((etaphis.shape[0], etaphis.shape[0]), dtype=np.float32)
-        associate_deltar(etaphis, 0.2**2, dm_dr)
+        #etas = np.array(list(ev.element_eta), dtype=np.float32)
+        #phis = np.array(list(ev.element_phi), dtype=np.float32)
+        #etaphis = np.vstack([etas, phis]).T
+        #dm_dr = np.zeros((etaphis.shape[0], etaphis.shape[0]), dtype=np.float32)
+        #associate_deltar(etaphis, 0.2**2, dm_dr)
         n = len(X)
-        dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n)).todense()
-        dm += dm_dr 
-        dm += dm.T
-        dm = scipy.sparse.coo_matrix(dm)
+        dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n))
+        #dm += dm_dr 
+        #dm += dm.T
+        #dm = scipy.sparse.coo_matrix(dm)
 
         with open("{}_dist_{}.npz".format(outpath, iev), "wb") as fi:
             scipy.sparse.save_npz(fi, dm)
