@@ -180,12 +180,9 @@ class PFGraphDataset(Dataset):
     def process_multiple_files(self, filenames, idx_file):
         datas = [self.process_single_file(fn) for fn in filenames]
         datas = sum(datas, [])
-        data = Batch.from_data_list(datas)
-        data.cand = (data.y_candidates_id, data.ycand, data.target_edge_attr_cand)
-        data.gen = (data.y_gen_id, data.ygen, data.target_edge_attr_gen)
         p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
-        print(p, data)
-        torch.save(data, p)
+        print(p)
+        torch.save(datas, p)
   
     def process(self, num_files_to_batch):
         idx_file = 0
