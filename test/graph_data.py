@@ -117,6 +117,11 @@ class PFGraphDataset(Dataset):
         batch_data = []
         for idata, data in enumerate(all_data):
             mat = data["dm"].copy()
+            #set all edges with distance greater than 0.5 to 0
+            md = mat.todense()
+            md[md>0.5] = 0
+            mat = scipy.sparse.coo_matrix(md)
+
             mat_reco_cand = data["dm_elem_cand"].copy()
             mat_reco_gen = data["dm_elem_gen"].copy()
 
@@ -180,12 +185,9 @@ class PFGraphDataset(Dataset):
     def process_multiple_files(self, filenames, idx_file):
         datas = [self.process_single_file(fn) for fn in filenames]
         datas = sum(datas, [])
-        data = Batch.from_data_list(datas)
-        data.cand = (data.y_candidates_id, data.ycand, data.target_edge_attr_cand)
-        data.gen = (data.y_gen_id, data.ygen, data.target_edge_attr_gen)
         p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx_file))
-        print(p, data)
-        torch.save(data, p)
+        print(p)
+        torch.save(datas, p)
   
     def process(self, num_files_to_batch):
         idx_file = 0
@@ -219,3 +221,4 @@ if __name__ == "__main__":
  
     pfgraphdataset = PFGraphDataset(root=args.dataset)
     pfgraphdataset.process_parallel(args.num_files_merge)
+    #pfgraphdataset.process(args.num_files_merge)
