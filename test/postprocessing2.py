@@ -19,7 +19,7 @@ map_candid_to_pdgid = {
     0: [0],
     211: [211, 2212, 321, -3112, 3222, -3312, -3334],
     -211: [-211, -2212, -321, 3112, -3222, 3312, 3334],
-    130: [130, 2112, -2112, 310, 3122, -3122, 3322, -3322],
+    130: [111, 130, 2112, -2112, 310, 3122, -3122, 3322, -3322],
     22: [22],
     11: [11],
     -11: [-11],
@@ -48,6 +48,126 @@ def associate_deltar(etaphi, dr2cut, ret):
             if dr2 < dr2cut:
                 ret[i,j] += np.sqrt(dr2)                   
 
+def graph_to_images(data):
+    ndim_ecal = 128
+    img_ecal = np.zeros((ndim_ecal, ndim_ecal))
+    bins_ecal_eta = np.linspace(-4, 4, ndim_ecal)
+    bins_ecal_phi = np.linspace(-4, 4, ndim_ecal)
+
+    ndim_hcal = 128
+    img_hcal = np.zeros((ndim_hcal, ndim_hcal))
+    bins_hcal_eta = np.linspace(-4, 4, ndim_hcal)
+    bins_hcal_phi = np.linspace(-4, 4, ndim_hcal)
+
+    ndim_hfem = 128
+    img_hfem = np.zeros((ndim_hfem, ndim_hfem))
+    bins_hfem_eta = np.linspace(-6, 6, ndim_hfem)
+    bins_hfem_phi = np.linspace(-4, 4, ndim_hfem)
+
+    ndim_hfhad = 128
+    img_hfhad = np.zeros((ndim_hfhad, ndim_hfhad))
+    bins_hfhad_eta = np.linspace(-6, 6, ndim_hfhad)
+    bins_hfhad_phi = np.linspace(-4, 4, ndim_hfhad)
+
+    ndim_tracker_1 = 128
+    img_tracker_1 = np.zeros((ndim_tracker_1, ndim_tracker_1))
+    img_tracker_2 = np.zeros((ndim_tracker_1, ndim_tracker_1))
+    img_tracker_3 = np.zeros((ndim_tracker_1, ndim_tracker_1))
+    bins_tracker_1_eta = np.linspace(-4, 4, ndim_tracker_1)
+    bins_tracker_1_phi = np.linspace(-4, 4, ndim_tracker_1)
+
+    ndim_gen = 128
+    img_gen = np.zeros((ndim_gen, ndim_gen))
+    bins_gen_eta = np.linspace(-6, 6, ndim_gen)
+    bins_gen_phi = np.linspace(-4, 4, ndim_gen)
+
+    img_gen_pid = {}
+    for k in map_candid_to_pdgid.keys():
+        img_gen_pid[k] = np.zeros((ndim_gen, ndim_gen))
+
+    necal = 0
+    ngen = 0
+    for node in data.nodes:
+        if node[0] == "elem":
+            if data.nodes[node]["typ"] == 4:
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_ecal_eta, eta)
+                iphi = np.searchsorted(bins_ecal_phi, phi)
+                img_ecal[ieta, iphi] += data.nodes[node]["e"]
+                necal += 1
+            elif data.nodes[node]["typ"] == 5:
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_hcal_eta, eta)
+                iphi = np.searchsorted(bins_hcal_phi, phi)
+                img_hcal[ieta, iphi] += data.nodes[node]["e"]
+            elif data.nodes[node]["typ"] == 8:
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_hfem_eta, eta)
+                iphi = np.searchsorted(bins_hfem_phi, phi)
+                img_hfem[ieta, iphi] += data.nodes[node]["e"]
+            elif data.nodes[node]["typ"] == 9:
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_hfhad_eta, eta)
+                iphi = np.searchsorted(bins_hfhad_phi, phi)
+                img_hfhad[ieta, iphi] += data.nodes[node]["e"]
+            elif data.nodes[node]["typ"] == 1:
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_tracker_1_eta, eta)
+                iphi = np.searchsorted(bins_tracker_1_phi, phi)
+                img_tracker_1[ieta, iphi] += data.nodes[node]["e"]
+
+                eta_ecal = data.nodes[node]["eta_ecal"]
+                phi_ecal = data.nodes[node]["phi_ecal"]
+                if eta_ecal != 0:
+                    ieta = np.searchsorted(bins_tracker_1_eta, eta_ecal)
+                    iphi = np.searchsorted(bins_tracker_1_phi, phi_ecal)
+                    img_tracker_2[ieta, iphi] += data.nodes[node]["e"]
+
+                eta_hcal = data.nodes[node]["eta_hcal"]
+                phi_hcal = data.nodes[node]["phi_hcal"]
+                if eta_hcal != 0:
+                    ieta = np.searchsorted(bins_tracker_1_eta, eta_hcal)
+                    iphi = np.searchsorted(bins_tracker_1_phi, phi_hcal)
+                    img_tracker_3[ieta, iphi] += data.nodes[node]["e"]
+
+        elif node[0] == "tp" or node[0] == "sc":
+            ngen += 1
+            pid = data.nodes[node]["typ"]
+            if pid in map_pdgid_to_candid:  
+                eta = data.nodes[node]["eta"]
+                phi = data.nodes[node]["phi"]
+                ieta = np.searchsorted(bins_gen_eta, eta)
+                iphi = np.searchsorted(bins_gen_phi, phi)
+                if ieta >= ndim_gen:
+                    ieta = ndim_gen-1
+                if iphi >= ndim_gen:
+                    iphi = ndim_gen-1
+                img_gen_pid[map_pdgid_to_candid[pid]][ieta, iphi] += data.nodes[node]["e"]
+            else:
+                print(pid, data.nodes[node]["e"])
+
+
+    ret = {
+        "ecal": img_ecal,
+        "hcal": img_hcal,
+        "tracker_1": img_tracker_1,
+        "tracker_2": img_tracker_2,
+        "tracker_3": img_tracker_3,
+        "hfem": img_hfem,
+        "hfhad": img_hfhad,
+    }
+
+    print("necal", necal)
+    print("ngen", ngen)
+    #X = np.stack([ret[k] for k in ["ecal", "hcal", "tracker_1", "tracker_2", "tracker_3", "hfem", "hfhad"]], axis=-1)
+    #y = np.stack([img_gen_pid[p] for p in [211, -211]], axis=-1)
+    #y = np.sum(y, axis=-1).reshape((64, 64, 1))
+    return ret, img_gen_pid
 
 def prepare_elem_distance_matrix(ev):
     di = np.array(list(ev.element_distance_i))
@@ -382,13 +502,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--event", type=int, default=None, help="event index to process, omit to process all")
+    parser.add_argument("--outpath", type=str, default="raw", help="output path")
     parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot as trees in pt-descending order")
     parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file, -1 for all")
-    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph in addition to the normalized table")
+    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph")
+    parser.add_argument("--save-normalized-table", action="store_true", help="save the uniquely identified table")
+    parser.add_argument("--save-images", action="store_true", help="saves the data as images")
     args = parser.parse_args()
 
     infile = args.input
-    outpath = os.path.join(os.path.dirname(infile), "raw", os.path.basename(infile).split(".")[0])
+    outpath = os.path.join(os.path.dirname(infile), args.outpath, os.path.basename(infile).split(".")[0])
     tf = ROOT.TFile(infile)
     tt = tf.Get("ana/pftree")
 
@@ -554,16 +677,23 @@ if __name__ == "__main__":
         #do one-to-one associations
         Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen = prepare_normalized_table(g)
         dm = prepare_elem_distance_matrix(ev)
-        data = {
-            "Xelem": Xelem,
-            "ycand": ycand,
-            "ygen": ygen,
-            "dm": dm,
-            "dm_elem_cand": dm_elem_cand,
-            "dm_elem_gen": dm_elem_gen
-        }
+        data = {}
+
+        if args.save_normalized_table:
+            data = {
+                "Xelem": Xelem,
+                "ycand": ycand,
+                "ygen": ygen,
+                "dm": dm,
+                "dm_elem_cand": dm_elem_cand,
+                "dm_elem_gen": dm_elem_gen
+            }
+
         if args.save_full_graph:
             data["full_graph"] = g
+
+        if args.save_images:
+            data["images"] = graph_to_images(g)
 
         all_data += [data]
 

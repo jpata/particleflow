@@ -1,0 +1,4 @@
+#!/bin/bash
+#singularity exec --nv ~/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 100 --n_test 100 --model PFNet7 --lr 0.001 --hidden_dim 256 --n_epochs 50 --l2 0.01 --l3 0.0 --target gen --batch_size 1 --convlayer gravnet-knn
+#singularity exec --nv ~/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 100 --n_test 100 --model PFNet7 --lr 0.001 --hidden_dim 256 --n_epochs 50 --l2 0.01 --l3 0.0 --target gen --batch_size 1 --convlayer gravnet-radius
+singularity exec --nv ~/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 3600 --n_test 400 --model PFNet8 --lr 0.001 --hidden_dim 256 --n_epochs 50 --l2 0.01 --l3 0.0 --target gen --batch_size 1
