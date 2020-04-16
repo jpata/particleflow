@@ -117,6 +117,11 @@ class PFGraphDataset(Dataset):
         batch_data = []
         for idata, data in enumerate(all_data):
             mat = data["dm"].copy()
+            #set all edges with distance greater than 0.5 to 0
+            md = mat.todense()
+            md[md>0.5] = 0
+            mat = scipy.sparse.coo_matrix(md)
+
             mat_reco_cand = data["dm_elem_cand"].copy()
             mat_reco_gen = data["dm_elem_gen"].copy()
 
@@ -216,3 +221,4 @@ if __name__ == "__main__":
  
     pfgraphdataset = PFGraphDataset(root=args.dataset)
     pfgraphdataset.process_parallel(args.num_files_merge)
+    #pfgraphdataset.process(args.num_files_merge)

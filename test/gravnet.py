@@ -5,6 +5,7 @@ from torch_geometric.nn.conv import MessagePassing
 
 try:
     from torch_cluster import knn_graph
+    from torch_cluster import radius_graph
 except ImportError:
     knn_graph = None
 
@@ -33,7 +34,7 @@ class GravNetConv(MessagePassing):
     """
 
     def __init__(self, in_channels, out_channels, space_dimensions,
-                 propagate_dimensions, k, **kwargs):
+                 propagate_dimensions, k, neighbor_algo="knn", **kwargs):
         super(GravNetConv, self).__init__(**kwargs)
 
         if knn_graph is None:
@@ -48,6 +49,7 @@ class GravNetConv(MessagePassing):
         self.lin_fout = Linear(in_channels + 2 * propagate_dimensions,
                                out_channels)
 
+        self.neighbor_algo = neighbor_algo
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -59,8 +61,14 @@ class GravNetConv(MessagePassing):
         spatial = self.lin_s(x)
         to_propagate = self.lin_flr(x)
 
-        edge_index = knn_graph(spatial, self.k, batch, loop=False,
-                               flow=self.flow)
+        if self.neighbor_algo == "knn":
+            edge_index = knn_graph(spatial, self.k, batch, loop=False,
+                                   flow=self.flow, cosine=True)
+        elif self.neighbor_algo == "radius":
+            edge_index = radius_graph(spatial, self.k, batch, loop=False,
+                                   flow=self.flow, max_num_neighbors=3)
+        else:
+            raise Exception("Unknown neighbor algo {}".format(self.neighbor_algo))
 
         reference = spatial.index_select(0, edge_index[1])
         neighbors = spatial.index_select(0, edge_index[0])
@@ -72,7 +80,7 @@ class GravNetConv(MessagePassing):
         prop_feat = self.propagate(edge_index, x=to_propagate,
                                    edge_weight=distance_weight)
 
-        return self.lin_fout(torch.cat([prop_feat, x], dim=-1))
+        return edge_index, self.lin_fout(torch.cat([prop_feat, x], dim=-1))
 
     def message(self, x_j, edge_weight):
         return x_j * edge_weight.unsqueeze(1)

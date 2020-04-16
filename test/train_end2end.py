@@ -1,7 +1,10 @@
 import sys
 import os
+
 if not ("CUDA_VISIBLE_DEVICES" in os.environ):
     import setGPU
+
+multi_gpu = False
 
 import torch
 print("torch", torch.__version__)
@@ -43,9 +46,8 @@ from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
-#device = torch.device('cuda')
-device = torch.device("cuda:0")
-
+device = torch.device('cuda')
+#device = torch.device("cuda:0")
 
 def prepare_dataframe(model, loader):
     model.eval()
@@ -53,9 +55,14 @@ def prepare_dataframe(model, loader):
     eval_time = 0
     for i, data in enumerate(loader):
 
+        if not multi_gpu:
+            data = data.to(device)
+
         _, pred_id_onehot, pred_momentum = model(data)
         _, pred_id = torch.max(pred_id_onehot, -1)
         pred_momentum[pred_id==0] = 0
+        if not multi_gpu:
+            data = [data]
 
         x = torch.cat([d.x.to("cpu") for d in data])
         gen_id = torch.cat([d.y_gen_id.to("cpu") for d in data])
@@ -255,49 +262,43 @@ class PFDenseNet(nn.Module):
 
 #Baseline model with graph attention convolution & edge classification, slow to train 
 class PFNet6(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4, dropout_rate=0.5):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
         super(PFNet6, self).__init__()
 
-        act = nn.LeakyReLU
+        act = nn.SELU
 
-        #self.inp = nn.Sequential(
-        #    nn.Linear(input_dim, hidden_dim),
-        #    nn.BatchNorm1d(hidden_dim),
-        #    nn.Dropout(p=dropout_rate),
-        #    act(),
-        #    nn.Linear(hidden_dim, hidden_dim),
-        #    nn.BatchNorm1d(hidden_dim),
-        #    nn.Dropout(p=dropout_rate),
-        #    act(),
-        #    nn.Linear(hidden_dim, hidden_dim),
-        #    nn.BatchNorm1d(hidden_dim),
-        #    nn.Dropout(p=dropout_rate),
-        #    act(),
-        #    nn.Linear(hidden_dim, hidden_dim),
-        #    nn.BatchNorm1d(hidden_dim),
-        #    nn.Dropout(p=dropout_rate),
-        #    act(),
-        #    nn.Linear(hidden_dim, hidden_dim),
-        #)
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=1, concat=False)
+        self.inp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, embedding_dim),
+            act(),
+        )
+        if convlayer == "sgconv":
+            self.conv1 = SGConv(embedding_dim, embedding_dim, K=2)
+        elif convlayer == "gatconv":
+            self.conv1 = GATConv(embedding_dim, embedding_dim, heads=1, concat=False)
 
         #pairs of embedded nodes + edge
+        self.num_node_features_edgecls = 2
         self.edgenet = nn.Sequential(
-            nn.Linear(2*hidden_dim + 1, hidden_dim),
+            nn.Linear(2*self.num_node_features_edgecls + 1, 32),
             act(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(32, 32),
             act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            act(),
-            nn.Linear(hidden_dim, 1),
+            nn.Linear(32, 1),
             nn.Sigmoid(),
         )
-        self.conv2 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False)
+        if convlayer == "sgconv":
+            self.conv2 = SGConv(embedding_dim, embedding_dim, K=2)
+        elif convlayer == "gatconv":
+            self.conv2 = GATConv(embedding_dim, embedding_dim, heads=1, concat=False)
 
         self.nn1 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(embedding_dim, hidden_dim),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
@@ -305,10 +306,10 @@ class PFNet6(nn.Module):
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
-            nn.Linear(hidden_dim, len(class_to_id)),
+            nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn2 = nn.Sequential(
-            nn.Linear(hidden_dim + len(class_to_id), hidden_dim),
+            nn.Linear(embedding_dim + output_dim_id, hidden_dim),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
@@ -316,10 +317,11 @@ class PFNet6(nn.Module):
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
-            nn.Linear(hidden_dim, 4),
+            nn.Linear(hidden_dim, output_dim_p4),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.embedding_dim = embedding_dim
 
     def forward(self, data):
         batch = data.batch
@@ -333,18 +335,21 @@ class PFNet6(nn.Module):
             batch = edge_index.new_zeros(x.size(0))
         edge_weight = data.edge_attr.squeeze(-1)
 
-        #Run a graph convolution to embed the nodes
-        x = torch.nn.functional.leaky_relu(self.conv1(x, data.edge_index))
+        #embed the nodes
+        x = self.inp(x)
+ 
+        #Run a graph convolution on the embedded nodes
+        x = torch.nn.functional.selu(self.conv1(x, data.edge_index))
 
         #Compute new edge weights based on embedded node pairs
-        xpairs = torch.cat([x[edge_index[0, :]], x[edge_index[1, :]], edge_weight.unsqueeze(-1)], axis=-1)
+        xpairs = torch.cat([x[edge_index[0, :], :self.num_node_features_edgecls], x[edge_index[1, :], :self.num_node_features_edgecls], edge_weight.unsqueeze(-1)], axis=-1)
         edge_weight2 = self.edgenet(xpairs).squeeze(-1)
         edge_mask = edge_weight2 > 0.5
         row, col = data.edge_index
         row2, col2 = row[edge_mask], col[edge_mask]
 
         #Run a second convolution with the new edges
-        x = torch.nn.functional.leaky_relu(self.conv2(x, torch.stack([row2, col2])))
+        x = torch.nn.functional.selu(self.conv2(x, torch.stack([row2, col2])))
 
         #Final candidate inference
         cand_ids = self.nn1(x)
@@ -354,11 +359,93 @@ class PFNet6(nn.Module):
 
 #Simplified model with SGConv, no edge classification, fast to train
 class PFNet7(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet", dropout_rate=0.0):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet-knn", dropout_rate=0.0):
         super(PFNet7, self).__init__()
+
         act = nn.LeakyReLU
         self.convlayer = convlayer
+
         self.nn1 = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+        )
+        #self.conv0 = SGConv(hidden_dim, hidden_dim, K=2)
+
+        if convlayer == "gravnet-knn":
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="knn") 
+        elif convlayer == "gravnet-radius":
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="radius") 
+        elif convlayer == "sgconv":
+            self.conv1 = SGConv(hidden_dim, hidden_dim, K=3)
+        elif convlayer == "gatconv":
+            self.conv1 = GATConv(hidden_dim, hidden_dim, heads=1, concat=False)
+
+        self.nn2 = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, output_dim_id),
+        )
+        self.nn3 = nn.Sequential(
+            nn.Linear(hidden_dim + output_dim_id, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(dropout_rate),
+            act(),
+            nn.Linear(hidden_dim, output_dim_p4),
+        )
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+    def forward(self, data):
+        #print("forward", data.batch.device, len(torch.unique(data.batch)))
+        edge_weight = data.edge_attr.squeeze(-1)
+        edge_index = data.edge_index
+        
+        x = self.nn1(data.x)
+        #x = torch.nn.functional.leaky_relu(self.conv0(x, edge_index))
+        #x = data.x
+        
+        #Run a convolution
+        if self.convlayer == "gravnet-knn" or self.convlayer == "gravnet-radius":
+            new_edge_index, x = self.conv1(x)
+            #print("edges", len(new_edge_index[0]))
+            x = torch.nn.functional.leaky_relu(x)
+        else:
+            x = torch.nn.functional.leaky_rely(self.conv1(x, edge_index=edge_index))
+        
+        #Decode convolved graph nodes to pdgid and p4
+        cand_ids = self.nn2(x)
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
+
+        #print("forward done", data.batch.device)
+        return torch.sigmoid(edge_weight), cand_ids, cand_p4
+
+class PFNet8(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+        super(PFNet8, self).__init__()
+
+        act = nn.SELU
+
+        self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -367,18 +454,12 @@ class PFNet7(nn.Module):
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, embedding_dim),
         )
+        self.unet = GraphUNet(embedding_dim, hidden_dim, embedding_dim, 3, pool_ratios=0.2, act=torch.nn.functional.selu)
 
-        if convlayer == "gravnet":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 4, hidden_dim, 3) 
-        elif convlayer == "sgconv":
-            self.conv1 = SGConv(hidden_dim, hidden_dim)
-        elif convlayer == "gatconv":
-            self.conv1 = GATConv(hidden_dim, hidden_dim)
-
-        self.nn2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+        self.nn1 = nn.Sequential(
+            nn.Linear(embedding_dim, hidden_dim),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
@@ -387,9 +468,10 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             act(),
             nn.Linear(hidden_dim, output_dim_id),
+            act(),
         )
-        self.nn3 = nn.Sequential(
-            nn.Linear(hidden_dim + output_dim_id, hidden_dim),
+        self.nn2 = nn.Sequential(
+            nn.Linear(embedding_dim + output_dim_id, hidden_dim),
             act(),
             nn.Linear(hidden_dim, hidden_dim),
             act(),
@@ -401,21 +483,27 @@ class PFNet7(nn.Module):
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.embedding_dim = embedding_dim
 
     def forward(self, data):
-        #print("forward", data.batch.device, data.batch, len(data.batch))
-        edge_weight = data.edge_attr.squeeze(-1)
+        batch = data.batch
+
+        #encode the inputs
+        #x = self.inp(data.x)
+        x = data.x
         edge_index = data.edge_index
-        
-        #Run a convolution
-        x = self.nn1(data.x)
-        if self.convlayer == "gravnet":
-            x = torch.nn.functional.leaky_relu(self.conv1(x))
-        else:
-            x = torch.nn.functional.leaky_relu(self.conv1(x, edge_index=edge_index))
-        
-        cand_ids = self.nn2(x)
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
+
+        if batch is None:
+            batch = edge_index.new_zeros(x.size(0))
+        edge_weight = data.edge_attr.squeeze(-1)
+
+        x = self.inp(x)
+        x = torch.nn.functional.selu(self.unet(x, edge_index, batch))
+ 
+        #Final candidate inference
+        cand_ids = self.nn1(x)
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn2(torch.cat([cand_ids, x], axis=-1))
+
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 
@@ -423,6 +511,7 @@ model_classes = {
     "PFDenseNet": PFDenseNet,
     "PFNet6": PFNet6,
     "PFNet7": PFNet7,
+    "PFNet8": PFNet8,
 }
 
 def parse_args():
@@ -442,7 +531,7 @@ def parse_args():
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
-    parser.add_argument("--convlayer", type=str, choices=["gravnet", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
+    parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     args = parser.parse_args()
     return args
 
@@ -474,23 +563,30 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
     num_samples = 0
     for i, data in enumerate(loader):
 
+        t0 = time.time()
         num_samples += len(data)
-        #_dev = device
-        #data = data.to(_dev)
+        
+        if not multi_gpu:
+            data = data.to(device)
 
         if is_train:
             optimizer.zero_grad()
 
+        #print("Calling model with N={}".format(len(data)))
         edges, cand_id_onehot, cand_momentum = model(data)
         _dev = edges.device
         _, indices = torch.max(cand_id_onehot, -1)
+        if not multi_gpu:
+            data = [data]
         
         if args.target == "gen":
             target_ids = torch.cat([d.y_gen_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ygen[:, :4] for d in data]).to(_dev)
+            target_edges = torch.cat([d.target_edge_attr_gen for d in data]).to(_dev)
         elif args.target == "cand":
             target_ids = torch.cat([d.y_candidates_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
+            target_edges = torch.cat([d.target_edge_attr_cand for d in data]).to(_dev)
 
         vs, cs = torch.unique(target_ids, return_counts=True)
         weights = torch.zeros(len(class_to_id)).to(device=_dev)
@@ -502,6 +598,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         #In these cases, the true candidate existed and a candidate was predicted
         #msk = (indices != 0)
         msk = ((indices != 0) & (target_ids != 0)).detach().cpu()
+        msk2 = ((indices != 0) & (indices == target_ids))
 
         accuracies_batch[i] = accuracy_score(target_ids[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
 
@@ -516,15 +613,15 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         if l2m > 0.0:
             #l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
             #modular loss for phi, seems to consume more memory
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 0], target_p4[:, 0])
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 1], target_p4[:, 1])
-            l2 += l2m*torch.pow(torch.fmod(cand_momentum[:, 2] - target_p4[:, 2] + np.pi, 2*np.pi) - np.pi, 2).mean()
-            l2 += l2m*torch.nn.functional.mse_loss(cand_momentum[:, 3], target_p4[:, 3])
-
+            l2_0 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2, 0], target_p4[msk2, 0])
+            l2_1 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2, 1], target_p4[msk2, 1])
+            l2_2 = l2m*torch.pow(torch.fmod(cand_momentum[msk2, 2] - target_p4[msk2, 2] + np.pi, 2*np.pi) - np.pi, 2).mean()
+            l2_3 = l2m*torch.nn.functional.mse_loss(torch.log(torch.abs(cand_momentum[msk2, 3] + 0.0001)), torch.log(torch.abs(target_p4[msk2, 3] + 0.0001)))
+            l2 = l2_0 + l2_1*10.0 + l2_2*10.0 + l2_3
+            #print(l2_0.item(), l2_1.item(), l2_2.item(), l2_3.item())
         #Loss for edges enabled/disabled in clustering (binary)
         if l3m > 0.0:
-            l3 = torch.tensor(0.0).to(device=_dev)
-            #l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, target[2])
+            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, target_edges)
         else:
             l3 = torch.tensor(0.0).to(device=_dev)
 
@@ -536,7 +633,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         if is_train:
             batch_loss.backward()
         batch_loss_item = batch_loss.item()
-        print('{}/{} batch_loss={:.2f}'.format(i, len(loader), batch_loss_item), end='\r', flush=True)
+        t1 = time.time()
+        print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), batch_loss_item, t1-t0), end='\r', flush=True)
         if is_train:
             optimizer.step()
 
@@ -610,10 +708,15 @@ if __name__ == "__main__":
     print("train_dataset", len(train_dataset))
     print("test_dataset", len(test_dataset))
 
-    def collate(items):
-        #return [Batch.from_data_list(it) for it in items]
-        l = sum(items, [])
-        return l
+
+    if not multi_gpu:
+        def collate(items):
+            l = sum(items, [])
+            return Batch.from_data_list(l)
+    else:
+        def collate(items):
+            l = sum(items, [])
+            return l
 
     train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
     train_loader.collate_fn = collate
@@ -628,7 +731,10 @@ if __name__ == "__main__":
         output_dim_p4=output_dim_p4,
         dropout_rate=args.dropout,
         convlayer=args.convlayer)
-    model = torch_geometric.nn.DataParallel(model)
+
+    if multi_gpu:
+        model = torch_geometric.nn.DataParallel(model)
+
     model.to(device)
 
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
