@@ -5,25 +5,27 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 - [x] set up datasets and ntuples for detailed PF analysis
   - [x] simple python version in [test/ntuplizer.py](test/ntuplizer.py)
   - [x] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
+- [x] reproduce existing PFCandidates with machine learning
+  - [x] test element-to-block clustering with ML (Edge classifier, GNN)
+  - [x] test block-to-candidate regression
+  - [x] end-to-end training of elements to MLPF-candidates using GNN-s
+- [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
+  - [x] set up datasets for regression genparticles from elements
+    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
+  - [x] Develop a baseline ML-PF model that is able to regress pions and neutral hadrons (currently GravNet-512 with 2D radius-graph)
+  - [ ] Improve ML-PF model performance 
+  - [ ] Implement a simple tensorflow or ONNX based ML-PF training for evalutation in CMSSW
+  - [ ] Create CMSSW EDProducer for ML-PF particles
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
   - [ ] parallelize PFAlgo calls on blocks
   - [ ] GPU-implementation of PFAlgo
-- [ ] reproduce existing PF with machine learning
-  - [x] test element-to-block clustering with ML (Edge classifier, GNN)
-  - [x] test block-to-candidate regression
-  - [ ] end-to-end training of elements to MLPF-candidates using GNN-s
-    - [x] first baseline training converges to multiclass accuracy > 0.96, momentum correlation > 0.9
-    - [ ] improve training speed
-    - [ ] detailed hyperparameter scan
-    - [ ] further reduce bias in end-to-end training (muons, electrons, momentum tails)
-- [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
-  - [x] set up datasets for regression genparticles from elements
-    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
+  - [ ] GPU-implementation of PFBlockAlgo distances
 
 ## Presentations
 
+- Caltech CMS group ML meeting, 2020-04-16: https://indico.cern.ch/event/909688/contributions/3826957/attachments/2021475/3380133/2020_04_15_caltechml.pdf
 - ML4RECO meeting, 2020-04-09: https://indico.cern.ch/event/908361/contributions/3821957/attachments/2017888/3373038/2020_04_08.pdf
 - CMS PF group, 2020-03-13: https://indico.cern.ch/event/897397/contributions/3786360/attachments/2003108/3344534/2020_03_13.pdf
 - ML4RECO meeting, 2020-03-12: https://indico.cern.ch/event/897281/contributions/3784715/attachments/2002839/3343921/2020_03_12.pdf
@@ -39,6 +41,8 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 - Caltech ML meeting, 2019-09-19: https://indico.cern.ch/event/849944/contributions/3572113/attachments/1911520/3158764/2019_09_18_pf_ml.pdf
 - CMS PF group, 2019-09-10: https://indico.cern.ch/event/846887/contributions/3557300/attachments/1904664/3145310/2019_09_10_pf_refactoring.pdf
 - Caltech ML meeting, 2019-09-05: https://indico.cern.ch/event/845349/contributions/3554787/attachments/1902837/3141723/2019_09_05_pfalgo.pdf
+
+In case the above links do not load, the presentations are also mirrored on the following CERNBox link: https://cernbox.cern.ch/index.php/s/GkIRJU1YZuai4ix
 
 ## Other relevant issues, repos, PR-s:
 
