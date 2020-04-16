@@ -1,5 +1,21 @@
 Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
 
+Quickstart on Caltech iBanks:
+
+```
+#get the code
+git clone https://github.com/jpata/particleflow.git
+cd particleflow
+
+#run a small prepared training
+./test/train.sh
+
+...wait...
+
+#look at the output
+ls data/PFNet*/epoch*/
+```
+
 # Overview
 
 - [x] set up datasets and ntuples for detailed PF analysis
@@ -96,7 +112,11 @@ condor_submit genjob.jdl
 The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph data and a normalized data table:
 
 ```bash
-python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph
+#process a single file from ROOT to pickle, saving each event into a separate file
+python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph --save-normalized-table
+
+#produce the pytorch processed dataset, merging 5 pickle files into one pytorch file
+python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-files-merge 5
 ```
 
 ## Contents of the numpy ntuple
@@ -105,18 +125,7 @@ For more details, see [data.ipynb](notebooks/data.ipynb).
 
 ## Model training
 
-Train with GenParticles as the target:
-```
-singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
-odel PFNet6 --lr 0.001 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target gen
-```
-
-
-Train with PFCandidates as the target:
-```
-singularity exec --nv ~jpata/gpuservers/singularity/images/pytorch.simg python3 test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 900 --n_test 100 --m
-odel PFNet6 --lr 0.001 --hidden_dim 128 --n_epochs 100 --l2 0.001 --l3 10.0 --target cand
-```
+Main training code in [train_end2end.py](test/train_end2end.py). See the example script in [train.sh](test/train.sh) on how to run the training.
 
 ## Model validation
 
