@@ -3,19 +3,17 @@ Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://gith
 # Overview
 
 - [x] set up datasets and ntuples for detailed PF analysis
-  - [x] simple python version in [test/ntuplizer.py](test/ntuplizer.py)
   - [x] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
 - [x] reproduce existing PFCandidates with machine learning
-  - [x] test element-to-block clustering with ML (Edge classifier, GNN)
-  - [x] test block-to-candidate regression
   - [x] end-to-end training of elements to MLPF-candidates using GNN-s
 - [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
   - [x] set up datasets for regression genparticles from elements
-    - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
   - [x] Develop a baseline ML-PF model that is able to regress pions and neutral hadrons (currently GravNet-512 with 2D radius-graph)
-  - [ ] Improve ML-PF model performance 
-  - [ ] Implement a simple tensorflow or ONNX based ML-PF training for evalutation in CMSSW
+  - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
+  - [ ] Improve ML-PF model physics performance 
+  - [ ] Improve ML-PF model computational performance 
   - [ ] Create CMSSW EDProducer for ML-PF particles
+    - [ ] Implement a simple tensorflow or ONNX based ML-PF training for evalutation in CMSSW
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
