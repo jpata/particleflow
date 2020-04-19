@@ -14,7 +14,7 @@ print("torch_geometric", torch_geometric.__version__)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from torch_geometric.nn import EdgeConv, MessagePassing, EdgePooling, GATConv, GCNConv, JumpingKnowledge, GraphUNet, DynamicEdgeConv
+from torch_geometric.nn import EdgeConv, MessagePassing, EdgePooling, GATConv, GCNConv, JumpingKnowledge, GraphUNet, DynamicEdgeConv, DenseGCNConv
 from torch_geometric.nn import TopKPooling, SAGPooling, SGConv
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 from torch_scatter import scatter_mean
@@ -220,44 +220,66 @@ def plot_confusion_matrix(cm,
     plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
 
-#Baseline dense models
-class PFDenseNet(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim=4):
-        super(PFDenseNet, self).__init__()
+#Dense GCN
+class PFNet5(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=16, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+        super(PFNet5, self).__init__()
         self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.inputnet = nn.Sequential(
+        act = nn.LeakyReLU
+        self.inp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, len(class_to_id) + output_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, embedding_dim),
+            act(),
         )
-        self.edgenet = nn.Sequential(
-            nn.Linear(1, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
+        self.conv = DenseGCNConv(embedding_dim, embedding_dim)
+
+        self.nn1 = nn.Sequential(
+            nn.Linear(embedding_dim, hidden_dim),
+            act(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, output_dim_id),
+        )
+        self.nn2 = nn.Sequential(
+            nn.Linear(embedding_dim + output_dim_id, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, hidden_dim),
+            act(),
+            nn.Linear(hidden_dim, output_dim_p4),
         )
 
     def forward(self, data):
-        r = self.inputnet(data.x)
-        edges = self.edgenet(data.edge_attr).squeeze(-1)
+        x = data.x
+        batch = data.batch
 
-        n_onehot = len(class_to_id)
-        cand_ids = r[:, :n_onehot]
-        cand_p4 = r[:, n_onehot:]
-        return edges, cand_ids, cand_p4
+        x = self.inp(x)
+
+        xdense, mask = torch_geometric.utils.to_dense_batch(x, data.batch)
+        print(xdense.shape)
+        adj_dense = torch_geometric.utils.to_dense_adj(data.edge_index, data.batch, data.edge_attr)
+        inds = torch.triu_indices(adj_dense.shape[1], adj_dense.shape[1], device=device)
+       
+        adj_dense[:, inds[0], inds[1]] += torch.sqrt((xdense[:, inds[0], 0] - xdense[:, inds[1], 0])**2 + (xdense[:, inds[0], 1] - xdense[:, inds[1], 1])**2)
+
+        x = self.conv(xdense, adj_dense, mask)[mask]
+
+        cand_ids = self.nn1(x)
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn2(torch.cat([cand_ids, x], axis=-1))
+
+        return torch.nn.functional.sigmoid(data.edge_attr), cand_ids, cand_p4
 
 
 #Baseline model with graph attention convolution & edge classification, slow to train 
@@ -508,7 +530,7 @@ class PFNet8(nn.Module):
 
 
 model_classes = {
-    "PFDenseNet": PFDenseNet,
+    "PFNet5": PFNet5,
     "PFNet6": PFNet6,
     "PFNet7": PFNet7,
     "PFNet8": PFNet8,
