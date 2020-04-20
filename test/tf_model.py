@@ -12,6 +12,7 @@ import numpy as np
 from sklearn.metrics import confusion_matrix, accuracy_score
 import pandas
 import time
+from tqdm import tqdm
 
 import keras
 import tensorflow as tf
@@ -26,92 +27,61 @@ class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 from tensorflow.keras.optimizers import Optimizer
 import tensorflow_addons as tfa
 
-def compute_weights(ys):
-    ws = []
-    uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
-    for i in range(len(Xs)):
-        w = np.ones(len(ys[i]), dtype=np.float32)
-        for uv, uc in zip(uniq_vals, uniq_counts):
-            w[ys[i][:, 0]==uv] = len(ys[i])/uc
-        ws += [w]
-    return ws
-
-def load_data(nfiles):
+def load_one_file(fn):
     Xs = []
     ys = []
     ys_cand = []
-    filelist = sorted(glob.glob("/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))
-    print("Found {} input .pkl files".format(len(filelist)))
-    print("loading data from {} files".format(nfiles)) 
-    for ifi, fi in enumerate(filelist[:nfiles]):
-        print("loading {} {}/{}".format(fi, ifi, len(filelist[:nfiles]))) 
-        data = pickle.load(open(fi, "rb"), encoding='iso-8859-1')
-        for event in data:
-            Xelem = event["Xelem"]
-            ygen = event["ygen"]
-            ycand = event["ycand"]
 
-            Xelem[:, 0] = [int(elem_labels.index(i)) for i in Xelem[:, 0]]
-            ygen[:, 0] = [int(class_labels.index(i)) for i in ygen[:, 0]]
-            ycand[:, 0] = [int(class_labels.index(i)) for i in ycand[:, 0]]
-            
-            #inds_sort_energy = np.argsort(Xelem[:, 4])[::-1]
-            #Xelem = Xelem[inds_sort_energy, :]
-            #ygen = ygen[inds_sort_energy, :]
-            #ycand = ycand[inds_sort_energy, :]
+    data = pickle.load(open(fn, "rb"), encoding='iso-8859-1')
+    for event in data:
+        Xelem = event["Xelem"]
+        ygen = event["ygen"]
+        ycand = event["ycand"]
+
+        Xelem[:, 0] = [int(elem_labels.index(i)) for i in Xelem[:, 0]]
+        ygen[:, 0] = [int(class_labels.index(i)) for i in ygen[:, 0]]
+        ycand[:, 0] = [int(class_labels.index(i)) for i in ycand[:, 0]]
         
-            #max_elem = 10000
-            #Xelem = Xelem[:max_elem, :]
-            #ygen = ygen[:max_elem, :]
-            #ycand = ygen[:max_elem, :]
+        #inds_sort_energy = np.argsort(Xelem[:, 4])[::-1]
+        #Xelem = Xelem[inds_sort_energy, :]
+        #ygen = ygen[inds_sort_energy, :]
+        #ycand = ycand[inds_sort_energy, :]
+    
+        #max_elem = 10000
+        #Xelem = Xelem[:max_elem, :]
+        #ygen = ygen[:max_elem, :]
+        #ycand = ygen[:max_elem, :]
 
-            ygen = np.hstack([ygen[:, :1], ygen[:, 2:5]])
-            ycand = np.hstack([ycand[:, :1], ycand[:, 2:5]])
-            Xelem[np.isnan(Xelem)] = 0
-            ygen[np.isnan(ygen)] = 0
-            Xelem[np.abs(Xelem) > 1e4] = 0
-            ygen[np.abs(ygen) > 1e4] = 0
+        ygen = np.hstack([ygen[:, :1], ygen[:, 2:5]])
+        ycand = np.hstack([ycand[:, :1], ycand[:, 2:5]])
+        Xelem[np.isnan(Xelem)] = 0
+        ygen[np.isnan(ygen)] = 0
+        Xelem[np.abs(Xelem) > 1e4] = 0
+        ygen[np.abs(ygen) > 1e4] = 0
 
-            #Xelem = np.pad(Xelem, ((0, max_elem - Xelem.shape[0]), (0,0)))
-            #ygen = np.pad(ygen, ((0, max_elem - ygen.shape[0]), (0,0)))
-            #ycand = np.pad(ycand, ((0, max_elem - ycand.shape[0]), (0,0)))
-            #print(Xelem.shape, ygen.shape, ycand.shape)
+        #Xelem = np.pad(Xelem, ((0, max_elem - Xelem.shape[0]), (0,0)))
+        #ygen = np.pad(ygen, ((0, max_elem - ygen.shape[0]), (0,0)))
+        #ycand = np.pad(ycand, ((0, max_elem - ycand.shape[0]), (0,0)))
+        #print(Xelem.shape, ygen.shape, ycand.shape)
 
-            Xs += [Xelem]
-            ys += [ygen]
-            ys_cand += [ycand]
+        Xs += [Xelem]
+        ys += [ygen]
+        ys_cand += [ycand]
+
+    return Xs[0], ys[0], ys_cand[0]
+
+def load_data(filelist):
+    Xs = []
+    ys = []
+    ys_cand = []
+
+    for ifi, fi in enumerate(filelist):
+        X, y, ycand = load_one_file(fi)
+        Xs += [X]
+        ys += [y]
+        ys_cand += [ycand]
 
     return Xs, ys, ys_cand
-
-def split_test_train(Xs, ys, ws, nepochs, ntrain):
-    Xs_training = Xs[:ntrain]
-    ys_training = ys[:ntrain]
-    ws_training = ws[:ntrain]
-    
-    Xs_testing = Xs[ntrain:]
-    ys_testing = ys[ntrain:]
-    ws_testing = ws[ntrain:]
-
-    ds_training = tf.data.Dataset.from_generator(
-        lambda: [(yield x) for x in zip(Xs_training, ys_training, ws_training)], (tf.float32, tf.float32, tf.float32),
-        output_shapes=(
-            tf.TensorShape((None, Xs_training[0].shape[1])),
-            tf.TensorShape((None, ys_training[0].shape[1])),
-            tf.TensorShape((None,)),
-        ),
-    ).repeat(nepochs)
-    
-    ds_testing = tf.data.Dataset.from_generator(
-        lambda: [(yield x) for x in zip(Xs_testing, ys_testing, ws_testing)], (tf.float32, tf.float32, tf.float32),
-        output_shapes=(
-            tf.TensorShape((None, Xs_training[0].shape[1])),
-            tf.TensorShape((None, ys_training[0].shape[1])),
-            tf.TensorShape((None,)),
-        ),
-    ).repeat(nepochs)
- 
-    return len(Xs_training), len(Xs_testing), ds_training, ds_testing
-
 
 def dist(A,B):
     na = tf.reduce_sum(tf.square(A), 1)
@@ -136,8 +106,8 @@ class Distance(tf.keras.layers.Layer):
 
     def __init__(self, *args, **kwargs):
         super(Distance, self).__init__(*args, **kwargs)
-        self.a = tf.Variable(0.1, trainable=True)
-        self.b = tf.Variable(-5.0, trainable=True)
+        self.a = tf.Variable(0.1, trainable=True, name="pf_net/distance/a")
+        self.b = tf.Variable(-5.0, trainable=True, name="pf_net/distance/b")
 
     def call(self, inputs):
         
@@ -195,7 +165,7 @@ class PFNet(tf.keras.Model):
         #self.layer_momentum2_d = tf.keras.layers.Dropout(0.2)
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         #self.layer_momentum3_d = tf.keras.layers.Dropout(0.2)
-        self.layer_momentum = tf.keras.layers.Dense(3, activation="tanh", name="out_momentum")
+        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
         
     def call(self, inputs, training=False):
         x = self.enc(inputs)
@@ -230,15 +200,15 @@ class PFNet(tf.keras.Model):
         out_id = tf.argmax(out_id_logits, axis=-1)
         #msk_good = tf.cast(out_id != 0, tf.float32)
 
-        out_momentum_eta = inputs[:, 2] + inputs[:, 2]*pred_corr[:, 0]
-        new_phi = inputs[:, 3] + inputs[:, 3]*pred_corr[:, 1]
-        out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
-        out_momentum_E = inputs[:, 4] + inputs[:, 4]*pred_corr[:, 2]
-        #out_momentum_eta = (inputs[:, 2] + pred_corr[:, 0])
-        #new_phi = (inputs[:, 3] + pred_corr[:, 1])
+        #out_momentum_eta = inputs[:, 2] + inputs[:, 2]*pred_corr[:, 0]
+        #new_phi = inputs[:, 3] + inputs[:, 3]*pred_corr[:, 1]
         #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
-        #out_momentum_phi = new_phi
-        out_momentum_E = (inputs[:, 4] + pred_corr[:, 2])
+        #out_momentum_E = inputs[:, 4] + inputs[:, 4]*pred_corr[:, 2]
+
+        out_momentum_eta = (inputs[:, 2] + pred_corr[:, 0])
+        new_phi = (inputs[:, 3] + pred_corr[:, 1])
+        out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
+        out_momentum_E = pred_corr[:, 2]
 
         out_momentum = tf.stack([out_momentum_eta, out_momentum_phi, out_momentum_E], axis=-1)
         ret = tf.concat([out_id_logits, out_momentum], axis=-1)
@@ -264,13 +234,13 @@ def my_loss(y_true, y_pred):
     true_id, true_momentum = separate_truth(y_true)
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels)) 
-    l1 = 1000.0*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l1 = 100.0*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
     msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
-    l2_0 = 10*tf.math.pow(true_momentum[:, 0] - pred_momentum[:, 0], 2)
-    l2_1 = 100*tf.math.pow(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 2)
+    l2_0 = tf.math.pow(true_momentum[:, 0] - pred_momentum[:, 0], 2)
+    l2_1 = tf.math.pow(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 2)
     l2_2 = tf.math.pow(true_momentum[:, 2] - pred_momentum[:, 2], 2)
     #tf.print("l1", tf.reduce_mean(l1))
     #tf.print("l2_0", tf.reduce_mean(l2_0))
@@ -301,8 +271,9 @@ def eta_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_momentum = separate_truth(y_true)
 
-    msk = ((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))
-    return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 0], true_momentum[:, 0])[msk]) 
+    msk = (((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))) & (true_momentum[:, 0]!=0.0)
+    #return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 0], true_momentum[:, 0])[msk]) 
+    return tf.keras.losses.mse(pred_momentum[:, 0][msk], true_momentum[:, 0][msk])
 
 #@tf.function
 def phi_resolution(y_true, y_pred):
@@ -310,8 +281,9 @@ def phi_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_momentum = separate_truth(y_true)
 
-    msk = ((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))
-    return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 1], true_momentum[:, 1])[msk]) 
+    msk = (((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))) & (true_momentum[:, 1]!=0.0)
+    #return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 1], true_momentum[:, 1])[msk]) 
+    return tf.keras.losses.mse(pred_momentum[:, 1][msk], true_momentum[:, 1][msk])
 
 #@tf.function(experimental_relax_shapes=True)
 def energy_resolution(y_true, y_pred):
@@ -319,8 +291,9 @@ def energy_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_momentum = separate_truth(y_true)
 
-    msk = ((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))
-    return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 2], true_momentum[:, 2])[msk]) 
+    msk = (((true_id[:, 0]==1) & (pred_id==1)) | ((true_id[:, 0]==10) & (pred_id==10))) & (true_momentum[:, 2]!=0.0)
+    #return tf.math.reduce_std(tf.math.divide(pred_momentum[:, 2], true_momentum[:, 2])[msk]) 
+    return tf.keras.losses.mse(pred_momentum[:, 2][msk], true_momentum[:, 2][msk])
 
 def get_unique_run():
     previous_runs = os.listdir('experiments')
@@ -332,7 +305,7 @@ def get_unique_run():
 
 def loss(model, inputs, targets, weights, epoch, training):
     pred = model(inputs, training=training)
-    l = weights*my_loss(targets, pred, epoch)
+    l = weights*my_loss(targets, pred)
     return tf.reduce_mean(l)
 
 def grad(model, inputs, targets, weights, epoch):
@@ -367,7 +340,7 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
             logs["val_" + metric] = []
 
         nsamp = 0 
-        for Xelem, ygen, ws in ds_training:
+        for Xelem, ygen, ws in tqdm(ds_training):
             ibatch += 1
             loss_value, grads = grad(model, Xelem, ygen, ws, iepoch)
             for igrad, gv in enumerate(grads):
@@ -384,15 +357,15 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
             for metric, func in metrics.items():        
                 logs[metric] += [func(ygen, ypred).numpy()]
             nsamp += 1 
+        t1 = time.time()
 
-        for Xelem, ygen, ws in ds_testing:
+        for Xelem, ygen, ws in tqdm(ds_testing):
             ypred = model(Xelem)
             for metric, func in metrics.items():        
                 logs["val_" + metric] += [func(ygen, ypred).numpy()]
        
             loss_value = loss(model, Xelem, ygen, ws, iepoch, False)
             logs["val_loss"] += [loss_value.numpy()]
-            nsamp += 1 
 
         for k in logs.keys():
             logs[k] = np.mean(logs[k])
@@ -400,7 +373,6 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
         #for k, v in logs.items():
         #    tf.summary.scalar('epoch_{}'.format(k), v, step=iepoch)
 
-        t1 = time.time()
         s = ""
         for metric in sorted(metrics.keys()):
             s += "{}={:.2f}/{:.2f} ".format(metric, logs[metric], logs["val_" + metric]) 
@@ -425,56 +397,23 @@ def parse_args():
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
+    parser.add_argument("--custom-training-loop", action="store_true", help="Run a custom training loop")
     #parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     #parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     args = parser.parse_args()
     return args
 
-if __name__ == "__main__":
-    #tf.config.experimental_run_functions_eagerly(True)
-
-    args = parse_args()
-
-    Xs, ys, ys_cand = load_data(args.ntrain + args.ntest)
-
-    model = PFNet(hidden_dim=args.nhidden)
-    model(Xs[0])
-
-    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
-
-    outdir = 'experiments/run_{:02}'.format(get_unique_run())
-    tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=10, write_graph=True, write_images=False,
-        update_freq='epoch'
-    )
-    tb.set_model(model)
-
-    model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
-
-    if args.target == "gen":
-        ws = compute_weights(ys)
-        ntrain, ntest, ds_training, ds_testing = split_test_train(Xs, ys, ws, args.nepochs, args.ntrain)
-    elif args.target == "cand":
-        ws = compute_weights(ys_cand)
-        ntrain, ntest, ds_training, ds_testing = split_test_train(Xs, ys_cand, ws, args.nepochs, args.ntrain)
-
-    #custom_training_loop(model, ds_training, ds_testing, nepochs, callbacks=[tb])
-    
-    ret = model.fit(ds_training,
-        validation_data=ds_testing, epochs=args.nepochs,
-        steps_per_epoch=args.ntrain, validation_steps=args.ntest, batch_size=None, workers=None, verbose=True, callbacks=[tb]
-    )
-
-#    tf.keras.models.save_model(model, "model.tf", save_format="tf")
-#    model = tf.keras.models.load_model("model.tf", compile=False)
-#    ntrain = 0
+def prepare_df(epoch, model, data, outdir):
+    tf.print("\nprepare_df")
 
     dfs = []
-    for i in range(args.ntrain, len(Xs)):
-        pred = model(Xs[i])
+    for iev, d in enumerate(data):
+        tf.print(".", end="")
+        X, y, w = d
+        pred = model(X)
         pred_id_onehot, pred_momentum = separate_prediction(pred)
         pred_id = np.argmax(pred_id_onehot, axis=-1)
-        true_id, true_momentum = separate_truth(ys[i])
+        true_id, true_momentum = separate_truth(y)
         true_id = true_id.numpy()
         
         df = pandas.DataFrame()
@@ -483,21 +422,91 @@ if __name__ == "__main__":
         df["pred_phi"] = np.array(pred_momentum[:, 1].numpy(), dtype=np.float64)
         df["pred_e"] = np.array(pred_momentum[:, 2].numpy(), dtype=np.float64)
 
-        df["gen_pid"] = np.array([int(class_labels[p]) for p in true_id[:, 0]])
-        df["gen_eta"] = np.array(true_momentum[:, 0], dtype=np.float64)
-        df["gen_phi"] = np.array(true_momentum[:, 1], dtype=np.float64)
-        df["gen_e"] = np.array(true_momentum[:, 2], dtype=np.float64)
-        
-        df["cand_pid"] = np.array([int(class_labels[int(p)]) for p in ys_cand[i][:, 0]])
-        df["cand_eta"] = np.array(ys_cand[i][:, 1], dtype=np.float64)
-        df["cand_phi"] = np.array(ys_cand[i][:, 2], dtype=np.float64)
-        df["cand_e"] = np.array(ys_cand[i][:, 3], dtype=np.float64)
+        df["target_pid"] = np.array([int(class_labels[p]) for p in true_id[:, 0]])
+        df["target_eta"] = np.array(true_momentum[:, 0], dtype=np.float64)
+        df["target_phi"] = np.array(true_momentum[:, 1], dtype=np.float64)
+        df["target_e"] = np.array(true_momentum[:, 2], dtype=np.float64)
 
-        df["iev"] = i
+        df["iev"] = iev
         dfs += [df]
 
     df = pandas.concat(dfs, ignore_index=True)
-    df.to_pickle(outdir + "/df.pkl.bz2")
+    fn = outdir + "/df_{}.pkl.bz2".format(epoch)
+    df.to_pickle(fn)
+    tf.print("\nprepare_df done", fn)
+
+class DataFrameCallback(tf.keras.callbacks.Callback):
+    def __init__(self, dataset, outdir, every=2):
+        self.dataset = dataset
+        self.outdir = outdir
+        self.every = every
+
+    def on_epoch_end(self, epoch, logs):
+        if epoch > 0 and epoch%self.every == 0:
+            prepare_df(epoch, self.model, self.dataset, self.outdir)
+ 
+if __name__ == "__main__":
+    #tf.config.experimental_run_functions_eagerly(True)
+
+    args = parse_args()
+
+    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:args.ntrain+args.ntest]
+    X, y, ycand = load_one_file(filelist[0])
+
+    from tf_data import _parse_tfr_element, NUM_EVENTS_PER_TFR
+    tfr_files = sorted(glob.glob("test_*.tfrecords"))
+    dataset = tf.data.TFRecordDataset(tfr_files)
+
+    strategy = tf.distribute.MirroredStrategy()
+    ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    
+    N = 0
+    for d in ds_train:
+        N += 1
+    print("train", N)
+
+    N = 0
+    for d in ds_test:
+        N += 1
+    print("test", N)
+     
+    if not args.custom_training_loop:
+        ds_train_r = ds_train.repeat(args.nepochs)
+        ds_test_r = ds_test.repeat(args.nepochs)
+
+    model = PFNet(hidden_dim=args.nhidden)
+    model(X)
+
+    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+
+    outdir = 'experiments/run_{:02}'.format(get_unique_run())
+    print(outdir)
+    callbacks = []
+    tb = tf.keras.callbacks.TensorBoard(
+        log_dir=outdir, histogram_freq=10, write_graph=True, write_images=False,
+        update_freq='epoch'
+    )
+    tb.set_model(model)
+    callbacks += [tb]
+
+    prepare_df_cb = DataFrameCallback(ds_test, outdir)
+    prepare_df_cb.set_model(model)
+    callbacks += [prepare_df_cb]
+
+    if args.custom_training_loop:
+        custom_training_loop(model, ds_train, ds_test, args.nepochs, callbacks=callbacks)
+    else: 
+        model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+        ret = model.fit(ds_train_r,
+            validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+            verbose=True, callbacks=callbacks
+        )
+
+#    tf.keras.models.save_model(model, "model.tf", save_format="tf")
+#    model = tf.keras.models.load_model("model.tf", compile=False)
+#    ntrain = 0
+
     #Print some stats for each target particle type 
     for pid in [211, -211, 130, 22, -11, 11, 13, -13, 1, 2]:
         if args.target == "gen":

@@ -10,5 +10,14 @@
 #  --target gen \
 #  --dropout 0.2
 
+#singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+#  python3 test/tf_data.py
+
 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
-  python3 test/tf_model.py --target cand --ntrain 800 --ntest 200 --nepochs 100
+  python3 test/tf_model.py --target cand --ntrain 500 --ntest 500 --nepochs 100 --lr 0.0001 --custom-training-loop
+
+#singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+#  python3 test/tf_model.py --target cand --ntrain 2500 --ntest 500 --nepochs 100 --lr 0.00001
+
+#singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+#  python3 test/tf_model.py --target cand --ntrain 15000 --ntest 5000 --nepochs 20 --lr 0.00001 --generator
