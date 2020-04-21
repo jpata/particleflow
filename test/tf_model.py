@@ -1,11 +1,15 @@
 import os
 import sys
 os.environ["KERAS_BACKEND"] = "tensorflow"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 import glob
-import setGPU
 
+try:
+    import setGPU
+except ImportError:
+    print("Coult not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
+    pass
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
@@ -207,8 +211,9 @@ class PFNet(tf.keras.Model):
 
         out_momentum_eta = (inputs[:, 2] + pred_corr[:, 0])
         new_phi = (inputs[:, 3] + pred_corr[:, 1])
-        out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
-        out_momentum_E = pred_corr[:, 2]
+        #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
+        out_momentum_phi = new_phi
+        out_momentum_E = inputs[:, 4] + pred_corr[:, 2]
 
         out_momentum = tf.stack([out_momentum_eta, out_momentum_phi, out_momentum_E], axis=-1)
         ret = tf.concat([out_id_logits, out_momentum], axis=-1)
@@ -314,7 +319,7 @@ def grad(model, inputs, targets, weights, epoch):
         loss_value = loss(model, inputs, targets, weights, epoch_tf, training=True)
         return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
-def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[]):
+def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[], num_accumulate=5):
 
     accum_vars = [tf.Variable(tf.zeros_like(tv.initialized_value()), trainable=False) for tv in model.trainable_variables]
 
@@ -325,8 +330,6 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
         "eta_resolution": eta_resolution,
     }
 
-    max_dim_X = 10000
- 
     for iepoch in range(num_epochs):
         
         ibatch = 0
@@ -347,8 +350,8 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
                 accum_vars[igrad].assign_add(gv)
             
             logs["loss"] += [loss_value.numpy()]
-            if ibatch == 5:
-                opt.apply_gradients([(accum_vars[igrad] / 5.0, model.trainable_variables[igrad]) for igrad in range(len(accum_vars))])
+            if ibatch == num_accumulate:
+                opt.apply_gradients([(accum_vars[igrad] / num_accumulate, model.trainable_variables[igrad]) for igrad in range(len(accum_vars))])
                 ibatch = 0
                 for igrad in range(len(accum_vars)):
                     accum_vars[igrad].assign(tf.zeros_like(accum_vars[igrad]))
@@ -390,11 +393,12 @@ def parse_args():
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
-    #parser.add_argument("--nplot", type=int, default=10, help="make plots every iterations")
+    parser.add_argument("--nplot", type=int, default=5, help="make plots every iterations")
     parser.add_argument("--nhidden", type=int, default=512, help="hidden dimension")
     #parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     #parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
+    parser.add_argument("--name", type=str, default=None, help="where to store the output")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
     parser.add_argument("--custom-training-loop", action="store_true", help="Run a custom training loop")
@@ -408,7 +412,8 @@ def prepare_df(epoch, model, data, outdir):
 
     dfs = []
     for iev, d in enumerate(data):
-        tf.print(".", end="")
+        if iev%50==0:
+            tf.print(".", end="")
         X, y, w = d
         pred = model(X)
         pred_id_onehot, pred_momentum = separate_prediction(pred)
@@ -431,18 +436,18 @@ def prepare_df(epoch, model, data, outdir):
         dfs += [df]
 
     df = pandas.concat(dfs, ignore_index=True)
-    fn = outdir + "/df_{}.pkl.bz2".format(epoch)
+    fn = outdir + "/df_{}.pkl.bz2".format(epoch + 1)
     df.to_pickle(fn)
     tf.print("\nprepare_df done", fn)
 
 class DataFrameCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset, outdir, every=2):
+    def __init__(self, dataset, outdir, freq=5):
         self.dataset = dataset
         self.outdir = outdir
-        self.every = every
+        self.freq = freq
 
     def on_epoch_end(self, epoch, logs):
-        if epoch > 0 and epoch%self.every == 0:
+        if epoch > 0 and (epoch + 1)%self.freq == 0:
             prepare_df(epoch, self.model, self.dataset, self.outdir)
  
 if __name__ == "__main__":
@@ -450,37 +455,42 @@ if __name__ == "__main__":
 
     args = parse_args()
 
+    num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+    strategy = None
+    if num_gpus > 1:
+        strategy = tf.distribute.MirroredStrategy()
+
     filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:args.ntrain+args.ntest]
     X, y, ycand = load_one_file(filelist[0])
 
     from tf_data import _parse_tfr_element, NUM_EVENTS_PER_TFR
-    tfr_files = sorted(glob.glob("test_*.tfrecords"))
+    tfr_files = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/chunk_*.tfrecords"))
     dataset = tf.data.TFRecordDataset(tfr_files)
 
-    strategy = tf.distribute.MirroredStrategy()
     ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    
-    N = 0
-    for d in ds_train:
-        N += 1
-    print("train", N)
-
-    N = 0
-    for d in ds_test:
-        N += 1
-    print("test", N)
      
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
         ds_test_r = ds_test.repeat(args.nepochs)
 
-    model = PFNet(hidden_dim=args.nhidden)
-    model(X)
+    if strategy:
+        with strategy.scope():
+            opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+            model = PFNet(hidden_dim=args.nhidden)
+            model(X)
+    else:
+       opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+       model = PFNet(hidden_dim=args.nhidden)
+       model(X)
 
-    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+    if args.name is None:
+        args.name =  'run_{:02}'.format(get_unique_run())
+    outdir = 'experiments/' + args.name
+    if os.path.isdir(outdir):
+        print("Output directory exists: {}".format(outdir), file=sys.stderr)
+        sys.exit(1)
 
-    outdir = 'experiments/run_{:02}'.format(get_unique_run())
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
@@ -490,18 +500,29 @@ if __name__ == "__main__":
     tb.set_model(model)
     callbacks += [tb]
 
-    prepare_df_cb = DataFrameCallback(ds_test, outdir)
+    prepare_df_cb = DataFrameCallback(ds_test, outdir, freq=args.nplot)
     prepare_df_cb.set_model(model)
     callbacks += [prepare_df_cb]
 
     if args.custom_training_loop:
+        assert(num_gpus == 1)
+        assert(strategy is None)
         custom_training_loop(model, ds_train, ds_test, args.nepochs, callbacks=callbacks)
-    else: 
-        model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
-        ret = model.fit(ds_train_r,
-            validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
-            verbose=True, callbacks=callbacks
-        )
+    else:
+        if strategy: 
+            with strategy.scope():
+                model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+                ret = model.fit(ds_train_r,
+                    validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+                    verbose=True, callbacks=callbacks
+                )
+        else:
+           model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+           ret = model.fit(ds_train_r,
+               validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+               verbose=True, callbacks=callbacks
+           )
+
 
 #    tf.keras.models.save_model(model, "model.tf", save_format="tf")
 #    model = tf.keras.models.load_model("model.tf", compile=False)
