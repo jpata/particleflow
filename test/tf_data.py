@@ -48,6 +48,10 @@ def compute_weights(ys):
         w = np.ones(len(ys[i]), dtype=np.float32)
         for uv, uc in zip(uniq_vals, uniq_counts):
             w[ys[i][:, 0]==uv] = len(ys[i])/uc
+
+        #normalize elements with no candidate to sum to the same weight as all the elements with a candidate together
+        ws[ys[i][:, 0]==0] *= len(uniq_vals) - 1
+
         ws += [w]
     return ws
 
@@ -62,7 +66,7 @@ def serialize_X_y_w(writer, X, y, w):
 
 def serialize_chunk(args):
     files, ichunk = args
-    writer = tf.io.TFRecordWriter("test_{}.tfrecords".format(ichunk))
+    writer = tf.io.TFRecordWriter("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/chunk_{}.tfrecords".format(ichunk))
     Xs = []
     ys = []
     ws = []
@@ -87,7 +91,7 @@ def serialize_chunk(args):
 if __name__ == "__main__":
     tf.config.experimental_run_functions_eagerly(True)
 
-    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:1000]
+    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:3000]
     args = []
     for ichunk, files in enumerate(chunks(filelist, NUM_EVENTS_PER_TFR)):
         args += [(files, ichunk)]
