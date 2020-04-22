@@ -94,7 +94,8 @@ def dist(A,B):
  
     na = tf.reshape(na, [-1, 1])
     nb = tf.reshape(nb, [1, -1])
-    D = tf.sqrt(tf.maximum(na - 2*tf.linalg.matmul(A, B, False, True) + nb, 0.0))
+    Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, False, True) + nb, 1e-3, 1e3)
+    D = tf.sqrt(Dsq)
     return D
 
 class InputEncoding(tf.keras.layers.Layer):
@@ -119,11 +120,12 @@ class Distance(tf.keras.layers.Layer):
         D =  dist(inputs[:, :3], inputs[:, :3])
         
         #closer nodes have higher weight, could also consider exp(-D) or such here
-        D = tf.math.abs(tf.math.divide_no_nan(1.0, D + self.a))
+        D = tf.math.abs(tf.math.divide_no_nan(1.0, tf.clip_by_value(D + self.a, 0.001, 1e3)))
         #D = tf.math.exp(-tf.abs(self.a)*D)
         
         #turn edges on or off based on activation with an arbitrary shift parameter
         D = tf.clip_by_value(tf.nn.relu(D + self.b), 0.0, 2.0)
+        #tf.print("D=", tf.reduce_sum(D))
 
         #import pdb;pdb.set_trace()
         #rowsum = tf.reduce_sum(D, axis=0) 
@@ -204,6 +206,7 @@ class PFNet(tf.keras.Model):
         x = self.layer_input3(x)
         
         dm = self.layer_dist(x)
+        #tf.debugging.check_numerics(dm, "dm")
 
         x = self.layer_conv1(x, dm)
         #x = self.layer_conv1_d(x, training)
@@ -213,7 +216,7 @@ class PFNet(tf.keras.Model):
         #x = self.layer_conv3_d(x, training)
         #x = self.layer_conv4(x, dm)
         #x = self.layer_conv4_d(x, training)
-        tf.debugging.check_numerics(x, "x")
+        #tf.debugging.check_numerics(x, "x")
         
         a = self.layer_id1(x)
         #a = self.layer_id1_d(a, training)
@@ -222,7 +225,7 @@ class PFNet(tf.keras.Model):
         a = self.layer_id3(a)
         #a = self.layer_id3_d(a, training)
         out_id_logits = self.layer_id(a)
-        tf.debugging.check_numerics(out_id_logits, "out_id_logits")
+        #tf.debugging.check_numerics(out_id_logits, "out_id_logits")
         
         x = tf.concat([x, tf.nn.selu(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
@@ -242,7 +245,7 @@ class PFNet(tf.keras.Model):
         #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
         #out_momentum_E = inputs[:, 4] + inputs[:, 4]*pred_corr[:, 2]
 
-        tf.debugging.check_numerics(pred_corr, "pred_corr")
+        #tf.debugging.check_numerics(pred_corr, "pred_corr")
         out_momentum_eta = inputs[:, 2] + pred_corr[:, 0]
         new_phi = inputs[:, 3] + pred_corr[:, 1]
         #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
@@ -303,10 +306,10 @@ def my_loss_full(y_true, y_pred):
 
     #l3 = 0.001*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
 
-    tf.debugging.check_numerics(l1, "l1")
-    tf.debugging.check_numerics(l2_0, "l2_0")
-    tf.debugging.check_numerics(l2_1, "l2_1")
-    tf.debugging.check_numerics(l2_2, "l2_2")
+    #tf.debugging.check_numerics(l1, "l1")
+    #tf.debugging.check_numerics(l2_0, "l2_0")
+    #tf.debugging.check_numerics(l2_1, "l2_1")
+    #tf.debugging.check_numerics(l2_2, "l2_2")
 
     #tf.print("l1", tf.reduce_mean(l1))
     #tf.print("l2_0", tf.reduce_mean(l2_0))
@@ -317,7 +320,7 @@ def my_loss_full(y_true, y_pred):
 
     #tf.print("\n")
     l = l1 + l2
-    return l
+    return 1000.0*l
 
 #@tf.function
 def cls_accuracy(y_true, y_pred):
@@ -538,17 +541,19 @@ class DataFrameCallback(tf.keras.callbacks.Callback):
             prepare_df(epoch, self.model, self.dataset, self.outdir)
  
 if __name__ == "__main__":
-    tf.debugging.enable_check_numerics()
+    #tf.debugging.enable_check_numerics()
     #tf.config.experimental_run_functions_eagerly(True)
 
     args = parse_args()
-    if args.load:
-        model = tf.keras.models.load_model(args.load, compile=False)
 
-    #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
+    #datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+    if num_gpus > 1:
+        strategy = tf.distribute.MirroredStrategy()
+    else:
+        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
 
     filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
     X, y, ycand = load_one_file(filelist[0])
@@ -564,10 +569,10 @@ if __name__ == "__main__":
         ds_train_r = ds_train.repeat(args.nepochs)
         ds_test_r = ds_test.repeat(args.nepochs)
 
-    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
-    if not args.load:
+    with strategy.scope():
+        opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
         model = PFNet(hidden_dim=args.nhidden)
-    model(X)
+        model(X)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
@@ -585,22 +590,36 @@ if __name__ == "__main__":
     tb.set_model(model)
     callbacks += [tb]
 
-    prepare_df_cb = DataFrameCallback(ds_test, outdir, freq=args.nplot)
-    prepare_df_cb.set_model(model)
-    callbacks += [prepare_df_cb]
+    if args.nplot > 0:
+        prepare_df_cb = DataFrameCallback(ds_test, outdir, freq=args.nplot)
+        prepare_df_cb.set_model(model)
+        callbacks += [prepare_df_cb]
 
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
+
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=outdir + "/weights.{epoch:02d}-{val_loss:.2f}.hdf5",
+        save_weights_only=True,
+        verbose=0
+    )
+    callbacks += [cp_callback]
 
     if args.custom_training_loop:
         assert(num_gpus == 1)
         custom_training_loop(opt, model, ds_train, ds_test, args.ntrain, args.ntest, args.nepochs, callbacks=callbacks)
     else:
-        model.compile(optimizer=opt, loss=my_loss_full, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
-        ret = model.fit(ds_train_r,
-            validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
-            verbose=True, callbacks=callbacks
-        )
+        with strategy.scope():
+            model.compile(optimizer=opt, loss=my_loss_full, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+            if args.load:
+                model.load_weights(args.load)
+            if args.nepochs > 0:
+                ret = model.fit(ds_train_r,
+                    validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+                    verbose=True, callbacks=callbacks
+                )
+
+    prepare_df(args.nepochs, model, ds_test, outdir)
 
 #    tf.keras.models.save_model(model, "model.tf", save_format="tf")
 #    model = tf.keras.models.load_model("model.tf", compile=False)
