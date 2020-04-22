@@ -1,11 +1,20 @@
 import numpy as np
 import glob
 import multiprocessing
+import os
 
 import tensorflow as tf
 from tf_model import load_one_file
 
+#save this many events in one TFRecord file
 NUM_EVENTS_PER_TFR = 100
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
+    args = parser.parse_args()
+    return args
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -41,20 +50,6 @@ def _parse_tfr_element(element):
 
     return arr_X, arr_y, arr_w
 
-def compute_weights(ys):
-    ws = []
-    uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
-    for i in range(len(ys)):
-        w = np.ones(len(ys[i]), dtype=np.float32)
-        for uv, uc in zip(uniq_vals, uniq_counts):
-            w[ys[i][:, 0]==uv] = len(ys[i])/uc
-
-        #normalize elements with no candidate to sum to the same weight as all the elements with a candidate together
-        ws[ys[i][:, 0]==0] *= len(uniq_vals) - 1
-
-        ws += [w]
-    return ws
-
 def serialize_X_y_w(writer, X, y, w):
     feature = {
         'X': _bytes_feature(tf.io.serialize_tensor(X)),
@@ -65,8 +60,9 @@ def serialize_X_y_w(writer, X, y, w):
     writer.write(sample.SerializeToString())
 
 def serialize_chunk(args):
-    files, ichunk = args
-    writer = tf.io.TFRecordWriter("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/chunk_{}.tfrecords".format(ichunk))
+    path, files, ichunk, target = args
+    out_filename = os.path.join(path, "chunk_{}.tfrecords".format(ichunk))
+    writer = tf.io.TFRecordWriter(out_filename)
     Xs = []
     ys = []
     ws = []
@@ -74,13 +70,23 @@ def serialize_chunk(args):
     for fi in files:
         X, y, ycand = load_one_file(fi)
         Xs += [X]
-        ys += [ycand]
+        if target == "cand":
+            ys += [ycand]
+        elif target == "gen":
+            ys += [ycand]
+        else:
+            raise Exception("Unknown target")
 
     uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
     for i in range(len(ys)):
         w = np.ones(len(ys[i]), dtype=np.float32)
         for uv, uc in zip(uniq_vals, uniq_counts):
-            w[ys[i][:, 0]==uv] = len(ys[i])/uc
+            w[ys[i][:, 0]==uv] = 1.0/uc
+        ids = ys[i][:, 0]
+
+        w[ids==0] *= w[ids!=0].sum()/w[ids==0].sum()
+        #w *= len(ys[i])
+
         ws += [w]
 
     for X, y, w in zip(Xs, ys, ws):
@@ -89,16 +95,22 @@ def serialize_chunk(args):
     writer.close()
 
 if __name__ == "__main__":
+    args = parse_args()
     tf.config.experimental_run_functions_eagerly(True)
 
-    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:3000]
-    args = []
-    for ichunk, files in enumerate(chunks(filelist, NUM_EVENTS_PER_TFR)):
-        args += [(files, ichunk)]
+    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))
+    path = "data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/{}".format(args.target)
 
+    if not os.path.isdir(path):
+        os.makedirs(path)
+
+    pars = []
+    for ichunk, files in enumerate(chunks(filelist, NUM_EVENTS_PER_TFR)):
+        pars += [(path, files, ichunk, args.target)]
+    print(len(pars))
     pool = multiprocessing.Pool(20)
-    pool.map(serialize_chunk, args)
-    
+    pool.map(serialize_chunk, pars)
+ 
     #tfr_dataset = tf.data.TFRecordDataset(glob.glob("test_*.tfrecords"))
     #dataset = tfr_dataset.map(_parse_tfr_element)
     #ds_train = dataset.take(15000)
