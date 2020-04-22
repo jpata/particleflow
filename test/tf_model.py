@@ -6,7 +6,8 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 import glob
 
 try:
-    import setGPU
+    if not ("CUDA_VISIBLE_DEVICES" in os.environ):
+        import setGPU
 except ImportError:
     print("Coult not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
     pass
@@ -88,12 +89,12 @@ def load_data(filelist):
     return Xs, ys, ys_cand
 
 def dist(A,B):
-    na = tf.reduce_sum(tf.square(A), 1)
-    nb = tf.reduce_sum(tf.square(B), 1)
-
+    na = tf.reduce_sum(tf.square(A), -1)
+    nb = tf.reduce_sum(tf.square(B), -1)
+ 
     na = tf.reshape(na, [-1, 1])
     nb = tf.reshape(nb, [1, -1])
-    D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 0.0))
+    D = tf.sqrt(tf.maximum(na - 2*tf.linalg.matmul(A, B, False, True) + nb, 0.0))
     return D
 
 class InputEncoding(tf.keras.layers.Layer):
@@ -105,7 +106,7 @@ class InputEncoding(tf.keras.layers.Layer):
         Xid = tf.one_hot(tf.cast(X[:, 0], tf.int32), self.num_input_classes)
         Xprop = X[:, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
-    
+
 class Distance(tf.keras.layers.Layer):
 
     def __init__(self, *args, **kwargs):
@@ -114,18 +115,30 @@ class Distance(tf.keras.layers.Layer):
         self.b = tf.Variable(-5.0, trainable=True, name="pf_net/distance/b")
 
     def call(self, inputs):
-        
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
         D =  dist(inputs[:, :3], inputs[:, :3])
         
         #closer nodes have higher weight, could also consider exp(-D) or such here
-        D = tf.math.divide_no_nan(1.0, D)
+        D = tf.math.abs(tf.math.divide_no_nan(1.0, D + self.a))
+        #D = tf.math.exp(-tf.abs(self.a)*D)
         
         #turn edges on or off based on activation with an arbitrary shift parameter
-        D = self.a*tf.keras.activations.sigmoid(D + self.b)
-        
+        D = tf.clip_by_value(tf.nn.relu(D + self.b), 0.0, 2.0)
+
+        #import pdb;pdb.set_trace()
+        #rowsum = tf.reduce_sum(D, axis=0) 
+        #colsum = tf.reduce_sum(D, axis=1)
+        #deg = tf.expand_dims(tf.sqrt(rowsum+colsum), axis=-1)
+        #D = D - deg
+
+        #D = tf.nn.sigmoid(self.a*D + self.b)
+        #tf.print(tf.reduce_sum(D)/tf.cast(tf.shape(D)[0]*tf.shape(D)[1], tf.float32))
+
         #keep only upper triangular matrix (unidirectional edges)
-        D = tf.linalg.band_part(D, 0, -1)
+        #D = tf.linalg.band_part(D, 0, -1)
+
+        #spD = tf.sparse.from_dense(D)
+
         return D
     
 class GraphConv(tf.keras.layers.Dense):
@@ -135,25 +148,38 @@ class GraphConv(tf.keras.layers.Dense):
     def call(self, inputs, adj):
         W = self.weights[0]
         b = self.weights[1]
-        support = tf.matmul(inputs, W) + b
-        out = tf.matmul(adj, support)
+
+        #rowsum = tf.reduce_sum(adj, axis=-1) 
+        #colsum = tf.reduce_sum(adj, axis=-2)
+        #deg = tf.expand_dims(tf.sqrt(rowsum+colsum), axis=-1)
+
+        support = (tf.linalg.matmul(inputs, W) + b)
+
+        #out = tf.sparse.sparse_dense_matmul(adj, support)
+        out = tf.linalg.matmul(adj, support)
+
         return self.activation(out)
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.keras.activations.selu, hidden_dim=256):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256):
         super(PFNet, self).__init__()
         self.inp = tf.keras.Input(shape=(None,))
         self.enc = InputEncoding(len(elem_labels))
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
-        #self.layer_input1_d = tf.keras.layers.Dropout(0.2)
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
-        #self.layer_input2_d = tf.keras.layers.Dropout(0.2)
         self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3")
-        #self.layer_input3_d = tf.keras.layers.Dropout(0.2)
         
         self.layer_dist = Distance(name="distance")
-        self.layer_conv = GraphConv(hidden_dim, activation=activation, name="conv")
+
+        self.layer_conv1 = GraphConv(hidden_dim, activation=activation, name="conv1")
+        #self.layer_conv1_d = tf.keras.layers.Dropout(0.2)
+        self.layer_conv2 = GraphConv(hidden_dim, activation=activation, name="conv2")
+        #self.layer_conv2_d = tf.keras.layers.Dropout(0.2)
+        #self.layer_conv3 = GraphConv(hidden_dim, activation=activation, name="conv3")
+        #self.layer_conv3_d = tf.keras.layers.Dropout(0.2)
+        #self.layer_conv4 = GraphConv(hidden_dim, activation=activation, name="conv4")
+        #self.layer_conv4_d = tf.keras.layers.Dropout(0.2)
         
         self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
         #self.layer_id1_d = tf.keras.layers.Dropout(0.2)
@@ -161,7 +187,7 @@ class PFNet(tf.keras.Model):
         #self.layer_id2_d = tf.keras.layers.Dropout(0.2)
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
         #self.layer_id3_d = tf.keras.layers.Dropout(0.2)
-        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="relu", name="out_id")
         
         self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim+len(class_labels), activation=activation, name="momentum1")
         #self.layer_momentum1_d = tf.keras.layers.Dropout(0.2)
@@ -174,14 +200,20 @@ class PFNet(tf.keras.Model):
     def call(self, inputs, training=False):
         x = self.enc(inputs)
         x = self.layer_input1(x)
-        #x = self.layer_input1_d(x, training)
         x = self.layer_input2(x)
-        #x = self.layer_input2_d(x, training)
         x = self.layer_input3(x)
-        #x = self.layer_input3_d(x, training)
         
         dm = self.layer_dist(x)
-        x = self.layer_conv(x, dm)
+
+        x = self.layer_conv1(x, dm)
+        #x = self.layer_conv1_d(x, training)
+        x = self.layer_conv2(x, dm)
+        #x = self.layer_conv2_d(x, training)
+        #x = self.layer_conv3(x, dm)
+        #x = self.layer_conv3_d(x, training)
+        #x = self.layer_conv4(x, dm)
+        #x = self.layer_conv4_d(x, training)
+        tf.debugging.check_numerics(x, "x")
         
         a = self.layer_id1(x)
         #a = self.layer_id1_d(a, training)
@@ -190,8 +222,9 @@ class PFNet(tf.keras.Model):
         a = self.layer_id3(a)
         #a = self.layer_id3_d(a, training)
         out_id_logits = self.layer_id(a)
-      
-        x = tf.concat([x, tf.keras.activations.selu(out_id_logits)], axis=-1)
+        tf.debugging.check_numerics(out_id_logits, "out_id_logits")
+        
+        x = tf.concat([x, tf.nn.selu(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
         #b = self.layer_momentum1_d(b, training)
         b = self.layer_momentum2(b)
@@ -202,20 +235,32 @@ class PFNet(tf.keras.Model):
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
-        #msk_good = tf.cast(out_id != 0, tf.float32)
+        msk_good = tf.cast(out_id != 0, tf.float32)
 
         #out_momentum_eta = inputs[:, 2] + inputs[:, 2]*pred_corr[:, 0]
         #new_phi = inputs[:, 3] + inputs[:, 3]*pred_corr[:, 1]
         #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
         #out_momentum_E = inputs[:, 4] + inputs[:, 4]*pred_corr[:, 2]
 
-        out_momentum_eta = (inputs[:, 2] + pred_corr[:, 0])
-        new_phi = (inputs[:, 3] + pred_corr[:, 1])
+        tf.debugging.check_numerics(pred_corr, "pred_corr")
+        out_momentum_eta = inputs[:, 2] + pred_corr[:, 0]
+        new_phi = inputs[:, 3] + pred_corr[:, 1]
         #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
         out_momentum_phi = new_phi
         out_momentum_E = inputs[:, 4] + pred_corr[:, 2]
+        
+        #out_momentum = tf.stack([
+        #    out_momentum_eta,
+        #    out_momentum_phi,
+        #    out_momentum_E,
+        #], axis=-1)
 
-        out_momentum = tf.stack([out_momentum_eta, out_momentum_phi, out_momentum_E], axis=-1)
+        out_momentum = tf.stack([
+            tf.multiply(out_momentum_eta, msk_good),
+            tf.multiply(out_momentum_phi, msk_good),
+            tf.multiply(out_momentum_E, msk_good)
+        ], axis=-1)
+
         ret = tf.concat([out_id_logits, out_momentum], axis=-1)
         return ret
 
@@ -232,31 +277,46 @@ def separate_truth(y_true):
     true_momentum = y_true[:, 1:]
     return true_id, true_momentum
 
+def mse_unreduced(true, pred):
+    return tf.math.pow(true-pred,2)
+
 #@tf.function
-def my_loss(y_true, y_pred):
+def my_loss_full(y_true, y_pred):
     pred_id_onehot, pred_momentum = separate_prediction(y_pred)
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_momentum = separate_truth(y_true)
 
-    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels)) 
-    l1 = 100.0*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
+    #tf.print(pred_id_onehot)
+    l1 = 1000.0 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
     msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
-    l2_0 = tf.math.pow(true_momentum[:, 0] - pred_momentum[:, 0], 2)
-    l2_1 = tf.math.pow(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 2)
-    l2_2 = tf.math.pow(true_momentum[:, 2] - pred_momentum[:, 2], 2)
+    #tf.print(tf.reduce_mean(pred_momentum[:, 0]))
+    l2_0 = mse_unreduced(true_momentum[:, 0], pred_momentum[:, 0])
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
+    l2_2 = mse_unreduced(true_momentum[:, 2], pred_momentum[:, 2])
+
+    l2 = (l2_0 + l2_1 + l2_2)
+    l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
+
+    #l3 = 0.001*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
+
+    tf.debugging.check_numerics(l1, "l1")
+    tf.debugging.check_numerics(l2_0, "l2_0")
+    tf.debugging.check_numerics(l2_1, "l2_1")
+    tf.debugging.check_numerics(l2_2, "l2_2")
+
     #tf.print("l1", tf.reduce_mean(l1))
     #tf.print("l2_0", tf.reduce_mean(l2_0))
     #tf.print("l2_1", tf.reduce_mean(l2_1))
     #tf.print("l2_2", tf.reduce_mean(l2_2))
-    #loss_mult = tf.math.minimum(epoch/tf.constant(20.0), tf.constant(1.0))
+    #tf.print("l2", tf.reduce_mean(l2))
+    #tf.print("l3", tf.reduce_mean(l3))
 
-    l2 = (l2_0 + l2_1 + l2_2)
-    l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
+    #tf.print("\n")
     l = l1 + l2
- 
     return l
 
 #@tf.function
@@ -269,6 +329,16 @@ def cls_accuracy(y_true, y_pred):
     nall = tf.cast(tf.size(pred_id), tf.float32)
     v = nmatch/nall
     return v
+
+#@tf.function
+def num_pred(y_true, y_pred):
+    pred_id_onehot, pred_momentum = separate_prediction(y_pred)
+    pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
+    true_id, true_momentum = separate_truth(y_true)
+
+    ntrue = tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.int32))
+    npred = tf.reduce_sum(tf.cast(pred_id!=0, tf.int32))
+    return tf.cast(ntrue - npred, tf.float32)
 
 #@tf.function
 def eta_resolution(y_true, y_pred):
@@ -308,22 +378,23 @@ def get_unique_run():
         run_number = max([int(s.split('run_')[1]) for s in previous_runs]) + 1
     return run_number
 
-def loss(model, inputs, targets, weights, epoch, training):
+def loss(model, inputs, targets, weights, epoch, training, lossfn):
     pred = model(inputs, training=training)
-    l = weights*my_loss(targets, pred)
+    l = weights*lossfn(targets, pred)
     return tf.reduce_mean(l)
 
-def grad(model, inputs, targets, weights, epoch):
+def grad(model, inputs, targets, weights, epoch, lossfn):
     epoch_tf = tf.cast(tf.constant(epoch), tf.float32)
     with tf.GradientTape() as tape:
-        loss_value = loss(model, inputs, targets, weights, epoch_tf, training=True)
+        loss_value = loss(model, inputs, targets, weights, epoch_tf, True, lossfn)
         return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
-def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[], num_accumulate=5):
+def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_testing, num_epochs, callbacks=[], num_accumulate=10):
 
     accum_vars = [tf.Variable(tf.zeros_like(tv.initialized_value()), trainable=False) for tv in model.trainable_variables]
 
     metrics = {
+        "num_pred": num_pred, 
         "cls_accuracy": cls_accuracy,
         "energy_resolution": energy_resolution,
         "phi_resolution": phi_resolution,
@@ -343,9 +414,11 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
             logs["val_" + metric] = []
 
         nsamp = 0 
-        for Xelem, ygen, ws in tqdm(ds_training):
+        looper = tqdm(ds_training, total=num_training)
+        for Xelem, ygen, ws in looper:
             ibatch += 1
-            loss_value, grads = grad(model, Xelem, ygen, ws, iepoch)
+            model.trainable = True
+            loss_value, grads = grad(model, Xelem, ygen, ws, iepoch, my_loss_full)
             for igrad, gv in enumerate(grads):
                 accum_vars[igrad].assign_add(gv)
             
@@ -359,16 +432,29 @@ def custom_training_loop(model, ds_training, ds_testing, num_epochs, callbacks=[
             ypred = model(Xelem)
             for metric, func in metrics.items():        
                 logs[metric] += [func(ygen, ypred).numpy()]
+            looper.set_postfix(
+                nelem="{:.0f}".format(np.mean(logs["num_pred"])),
+                acc="{:.2f}".format(np.mean(logs["cls_accuracy"])),
+                e="{:.2f}".format(np.mean(logs["energy_resolution"]))
+            )
+
             nsamp += 1 
         t1 = time.time()
 
-        for Xelem, ygen, ws in tqdm(ds_testing):
+        looper = tqdm(ds_testing, total=num_testing)
+        for Xelem, ygen, ws in looper:
+            model.trainable = False
             ypred = model(Xelem)
             for metric, func in metrics.items():        
                 logs["val_" + metric] += [func(ygen, ypred).numpy()]
        
-            loss_value = loss(model, Xelem, ygen, ws, iepoch, False)
+            loss_value = loss(model, Xelem, ygen, ws, iepoch, False, my_loss_full)
             logs["val_loss"] += [loss_value.numpy()]
+            looper.set_postfix(
+                nelem="{:.0f}".format(np.mean(logs["val_num_pred"])),
+                acc="{:.2f}".format(np.mean(logs["val_cls_accuracy"])),
+                e="{:.2f}".format(np.mean(logs["val_energy_resolution"]))
+            )
 
         for k in logs.keys():
             logs[k] = np.mean(logs[k])
@@ -399,6 +485,7 @@ def parse_args():
     #parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
+    parser.add_argument("--load", type=str, default=None, help="model to load")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
     parser.add_argument("--custom-training-loop", action="store_true", help="Run a custom training loop")
@@ -420,7 +507,7 @@ def prepare_df(epoch, model, data, outdir):
         pred_id = np.argmax(pred_id_onehot, axis=-1)
         true_id, true_momentum = separate_truth(y)
         true_id = true_id.numpy()
-        
+       
         df = pandas.DataFrame()
         df["pred_pid"] = np.array([int(class_labels[p]) for p in pred_id])
         df["pred_eta"] = np.array(pred_momentum[:, 0].numpy(), dtype=np.float64)
@@ -451,20 +538,23 @@ class DataFrameCallback(tf.keras.callbacks.Callback):
             prepare_df(epoch, self.model, self.dataset, self.outdir)
  
 if __name__ == "__main__":
+    tf.debugging.enable_check_numerics()
     #tf.config.experimental_run_functions_eagerly(True)
 
     args = parse_args()
+    if args.load:
+        model = tf.keras.models.load_model(args.load, compile=False)
+
+    #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
-    strategy = None
-    if num_gpus > 1:
-        strategy = tf.distribute.MirroredStrategy()
 
-    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:args.ntrain+args.ntest]
+    filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
     X, y, ycand = load_one_file(filelist[0])
 
     from tf_data import _parse_tfr_element, NUM_EVENTS_PER_TFR
-    tfr_files = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/chunk_*.tfrecords"))
+    tfr_files = sorted(glob.glob(datapath + "/tfr/cand/chunk_*.tfrecords"))
     dataset = tf.data.TFRecordDataset(tfr_files)
 
     ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -474,15 +564,10 @@ if __name__ == "__main__":
         ds_train_r = ds_train.repeat(args.nepochs)
         ds_test_r = ds_test.repeat(args.nepochs)
 
-    if strategy:
-        with strategy.scope():
-            opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
-            model = PFNet(hidden_dim=args.nhidden)
-            model(X)
-    else:
-       opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
-       model = PFNet(hidden_dim=args.nhidden)
-       model(X)
+    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+    if not args.load:
+        model = PFNet(hidden_dim=args.nhidden)
+    model(X)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
@@ -494,7 +579,7 @@ if __name__ == "__main__":
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=10, write_graph=True, write_images=False,
+        log_dir=outdir, histogram_freq=0, write_graph=True, write_images=False,
         update_freq='epoch'
     )
     tb.set_model(model)
@@ -504,59 +589,23 @@ if __name__ == "__main__":
     prepare_df_cb.set_model(model)
     callbacks += [prepare_df_cb]
 
+    terminate_cb = tf.keras.callbacks.TerminateOnNaN()
+    callbacks += [terminate_cb]
+
     if args.custom_training_loop:
         assert(num_gpus == 1)
-        assert(strategy is None)
-        custom_training_loop(model, ds_train, ds_test, args.nepochs, callbacks=callbacks)
+        custom_training_loop(opt, model, ds_train, ds_test, args.ntrain, args.ntest, args.nepochs, callbacks=callbacks)
     else:
-        if strategy: 
-            with strategy.scope():
-                model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
-                ret = model.fit(ds_train_r,
-                    validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
-                    verbose=True, callbacks=callbacks
-                )
-        else:
-           model.compile(optimizer=opt, loss=my_loss, metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
-           ret = model.fit(ds_train_r,
-               validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
-               verbose=True, callbacks=callbacks
-           )
-
+        model.compile(optimizer=opt, loss=my_loss_full, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+        ret = model.fit(ds_train_r,
+            validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+            verbose=True, callbacks=callbacks
+        )
 
 #    tf.keras.models.save_model(model, "model.tf", save_format="tf")
 #    model = tf.keras.models.load_model("model.tf", compile=False)
 #    ntrain = 0
 
-    #Print some stats for each target particle type 
-    for pid in [211, -211, 130, 22, -11, 11, 13, -13, 1, 2]:
-        if args.target == "gen":
-            msk_gen = df["gen_pid"] == pid
-        elif args.target == "cand":
-            msk_gen = df["cand_pid"] == pid
-        msk_pred = df["pred_pid"] == pid
-
-        npred = int(np.sum(msk_pred))
-        ngen = int(np.sum(msk_gen))
-        tpr = np.sum(msk_gen & msk_pred) / npred
-        fpr = np.sum(~msk_gen & msk_pred) / npred
-        eff = np.sum(msk_gen & msk_pred) / ngen
-
-        mu = 0.0
-        sigma = 0.0
-        if np.sum(msk_pred) > 0:
-
-            if args.target == "gen":
-                energies = df[msk_gen & msk_pred][["gen_e", "pred_e"]].values
-            elif args.target == "cand":
-                energies = df[msk_gen & msk_pred][["cand_e", "pred_e"]].values
-
-            r = energies[:, 1]/energies[:, 0]
-            mu, sigma = np.mean(r), np.std(r)
-        print("pid={pid} Ngen={ngen} Npred={npred} eff={eff:.4f} tpr={tpr:.4f} fpr={fpr:.4f} E_m={E_m:.4f} E_s={E_s:.4f}".format(
-            pid=pid, ngen=ngen, npred=npred, eff=eff, tpr=tpr, fpr=fpr, E_m=mu, E_s=sigma
-        ))
-
     #ensure model is compiled
-    model.predict(Xs[0])
+    model.predict(X)
     tf.keras.models.save_model(model, outdir + "/model.tf", save_format="tf")
