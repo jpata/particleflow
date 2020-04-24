@@ -1,10 +1,11 @@
 import sys
-import ROOT
 import pickle
 import networkx as nx
 import numpy as np
 import numba
 import os
+import uproot
+import uproot_methods
 
 import matplotlib
 matplotlib.use("Agg")
@@ -170,11 +171,11 @@ def graph_to_images(data):
     return ret, img_gen_pid
 
 def prepare_elem_distance_matrix(ev):
-    di = np.array(list(ev.element_distance_i))
-    dj = np.array(list(ev.element_distance_j))
-    d = np.array(list(ev.element_distance_d))
-    etas = np.array(list(ev.element_eta), dtype=np.float32)
-    phis = np.array(list(ev.element_phi), dtype=np.float32)
+    di = ev[b'element_distance_i']
+    dj = ev[b'element_distance_j']
+    d = ev[b'element_distance_d']
+    etas = ev[b'element_eta']
+    phis = ev[b'element_phi']
     etaphis = np.vstack([etas, phis]).T
     dm_dr = np.zeros((etaphis.shape[0], etaphis.shape[0]), dtype=np.float32)
     associate_deltar(etaphis, 0.2**2, dm_dr)
@@ -446,22 +447,19 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         genparticles = [gp for gp in genparticles if g.nodes[gp]["e"] > genparticle_energy_threshold]
         candidate = elem_to_cand.get(elem, None)
        
-        lvs = []
+        lv = uproot_methods.TLorentzVector(0, 0, 0, 0)
        
         pid = 0
         if len(genparticles) > 0:
             pid = map_pdgid_to_candid.get(g.nodes[genparticles[0]]["typ"], 0)
 
         for gp in genparticles:
-            lv = ROOT.TLorentzVector()
-            lv.SetPtEtaPhiE(
+            lv += uproot_methods.TLorentzVector.from_ptetaphie(
                 g.nodes[gp]["pt"], 
                 g.nodes[gp]["eta"], 
                 g.nodes[gp]["phi"], 
                 g.nodes[gp]["e"]
             )
-            lvs += [lv]
-        lv = sum(lvs, ROOT.TLorentzVector())
 
         if len(genparticles) > 0:
             if abs(elem_eta) > 3.0:
@@ -479,8 +477,14 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             if elem_type == 5 and (pid == 22 or abs(pid) == 11):
                 pid = 130
 
+        #reproduce ROOT.TLorentzVector behavior (https://root.cern.ch/doc/master/TVector3_8cxx_source.html#l00320)
+        try:
+            eta = lv.eta
+        except ZeroDivisionError:
+            eta = np.sign(lv.z)*10e10
+        
         gp = {
-            "pt": lv.Pt(), "eta": lv.Eta(), "phi": lv.Phi(), "e": lv.E(), "typ": pid, "px": lv.Px(), "py": lv.Py(), "pz": lv.Pz()
+            "pt": lv.pt, "eta": eta, "phi": lv.phi, "e": lv.energy, "typ": pid, "px": lv.x, "py": lv.y, "pz": lv.z
         }
 
         for j in range(len(elem_branches)):
@@ -512,67 +516,68 @@ if __name__ == "__main__":
 
     infile = args.input
     outpath = os.path.join(os.path.dirname(infile), args.outpath, os.path.basename(infile).split(".")[0])
-    tf = ROOT.TFile(infile)
-    tt = tf.Get("ana/pftree")
+    tf = uproot.open(infile)
+    tt = tf["ana/pftree"]
 
-    events_to_process = [i for i in range(tt.GetEntries())] 
+
+    events_to_process = [i for i in range(tt.numentries)] 
     if not (args.event is None):
         events_to_process = [args.event]
 
     all_data = []
     ifile = 0
-    for iev, ev in enumerate(tt):
-        if not (iev in events_to_process):
-            continue
+    for iev in events_to_process:
         print("processing event {}".format(iev))
 
-        element_type = ev.element_type
-        element_pt = ev.element_pt
-        element_e = ev.element_energy
-        element_eta = ev.element_eta
-        element_phi = ev.element_phi
-        element_eta_ecal = ev.element_eta_ecal
-        element_phi_ecal = ev.element_phi_ecal
-        element_eta_hcal = ev.element_eta_hcal
-        element_phi_hcal = ev.element_phi_hcal
-        element_trajpoint = ev.element_trajpoint
-        element_layer = ev.element_layer
-        element_charge = ev.element_charge
-        element_depth = ev.element_depth
-        element_deltap = ev.element_deltap
-        element_sigmadeltap = ev.element_sigmadeltap
-        element_px = ev.element_px
-        element_py = ev.element_py
-        element_pz = ev.element_pz
+        ev = tt.arrays(flatten=True,entrystart=iev,entrystop=iev+1)
+        
+        element_type = ev[b'element_type']
+        element_pt = ev[b'element_pt']
+        element_e = ev[b'element_energy']
+        element_eta = ev[b'element_eta']
+        element_phi = ev[b'element_phi']
+        element_eta_ecal = ev[b'element_eta_ecal']
+        element_phi_ecal = ev[b'element_phi_ecal']
+        element_eta_hcal = ev[b'element_eta_hcal']
+        element_phi_hcal = ev[b'element_phi_hcal']
+        element_trajpoint = ev[b'element_trajpoint']
+        element_layer = ev[b'element_layer']
+        element_charge = ev[b'element_charge']
+        element_depth = ev[b'element_depth']
+        element_deltap = ev[b'element_deltap']
+        element_sigmadeltap = ev[b'element_sigmadeltap']
+        element_px = ev[b'element_px']
+        element_py = ev[b'element_py']
+        element_pz = ev[b'element_pz']
 
-        trackingparticle_pid = ev.trackingparticle_pid
-        trackingparticle_pt = ev.trackingparticle_pt
-        trackingparticle_e = ev.trackingparticle_energy
-        trackingparticle_eta = ev.trackingparticle_eta
-        trackingparticle_phi = ev.trackingparticle_phi
-        trackingparticle_phi = ev.trackingparticle_phi
-        trackingparticle_px = ev.trackingparticle_px
-        trackingparticle_py = ev.trackingparticle_py
-        trackingparticle_pz = ev.trackingparticle_pz
+        trackingparticle_pid = ev[b'trackingparticle_pid']
+        trackingparticle_pt = ev[b'trackingparticle_pt']
+        trackingparticle_e = ev[b'trackingparticle_energy']
+        trackingparticle_eta = ev[b'trackingparticle_eta']
+        trackingparticle_phi = ev[b'trackingparticle_phi']
+        trackingparticle_phi = ev[b'trackingparticle_phi']
+        trackingparticle_px = ev[b'trackingparticle_px']
+        trackingparticle_py = ev[b'trackingparticle_py']
+        trackingparticle_pz = ev[b'trackingparticle_pz']
 
-        simcluster_pid = ev.simcluster_pid
-        simcluster_pt = ev.simcluster_pt
-        simcluster_e = ev.simcluster_energy
-        simcluster_eta = ev.simcluster_eta
-        simcluster_phi = ev.simcluster_phi
-        simcluster_px = ev.simcluster_px
-        simcluster_py = ev.simcluster_py
-        simcluster_pz = ev.simcluster_pz
+        simcluster_pid = ev[b'simcluster_pid']
+        simcluster_pt = ev[b'simcluster_pt']
+        simcluster_e = ev[b'simcluster_energy']
+        simcluster_eta = ev[b'simcluster_eta']
+        simcluster_phi = ev[b'simcluster_phi']
+        simcluster_px = ev[b'simcluster_px']
+        simcluster_py = ev[b'simcluster_py']
+        simcluster_pz = ev[b'simcluster_pz']
 
-        simcluster_idx_trackingparticle = ev.simcluster_idx_trackingparticle
-        pfcandidate_pdgid = ev.pfcandidate_pdgid
-        pfcandidate_pt = ev.pfcandidate_pt
-        pfcandidate_e = ev.pfcandidate_energy
-        pfcandidate_eta = ev.pfcandidate_eta
-        pfcandidate_phi = ev.pfcandidate_phi
-        pfcandidate_px = ev.pfcandidate_px
-        pfcandidate_py = ev.pfcandidate_py
-        pfcandidate_pz = ev.pfcandidate_pz
+        simcluster_idx_trackingparticle = ev[b'simcluster_idx_trackingparticle']
+        pfcandidate_pdgid = ev[b'pfcandidate_pdgid']
+        pfcandidate_pt = ev[b'pfcandidate_pt']
+        pfcandidate_e = ev[b'pfcandidate_energy']
+        pfcandidate_eta = ev[b'pfcandidate_eta']
+        pfcandidate_phi = ev[b'pfcandidate_phi']
+        pfcandidate_px = ev[b'pfcandidate_px']
+        pfcandidate_py = ev[b'pfcandidate_py']
+        pfcandidate_pz = ev[b'pfcandidate_pz']
 
         g = nx.DiGraph()
         for iobj in range(len(element_type)):
@@ -619,15 +624,17 @@ if __name__ == "__main__":
                 pz=simcluster_pz[iobj],
             )
 
-        trackingparticle_to_element = ev.trackingparticle_to_element
+        trackingparticle_to_element_first = ev[b'trackingparticle_to_element.first']
+        trackingparticle_to_element_second = ev[b'trackingparticle_to_element.second']
         #for trackingparticles associated to elements, set a very high edge weight
-        for obj in trackingparticle_to_element:
-            g.add_edge(("tp", obj.first), ("elem", obj.second), weight=99999.0)
+        for tp, elem in zip(trackingparticle_to_element_first, trackingparticle_to_element_second):
+            g.add_edge(("tp", tp), ("elem", elem), weight=99999.0)
  
-        simcluster_to_element = ev.simcluster_to_element
-        simcluster_to_element_cmp = ev.simcluster_to_element_cmp
-        for obj, c in zip(simcluster_to_element, simcluster_to_element_cmp):
-            g.add_edge(("sc", obj.first), ("elem", obj.second), weight=c)
+        simcluster_to_element_first = ev[b'simcluster_to_element.first']
+        simcluster_to_element_second = ev[b'simcluster_to_element.second']
+        simcluster_to_element_cmp = ev[b'simcluster_to_element_cmp']
+        for sc, elem, c in zip(simcluster_to_element_first, simcluster_to_element_second, simcluster_to_element_cmp):
+            g.add_edge(("sc", sc), ("elem", elem), weight=c)
 
         print("contracting nodes: trackingparticle to simcluster")
         nodes_to_remove = []
@@ -651,9 +658,10 @@ if __name__ == "__main__":
                 pz=pfcandidate_pz[iobj],
             )
 
-        element_to_candidate = ev.element_to_candidate
-        for obj in element_to_candidate:
-            g.add_edge(("elem", obj.first), ("pfcand", obj.second), weight=1.0)
+        element_to_candidate_first = ev[b'element_to_candidate.first']
+        element_to_candidate_second = ev[b'element_to_candidate.second']
+        for elem, pfcand in zip(element_to_candidate_first, element_to_candidate_second):
+            g.add_edge(("elem", elem), ("pfcand", pfcand), weight=1.0)
         print("Graph created: {} nodes, {} edges".format(len(g.nodes), len(g.edges)))
  
         g = cleanup_graph(g)
