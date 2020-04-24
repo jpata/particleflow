@@ -454,12 +454,20 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             pid = map_pdgid_to_candid.get(g.nodes[genparticles[0]]["typ"], 0)
 
         for gp in genparticles:
-            lv += uproot_methods.TLorentzVector.from_ptetaphie(
-                g.nodes[gp]["pt"], 
-                g.nodes[gp]["eta"], 
-                g.nodes[gp]["phi"], 
-                g.nodes[gp]["e"]
-            )
+            try:
+                lv += uproot_methods.TLorentzVector.from_ptetaphie(
+                    g.nodes[gp]["pt"],
+                    g.nodes[gp]["eta"],
+                    g.nodes[gp]["phi"],
+                    g.nodes[gp]["e"]
+                )
+            except OverflowError:
+                lv += uproot_methods.TLorentzVector.from_ptetaphie(
+                    g.nodes[gp]["pt"],
+                    np.nan,
+                    g.nodes[gp]["phi"],
+                    g.nodes[gp]["e"]
+                )
 
         if len(genparticles) > 0:
             if abs(elem_eta) > 3.0:
