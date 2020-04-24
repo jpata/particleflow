@@ -44,12 +44,12 @@ def load_one_file(fn):
         ygen = event["ygen"]
         ycand = event["ycand"]
 
-        elem_id = Xelem[:, 0]
         #skip PS, GSF and BREM for now
-        msk = (elem_id != 2) & (elem_id != 3) & (elem_id != 7)
-        Xelem = Xelem[msk]
-        ygen = ygen[msk]
-        ycand = ycand[msk]
+        #elem_id = Xelem[:, 0]
+        #msk = (elem_id != 2) & (elem_id != 3) & (elem_id != 7)
+        #Xelem = Xelem[msk]
+        #ygen = ygen[msk]
+        #ycand = ycand[msk]
 
         Xelem[:, 0] = [int(elem_labels.index(i)) for i in Xelem[:, 0]]
         ygen[:, 0] = [int(class_labels.index(i)) for i in ygen[:, 0]]
@@ -77,24 +77,42 @@ def load_one_file(fn):
         #ycand = np.pad(ycand, ((0, max_elem - ycand.shape[0]), (0,0)))
         #print(Xelem.shape, ygen.shape, ycand.shape)
 
+        assert(Xelem.shape[0] == ygen.shape[0])
+        assert(Xelem.shape[0] == ycand.shape[0])
         Xs += [Xelem]
         ys += [ygen]
         ys_cand += [ycand]
 
     return Xs[0], ys[0], ys_cand[0]
 
-def load_data(filelist):
+def load_data(filelist, target):
     Xs = []
     ys = []
-    ys_cand = []
+    ws = []
 
     for ifi, fi in enumerate(filelist):
+        print(fi)
         X, y, ycand = load_one_file(fi)
         Xs += [X]
-        ys += [y]
-        ys_cand += [ycand]
+        if target == "cand":
+            ys += [ycand]
+        elif target == "gen":
+            ys += [y]
+    
+    uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
+    for i in range(len(ys)):
+        w = np.ones(len(ys[i]), dtype=np.float32)
+        for uv, uc in zip(uniq_vals, uniq_counts):
+            w[ys[i][:, 0]==uv] = 1.0/uc
+        ids = ys[i][:, 0]
 
-    return Xs, ys, ys_cand
+        #equalize total weights between (0 and !=0 PIDs) to correctly predict the number of particles
+        w[ids==0] *= w[ids!=0].sum()/w[ids==0].sum()
+        #w *= len(ys[i])
+
+        ws += [w]
+
+    return Xs, ys, ws
 
 def dist(A,B):
     na = tf.reduce_sum(tf.square(A), -1)
@@ -103,8 +121,8 @@ def dist(A,B):
     na = tf.reshape(na, [-1, 1])
     nb = tf.reshape(nb, [1, -1])
     Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, False, True) + nb, 1e-12, 1e12)
-    #D = tf.sqrt(Dsq)
-    return Dsq
+    D = tf.sqrt(Dsq)
+    return D
 
 class InputEncoding(tf.keras.layers.Layer):
     def __init__(self, num_input_classes):
@@ -129,7 +147,7 @@ class Distance(tf.keras.layers.Layer):
         D =  dist(inputs[:, :self.distance_dim], inputs[:, :self.distance_dim])
         
         #closer nodes have higher weight, could also consider exp(-D) or such here
-        #D = tf.math.abs(tf.math.divide_no_nan(1.0, tf.clip_by_value(D + self.a, 1e-6, 1e6)))
+        #D = tf.math.abs(tf.math.divide_no_nan(1.0, tf.clip_by_value(D, 1e-6, 1e6)))
         D = tf.math.exp(-1.0*D)
         
         #turn edges on or off based on activation with an arbitrary shift parameter
@@ -160,13 +178,12 @@ class GraphConv(tf.keras.layers.Dense):
         W = self.weights[0]
         b = self.weights[1]
 
-        s = tf.reduce_sum(adj, axis=-1) 
-        deg = tf.linalg.diag(1.0/s)
-        adj_hat = tf.linalg.matmul(deg, adj)
+        in_degrees = tf.reduce_sum(adj, axis=-1) 
+        norm = tf.expand_dims(tf.pow(in_degrees, -0.5), 1)
+
         support = (tf.linalg.matmul(inputs, W) + b)
-        #out = tf.sparse.sparse_dense_matmul(adj, support)
-        adj_hat = tf.math.pow(adj_hat, 3)
-        out = tf.linalg.matmul(adj_hat, support)
+
+        out = tf.linalg.matmul(adj, support*norm)*norm
 
         return self.activation(out)
 
@@ -179,34 +196,20 @@ class PFNet(tf.keras.Model):
         self.enc = InputEncoding(len(elem_labels))
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
-        self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3")
-        self.layer_input4 = tf.keras.layers.Dense(hidden_dim, activation="linear", name="input4")
+        self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation="linear", name="input3")
         
         self.layer_dist = Distance(distance_dim, name="distance")
 
         self.layer_conv1 = GraphConv(hidden_dim, activation=activation, name="conv1")
-        #self.layer_conv1_d = tf.keras.layers.Dropout(0.2)
-        #self.layer_conv2 = GraphConv(hidden_dim, activation=activation, name="conv2")
-        #self.layer_conv2_d = tf.keras.layers.Dropout(0.2)
-        #self.layer_conv3 = GraphConv(hidden_dim, activation=activation, name="conv3")
-        #self.layer_conv3_d = tf.keras.layers.Dropout(0.2)
-        #self.layer_conv4 = GraphConv(hidden_dim, activation=activation, name="conv4")
-        #self.layer_conv4_d = tf.keras.layers.Dropout(0.2)
         
         self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
-        #self.layer_id1_d = tf.keras.layers.Dropout(0.2)
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
-        #self.layer_id2_d = tf.keras.layers.Dropout(0.2)
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
-        #self.layer_id3_d = tf.keras.layers.Dropout(0.2)
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         
         self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim+len(class_labels), activation=activation, name="momentum1")
-        #self.layer_momentum1_d = tf.keras.layers.Dropout(0.2)
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
-        #self.layer_momentum2_d = tf.keras.layers.Dropout(0.2)
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
-        #self.layer_momentum3_d = tf.keras.layers.Dropout(0.2)
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
         
     def call(self, inputs):
@@ -214,37 +217,20 @@ class PFNet(tf.keras.Model):
         x = self.layer_input1(x)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
-        x = self.layer_input4(x)
         
         dm = self.layer_dist(x)
-        #tf.debugging.check_numerics(dm, "dm")
 
         x = self.layer_conv1(self.activation(x), dm)
-        #x = self.layer_conv1_d(x, training)
-        #x = self.layer_conv2(x, dm)
-        #x = self.layer_conv2_d(x, training)
-        #x = self.layer_conv3(x, dm)
-        #x = self.layer_conv3_d(x, training)
-        #x = self.layer_conv4(x, dm)
-        #x = self.layer_conv4_d(x, training)
-        #tf.debugging.check_numerics(x, "x")
         
         a = self.layer_id1(x)
-        #a = self.layer_id1_d(a, training)
         a = self.layer_id2(a)
-        #a = self.layer_id2_d(a, training)
         a = self.layer_id3(a)
-        #a = self.layer_id3_d(a, training)
         out_id_logits = self.layer_id(a)
-        #tf.debugging.check_numerics(out_id_logits, "out_id_logits")
         
         x = tf.concat([x, tf.nn.selu(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
-        #b = self.layer_momentum1_d(b, training)
         b = self.layer_momentum2(b)
-        #b = self.layer_momentum2_d(b, training)
         b = self.layer_momentum3(b)
-        #b = self.layer_momentum3_d(b, training)
         pred_corr = self.layer_momentum(b)
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
@@ -259,7 +245,6 @@ class PFNet(tf.keras.Model):
         #tf.debugging.check_numerics(pred_corr, "pred_corr")
         out_momentum_eta = inputs[:, 2] + pred_corr[:, 0]
         new_phi = inputs[:, 3] + pred_corr[:, 1]
-        #out_momentum_phi = tf.math.atan2(tf.math.sin(new_phi), tf.math.cos(new_phi))
         out_momentum_phi = new_phi
         out_momentum_E = inputs[:, 4] + pred_corr[:, 2]
         
@@ -294,6 +279,16 @@ def separate_truth(y_true):
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
 
+def my_loss_cls(y_true, y_pred):
+    pred_id_onehot, pred_momentum = separate_prediction(y_pred)
+    pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
+    true_id, true_momentum = separate_truth(y_true)
+
+    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
+    l1 = 1000.0 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l3 = 0.01*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
+    return 1000.0*(l1 + l3)
+
 #@tf.function
 def my_loss_full(y_true, y_pred):
     pred_id_onehot, pred_momentum = separate_prediction(y_pred)
@@ -315,7 +310,7 @@ def my_loss_full(y_true, y_pred):
     l2 = (l2_0 + l2_1 + l2_2)
     #l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
 
-    l3 = 0.001*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
+    l3 = 0.1*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
 
     #tf.debugging.check_numerics(l1, "l1")
     #tf.debugging.check_numerics(l2_0, "l2_0")
@@ -387,7 +382,7 @@ def get_unique_run():
     return run_number
 
 def loss(model, inputs, targets, weights, epoch, training, lossfn):
-    pred = model(inputs, training)
+    pred = model(inputs)
     l = weights*lossfn(targets, pred)
     return tf.reduce_mean(l)
 
@@ -397,8 +392,7 @@ def grad(model, inputs, targets, weights, epoch, lossfn):
         loss_value = loss(model, inputs, targets, weights, epoch_tf, True, lossfn)
         return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
-def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_testing, num_epochs, callbacks=[], num_accumulate=10):
-
+def custom_training_loop(loss_fn, opt, model, ds_training, ds_testing, num_training, num_testing, num_epochs, callbacks=[], num_accumulate=2):
     accum_vars = [tf.Variable(tf.zeros_like(tv.initialized_value()), trainable=False) for tv in model.trainable_variables]
 
     metrics = {
@@ -422,11 +416,10 @@ def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_
             logs["val_" + metric] = []
 
         nsamp = 0 
-        looper = tqdm(ds_training, total=num_training)
+        looper = tqdm(ds_training, total=num_training, ascii=" =")
         for Xelem, ygen, ws in looper:
             ibatch += 1
-            model.trainable = True
-            loss_value, grads = grad(model, Xelem, ygen, ws, iepoch, my_loss_full)
+            loss_value, grads = grad(model, Xelem, ygen, ws, iepoch, loss_fn)
             for igrad, gv in enumerate(grads):
                 accum_vars[igrad].assign_add(gv)
             
@@ -437,7 +430,7 @@ def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_
                 for igrad in range(len(accum_vars)):
                     accum_vars[igrad].assign(tf.zeros_like(accum_vars[igrad]))
     
-            ypred = model(Xelem)
+            ypred, _ = model(Xelem)
             for metric, func in metrics.items():        
                 logs[metric] += [func(ygen, ypred).numpy()]
             looper.set_postfix(
@@ -449,14 +442,13 @@ def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_
             nsamp += 1 
         t1 = time.time()
 
-        looper = tqdm(ds_testing, total=num_testing)
+        looper = tqdm(ds_testing, total=num_testing, ascii=" =")
         for Xelem, ygen, ws in looper:
-            model.trainable = False
-            ypred = model(Xelem)
-            for metric, func in metrics.items():        
+            ypred, _ = model(Xelem)
+            for metric, func in metrics.items():
                 logs["val_" + metric] += [func(ygen, ypred).numpy()]
        
-            loss_value = loss(model, Xelem, ygen, ws, iepoch, False, my_loss_full)
+            loss_value = loss(model, Xelem, ygen, ws, iepoch, False, loss_fn)
             logs["val_loss"] += [loss_value.numpy()]
             looper.set_postfix(
                 nelem="{:.0f}".format(np.mean(logs["val_num_pred"])),
@@ -469,13 +461,16 @@ def custom_training_loop(opt, model, ds_training, ds_testing, num_training, num_
 
         #for k, v in logs.items():
         #    tf.summary.scalar('epoch_{}'.format(k), v, step=iepoch)
-
+        
+        dt = 0
+        if nsamp > 0:
+            dt = 1000.0*(t1-t0)/nsamp
         s = ""
         for metric in sorted(metrics.keys()):
             s += "{}={:.2f}/{:.2f} ".format(metric, logs[metric], logs["val_" + metric]) 
         print("epoch={epoch}/{maxepoch} t={t:.2f}s dt={dt:.0f}ms loss={loss_train:.2f}/{loss_test:.2f} {metrics}".format(
             epoch=iepoch, maxepoch=num_epochs, t=(t1-t0),
-            dt=1000.0*(t1-t0)/nsamp, loss_train=logs["loss"], loss_test=logs["val_loss"], metrics=s)
+            dt=dt, loss_train=logs["loss"], loss_test=logs["val_loss"], metrics=s)
         )
    
         for callback in callbacks:
@@ -498,6 +493,7 @@ def parse_args():
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
     parser.add_argument("--custom-training-loop", action="store_true", help="Run a custom training loop")
+    parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
     #parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     #parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     args = parser.parse_args()
@@ -530,7 +526,7 @@ def prepare_df(epoch, model, data, outdir):
 
         df["iev"] = iev
         dfs += [df]
-
+    assert(len(dfs) > 0)
     df = pandas.concat(dfs, ignore_index=True)
     fn = outdir + "/df_{}.pkl.bz2".format(epoch + 1)
     df.to_pickle(fn)
@@ -566,10 +562,11 @@ if __name__ == "__main__":
 
     from tf_data import _parse_tfr_element, NUM_EVENTS_PER_TFR
     tfr_files = sorted(glob.glob(datapath + "/tfr/{}/chunk_*.tfrecords".format(args.target)))
+
     dataset = tf.data.TFRecordDataset(tfr_files)
     ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-     
+ 
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
         ds_test_r = ds_test.repeat(args.nepochs)
@@ -595,10 +592,10 @@ if __name__ == "__main__":
     tb.set_model(model)
     callbacks += [tb]
 
-    if args.nplot > 0:
-        prepare_df_cb = DataFrameCallback(ds_test, outdir, freq=args.nplot)
-        prepare_df_cb.set_model(model)
-        callbacks += [prepare_df_cb]
+    #if args.nplot > 0:
+    #    prepare_df_cb = DataFrameCallback(ds_test, outdir, freq=args.nplot)
+    #    prepare_df_cb.set_model(model)
+    #    callbacks += [prepare_df_cb]
 
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
@@ -608,14 +605,23 @@ if __name__ == "__main__":
         save_weights_only=True,
         verbose=0
     )
+    cp_callback.set_model(model)
     callbacks += [cp_callback]
+
+    loss_fn = my_loss_full
+    if args.train_cls:
+        loss_fn = my_loss_cls
+        model.layer_momentum1.trainable = False
+        model.layer_momentum2.trainable = False
+        model.layer_momentum3.trainable = False
+        model.layer_momentum.trainable = False
 
     if args.custom_training_loop:
         assert(num_gpus == 1)
-        custom_training_loop(opt, model, ds_train, ds_test, args.ntrain, args.ntest, args.nepochs, callbacks=callbacks)
+        custom_training_loop(loss_fn, opt, model, ds_train, ds_test, args.ntrain, args.ntest, args.nepochs, callbacks=callbacks)
     else:
         with strategy.scope():
-            model.compile(optimizer=opt, loss=my_loss_full, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+            model.compile(optimizer=opt, loss=loss_fn, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
             if args.load:
                 model.load_weights(args.load)
             if args.nepochs > 0:
@@ -625,10 +631,6 @@ if __name__ == "__main__":
                 )
 
     prepare_df(args.nepochs, model, ds_test, outdir)
-
-#    tf.keras.models.save_model(model, "model.tf", save_format="tf")
-#    model = tf.keras.models.load_model("model.tf", compile=False)
-#    ntrain = 0
 
     #ensure model is compiled
     model.predict(X)
