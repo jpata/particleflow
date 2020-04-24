@@ -69,14 +69,16 @@ def serialize_chunk(args):
 
     for fi in files:
         X, y, ycand = load_one_file(fi)
+
         Xs += [X]
         if target == "cand":
             ys += [ycand]
         elif target == "gen":
-            ys += [ycand]
+            ys += [y]
         else:
             raise Exception("Unknown target")
 
+    #compute per-element weights based on target PID, such that each target PID has equal weight
     uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
     for i in range(len(ys)):
         w = np.ones(len(ys[i]), dtype=np.float32)
@@ -84,6 +86,7 @@ def serialize_chunk(args):
             w[ys[i][:, 0]==uv] = 1.0/uc
         ids = ys[i][:, 0]
 
+        #equalize total weights between (0 and !=0 PIDs) to correctly predict the number of particles
         w[ids==0] *= w[ids!=0].sum()/w[ids==0].sum()
         #w *= len(ys[i])
 
