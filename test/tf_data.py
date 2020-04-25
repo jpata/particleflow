@@ -101,7 +101,7 @@ if __name__ == "__main__":
     args = parse_args()
     tf.config.experimental_run_functions_eagerly(True)
 
-    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:1500]
+    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))
     path = "data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/{}".format(args.target)
 
     if not os.path.isdir(path):
