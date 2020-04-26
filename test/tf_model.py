@@ -194,6 +194,7 @@ class PFNet(tf.keras.Model):
         self.activation = activation
         self.inp = tf.keras.Input(shape=(None,))
         self.enc = InputEncoding(len(elem_labels))
+
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
         self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation="linear", name="input3")
@@ -202,19 +203,20 @@ class PFNet(tf.keras.Model):
 
         self.layer_conv1 = GraphConv(hidden_dim, activation=activation, name="conv1")
         
-        self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
+        self.layer_id1 = tf.keras.layers.Dense(24 + hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         
-        self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim+len(class_labels), activation=activation, name="momentum1")
+        self.layer_momentum1 = tf.keras.layers.Dense(24 + hidden_dim+len(class_labels), activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
         
     def call(self, inputs):
-        x = self.enc(inputs)
-        x = self.layer_input1(x)
+        enc = self.activation(self.enc(inputs))
+
+        x = self.layer_input1(enc)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
         
@@ -222,12 +224,12 @@ class PFNet(tf.keras.Model):
 
         x = self.layer_conv1(self.activation(x), dm)
         
-        a = self.layer_id1(x)
+        a = self.layer_id1(tf.concat([enc, x], axis=-1))
         a = self.layer_id2(a)
         a = self.layer_id3(a)
         out_id_logits = self.layer_id(a)
         
-        x = tf.concat([x, tf.nn.selu(out_id_logits)], axis=-1)
+        x = tf.concat([enc, x, tf.nn.selu(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
         b = self.layer_momentum2(b)
         b = self.layer_momentum3(b)
@@ -549,7 +551,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
     if num_gpus > 1:
