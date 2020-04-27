@@ -29,5 +29,5 @@
 #  --nplot 0 --nhidden 512 --distance-dim 32 --train-cls
 
 CUDA_VISIBLE_DEVICES=3,4 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
-  python3 test/tf_model.py --target cand --ntrain 15000 --ntest 5000 --nepochs 100 --lr 0.00001 \
-  --nplot 0 --nhidden 512 --distance-dim 64 --train-cls
+  python3 test/tf_model.py --target cand --ntrain 15000 --ntest 5000 --nepochs 500 --lr 0.00001 \
+  --nplot 0 --nhidden 256 --distance-dim 64

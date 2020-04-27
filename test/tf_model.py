@@ -317,7 +317,7 @@ def my_loss_full(y_true, y_pred):
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
     #tf.print(pred_id_onehot)
-    l1 = 1000.0 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l1 = 1e3 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
     msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
@@ -672,7 +672,7 @@ if __name__ == "__main__":
     callbacks += [terminate_cb]
 
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=outdir + "/weights.{epoch:02d}-{val_loss:.2f}.hdf5",
+        filepath=outdir + "/weights.{epoch:02d}-{val_loss:.6f}.hdf5",
         save_weights_only=True,
         verbose=0
     )
