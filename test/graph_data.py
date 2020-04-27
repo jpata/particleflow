@@ -195,13 +195,13 @@ class PFGraphDataset(Dataset):
             self.process_multiple_files(fns, idx_file)
             idx_file += 1
 
-    def process_parallel(self, num_files_to_batch):
+    def process_parallel(self, num_files_to_batch, num_proc):
         pars = []
         idx_file = 0
         for fns in chunks(self.raw_file_names, num_files_to_batch):
             pars += [(self, fns, idx_file)]
             idx_file += 1
-        pool = multiprocessing.Pool(24)
+        pool = multiprocessing.Pool(num_proc)
         pool.map(process_func, pars)
 
     def get(self, idx):
@@ -217,8 +217,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="dataset path", required=True)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
+    parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
     args = parser.parse_args()
  
     pfgraphdataset = PFGraphDataset(root=args.dataset)
-    pfgraphdataset.process_parallel(args.num_files_merge)
+    pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
