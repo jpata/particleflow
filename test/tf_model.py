@@ -19,6 +19,8 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 import pandas
 import time
 from tqdm import tqdm
+import itertools
+import io
 
 import keras
 import tensorflow as tf
@@ -26,6 +28,7 @@ import tensorflow as tf
 from keras.layers import Input, Dense
 from keras.models import Model
 from tensorflow.python.keras import backend as K
+from plot_utils import plot_confusion_matrix
 
 elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
@@ -136,15 +139,14 @@ class InputEncoding(tf.keras.layers.Layer):
 
 class Distance(tf.keras.layers.Layer):
 
-    def __init__(self, distance_dim, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(Distance, self).__init__(*args, **kwargs)
         #self.a = tf.Variable(0.1, trainable=True, name="pf_net/distance/a")
         #self.b = tf.Variable(-0.5, trainable=True, name="pf_net/distance/b")
-        self.distance_dim = tf.constant(distance_dim, tf.int32)
 
     def call(self, inputs):
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
-        D =  dist(inputs[:, :self.distance_dim], inputs[:, :self.distance_dim])
+        D =  dist(inputs, inputs)
         
         #closer nodes have higher weight, could also consider exp(-D) or such here
         #D = tf.math.abs(tf.math.divide_no_nan(1.0, tf.clip_by_value(D, 1e-6, 1e6)))
@@ -183,32 +185,38 @@ class GraphConv(tf.keras.layers.Dense):
 
         support = (tf.linalg.matmul(inputs, W) + b)
 
-        out = tf.linalg.matmul(adj, support*norm)*norm
+        out = support
+
+        for i in range(3):
+            out = tf.linalg.matmul(adj, out*norm)*norm
 
         return self.activation(out)
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, dim_graph_summary=16):
         super(PFNet, self).__init__()
         self.activation = activation
         self.inp = tf.keras.Input(shape=(None,))
         self.enc = InputEncoding(len(elem_labels))
+        self.layer_distcoords1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords1")
+        self.layer_distcoords = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
         self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation="linear", name="input3")
         
-        self.layer_dist = Distance(distance_dim, name="distance")
+        self.layer_dist = Distance(name="distance")
 
         self.layer_conv1 = GraphConv(hidden_dim, activation=activation, name="conv1")
+        self.layer_summarize = tf.keras.layers.Dense(dim_graph_summary, activation=activation, name="summarize")
         
-        self.layer_id1 = tf.keras.layers.Dense(24 + hidden_dim, activation=activation, name="id1")
+        self.layer_id1 = tf.keras.layers.Dense(dim_graph_summary + hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         
-        self.layer_momentum1 = tf.keras.layers.Dense(24 + hidden_dim+len(class_labels), activation=activation, name="momentum1")
+        self.layer_momentum1 = tf.keras.layers.Dense(dim_graph_summary + hidden_dim+len(class_labels), activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
@@ -216,20 +224,26 @@ class PFNet(tf.keras.Model):
     def call(self, inputs):
         enc = self.activation(self.enc(inputs))
 
+        x = self.layer_distcoords1(enc)
+        distcoords = self.layer_distcoords(x)
+
+        dm = self.layer_dist(distcoords)
+        self.add_loss(1e-4*tf.reduce_sum(dm))
+
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
         
-        dm = self.layer_dist(x)
-
         x = self.layer_conv1(self.activation(x), dm)
-        
-        a = self.layer_id1(tf.concat([enc, x], axis=-1))
+        summary = tf.expand_dims(tf.reduce_mean(self.layer_summarize(x), axis=0), axis=0)
+        summary = tf.tile(summary, [tf.shape(inputs)[0], 0])
+ 
+        a = self.layer_id1(tf.concat([summary, x], axis=-1))
         a = self.layer_id2(a)
         a = self.layer_id3(a)
         out_id_logits = self.layer_id(a)
         
-        x = tf.concat([enc, x, tf.nn.selu(out_id_logits)], axis=-1)
+        x = tf.concat([summary, x, tf.nn.selu(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
         b = self.layer_momentum2(b)
         b = self.layer_momentum3(b)
@@ -286,10 +300,10 @@ def my_loss_cls(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_momentum = separate_truth(y_true)
 
-    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
-    l1 = 1000.0 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
-    l3 = 0.01*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
-    return 1000.0*(l1 + l3)
+    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))[:, 0, :]
+    #predict the particle class labels
+    l1 = 1e3*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    return l1
 
 #@tf.function
 def my_loss_full(y_true, y_pred):
@@ -543,6 +557,55 @@ class DataFrameCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs):
         if epoch > 0 and (epoch + 1)%self.freq == 0:
             prepare_df(epoch, self.model, self.dataset, self.outdir)
+
+def plot_to_image(figure):
+    """Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call."""
+    # Save the plot to a PNG in memory.
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    # Closing the figure prevents it from being displayed directly inside
+    # the notebook.
+    plt.close(figure)
+    buf.seek(0)
+    # Convert PNG buffer to TF image
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    # Add the batch dimension
+    image = tf.expand_dims(image, 0)
+    return image
+
+class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
+    def __init__(self, dataset, file_writer_cm):
+        self.dataset = dataset
+        self.file_writer_cm = file_writer_cm
+
+    def on_epoch_end(self, epoch, logs):
+        true_ids = []
+        pred_ids = []
+        for iev, data in enumerate(self.dataset):
+            if iev>10:
+                break
+            X, y, w = data
+            pred = self.model(X).numpy()
+            pred_id_onehot, pred_momentum = separate_prediction(pred)
+            pred_id = np.argmax(pred_id_onehot, axis=-1)
+            true_id, true_momentum = separate_truth(y)
+            true_id = true_id.numpy()
+            pred_ids += [pred_id]
+            true_ids += [true_id]
+   
+        true_ids = np.concatenate(true_ids) 
+        pred_ids = np.concatenate(pred_ids)
+ 
+        # Calculate the confusion matrix.
+        cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
+
+        figure = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
+        cm_image = plot_to_image(figure)
+    
+        # Log the confusion matrix as an image summary.
+        with self.file_writer_cm.as_default():
+          tf.summary.image("Confusion Matrix", cm_image, step=epoch)
  
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
@@ -591,6 +654,7 @@ if __name__ == "__main__":
         log_dir=outdir, histogram_freq=0, write_graph=True, write_images=False,
         update_freq='epoch'
     )
+    file_writer_cm = tf.summary.create_file_writer(outdir + '/cm')
     tb.set_model(model)
     callbacks += [tb]
 
@@ -609,6 +673,10 @@ if __name__ == "__main__":
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
+    
+    confusion_cb = ConfusionMatrixCallback(ds_test, file_writer_cm)
+    confusion_cb.set_model(model)
+    callbacks += [confusion_cb]
 
     loss_fn = my_loss_full
     if args.train_cls:
