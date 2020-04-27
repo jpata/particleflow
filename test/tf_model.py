@@ -151,6 +151,7 @@ class Distance(tf.keras.layers.Layer):
         #closer nodes have higher weight, could also consider exp(-D) or such here
         #D = tf.math.abs(tf.math.divide_no_nan(1.0, tf.clip_by_value(D, 1e-6, 1e6)))
         D = tf.math.exp(-1.0*D)
+        #tf.print("D", tf.reduce_mean(D))
         
         #turn edges on or off based on activation with an arbitrary shift parameter
         #D = tf.clip_by_value(tf.nn.relu(D + self.b), 0.0, 10.0)
@@ -190,6 +191,7 @@ class GraphConv(tf.keras.layers.Dense):
         for i in range(3):
             out = tf.linalg.matmul(adj, out*norm)*norm
 
+        #tf.print("out", tf.reduce_mean(out))
         return self.activation(out)
 
 class PFNet(tf.keras.Model):
@@ -228,13 +230,15 @@ class PFNet(tf.keras.Model):
         distcoords = self.layer_distcoords(x)
 
         dm = self.layer_dist(distcoords)
-        self.add_loss(1e-4*tf.reduce_sum(dm))
+        #tf.debugging.check_numerics(dm, "dm")
+        #self.add_loss(1e-4*tf.reduce_sum(dm))
 
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
         
         x = self.layer_conv1(self.activation(x), dm)
+        #tf.debugging.check_numerics(x, "conv1")
         summary = tf.expand_dims(tf.reduce_mean(self.layer_summarize(x), axis=0), axis=0)
         summary = tf.tile(summary, [tf.shape(inputs)[0], 0])
  
@@ -580,32 +584,33 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
         self.file_writer_cm = file_writer_cm
 
     def on_epoch_end(self, epoch, logs):
-        true_ids = []
-        pred_ids = []
-        for iev, data in enumerate(self.dataset):
-            if iev>10:
-                break
-            X, y, w = data
-            pred = self.model(X).numpy()
-            pred_id_onehot, pred_momentum = separate_prediction(pred)
-            pred_id = np.argmax(pred_id_onehot, axis=-1)
-            true_id, true_momentum = separate_truth(y)
-            true_id = true_id.numpy()
-            pred_ids += [pred_id]
-            true_ids += [true_id]
+        if epoch%5 == 0:
+            true_ids = []
+            pred_ids = []
+            for iev, data in enumerate(self.dataset):
+                if iev>10:
+                    break
+                X, y, w = data
+                pred = self.model(X).numpy()
+                pred_id_onehot, pred_momentum = separate_prediction(pred)
+                pred_id = np.argmax(pred_id_onehot, axis=-1)
+                true_id, true_momentum = separate_truth(y)
+                true_id = true_id.numpy()
+                pred_ids += [pred_id]
+                true_ids += [true_id]
    
-        true_ids = np.concatenate(true_ids) 
-        pred_ids = np.concatenate(pred_ids)
+            true_ids = np.concatenate(true_ids) 
+            pred_ids = np.concatenate(pred_ids)
  
-        # Calculate the confusion matrix.
-        cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
+            # Calculate the confusion matrix.
+            cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
 
-        figure = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
-        cm_image = plot_to_image(figure)
+            figure = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
+            cm_image = plot_to_image(figure)
     
-        # Log the confusion matrix as an image summary.
-        with self.file_writer_cm.as_default():
-          tf.summary.image("Confusion Matrix", cm_image, step=epoch)
+            # Log the confusion matrix as an image summary.
+            with self.file_writer_cm.as_default():
+              tf.summary.image("Confusion Matrix", cm_image, step=epoch)
  
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
