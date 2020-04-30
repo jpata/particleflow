@@ -16,15 +16,31 @@ import time
 def collate(batch):
     print(batch)
     return batch
-        
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, choices=sorted(train_end2end.model_classes.keys()), help="type of model to use", default="PFNet6")
+    parser.add_argument("--path", type=str, help="path to model", default="data/PFNet7_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_221073__cfg_ee19d91068__user_jovyan__ntrain_400__lr_0.0001__1588215695")
+    parser.add_argument("--epoch", type=float, default="best", help="Epoch to use; could be 'last' or 'best'")
+    
+    args = parser.parse_args()
+    return args
+
 if __name__ == "__main__":
+    args = parse_args()
     device = torch.device("cuda")
    
-    epoch = 40 
-    model = "PFNet6_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_425491__cfg_36ec608897__user_jpata__ntrain_100__lr_0.0002__1586359112"
-    weights = torch.load("data/{}/epoch_{}/weights.pth".format(model, epoch))
-    
-    model = train_end2end.PFNet6(23, 128, 7, dropout_rate=0.2)
+    epoch = args.epoch
+    model = args.model
+    path = args.path
+    weights = torch.load("{}/epoch_{}/weights.pth".format(path, epoch))
+
+    with open('{}/model_kwargs.pkl'.format(path),'rb') as f:
+        model_kwargs = pickle.load(f)
+        
+    model_class = train_end2end.model_classes[args.model]
+    model = model_class(**model_kwargs)
     model.load_state_dict(weights)
     model = model.to(device)
     model.eval()

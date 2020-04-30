@@ -25,6 +25,7 @@ from gravnet import GravNetConv
 from glob import glob
 import numpy as np
 import os.path as osp
+import pickle
 
 import math
 import time
@@ -673,27 +674,35 @@ if __name__ == "__main__":
     test_loader.collate_fn = collate
 
     model_class = model_classes[args.model]
-    model = model_class(
-        input_dim=input_dim,
-        hidden_dim=args.hidden_dim,
-        output_dim_id=output_dim_id, 
-        output_dim_p4=output_dim_p4,
-        dropout_rate=args.dropout,
-        convlayer=args.convlayer,
-        space_dim=args.space_dim,
-        nearest=args.nearest)
-
+    model_kwargs = {'input_dim': input_dim,
+                    'hidden_dim': args.hidden_dim,
+                    'output_dim_id': output_dim_id,
+                    'output_dim_p4': output_dim_p4,
+                    'dropout_rate': args.dropout,
+                    'convlayer': args.convlayer,
+                    'space_dim': args.space_dim,
+                    'nearest': args.nearest}
+                    
+    model = model_class(**model_kwargs)
+        
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
 
     model.to(device)
 
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
-    outpath = os.path.join(args.outpath, model_fname)
-    if os.path.isdir(outpath):
+    outpath = osp.join(args.outpath, model_fname)
+    if osp.isdir(outpath):
         print("model output {} already exists, please delete it".format(outpath))
         sys.exit(0)
+    try:
+        os.makedirs(outpath)
+    except Exception as e:
+        pass
 
+    with open('{}/model_kwargs.pkl'.format(outpath), 'wb') as f:
+        pickle.dump(model_kwargs, f,  protocol=pickle.HIGHEST_PROTOCOL)
+        
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
@@ -745,6 +754,10 @@ if __name__ == "__main__":
         if l_t < best_test_loss:
             best_test_loss = l_t 
             stale_epochs = 0
+            make_plots(
+                model, j, "{0}/epoch_{1}/".format(outpath, "best"),
+                losses_train, losses_test, corrs, corrs_t,
+                accuracies, accuracies_t, test_loader)
         else:
             stale_epochs += 1
         if j > 0 and j%args.n_plot == 0:
@@ -766,6 +779,6 @@ if __name__ == "__main__":
             losses_str, stale_epochs, eta, spd))
 
     make_plots(
-        model, j, "{0}/epoch_{1}/".format(outpath, j),
+        model, j, "{0}/epoch_{1}/".format(outpath, "last"),
         losses_train, losses_test, corrs, corrs_t,
         accuracies, accuracies_t, test_loader)
