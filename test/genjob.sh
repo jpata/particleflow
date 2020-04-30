@@ -2,6 +2,8 @@
 set -e
 set -x
 
+CMSSWDIR=/storage/user/jpata/particleflow/test/CMSSW_11_1_0_pre5
+
 WORKDIR=`pwd`
 
 #sleep randomly up to 120s to stagger job start times
@@ -16,12 +18,11 @@ PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
 #--pileup_input $PILEUP_INPUT \
 
-N=10
+N=5
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
-CMSSWDIR=/storage/user/jpata/particleflow/test/CMSSW_11_1_X_2020-03-31-1100
 
 cd $CMSSWDIR
 eval `scramv1 runtime -sh`
@@ -71,5 +72,7 @@ cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 
+#cp *.root $CMSSWDIR/../$SAMPLE/
 cp pfntuple.root $CMSSWDIR/../$SAMPLE/pfntuple_$SEED.root
+
 rm -Rf testjob

@@ -60,7 +60,7 @@ def serialize_X_y_w(writer, X, y, w):
     writer.write(sample.SerializeToString())
 
 def serialize_chunk(args):
-    path, files, ichunk, target = args
+    path, files, ichunk, target, means, stds = args
     out_filename = os.path.join(path, "chunk_{}.tfrecords".format(ichunk))
     writer = tf.io.TFRecordWriter(out_filename)
     Xs = []
@@ -69,6 +69,9 @@ def serialize_chunk(args):
 
     for fi in files:
         X, y, ycand = load_one_file(fi)
+
+        X -= means
+        X /= stds
 
         Xs += [X]
         if target == "cand":
@@ -83,33 +86,43 @@ def serialize_chunk(args):
     for i in range(len(ys)):
         w = np.ones(len(ys[i]), dtype=np.float32)
         for uv, uc in zip(uniq_vals, uniq_counts):
-            w[ys[i][:, 0]==uv] = 1.0/uc
-        ids = ys[i][:, 0]
-
-        #equalize total weights between (0 and !=0 PIDs) to correctly predict the number of particles
-        w[ids==0] *= w[ids!=0].sum()/w[ids==0].sum()
-        #w *= len(ys[i])
-
+            w[ys[i][:, 0]==uv] = uc
         ws += [w]
 
     for X, y, w in zip(Xs, ys, ws):
+        print("serializing", X.shape, y.shape, w.shape)
         serialize_X_y_w(writer, X, y, w)
 
     writer.close()
+
+def extract_means_stds(filelist):
+    Xs = []
+    for fi in filelist[:10]:
+        X, y, ycand = load_one_file(fi)
+        Xs += [X]
+
+    X = np.vstack(Xs)
+    means = np.zeros(X.shape[1])
+    stds = np.ones(X.shape[1])
+    means[1:] = X[:, 1:].mean(axis=0)
+    X = X-means
+    stds[1:] = X[:, 1:].std(axis=0)
+    return means, stds
 
 if __name__ == "__main__":
     args = parse_args()
     tf.config.experimental_run_functions_eagerly(True)
 
     filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))
-    path = "data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/{}".format(args.target)
+    means, stds = extract_means_stds(filelist)
+    path = "data/TTbar_14TeV_TuneCUETP8M1_cfi_v2/tfr/{}".format(args.target)
 
     if not os.path.isdir(path):
         os.makedirs(path)
 
     pars = []
     for ichunk, files in enumerate(chunks(filelist, NUM_EVENTS_PER_TFR)):
-        pars += [(path, files, ichunk, args.target)]
+        pars += [(path, files, ichunk, args.target, means, stds)]
     print(len(pars))
     pool = multiprocessing.Pool(20)
     pool.map(serialize_chunk, pars)

@@ -36,6 +36,33 @@ class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
 from tensorflow.keras.optimizers import Optimizer
 import tensorflow_addons as tfa
 
+beta = (1.0 - 1e-3)
+def compute_weights_classbalanced(X, y, w):
+    wn = (1.0 - beta)/(1.0 - tf.pow(beta, w))
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
+
+def compute_weights_uniform(X, y, w):
+    wn = tf.ones_like(w)
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
+
+def compute_weights_inverse(X, y, w):
+    wn = 1.0/tf.sqrt(w)
+
+    msk = y[:, 0]==0
+    mult_mask = tf.where(msk, 2.0, 1.0)
+    wn = mult_mask*wn
+
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
+
+weight_schemes = {
+    "uniform": compute_weights_uniform,
+    "inverse": compute_weights_inverse,
+    "classbalanced": compute_weights_inverse,
+}
+
 def load_one_file(fn):
     Xs = []
     ys = []
@@ -182,7 +209,7 @@ class GraphConv(tf.keras.layers.Dense):
         b = self.weights[1]
 
         in_degrees = tf.reduce_sum(adj, axis=-1) 
-        norm = tf.expand_dims(tf.pow(in_degrees, -0.5), 1)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-4, -0.5), 1)
 
         support = (tf.linalg.matmul(inputs, W) + b)
 
@@ -231,7 +258,7 @@ class PFNet(tf.keras.Model):
 
         dm = self.layer_dist(distcoords)
         #tf.debugging.check_numerics(dm, "dm")
-        #self.add_loss(1e-4*tf.reduce_sum(dm))
+        #self.add_loss(1e-6*tf.reduce_sum(dm))
 
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
@@ -508,6 +535,7 @@ def parse_args():
     #parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     #parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
+    parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalance"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
     parser.add_argument("--load", type=str, default=None, help="model to load")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
@@ -579,8 +607,9 @@ def plot_to_image(figure):
     return image
 
 class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset, file_writer_cm):
+    def __init__(self, dataset, ntest, file_writer_cm):
         self.dataset = dataset
+        self.ntest = ntest
         self.file_writer_cm = file_writer_cm
 
     def on_epoch_end(self, epoch, logs):
@@ -588,7 +617,7 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
             true_ids = []
             pred_ids = []
             for iev, data in enumerate(self.dataset):
-                if iev>10:
+                if iev>=self.ntest:
                     break
                 X, y, w = data
                 pred = self.model(X).numpy()
@@ -611,7 +640,13 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
             # Log the confusion matrix as an image summary.
             with self.file_writer_cm.as_default():
               tf.summary.image("Confusion Matrix", cm_image, step=epoch)
- 
+              for pdgid in [-211, 211, 130, 13, -13, 11, -11, 22, 0]:
+                  idx = class_labels.index(pdgid)
+                  eff = cm[idx, idx] / np.sum(cm[idx, :])
+                  fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
+                  tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
+                  tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
+
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
     #tf.config.experimental_run_functions_eagerly(True)
@@ -634,8 +669,8 @@ if __name__ == "__main__":
     tfr_files = sorted(glob.glob(datapath + "/tfr/{}/chunk_*.tfrecords".format(args.target)))
 
     dataset = tf.data.TFRecordDataset(tfr_files)
-    ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).map(weight_schemes[args.weights])
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).map(weight_schemes[args.weights])
  
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
@@ -679,7 +714,7 @@ if __name__ == "__main__":
     cp_callback.set_model(model)
     callbacks += [cp_callback]
     
-    confusion_cb = ConfusionMatrixCallback(ds_test, file_writer_cm)
+    confusion_cb = ConfusionMatrixCallback(ds_test.repeat(), args.ntest, file_writer_cm)
     confusion_cb.set_model(model)
     callbacks += [confusion_cb]
 

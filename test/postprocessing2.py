@@ -413,7 +413,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     elem_branches = [
         "typ", "pt", "eta", "phi", "e",
         "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal"
+        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits"
     ]
     target_branches = ["typ", "pt", "eta", "phi", "e", "px", "py", "pz"]
 
@@ -557,6 +557,7 @@ if __name__ == "__main__":
         element_px = ev[b'element_px']
         element_py = ev[b'element_py']
         element_pz = ev[b'element_pz']
+        element_muon_dt_hits = ev[b'element_muon_dt_hits']
 
         trackingparticle_pid = ev[b'trackingparticle_pid']
         trackingparticle_pt = ev[b'trackingparticle_pt']
@@ -608,6 +609,7 @@ if __name__ == "__main__":
                 px=element_px[iobj],
                 py=element_py[iobj],
                 pz=element_pz[iobj],
+                muon_dt_hits=element_muon_dt_hits[iobj],
             )
         for iobj in range(len(trackingparticle_pid)):
             g.add_node(("tp", iobj),

@@ -8,8 +8,9 @@ Requirements=(TARGET.OpSysAndVer=="CentOS7" && regexp("blade.*", TARGET.Machine)
 +InteractiveUser = true
 +SingularityImage = "/cvmfs/singularity.opensciencegrid.org/bbockelm/cms:rhel7"
 +SingularityBindCVMFS = True
-+RequestWalltime = 6*3600
++RequestWalltime = 1*3600
 +PeriodicRemove = ((JobStatus =?= 2) && ((MemoryUsage =!= UNDEFINED && MemoryUsage > 1.1*RequestMemory)))
++PeriodicHold = ((JobStatus =?= 2) && (CurrentTime - EnteredCurrentStatus) > (60 * 60))
 
 run_as_owner = True
 x509userproxy = $ENV(X509_USER_PROXY)
@@ -20,4 +21,4 @@ RequestMemory = 1*3500
 Environment = USER=$ENV(USER);CONDORJOBID=$(Process)
 
 #Queue 10
-Queue arguments from args.txt
+Queue arguments from args2.txt

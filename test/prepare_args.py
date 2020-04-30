@@ -14,5 +14,5 @@ samples = [
 
 if __name__ == "__main__":
     for s in samples:
-        for iseed in range(1001, 2001):
-            print("{} {}".format(s, iseed))
+        for iseed in range(1000):
+            print("{} {}".format(s, iseed+1))
