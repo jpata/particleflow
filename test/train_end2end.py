@@ -145,7 +145,7 @@ def get_model_fname(dataset, model, n_train, lr, target_type):
 
 #Dense GCN
 class PFNet5(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=16, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=16, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet5, self).__init__()
         self.input_dim = input_dim
         act = nn.LeakyReLU
@@ -207,7 +207,7 @@ class PFNet5(nn.Module):
 
 #Baseline model with graph attention convolution & edge classification, slow to train 
 class PFNet6(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet6, self).__init__()
 
         act = nn.SELU
@@ -304,7 +304,7 @@ class PFNet6(nn.Module):
 
 #Simplified model with SGConv, no edge classification, fast to train
 class PFNet7(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet-knn", dropout_rate=0.0):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet-knn", space_dim=2, nearest=3, dropout_rate=0.0):
         super(PFNet7, self).__init__()
 
         act = nn.LeakyReLU
@@ -325,9 +325,9 @@ class PFNet7(nn.Module):
         #self.conv0 = SGConv(hidden_dim, hidden_dim, K=2)
 
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="knn") 
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="radius") 
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius") 
         elif convlayer == "sgconv":
             self.conv1 = SGConv(hidden_dim, hidden_dim, K=3)
         elif convlayer == "gatconv":
@@ -385,7 +385,7 @@ class PFNet7(nn.Module):
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 class PFNet8(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet8, self).__init__()
 
         act = nn.SELU
@@ -465,18 +465,22 @@ def parse_args():
     parser.add_argument("--n_train", type=int, default=80, help="number of training events")
     parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
+    parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
     parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
+    parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
+    parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
+    parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     args = parser.parse_args()
     return args
 
@@ -646,7 +650,7 @@ if __name__ == "__main__":
 
     edge_dim = 1
 
-    patience = args.n_epochs
+    patience = args.patience
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
@@ -675,7 +679,9 @@ if __name__ == "__main__":
         output_dim_id=output_dim_id, 
         output_dim_p4=output_dim_p4,
         dropout_rate=args.dropout,
-        convlayer=args.convlayer)
+        convlayer=args.convlayer,
+        space_dim=args.space_dim,
+        nearest=args.nearest)
 
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
@@ -683,8 +689,9 @@ if __name__ == "__main__":
     model.to(device)
 
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
-    if os.path.isdir("data/" + model_fname):
-        print("model output data/{} already exists, please delete it".format(model_fname))
+    outpath = os.path.join(args.outpath, model_fname)
+    if os.path.isdir(outpath):
+        print("model output {} already exists, please delete it".format(outpath))
         sys.exit(0)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -742,7 +749,7 @@ if __name__ == "__main__":
             stale_epochs += 1
         if j > 0 and j%args.n_plot == 0:
             make_plots(
-                model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+                model, j, "{0}/epoch_{1}/".format(outpath, j),
                 losses_train, losses_test, corrs, corrs_t,
                 accuracies, accuracies_t, test_loader)
  
@@ -759,6 +766,6 @@ if __name__ == "__main__":
             losses_str, stale_epochs, eta, spd))
 
     make_plots(
-        model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
+        model, j, "{0}/epoch_{1}/".format(outpath, j),
         losses_train, losses_test, corrs, corrs_t,
         accuracies, accuracies_t, test_loader)
