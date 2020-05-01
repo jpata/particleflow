@@ -4,7 +4,7 @@ import torch_geometric
 import sklearn
 import numpy as np
 import matplotlib.pyplot as plt
-from torch_geometric.data import Data, DataLoader, DataListLoader
+from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 import pandas
 import mplhep
 import pickle
@@ -13,9 +13,9 @@ import graph_data
 import train_end2end
 import time
 
-def collate(batch):
-    print(batch)
-    return batch
+def collate(items):
+    print(items)
+    return items[0]
 
 def parse_args():
     import argparse

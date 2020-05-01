@@ -56,7 +56,6 @@ def prepare_dataframe(model, loader):
     dfs = []
     eval_time = 0
     for i, data in enumerate(loader):
-        print(data)
         if not multi_gpu:
             data = data.to(device)
 
