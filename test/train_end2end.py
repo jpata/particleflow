@@ -56,7 +56,7 @@ def prepare_dataframe(model, loader):
     dfs = []
     eval_time = 0
     for i, data in enumerate(loader):
-
+        print(data)
         if not multi_gpu:
             data = data.to(device)
 
@@ -464,7 +464,7 @@ def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_train", type=int, default=80, help="number of training events")
-    parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
+    parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
     parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
@@ -604,7 +604,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
     losses = losses.sum(axis=0)
     return num_samples, losses, corr, acc
 
-def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, accuracies, accuracies_t, test_loader):
+def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
     try:
         os.makedirs(path)
     except Exception as e:
@@ -613,15 +613,15 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     modpath = path + 'weights.pth'
     torch.save(model.state_dict(), modpath)
 
-    df = prepare_dataframe(model, test_loader)
+    df = prepare_dataframe(model, val_loader)
     df.to_pickle(path + "df.pkl.bz2")
 
     np.savetxt(path+"losses_train.txt", losses_train)
-    np.savetxt(path+"losses_test.txt", losses_test)
+    np.savetxt(path+"losses_val.txt", losses_val)
     np.savetxt(path+"corrs_train.txt", corrs_train)
-    np.savetxt(path+"corrs_test.txt", corrs_test)
+    np.savetxt(path+"corrs_val.txt", corrs_val)
     np.savetxt(path+"accuracies_train.txt", accuracies)
-    np.savetxt(path+"accuracies_test.txt", accuracies_t)
+    np.savetxt(path+"accuracies_val.txt", accuracies_v)
 
 #    for i in range(losses_train.shape[1]):
 #        fig = plt.figure(figsize=(5,5))
@@ -629,8 +629,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 #        plt.ylabel("train loss")
 #        plt.plot(losses_train[:n_epoch, i])
 #        ax2=ax.twinx()
-#        ax2.plot(losses_test[:n_epoch, i], color="orange")
-#        ax2.set_ylabel("test loss", color="orange")
+#        ax2.plot(losses_val[:n_epoch, i], color="orange")
+#        ax2.set_ylabel("val loss", color="orange")
 #        plt.xlabel("epoch")
 #        plt.tight_layout()
 #        plt.savefig(path + "loss_{0}.pdf".format(i))
@@ -654,9 +654,9 @@ if __name__ == "__main__":
     patience = args.patience
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
+    val_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
     print("train_dataset", len(train_dataset))
-    print("test_dataset", len(test_dataset))
+    print("val_dataset", len(val_dataset))
 
 
     if not multi_gpu:
@@ -670,8 +670,8 @@ if __name__ == "__main__":
 
     train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
     train_loader.collate_fn = collate
-    test_loader = DataListLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
-    test_loader.collate_fn = collate
+    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    val_loader.collate_fn = collate
 
     model_class = model_classes[args.model]
     model_kwargs = {'input_dim': input_dim,
@@ -716,13 +716,13 @@ if __name__ == "__main__":
     model.train()
     
     losses_train = np.zeros((args.n_epochs+1, 3))
-    losses_test = np.zeros((args.n_epochs+1, 3))
+    losses_val = np.zeros((args.n_epochs+1, 3))
 
     corrs = []
-    corrs_t = []
+    corrs_v = []
     accuracies = []
-    accuracies_t = []
-    best_test_loss = 99999.9
+    accuracies_v = []
+    best_val_loss = 99999.9
     stale_epochs = 0
 
     initial_epochs = 10
@@ -745,40 +745,40 @@ if __name__ == "__main__":
         accuracies += [acc]
 
         model.eval()
-        num_samples_test, losses_t, c_t, acc_t = test(model, test_loader, j, args.l1, args.l2, args.l3, args.target)
-        l_t = sum(losses_t)
-        losses_test[j] = losses_t
-        corrs_t += [c_t]
-        accuracies_t += [acc_t]
+        num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.l3, args.target)
+        l_v = sum(losses_v)
+        losses_val[j] = losses_v
+        corrs_v += [c_v]
+        accuracies_v += [acc_v]
 
-        if l_t < best_test_loss:
-            best_test_loss = l_t 
+        if l_v < best_val_loss:
+            best_val_loss = l_v
             stale_epochs = 0
             make_plots(
                 model, j, "{0}/epoch_{1}/".format(outpath, "best"),
-                losses_train, losses_test, corrs, corrs_t,
-                accuracies, accuracies_t, test_loader)
+                losses_train, losses_val, corrs, corrs_v,
+                accuracies, accuracies_v, val_loader)
         else:
             stale_epochs += 1
         if j > 0 and j%args.n_plot == 0:
             make_plots(
                 model, j, "{0}/epoch_{1}/".format(outpath, j),
-                losses_train, losses_test, corrs, corrs_t,
-                accuracies, accuracies_t, test_loader)
+                losses_train, losses_val, corrs, corrs_v,
+                accuracies, accuracies_v, val_loader)
  
         t1 = time.time()
         epochs_remaining = args.n_epochs - j
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
-        spd = (num_samples_test+num_samples_train)/time_per_epoch
-        losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_t]) + "]"
+        spd = (num_samples_val+num_samples_train)/time_per_epoch
+        losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_v]) + "]"
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s".format(
             j, args.n_epochs,
-            t1 - t0, l, l_t, c, c_t, acc, acc_t,
+            t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd))
 
     make_plots(
         model, j, "{0}/epoch_{1}/".format(outpath, "last"),
-        losses_train, losses_test, corrs, corrs_t,
-        accuracies, accuracies_t, test_loader)
+        losses_train, losses_val, corrs, corrs_v,
+        accuracies, accuracies_v, val_loader)

@@ -4,7 +4,7 @@ import torch_geometric
 import sklearn
 import numpy as np
 import matplotlib.pyplot as plt
-from torch_geometric.data import Data, DataLoader
+from torch_geometric.data import Data, DataLoader, DataListLoader
 import pandas
 import mplhep
 import pickle
@@ -22,8 +22,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, choices=sorted(train_end2end.model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--path", type=str, help="path to model", default="data/PFNet7_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_221073__cfg_ee19d91068__user_jovyan__ntrain_400__lr_0.0001__1588215695")
-    parser.add_argument("--epoch", type=float, default="best", help="Epoch to use; could be 'last' or 'best'")
-    
+    parser.add_argument("--epoch", type=str, default="best", help="Epoch to use; could be 'last' or 'best'")
+    parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
+    parser.add_argument("--start", type=int, default=3900, help="starting testing event")
+    parser.add_argument("--stop", type=int, default=4000, help="stopping testing event")
     args = parser.parse_args()
     return args
 
@@ -45,20 +47,15 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
-    for dataset, start, stop in [
-        #("test/SinglePiFlatPt0p7To10_cfi", 900, 1000),
-        #("test/SingleElectronFlatPt1To100_pythia8_cfi", 0, 100),
-        #("test/SingleGammaFlatPt10To100_pythia8_cfi", 0, 100),
-        ("test/TTbar_14TeV_TuneCUETP8M1_cfi", 9000, 10000),
-        ]:
-        print(dataset)    
-        full_dataset = graph_data.PFGraphDataset(root=dataset)
-        test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=start, stop=stop))
-        
-        loader = DataLoader(test_dataset, batch_size=None, batch_sampler=None, pin_memory=False, shuffle=False)
-        loader.collate_fn = collate
-
-        big_df = train_end2end.prepare_dataframe(model, loader)
-   
-        big_df.to_pickle("{}.pkl.bz2".format(dataset))
-        print(big_df[big_df["cand_pid"]!=1].head())
+    
+    print(args.dataset)    
+    full_dataset = graph_data.PFGraphDataset(root=args.dataset)
+    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.start, stop=args.stop))
+    
+    loader = DataListLoader(test_dataset, batch_size=None, batch_sampler=None, pin_memory=False, shuffle=False)
+    loader.collate_fn = collate
+    
+    big_df = train_end2end.prepare_dataframe(model, loader)
+    
+    big_df.to_pickle("{}.pkl.bz2".format(dataset))
+    print(big_df[big_df["cand_pid"]!=1].head())
