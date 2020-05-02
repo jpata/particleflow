@@ -483,6 +483,7 @@ def parse_args():
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
+    parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
     args = parser.parse_args()
     return args
 
@@ -700,8 +701,13 @@ if __name__ == "__main__":
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
     outpath = osp.join(args.outpath, model_fname)
     if osp.isdir(outpath):
-        print("model output {} already exists, please delete it".format(outpath))
-        sys.exit(0)
+        if args.overwrite:
+            print("model output {} already exists, deleting it".format(outpath))
+            import shutil
+            shutil.rmtree(outpath)
+        else:
+            print("model output {} already exists, please delete it".format(outpath))
+            sys.exit(0)
     try:
         os.makedirs(outpath)
     except Exception as e:
