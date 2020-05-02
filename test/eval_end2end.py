@@ -14,8 +14,9 @@ import train_end2end
 import time
 
 def collate(items):
-    print(items)
-    return items[0]
+    l = sum(items, [])
+    return Batch.from_data_list(l)
+
 
 def parse_args():
     import argparse
@@ -24,7 +25,7 @@ def parse_args():
     parser.add_argument("--path", type=str, help="path to model", default="data/PFNet7_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_221073__cfg_ee19d91068__user_jovyan__ntrain_400__lr_0.0001__1588215695")
     parser.add_argument("--epoch", type=str, default="best", help="Epoch to use; could be 'last' or 'best'")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
-    parser.add_argument("--start", type=int, default=3900, help="starting testing event")
+    parser.add_argument("--start", type=int, default=3800, help="starting testing event")
     parser.add_argument("--stop", type=int, default=4000, help="stopping testing event")
     args = parser.parse_args()
     return args
@@ -52,10 +53,10 @@ if __name__ == "__main__":
     full_dataset = graph_data.PFGraphDataset(root=args.dataset)
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.start, stop=args.stop))
     
-    loader = DataListLoader(test_dataset, batch_size=None, batch_sampler=None, pin_memory=False, shuffle=False)
+    loader = DataListLoader(test_dataset, batch_size=1, pin_memory=False, shuffle=False)
     loader.collate_fn = collate
     
     big_df = train_end2end.prepare_dataframe(model, loader)
     
-    big_df.to_pickle("{}.pkl.bz2".format(dataset))
+    big_df.to_pickle("{}/test.pkl.bz2".format(path))
     print(big_df[big_df["cand_pid"]!=1].head())

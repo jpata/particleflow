@@ -1,6 +1,8 @@
 import sys
 import os
 
+from comet_ml import Experiment
+
 if not ("CUDA_VISIBLE_DEVICES" in os.environ):
     import setGPU
 
@@ -55,7 +57,7 @@ def prepare_dataframe(model, loader):
     model.eval()
     dfs = []
     eval_time = 0
-    for i, data in enumerate(loader):
+    for i, data in tqdm.tqdm(enumerate(loader),total=len(loader)):
         if not multi_gpu:
             data = data.to(device)
 
@@ -681,6 +683,12 @@ if __name__ == "__main__":
                     'convlayer': args.convlayer,
                     'space_dim': args.space_dim,
                     'nearest': args.nearest}
+
+    experiment = Experiment(api_key="Z9PGuFBhxgyL4IVzS4yucaqF5",
+                            project_name="particeflow", workspace="jmduarte")
+    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
+                                                    'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
+                                                    'n_train':args.n_train, 'target':args.target}))
                     
     model = model_class(**model_kwargs)
         
@@ -727,29 +735,41 @@ if __name__ == "__main__":
     initial_epochs = 10
    
     t0_initial = time.time()
-    print("Training over {} epochs".format(args.n_epochs)) 
+    print("Training over {} epochs".format(args.n_epochs))
     for j in range(args.n_epochs + 1):
         t0 = time.time()
-
+        
         if stale_epochs > patience:
             print("breaking due to stale epochs")
             break
-
-        model.train()
-
-        num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.l3, args.target)
-        l = sum(losses)
-        losses_train[j] = losses
-        corrs += [c]
-        accuracies += [acc]
-
-        model.eval()
-        num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.l3, args.target)
-        l_v = sum(losses_v)
-        losses_val[j] = losses_v
-        corrs_v += [c_v]
-        accuracies_v += [acc_v]
-
+        with experiment.train():
+            model.train()
+            num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.l3, args.target)
+            l = sum(losses)
+            losses_train[j] = losses
+            corrs += [c]
+            accuracies += [acc]
+            experiment.log_metric('loss',l, step=j)
+            experiment.log_metric('loss1',losses[0], step=j)
+            experiment.log_metric('loss2',losses[1], step=j)
+            experiment.log_metric('loss3',losses[2], step=j)
+            experiment.log_metric('corrs',c, step=j)
+            experiment.log_metric('accuracy',acc, step=j)
+            
+        with experiment.validate():
+            model.eval()
+            num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.l3, args.target)
+            l_v = sum(losses_v)
+            losses_val[j] = losses_v
+            corrs_v += [c_v]
+            accuracies_v += [acc_v]
+            experiment.log_metric('loss',l_v, step=j)
+            experiment.log_metric('loss1',losses_v[0], step=j)
+            experiment.log_metric('loss2',losses_v[1], step=j)
+            experiment.log_metric('loss3',losses_v[2], step=j)
+            experiment.log_metric('corrs',c_v, step=j)
+            experiment.log_metric('accuracy',acc_v, step=j)
+            
         if l_v < best_val_loss:
             best_val_loss = l_v
             stale_epochs = 0
