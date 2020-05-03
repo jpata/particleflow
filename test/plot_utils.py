@@ -1,5 +1,32 @@
 import matplotlib.pyplot as plt
 
+pid_to_text = {
+    211: r"charged hadrons ($\pi^-$, ...)",
+    -211: r"charged hadrons ($\pi^+$, ...)",
+    130: r"neutral hadrons (K, ...)",
+    1: r"HF hadron (EM)",
+    2: r"HF-HAD hadron (HAD)",
+}
+
+def get_eff(df, pid):
+    v0 = np.sum(df==pid)
+    return v0 / len(df), np.sqrt(v0)/len(df)
+
+def get_fake(df, pid):
+    v0 = np.sum(df!=pid)
+    return v0 / len(df), np.sqrt(v0)/len(df)
+
+def cms_label(x0=0.12, x1=0.23, x2=0.67, y=0.90):
+    plt.figtext(x0, y,'CMS',fontweight='bold', wrap=True, horizontalalignment='left', fontsize=12)
+    plt.figtext(x1, y,'Simulation Preliminary', style='italic', wrap=True, horizontalalignment='left', fontsize=10)
+    plt.figtext(x2, y,'Run 3 (14 TeV)',  wrap=True, horizontalalignment='left', fontsize=10)
+
+def sample_label(ax, y=0.98):
+    plt.text(0.03, y, "$\mathrm{t}\overline{\mathrm{t}}$ events", va="top", ha="left", size=10, transform=ax.transAxes)
+
+def particle_label(ax, pid):
+    plt.text(0.03, 0.92, pid_to_text[pid], va="top", ha="left", size=10, transform=ax.transAxes)
+
 def plot_confusion_matrix(cm,
                           target_names,
                           title='Confusion matrix',
@@ -79,3 +106,89 @@ def plot_confusion_matrix(cm,
     plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
     return fig
+
+
+def plot_E_reso(pid, v0, msk_true, msk_pred, msk_both, bins):
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
+    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False);
+    plt.xlabel(bins["true_val"] + " " + bins["E_xlabel"])
+    plt.ylabel(bins["pred_val"]+ " " + bins["E_xlabel"])
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.plot(
+        [bins["E_val"][0], bins["E_val"][-1]],
+        [bins["E_val"][0], bins["E_val"][-1]],
+        color="black", ls="--", lw=0.5)
+    plt.savefig("energy_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    plt.hist(v0[msk_true, 0], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
+    plt.hist(v0[msk_pred, 1], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"]);
+    plt.xlabel(bins["E_xlabel"])
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    plt.legend(frameon=False)
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
+    plt.savefig("energy_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
+
+    res = (v0[msk_both, 1] - v0[msk_both, 0])/v0[msk_both, 0]
+    res[np.isnan(res)] = -1
+
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    ax.text(0.98, 0.98, "avg. $\Delta E / E$\n$%.2f \pm %.2f$"%(np.mean(res), np.std(res)), transform=ax.transAxes, ha="right", va="top")
+    plt.hist(res, bins=bins["E_res"], density=1.0);
+    plt.xlabel("$\Delta E / E$")
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.savefig("energy_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    #efficiency vs fake rate
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    big_df["bins_target_e"] = np.searchsorted(bins["E_val"], big_df["target_e"])
+    big_df["bins_pred_e"] = np.searchsorted(bins["E_val"], big_df["pred_e"])
+
+    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_e")["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_e")["target_pid"].apply(get_fake, pid)
+
+    out_eff = np.zeros((len(bins["E_val"]), 2))
+    out_fake = np.zeros((len(bins["E_val"]), 2))
+    for ib in range(len(bins["E_val"])):
+        if ib in vals_eff.keys():
+            out_eff[ib, 0] = vals_eff[ib][0]
+            out_eff[ib, 1] = vals_eff[ib][1]
+        if ib in vals_fake.keys():
+            out_fake[ib, 0] = vals_fake[ib][0]
+            out_fake[ib, 1] = vals_fake[ib][1]
+
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+
+    plt.errorbar(bins["E_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency")
+    plt.ylabel("efficiency\nN(pred|true) / N(true)")
+    ax.set_ylim(0, 1.5)
+    plt.xlabel(bins["E_xlabel"])
+
+    ax2 = ax.twinx()
+    col = "red"
+    plt.errorbar(bins["E_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate")
+    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
+    plt.xlabel(bins["E_xlabel"])
+    ax2.set_ylim(0, 1.5)
+    lines, labels = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
+    plt.savefig("energy_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
+

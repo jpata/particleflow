@@ -6,6 +6,7 @@ import numba
 import os
 import uproot
 import uproot_methods
+import math
 
 import matplotlib
 matplotlib.use("Agg")
@@ -37,6 +38,18 @@ for candid, pdgids in map_candid_to_pdgid.items():
 @numba.njit
 def deltaphi(phi1, phi2):
     return np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
+
+@numba.njit
+def get_charge(pid):
+    abs_pid = abs(pid)
+    if pid == 130 or pid == 22 or pid == 1 or pid == 2:
+        return 0.0
+    #13: mu-, 11: e-
+    elif abs_pid == 13 or abs_pid == 11:
+        return -math.copysign(1.0, pid)
+    #211: pi+
+    elif abs_pid == 211:
+        return math.copysign(1.0, pid)
 
 @numba.njit
 def associate_deltar(etaphi, dr2cut, ret):
@@ -413,13 +426,16 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     elem_branches = [
         "typ", "pt", "eta", "phi", "e",
         "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits"
+        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits"
     ]
-    target_branches = ["typ", "pt", "eta", "phi", "e", "px", "py", "pz"]
+    target_branches = ["typ", "pt", "eta", "phi", "e", "px", "py", "pz", "charge"]
 
-    Xelem = np.zeros((len(all_elements), len(elem_branches)), dtype=np.float32)
-    ygen = np.zeros((len(all_elements), len(target_branches)), dtype=np.float32)
-    ycand = np.zeros((len(all_elements), len(target_branches)), dtype=np.float32)
+    Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
+    Xelem.fill(0.0)
+    ygen = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
+    ygen.fill(0.0)
+    ycand = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
+    ycand.fill(0.0)
  
     #find which elements should be linked together in the output when regressing to PFCandidates or GenParticles
     graph_elem_cand = nx.Graph()  
@@ -492,16 +508,16 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             eta = np.sign(lv.z)*10e10
         
         gp = {
-            "pt": lv.pt, "eta": eta, "phi": lv.phi, "e": lv.energy, "typ": pid, "px": lv.x, "py": lv.y, "pz": lv.z
+            "pt": lv.pt, "eta": eta, "phi": lv.phi, "e": lv.energy, "typ": pid, "px": lv.x, "py": lv.y, "pz": lv.z, "charge": get_charge(pid)
         }
 
         for j in range(len(elem_branches)):
-            Xelem[ielem, j] = g.nodes[elem][elem_branches[j]]
+            Xelem[elem_branches[j]][ielem] = g.nodes[elem][elem_branches[j]]
 
         for j in range(len(target_branches)):
             if not (candidate is None):
-                ycand[ielem, j] = g.nodes[candidate][target_branches[j]]
-            ygen[ielem, j] = gp[target_branches[j]]
+                ycand[target_branches[j]][ielem] = g.nodes[candidate][target_branches[j]]
+            ygen[target_branches[j]][ielem] = gp[target_branches[j]]
 
     dm_elem_cand = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_cand, nodelist=all_elements))
     dm_elem_gen = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_gen, nodelist=all_elements))
@@ -558,6 +574,7 @@ if __name__ == "__main__":
         element_py = ev[b'element_py']
         element_pz = ev[b'element_pz']
         element_muon_dt_hits = ev[b'element_muon_dt_hits']
+        element_muon_csc_hits = ev[b'element_muon_csc_hits']
 
         trackingparticle_pid = ev[b'trackingparticle_pid']
         trackingparticle_pt = ev[b'trackingparticle_pt']
@@ -610,6 +627,7 @@ if __name__ == "__main__":
                 py=element_py[iobj],
                 pz=element_pz[iobj],
                 muon_dt_hits=element_muon_dt_hits[iobj],
+                muon_csc_hits=element_muon_csc_hits[iobj],
             )
         for iobj in range(len(trackingparticle_pid)):
             g.add_node(("tp", iobj),
@@ -666,6 +684,7 @@ if __name__ == "__main__":
                 px=pfcandidate_px[iobj],
                 py=pfcandidate_py[iobj],
                 pz=pfcandidate_pz[iobj],
+                charge=get_charge(pfcandidate_pdgid[iobj]),
             )
 
         element_to_candidate_first = ev[b'element_to_candidate.first']

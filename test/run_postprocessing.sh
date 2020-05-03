@@ -3,7 +3,7 @@
 IMG=~jpata/gpuservers/singularity/images/pytorch.simg
 
 #which dataset to process from data/
-DATASET=TTbar_14TeV_TuneCUETP8M1_cfi_v2
+DATASET=TTbar_14TeV_TuneCUETP8M1_cfi
 
 #how many event graphs to save in one pickle file
 PERFILE=1
@@ -25,7 +25,7 @@ cd data/$DATASET
 mkdir -p raw
 mkdir -p processed
 
-\ls -1 *.root | parallel -j24 --gnu singularity exec --nv $IMG python ../../test/postprocessing2.py --input {} --events-per-file $PERFILE --outpath raw --save-normalized-table
+\ls -1 *.root | parallel -j20 --gnu singularity exec --nv $IMG python ../../test/postprocessing2.py --input {} --events-per-file $PERFILE --outpath raw --save-normalized-table
 
 #cd ../..
 #singularity exec --nv $IMG python test/graph_data.py --dataset data/$DATASET --num-files-merge $MERGE

@@ -15,7 +15,7 @@ SEED=$2
 
 #PILEUP=NoPileUp
 PILEUP=Run3_Flat55To75_PoissonOOTPU
-PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
+PILEUP_INPUT=filelist:/storage/user/jpata/particleflow/test/pu_files.txt
 #--pileup_input $PILEUP_INPUT \
 
 N=5

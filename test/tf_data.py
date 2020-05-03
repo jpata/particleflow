@@ -44,8 +44,8 @@ def _parse_tfr_element(element):
     arr_w = tf.io.parse_tensor(w, out_type=tf.float32)
 
     #https://github.com/tensorflow/tensorflow/issues/24520#issuecomment-577325475
-    arr_X.set_shape(tf.TensorShape((None, None)))
-    arr_y.set_shape(tf.TensorShape((None, None)))
+    arr_X.set_shape(tf.TensorShape((None, 15)))
+    arr_y.set_shape(tf.TensorShape((None, 5)))
     arr_w.set_shape(tf.TensorShape((None, )))
 
     return arr_X, arr_y, arr_w
@@ -60,7 +60,8 @@ def serialize_X_y_w(writer, X, y, w):
     writer.write(sample.SerializeToString())
 
 def serialize_chunk(args):
-    path, files, ichunk, target, means, stds = args
+    path, files, ichunk, target = args
+    print(path, len(files), ichunk, target)
     out_filename = os.path.join(path, "chunk_{}.tfrecords".format(ichunk))
     writer = tf.io.TFRecordWriter(out_filename)
     Xs = []
@@ -68,10 +69,11 @@ def serialize_chunk(args):
     ws = []
 
     for fi in files:
+        print(fi)
         X, y, ycand = load_one_file(fi)
 
-        X -= means
-        X /= stds
+        #X -= means
+        #X /= stds
 
         Xs += [X]
         if target == "cand":
@@ -113,19 +115,21 @@ if __name__ == "__main__":
     args = parse_args()
     tf.config.experimental_run_functions_eagerly(True)
 
-    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))
-    means, stds = extract_means_stds(filelist)
-    path = "data/TTbar_14TeV_TuneCUETP8M1_cfi_v2/tfr/{}".format(args.target)
+    filelist = sorted(glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl"))[:20000]
+    print("found {} files".format(len(filelist)))
+    #means, stds = extract_means_stds(filelist)
+    path = "data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/{}".format(args.target)
 
     if not os.path.isdir(path):
         os.makedirs(path)
 
     pars = []
     for ichunk, files in enumerate(chunks(filelist, NUM_EVENTS_PER_TFR)):
-        pars += [(path, files, ichunk, args.target, means, stds)]
-    print(len(pars))
+        pars += [(path, files, ichunk, args.target)]
+    print("pars", len(pars))
     pool = multiprocessing.Pool(20)
     pool.map(serialize_chunk, pars)
+    #list(map(serialize_chunk, pars))
  
     #tfr_dataset = tf.data.TFRecordDataset(glob.glob("test_*.tfrecords"))
     #dataset = tfr_dataset.map(_parse_tfr_element)
