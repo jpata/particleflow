@@ -524,25 +524,12 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     return Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen
 #end of prepare_normalized_table
 
-if __name__ == "__main__":
 
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
-    parser.add_argument("--event", type=int, default=None, help="event index to process, omit to process all")
-    parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot as trees in pt-descending order")
-    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file, -1 for all")
-    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph")
-    parser.add_argument("--save-normalized-table", action="store_true", help="save the uniquely identified table")
-    parser.add_argument("--save-images", action="store_true", help="saves the data as images")
-    args = parser.parse_args()
-
+def process(args):
     infile = args.input
     outpath = os.path.join(os.path.dirname(infile), args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
     tt = tf["ana/pftree"]
-
 
     events_to_process = [i for i in range(tt.numentries)] 
     if not (args.event is None):
@@ -744,3 +731,22 @@ if __name__ == "__main__":
     if args.events_per_file == -1:
         with open(outpath + ".pkl", "wb") as fi:
             pickle.dump(all_data, fi)
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
+    parser.add_argument("--event", type=int, default=None, help="event index to process, omit to process all")
+    parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot as trees in pt-descending order")
+    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file, -1 for all")
+    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph")
+    parser.add_argument("--save-normalized-table", action="store_true", help="save the uniquely identified table")
+    parser.add_argument("--save-images", action="store_true", help="saves the data as images")
+    args = parser.parse_args()
+    return args
+
+if __name__ == "__main__":
+    args = parse_args()
+    process(args)
+
