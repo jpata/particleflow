@@ -1,7 +1,6 @@
 import os
 import sys
 os.environ["KERAS_BACKEND"] = "tensorflow"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 import glob
 
@@ -34,7 +33,6 @@ elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
 from tensorflow.keras.optimizers import Optimizer
-import tensorflow_addons as tfa
 
 beta = (1.0 - 1e-3)
 def compute_weights_classbalanced(X, y, w):
@@ -221,7 +219,7 @@ class GraphConv(tf.keras.layers.Dense):
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, dim_graph_summary=16, num_conv=2):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, dim_graph_summary=16, num_conv=1):
         super(PFNet, self).__init__()
         self.activation = activation
         self.inp = tf.keras.Input(shape=(None,))
@@ -540,10 +538,10 @@ def parse_args():
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
-    parser.add_argument("--nhidden", type=int, default=512, help="hidden dimension")
+    parser.add_argument("--nhidden", type=int, default=256, help="hidden dimension")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers")
-    parser.add_argument("--distance-dim", type=int, default=32, help="distance dimension")
-    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
+    parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalance"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
     parser.add_argument("--load", type=str, default=None, help="model to load")
@@ -643,7 +641,7 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
             # Calculate the confusion matrix.
             cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
 
-            figure = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
+            figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
             cm_image = plot_to_image(figure)
     
             # Log the confusion matrix as an image summary.
@@ -663,13 +661,16 @@ if __name__ == "__main__":
     args = parse_args()
 
     #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    datapath = "/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
-    num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
-    if num_gpus > 1:
-        strategy = tf.distribute.MirroredStrategy()
-    else:
-        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    try:
+        num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+        if num_gpus > 1:
+            strategy = tf.distribute.MirroredStrategy()
+        else:
+            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    except Exception as e:
+        strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
     X, y, ycand = load_one_file(filelist[0])

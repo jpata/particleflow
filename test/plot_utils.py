@@ -1,11 +1,116 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import mplhep
 
 pid_to_text = {
-    211: r"charged hadrons ($\pi^-$, ...)",
-    -211: r"charged hadrons ($\pi^+$, ...)",
+    211: r"charged hadrons ($\pi^\pm$, ...)",
     130: r"neutral hadrons (K, ...)",
     1: r"HF hadron (EM)",
     2: r"HF-HAD hadron (HAD)",
+    11: r"$e^{\pm}$",
+    13: r"$\mu^{\pm}$",
+    22: r"$\gamma$",
+}
+
+bins = {
+    211: {
+        "E_val": np.linspace(0, 5, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 61),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    -211: {
+        "E_val": np.linspace(0, 5, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 41),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    130: {
+        "E_val": np.linspace(0, 10, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 41),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    22: {
+        "E_val": np.linspace(0, 10, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 41),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    11: {
+        "E_val": np.linspace(0, 10, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 41),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    13: {
+        "E_val": np.linspace(0, 10, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "eta_val": np.linspace(-4, 4, 61),
+        "eta_res": np.linspace(-0.5, 0.5, 41),
+        "E_xlabel": "Energy [GeV]",
+        "eta_xlabel": "$\eta$",
+        "phi_val": np.linspace(-4, 4, 61),
+        "phi_res": np.linspace(-0.5, 0.5, 41),
+        "phi_xlabel": "Energy [GeV]",
+        "phi_xlabel": "$\phi$",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    1: {
+        "E_val": np.linspace(0, 100, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "xlabel": "Energy [GeV]",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    },
+    2: {
+        "E_val": np.linspace(0, 50, 61),
+        "E_res": np.linspace(-1, 1, 61),
+        "xlabel": "Energy [GeV]",
+        "true_val": "reco PF",
+        "pred_val": "ML-PF",
+    }
 }
 
 def get_eff(df, pid):
@@ -79,6 +184,7 @@ def plot_confusion_matrix(cm,
     cm[np.isnan(cm)] = 0.0
 
     fig = plt.figure(figsize=(8, 6))
+    ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)
     plt.colorbar()
@@ -105,10 +211,10 @@ def plot_confusion_matrix(cm,
     plt.ylim(-1, len(target_names))
     plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
-    return fig
+    return fig, ax
 
 
-def plot_E_reso(pid, v0, msk_true, msk_pred, msk_both, bins):
+def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
@@ -192,3 +298,168 @@ def plot_E_reso(pid, v0, msk_true, msk_pred, msk_both, bins):
     ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
     plt.savefig("energy_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
 
+def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["eta_val"], bins["eta_val"]))
+    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False);
+    plt.xlabel(bins["true_val"] + " " + bins["eta_xlabel"])
+    plt.ylabel(bins["pred_val"]+ " " + bins["eta_xlabel"])
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.plot(
+        [bins["eta_val"][0], bins["eta_val"][-1]],
+        [bins["eta_val"][0], bins["eta_val"][-1]],
+        color="black", ls="--", lw=0.5)
+    plt.savefig("eta_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    plt.hist(v0[msk_true, 0], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
+    plt.hist(v0[msk_pred, 1], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"]);
+    plt.xlabel(bins["eta_xlabel"])
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    plt.legend(frameon=False)
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
+    plt.savefig("eta_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
+
+    res = (v0[msk_both, 1] - v0[msk_both, 0])
+    res[np.isnan(res)] = -1
+
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    ax.text(0.98, 0.98, "avg. $\Delta \eta$\n$%.2f \pm %.2f$"%(np.mean(res), np.std(res)), transform=ax.transAxes, ha="right", va="top")
+    plt.hist(res, bins=bins["eta_res"], density=1.0);
+    plt.xlabel("$\Delta \eta$")
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.savefig("eta_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    #efficiency vs fake rate
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    big_df["bins_target_eta"] = np.searchsorted(bins["eta_val"], big_df["target_eta"])
+    big_df["bins_pred_eta"] = np.searchsorted(bins["eta_val"], big_df["pred_eta"])
+
+    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_eta")["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_eta")["target_pid"].apply(get_fake, pid)
+
+    out_eff = np.zeros((len(bins["eta_val"]), 2))
+    out_fake = np.zeros((len(bins["eta_val"]), 2))
+    for ib in range(len(bins["eta_val"])):
+        if ib in vals_eff.keys():
+            out_eff[ib, 0] = vals_eff[ib][0]
+            out_eff[ib, 1] = vals_eff[ib][1]
+        if ib in vals_fake.keys():
+            out_fake[ib, 0] = vals_fake[ib][0]
+            out_fake[ib, 1] = vals_fake[ib][1]
+
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+
+    plt.errorbar(bins["eta_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency")
+    plt.ylabel("efficiency\nN(pred|true) / N(true)")
+    ax.set_ylim(0, 1.5)
+    plt.xlabel(bins["eta_xlabel"])
+
+    ax2 = ax.twinx()
+    col = "red"
+    plt.errorbar(bins["eta_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate")
+    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
+    plt.xlabel(bins["eta_xlabel"])
+    ax2.set_ylim(0, 1.5)
+    lines, labels = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
+    plt.savefig("eta_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
+
+def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["phi_val"], bins["phi_val"]))
+    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False);
+    plt.xlabel(bins["true_val"] + " " + bins["phi_xlabel"])
+    plt.ylabel(bins["pred_val"]+ " " + bins["phi_xlabel"])
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.plot(
+        [bins["phi_val"][0], bins["phi_val"][-1]],
+        [bins["phi_val"][0], bins["phi_val"][-1]],
+        color="black", ls="--", lw=0.5)
+    plt.savefig("phi_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    plt.hist(v0[msk_true, 0], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
+    plt.hist(v0[msk_pred, 1], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"]);
+    plt.xlabel(bins["phi_xlabel"])
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    plt.legend(frameon=False)
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.savefig("phi_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
+
+    res = (v0[msk_both, 1] - v0[msk_both, 0])
+    res[np.isnan(res)] = -1
+
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    ax.text(0.98, 0.98, "avg. $\Delta \phi$\n$%.2f \pm %.2f$"%(np.mean(res), np.std(res)), transform=ax.transAxes, ha="right", va="top")
+    plt.hist(res, bins=bins["phi_res"], density=1.0);
+    plt.xlabel("$\Delta \phi$")
+    plt.ylabel("number of particles\n(normalized, a.u.)")
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+    plt.savefig("phi_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    
+    #efficiency vs fake rate
+    plt.figure(figsize=(4,4))
+    ax = plt.axes()
+    big_df["bins_target_phi"] = np.searchsorted(bins["phi_val"], big_df["target_phi"])
+    big_df["bins_pred_phi"] = np.searchsorted(bins["phi_val"], big_df["pred_phi"])
+
+    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_phi")["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_phi")["target_pid"].apply(get_fake, pid)
+
+    out_eff = np.zeros((len(bins["phi_val"]), 2))
+    out_fake = np.zeros((len(bins["phi_val"]), 2))
+    for ib in range(len(bins["phi_val"])):
+        if ib in vals_eff.keys():
+            out_eff[ib, 0] = vals_eff[ib][0]
+            out_eff[ib, 1] = vals_eff[ib][1]
+        if ib in vals_fake.keys():
+            out_fake[ib, 0] = vals_fake[ib][0]
+            out_fake[ib, 1] = vals_fake[ib][1]
+
+    cms_label()
+    sample_label(ax)
+    particle_label(ax, pid)
+
+    plt.errorbar(bins["phi_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency")
+    plt.ylabel("efficiency\nN(pred|true) / N(true)")
+    ax.set_ylim(0, 1.5)
+    plt.xlabel(bins["phi_xlabel"])
+
+    ax2 = ax.twinx()
+    col = "red"
+    plt.errorbar(bins["phi_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate")
+    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
+    plt.xlabel(bins["phi_xlabel"])
+    ax2.set_ylim(0, 1.5)
+    lines, labels = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
+    plt.savefig("phi_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
