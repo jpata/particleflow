@@ -283,11 +283,11 @@ if __name__ == "__main__":
         src_array = np.concatenate([src_array_tower, src_array_trk], axis=0)
   
         #Create edges between elements in the same tile or neighbouring tiles
-        n = len(src_array)
-        adj_matrix = np.zeros((n, n))
-        fill_adj_matrix(src_array, bins_eta, bins_phi, adj_matrix)
+        #n = len(src_array)
+        #adj_matrix = np.zeros((n, n))
+        #fill_adj_matrix(src_array, bins_eta, bins_phi, adj_matrix)
 
-        np.savez_compressed("raw2/ev_{}.npz".format(iev), X=src_array, y_trk=tgt_array_trk, y_tower=tgt_array_tower, adj=adj_matrix)
+        #np.savez_compressed("raw2/ev_{}.npz".format(iev), X=src_array, y_trk=tgt_array_trk, y_tower=tgt_array_tower, adj=adj_matrix)
 
         all_particles = pileupmix 
         itgt = 0

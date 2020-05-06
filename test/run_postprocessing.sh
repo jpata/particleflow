@@ -2,30 +2,20 @@
 
 IMG=~jpata/gpuservers/singularity/images/pytorch.simg
 
-#which dataset to process from data/
-DATASET=TTbar_14TeV_TuneCUETP8M1_cfi
+#which dataset to process
+DATASET=$1
 
 #how many event graphs to save in one pickle file
-PERFILE=1
+PERFILE=$2
 
-#how many pickle files to merge to one pytorch batch
-MERGE=5
+#how many pickle files to merge to one pytorch/tensorflow file
+MERGE=$3
 
-#DATASET=SingleElectronFlatPt1To100_pythia8_cfi
-#PERFILE=-1
-#MERGE=5
+#Produce pickle files
+\ls -1 $DATASET/*.root | parallel -j20 --gnu singularity exec --nv $IMG \
+  python test/postprocessing2.py --input {} \
+    --events-per-file $PERFILE --outpath raw --save-normalized-table
 
-#DATASET=SinglePiFlatPt0p7To10_cfi
-#PERFILE=-1
-#MERGE=10
-
-cd data/$DATASET
-
-#rm -Rf raw processed
-mkdir -p raw
-mkdir -p processed
-
-seq 1 10 | parallel -j24 --gnu python ../../test/postprocessing2.py --input pfntuple_{}.root --events-per-file $PERFILE --outpath raw2 --save-normalized-table --save-full-graph --save-images
-
-cd ../..
-singularity exec --nv $IMG python test/graph_data.py --dataset data/$DATASET --num-files-merge $MERGE
+#Produce TFRecords
+singularity exec -B /storage --nv $IMG \
+  python3 test/tf_data.py --target cand --datapath $DATASET --num-files-per-tfr $MERGE
