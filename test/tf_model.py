@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 os.environ["KERAS_BACKEND"] = "tensorflow"
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
@@ -36,7 +37,8 @@ class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 from tensorflow.keras.optimizers import Optimizer
 import tensorflow_addons as tfa
 
-beta = (1.0 - 1e-3)
+#https://arxiv.org/pdf/1901.05555.pdf
+beta = 0.99
 def compute_weights_classbalanced(X, y, w):
     wn = (1.0 - beta)/(1.0 - tf.pow(beta, w))
     wn /= tf.reduce_sum(wn)
@@ -49,7 +51,6 @@ def compute_weights_uniform(X, y, w):
 
 def compute_weights_inverse(X, y, w):
     wn = 1.0/tf.sqrt(w)
-
     wn /= tf.reduce_sum(wn)
     return X, y, wn
 
@@ -65,12 +66,14 @@ def load_one_file(fn):
     Xs = []
     ys = []
     ys_cand = []
+    dms = []
 
     data = pickle.load(open(fn, "rb"), encoding='iso-8859-1')
     for event in data:
         Xelem = event["Xelem"]
         ygen = event["ygen"]
         ycand = event["ycand"]
+        #dm = event["dm"]
 
         #skip PS, GSF and BREM for now
         #elem_id = Xelem[:, 0]
@@ -127,37 +130,9 @@ def load_one_file(fn):
         Xs += [Xelem_flat]
         ys += [ygen_flat]
         ys_cand += [ycand_flat]
+        #dms += [dm]
 
-    return Xs[0], ys[0], ys_cand[0]
-
-def load_data(filelist, target):
-    Xs = []
-    ys = []
-    ws = []
-
-    for ifi, fi in enumerate(filelist):
-        print(fi)
-        X, y, ycand = load_one_file(fi)
-        Xs += [X]
-        if target == "cand":
-            ys += [ycand]
-        elif target == "gen":
-            ys += [y]
-    
-    uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
-    for i in range(len(ys)):
-        w = np.ones(len(ys[i]), dtype=np.float32)
-        for uv, uc in zip(uniq_vals, uniq_counts):
-            w[ys[i][:, 0]==uv] = 1.0/uc
-        ids = ys[i][:, 0]
-
-        #equalize total weights between (0 and !=0 PIDs) to correctly predict the number of particles
-        w[ids==0] *= w[ids!=0].sum()/w[ids==0].sum()
-        #w *= len(ys[i])
-
-        ws += [w]
-
-    return Xs, ys, ws
+    return Xs, ys, ys_cand
 
 def dist(A,B):
     na = tf.reduce_sum(tf.square(A), -1)
@@ -189,11 +164,10 @@ class Distance(tf.keras.layers.Layer):
     def __init__(self, dist_shape, *args, **kwargs):
         super(Distance, self).__init__(*args, **kwargs)
 
-    def call(self, inputs):
+    def call(self, inputs1, inputs2):
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
-        D =  dist(inputs, inputs)
+        D =  dist(inputs1, inputs2)
         
-        #closer nodes have higher weight, could also consider exp(-D) or such here
         D = tf.math.exp(-1.0*D)
 
         return D
@@ -224,13 +198,14 @@ class PFNet(tf.keras.Model):
     def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, dim_graph_summary=16, num_conv=2):
         super(PFNet, self).__init__()
         self.activation = activation
-        self.inp = tf.keras.Input(shape=(None,))
+
         self.enc = InputEncoding(len(elem_labels))
 
         #self.layer_conv0 = GraphConv(hidden_dim, activation=activation, name="initial_conv")
 
-        self.layer_distcoords1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords1")
-        self.layer_distcoords = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords")
+        self.layer_distcoords1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords11")
+        self.layer_distcoords21 = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords21")
+        #self.layer_distcoords22 = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords22")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
@@ -255,26 +230,25 @@ class PFNet(tf.keras.Model):
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
-       
+        self.inp_X = tf.keras.Input(batch_size=None, shape=(15, ), name="X")
+        #self.inp_dm = tf.keras.Input(batch_size=None, shape=(None, ), sparse=True, name="dm")
+        #self._set_inputs(self.inp_X)
+ 
     def predict_distancematrix(self, inputs):
-
-        #adj0 = tf.exp(-1.0 * dist(inputs[:, 2:4], inputs[:, 2:4]))
-        #adj1 = tf.exp(-1.0 * dist(inputs[:, 2:4], inputs[:, 9:11]))
-        #adj2 = tf.exp(-1.0 * dist(inputs[:, 2:4], inputs[:, 11:13]))
-        #adj = adj0+adj1+adj2
 
         enc = self.activation(self.enc(inputs))
 
-        #x = self.layer_conv0(enc, adj)
-
         x = self.layer_distcoords1(enc)
-        distcoords = self.layer_distcoords(x)
+        distcoords1 = self.layer_distcoords21(x)
+        #distcoords2 = self.layer_distcoords22(x)
 
-        dm = self.layer_dist(distcoords)
+        dm = self.layer_dist(distcoords1, distcoords1)
         return enc, dm
  
     def call(self, inputs):
-        enc, dm = self.predict_distancematrix(inputs)
+        X = inputs
+
+        enc, dm = self.predict_distancematrix(X)
 
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
@@ -284,7 +258,7 @@ class PFNet(tf.keras.Model):
             x = conv(x, dm)
 
         summary = tf.expand_dims(tf.reduce_mean(self.layer_summarize(x), axis=0), axis=0)
-        summary = tf.tile(summary, [tf.shape(inputs)[0], 0])
+        summary = tf.tile(summary, [tf.shape(X)[0], 0])
  
         a = self.layer_id1(tf.concat([summary, x], axis=-1))
         a = self.layer_id2(a)
@@ -300,38 +274,38 @@ class PFNet(tf.keras.Model):
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
-        #msk_good = tf.cast(out_id != 0, tf.float32)
+        msk_good = tf.cast(out_id != 0, tf.float32)
 
-        out_momentum_eta = inputs[:, 2] + pred_corr[:, 0]
-        new_phi = inputs[:, 3] + pred_corr[:, 1]
+        out_momentum_eta = X[:, 2] + pred_corr[:, 0]
+        new_phi = X[:, 3] + pred_corr[:, 1]
         out_momentum_phi = new_phi
-        out_momentum_E = inputs[:, 4] + pred_corr[:, 2]
+        out_momentum_E = X[:, 4] + pred_corr[:, 2]
 
         out_momentum = tf.stack([
-            #tf.multiply(out_momentum_eta, msk_good),
-            #tf.multiply(out_momentum_phi, msk_good),
-            #tf.multiply(out_momentum_E, msk_good)
-            out_momentum_eta,
-            out_momentum_phi,
-            out_momentum_E,
+            tf.multiply(out_momentum_eta, msk_good),
+            tf.multiply(out_momentum_phi, msk_good),
+            tf.multiply(out_momentum_E, msk_good)
+            #out_momentum_eta,
+            #out_momentum_phi,
+            #out_momentum_E,
         ], axis=-1)
 
-        ret = tf.concat([out_id_logits, out_charge, out_momentum], axis=-1)
+        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
         return ret
 
 #@tf.function
 def separate_prediction(y_pred):
     N = len(class_labels)
     pred_id_onehot = y_pred[:, :N]
-    pred_charge = y_pred[:, N:N+2]
-    pred_momentum = y_pred[:, N+2:]
+    pred_momentum = y_pred[:, N:N+3]
+    pred_charge = y_pred[:, N+3:]
     return pred_id_onehot, pred_charge, pred_momentum
 
 #@tf.function
 def separate_truth(y_true):
     true_id = tf.cast(y_true[:, :1], tf.int32)
-    true_charge = y_true[:, 1:2] + 1.0
-    true_momentum = y_true[:, 2:]
+    true_momentum = y_true[:, 1:4]
+    true_charge = y_true[:, 4:5] + 1.0
     return true_id, true_charge, true_momentum
 
 def mse_unreduced(true, pred):
@@ -391,11 +365,7 @@ def cls_accuracy(y_true, y_pred):
     pred_id_onehot, pred_charge, pred_momentum = separate_prediction(y_pred)
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
-
-    nmatch = tf.reduce_sum(tf.cast(tf.math.equal(true_id[:, 0], pred_id), tf.float32))
-    nall = tf.cast(tf.size(pred_id), tf.float32)
-    v = nmatch/nall
-    return v
+    return tf.keras.metrics.categorical_accuracy(true_id[:, 0], pred_id)
 
 #@tf.function
 def num_pred(y_true, y_pred):
@@ -544,7 +514,7 @@ def parse_args():
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers")
     parser.add_argument("--distance-dim", type=int, default=32, help="distance dimension")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
-    parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalance"], help="Sample weighting scheme to use", default="inverse")
+    parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalanced"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
     parser.add_argument("--load", type=str, default=None, help="model to load")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
@@ -622,7 +592,7 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
         self.file_writer_cm = file_writer_cm
 
     def on_epoch_end(self, epoch, logs):
-        if epoch%5 == 0:
+        if epoch>0 and epoch%5 == 0:
             true_ids = []
             pred_ids = []
             for iev, data in enumerate(self.dataset):
@@ -645,16 +615,39 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
 
             figure = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
             cm_image = plot_to_image(figure)
+            
+            figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
+            cm_image2 = plot_to_image(figure2)
     
             # Log the confusion matrix as an image summary.
             with self.file_writer_cm.as_default():
               tf.summary.image("Confusion Matrix", cm_image, step=epoch)
+              tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
               for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
                   idx = class_labels.index(pdgid)
                   eff = cm[idx, idx] / np.sum(cm[idx, :])
                   fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
                   tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
                   tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
+
+def summarize_dataset(dataset):
+    yclasses = []
+    nev = 0.0
+    ntot = 0.0
+    sizes = []
+
+    for X, y, w in dataset:
+        yclasses += [y[:, 0]]
+        nev += 1
+        ntot += len(y)
+        sizes += [len(y)]
+    
+    yclasses = np.concatenate(yclasses)
+    values, counts= np.unique(yclasses, return_counts=True)
+    print("nev={}".format(nev))
+    print("sizes={}".format(np.percentile(sizes, [0.25, 0.5, 0.95, 0.99])))
+    for v, c in zip(values, counts):
+        print("label={} count={} frac={:.2f}".format(class_labels[int(v)], c, c/ntot))
 
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
@@ -663,7 +656,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    datapath = "/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
     if num_gpus > 1:
@@ -672,14 +665,26 @@ if __name__ == "__main__":
         strategy = tf.distribute.OneDeviceStrategy("gpu:0")
 
     filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
-    X, y, ycand = load_one_file(filelist[0])
 
-    from tf_data import _parse_tfr_element, NUM_EVENTS_PER_TFR
-    tfr_files = sorted(glob.glob(datapath + "/tfr/{}/chunk_*.tfrecords".format(args.target)))
+    from tf_data import _parse_tfr_element
+    #tfr_files = [
+    #    "test/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+    #    "test/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+    #    "test/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+    #    "test/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+    #]
+    tfr_files = glob.glob(datapath + "/tfr/{}/*.tfrecords".format(args.target))
+    assert(len(tfr_files) > 0)
 
-    dataset = tf.data.TFRecordDataset(tfr_files)
-    ds_train = dataset.take(args.ntrain).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).map(weight_schemes[args.weights])
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).map(weight_schemes[args.weights])
+    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ 
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights])
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights])
+
+    print("train")
+    summarize_dataset(ds_train)
+    print("test")
+    summarize_dataset(ds_test)
  
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
@@ -688,7 +693,6 @@ if __name__ == "__main__":
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
-        model(X)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
@@ -747,5 +751,5 @@ if __name__ == "__main__":
     prepare_df(args.nepochs, model, ds_test, outdir)
 
     #ensure model is compiled
-    model.predict(X)
-    tf.keras.models.save_model(model, outdir + "/model.tf", save_format="tf")
+    #model.predict((X, dm))
+    #tf.keras.models.save_model(model, outdir + "/model.tf", save_format="tf")
