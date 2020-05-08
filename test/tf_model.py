@@ -22,18 +22,13 @@ from tqdm import tqdm
 import itertools
 import io
 
-import keras
 import tensorflow as tf
 
-from keras.layers import Input, Dense
-from keras.models import Model
-from tensorflow.python.keras import backend as K
 from plot_utils import plot_confusion_matrix
 
 elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
-from tensorflow.keras.optimizers import Optimizer
 
 #https://arxiv.org/pdf/1901.05555.pdf
 beta = 0.99
@@ -138,7 +133,7 @@ def dist(A,B):
  
     na = tf.reshape(na, [-1, 1])
     nb = tf.reshape(nb, [1, -1])
-    Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, False, True) + nb, 1e-12, 1e12)
+    Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, transpose_a=False, transpose_b=True) + nb, 1e-12, 1e12)
     D = tf.sqrt(Dsq)
     return D
 
@@ -167,7 +162,8 @@ class Distance(tf.keras.layers.Layer):
         D =  dist(inputs1, inputs2)
         
         D = tf.math.exp(-1.0*D)
-
+        #D = tf.keras.activations.relu(D, threshold=0.01)
+        
         return D
     
 class GraphConv(tf.keras.layers.Dense):
@@ -182,13 +178,13 @@ class GraphConv(tf.keras.layers.Dense):
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), 1)
 
         support = (tf.linalg.matmul(inputs, W) + b)
-
+      
         out = support
 
+        #tf.print(tf.reduce_sum(tf.cast(adj>0, tf.float32)) / tf.cast(tf.shape(adj)[0]*tf.shape(adj)[1], tf.float32))
         for i in range(3):
             out = tf.linalg.matmul(adj, out*norm)*norm
 
-        #tf.print("out", tf.reduce_mean(out))
         return self.activation(out)
 
 class PFNet(tf.keras.Model):
@@ -242,7 +238,8 @@ class PFNet(tf.keras.Model):
 
         dm = self.layer_dist(distcoords1, distcoords1)
         return enc, dm
- 
+
+    #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
     def call(self, inputs):
         X = inputs
 
@@ -296,14 +293,14 @@ def separate_prediction(y_pred):
     N = len(class_labels)
     pred_id_onehot = y_pred[:, :N]
     pred_momentum = y_pred[:, N:N+3]
-    pred_charge = y_pred[:, N+3:]
+    pred_charge = y_pred[:, N+3:N+4]
     return pred_id_onehot, pred_charge, pred_momentum
 
 #@tf.function
 def separate_truth(y_true):
     true_id = tf.cast(y_true[:, :1], tf.int32)
     true_momentum = y_true[:, 1:4]
-    true_charge = y_true[:, 4:5] + 1.0
+    true_charge = y_true[:, 4:5]
     return true_id, true_charge, true_momentum
 
 def mse_unreduced(true, pred):
@@ -340,7 +337,7 @@ def my_loss_full(y_true, y_pred):
     l2 = (l2_0 + l2_1 + l2_2)
     #l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
 
-    #l3 = 0.1*tf.math.pow(tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.float32)) - tf.reduce_sum(tf.cast(pred_id != 0, tf.float32)), 2)
+    l3 = mse_unreduced(true_charge, pred_charge)
 
     #tf.debugging.check_numerics(l1, "l1")
     #tf.debugging.check_numerics(l2_0, "l2_0")
@@ -355,7 +352,7 @@ def my_loss_full(y_true, y_pred):
     #tf.print("l3", tf.reduce_mean(l3))
 
     #tf.print("\n")
-    l = l1 + l2
+    l = l1 + l2 + l3
     return l
 
 #@tf.function
@@ -575,7 +572,6 @@ def plot_to_image(figure):
     plt.savefig(buf, format='png')
     # Closing the figure prevents it from being displayed directly inside
     # the notebook.
-    plt.close(figure)
     buf.seek(0)
     # Convert PNG buffer to TF image
     image = tf.image.decode_png(buf.getvalue(), channels=4)
@@ -647,9 +643,32 @@ def summarize_dataset(dataset):
     for v, c in zip(values, counts):
         print("label={} count={} frac={:.2f}".format(class_labels[int(v)], c, c/ntot))
 
+def load_dataset_gun():
+    globs = [
+        "data/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "data/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "data/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+        "data/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "data/SingleTauFlatPt2To150_cfi/tfr/cand/chunk_0.tfrecords",
+    ]
+
+    tfr_files = []
+    for g in globs:
+        tfr_files += [g]
+    tfr_files = sorted(tfr_files)
+    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.shuffle(50000)
+    return dataset
+
+def load_dataset_ttbar(datapath):
+    tfr_files = glob.glob(datapath + "/tfr/{}/*.tfrecords".format(args.target))
+    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    #dataset = tf.data.Dataset.from_tensor_slices(tfr_files).interleave(lambda x: tf.data.TFRecordDataset(x)).map(_parse_tfr_element)
+    return dataset
+
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
-    #tf.config.experimental_run_functions_eagerly(True)
+    #tf.config.experimental_run_functions_eagerly(False)
 
     args = parse_args()
 
@@ -668,24 +687,17 @@ if __name__ == "__main__":
     filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
 
     from tf_data import _parse_tfr_element
-    #tfr_files = [
-    #    "test/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-    #    "test/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-    #    "test/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
-    #    "test/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-    #]
-    tfr_files = glob.glob(datapath + "/tfr/{}/*.tfrecords".format(args.target))
-    assert(len(tfr_files) > 0)
 
-    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
- 
+    #dataset = load_dataset_gun()
+    dataset = load_dataset_ttbar(datapath)
+  
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights])
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights])
 
-    print("train")
-    summarize_dataset(ds_train)
-    print("test")
-    summarize_dataset(ds_test)
+    #print("train")
+    #summarize_dataset(ds_train)
+    #print("test")
+    #summarize_dataset(ds_test)
  
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
@@ -694,7 +706,7 @@ if __name__ == "__main__":
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
-
+   
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
     outdir = 'experiments/' + args.name
@@ -705,8 +717,10 @@ if __name__ == "__main__":
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=0, write_graph=True, write_images=False,
-        update_freq='epoch'
+        log_dir=outdir, histogram_freq=10, write_graph=True, write_images=False,
+        update_freq='epoch',
+        #profile_batch=(10,90),
+        profile_batch=0,
     )
     file_writer_cm = tf.summary.create_file_writer(outdir + '/cm')
     tb.set_model(model)
@@ -742,14 +756,20 @@ if __name__ == "__main__":
         with strategy.scope():
             model.compile(optimizer=opt, loss=loss_fn, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
             if args.load:
+                #ensure model input size is known 
+                for X, y, w in dataset:
+                    model(X)
+                    break
                 model.load_weights(args.load)
             if args.nepochs > 0:
                 ret = model.fit(ds_train_r,
-                    validation_data=ds_test_r, epochs=args.nepochs, steps_per_epoch=args.ntrain, validation_steps=args.ntest,
-                    verbose=True, callbacks=callbacks
+                    validation_data=ds_test_r, epochs=args.nepochs,
+                    steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+                    verbose=True,
+                    callbacks=callbacks
                 )
 
-    prepare_df(args.nepochs, model, ds_test, outdir)
+    #prepare_df(args.nepochs, model, ds_test, outdir)
 
     #ensure model is compiled
     #model.predict((X, dm))

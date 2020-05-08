@@ -29,18 +29,7 @@ def prepare_resolution_plots(big_df, pid, bins):
     plot_eta_reso(big_df, pid, v1, msk_true, msk_pred, msk_both, bins)
     plot_phi_reso(big_df, pid, v2, msk_true, msk_pred, msk_both, bins)
 
-if __name__ == "__main__":
-    big_df = pandas.read_pickle("data/df_1.pkl.bz2")
-    big_df["pred_phi"] = np.arctan2(np.sin(big_df["pred_phi"]), np.cos(big_df["pred_phi"]))
-
-    #msk = (big_df["target_pid"] != 0) & ((big_df["pred_pid"] != 0))
-    msk = np.ones(len(big_df), dtype=np.bool)
-    confusion2 = sklearn.metrics.confusion_matrix(
-        big_df["target_pid"][msk], big_df["pred_pid"][msk],
-        labels=class_labels
-    )
-
-    print(class_labels)
+def prepare_confusion_matrix(big_df):
     fig, ax = plot_confusion_matrix(
         cm=confusion2, target_names=[int(x) for x in class_labels], normalize=True
     )
@@ -54,8 +43,19 @@ if __name__ == "__main__":
     sample_label(ax, y=0.995)
     plt.savefig("confusion_mlpf.pdf", bbox_inches="tight")
 
-    #prepare_resolution_plots(big_df, 211, bins[211])
-    #prepare_resolution_plots(big_df, 130, bins[130])
-    #prepare_resolution_plots(big_df, 11, bins[11])
-    #prepare_resolution_plots(big_df, 13, bins[13])
-    #prepare_resolution_plots(big_df, 22, bins[22])
+if __name__ == "__main__":
+    big_df = pandas.read_pickle("df_1.pkl.bz2")
+    big_df["pred_phi"] = np.arctan2(np.sin(big_df["pred_phi"]), np.cos(big_df["pred_phi"]))
+
+    msk = np.ones(len(big_df), dtype=np.bool)
+    confusion2 = sklearn.metrics.confusion_matrix(
+        big_df["target_pid"][msk], big_df["pred_pid"][msk],
+        labels=class_labels
+    )
+
+    prepare_confusion_matrix(big_df)
+    prepare_resolution_plots(big_df, 211, bins[211])
+    prepare_resolution_plots(big_df, 130, bins[130])
+    prepare_resolution_plots(big_df, 11, bins[11])
+    prepare_resolution_plots(big_df, 13, bins[13])
+    prepare_resolution_plots(big_df, 22, bins[22])
