@@ -314,7 +314,7 @@ def my_loss_cls(y_true, y_pred):
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))[:, 0, :]
     #predict the particle class labels
     l1 = 1e3*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
-    return l1
+    return 1e3*l1
 
 #@tf.function
 def my_loss_full(y_true, y_pred):
@@ -353,7 +353,7 @@ def my_loss_full(y_true, y_pred):
 
     #tf.print("\n")
     l = l1 + l2 + l3
-    return l
+    return 1e3*l
 
 #@tf.function
 def cls_accuracy(y_true, y_pred):
