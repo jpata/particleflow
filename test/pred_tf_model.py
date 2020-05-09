@@ -14,6 +14,8 @@ def parse_args():
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers")
     parser.add_argument("--nthreads", type=int, default=-1, help="number of threads to use")
+    parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
+    parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--gpu", action="store_true", help="use GPU")
     args = parser.parse_args()
     return args
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     from tf_model import PFNet, prepare_df
     from tf_data import _parse_tfr_element
     tfr_files = glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/cand/*.tfrecords")
-    tf.config.optimizer.set_jit(True)
+    #tf.config.optimizer.set_jit(True)
 
     if args.nthreads > 0:
         tf.config.threading.set_inter_op_parallelism_threads(args.nthreads)
@@ -38,8 +40,8 @@ if __name__ == "__main__":
     if not args.gpu:
         tf.config.set_visible_devices([], 'GPU')
 
-    nev = 500
-    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=1).skip(35000).take(nev)
+    nev = args.ntest
+    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev)
     dataset_X = dataset.map(get_X)
 
     model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
