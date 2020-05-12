@@ -18,7 +18,7 @@ PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:/storage/user/jpata/particleflow/test/pu_files.txt
 #--pileup_input $PILEUP_INPUT \
 
-N=2
+N=5
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh

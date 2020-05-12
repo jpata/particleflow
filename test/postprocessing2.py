@@ -527,7 +527,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
 
 def process(args):
     infile = args.input
-    outpath = os.path.join(os.path.dirname(infile), args.outpath, os.path.basename(infile).split(".")[0])
+    outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
     tt = tf["ana/pftree"]
 
@@ -723,12 +723,14 @@ def process(args):
 
         if args.events_per_file > 0:
             if len(all_data) == args.events_per_file:
+                print(outpath + "_{}.pkl".format(ifile))
                 with open(outpath + "_{}.pkl".format(ifile), "wb") as fi:
                     pickle.dump(all_data, fi)
                 ifile += 1
                 all_data = []
 
     if args.events_per_file == -1:
+        print(outpath)
         with open(outpath + ".pkl", "wb") as fi:
             pickle.dump(all_data, fi)
 
