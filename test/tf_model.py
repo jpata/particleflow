@@ -31,17 +31,19 @@ class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
 
 #https://arxiv.org/pdf/1901.05555.pdf
-beta = 0.99
+beta = 0.9999 #beta -> 1 means weight by inverse frequency, beta -> 0 means no reweighting
 def compute_weights_classbalanced(X, y, w):
     wn = (1.0 - beta)/(1.0 - tf.pow(beta, w))
     wn /= tf.reduce_sum(wn)
     return X, y, wn
 
+#uniform weights
 def compute_weights_uniform(X, y, w):
     wn = tf.ones_like(w)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
 
+#weight proportional to 1/sqrt(N)
 def compute_weights_inverse(X, y, w):
     wn = 1.0/tf.sqrt(w)
     wn /= tf.reduce_sum(wn)
@@ -162,7 +164,7 @@ class Distance(tf.keras.layers.Layer):
         D =  dist(inputs1, inputs2)
         
         D = tf.math.exp(-1.0*D)
-        #D = tf.keras.activations.relu(D, threshold=0.01)
+        D = tf.keras.activations.relu(D, threshold=0.01)
         
         return D
     
@@ -177,13 +179,12 @@ class GraphConv(tf.keras.layers.Dense):
         in_degrees = tf.reduce_sum(adj, axis=-1) 
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), 1)
 
-        support = (tf.linalg.matmul(inputs, W) + b)
+        support = (tf.linalg.matmul(inputs, W))
       
         out = support
 
         #tf.print(tf.reduce_sum(tf.cast(adj>0, tf.float32)) / tf.cast(tf.shape(adj)[0]*tf.shape(adj)[1], tf.float32))
-        for i in range(3):
-            out = tf.linalg.matmul(adj, out*norm)*norm
+        out = tf.linalg.matmul(adj, out*norm)*norm + b
 
         return self.activation(out)
 
@@ -269,7 +270,7 @@ class PFNet(tf.keras.Model):
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
-        msk_good = tf.cast(out_id != 0, tf.float32)
+        #msk_good = tf.cast(out_id != 0, tf.float32)
 
         out_momentum_eta = X[:, 2] + pred_corr[:, 0]
         new_phi = X[:, 3] + pred_corr[:, 1]
@@ -277,12 +278,12 @@ class PFNet(tf.keras.Model):
         out_momentum_E = X[:, 4] + pred_corr[:, 2]
 
         out_momentum = tf.stack([
-            tf.multiply(out_momentum_eta, msk_good),
-            tf.multiply(out_momentum_phi, msk_good),
-            tf.multiply(out_momentum_E, msk_good)
-            #out_momentum_eta,
-            #out_momentum_phi,
-            #out_momentum_E,
+            #tf.multiply(out_momentum_eta, msk_good),
+            #tf.multiply(out_momentum_phi, msk_good),
+            #tf.multiply(out_momentum_E, msk_good)
+            out_momentum_eta,
+            out_momentum_phi,
+            out_momentum_E,
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
@@ -326,7 +327,7 @@ def my_loss_full(y_true, y_pred):
     #tf.print(pred_id_onehot)
     l1 = 1e3 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
-    msk_good = (true_id[:, 0] == pred_id)
+    #msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
     #tf.print(tf.reduce_mean(pred_momentum[:, 0]))
@@ -586,43 +587,42 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
         self.file_writer_cm = file_writer_cm
 
     def on_epoch_end(self, epoch, logs):
-        if epoch>0 and epoch%5 == 0:
-            true_ids = []
-            pred_ids = []
-            for iev, data in enumerate(self.dataset):
-                if iev>=self.ntest:
-                    break
-                X, y, w = data
-                pred = self.model(X).numpy()
-                pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-                pred_id = np.argmax(pred_id_onehot, axis=-1)
-                true_id, true_charge, true_momentum = separate_truth(y)
-                true_id = true_id.numpy()
-                pred_ids += [pred_id]
-                true_ids += [true_id]
+        true_ids = []
+        pred_ids = []
+        for iev, data in enumerate(self.dataset):
+            if iev>=self.ntest:
+                break
+            X, y, w = data
+            pred = self.model(X).numpy()
+            pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
+            pred_id = np.argmax(pred_id_onehot, axis=-1)
+            true_id, true_charge, true_momentum = separate_truth(y)
+            true_id = true_id.numpy()
+            pred_ids += [pred_id]
+            true_ids += [true_id]
    
-            true_ids = np.concatenate(true_ids) 
-            pred_ids = np.concatenate(pred_ids)
+        true_ids = np.concatenate(true_ids) 
+        pred_ids = np.concatenate(pred_ids)
  
-            # Calculate the confusion matrix.
-            cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
+        # Calculate the confusion matrix.
+        cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
 
-            figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
-            cm_image = plot_to_image(figure)
-            
-            figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
-            cm_image2 = plot_to_image(figure2)
+        figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
+        cm_image = plot_to_image(figure)
+        
+        figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
+        cm_image2 = plot_to_image(figure2)
     
-            # Log the confusion matrix as an image summary.
-            with self.file_writer_cm.as_default():
-              tf.summary.image("Confusion Matrix", cm_image, step=epoch)
-              tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
-              for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
-                  idx = class_labels.index(pdgid)
-                  eff = cm[idx, idx] / np.sum(cm[idx, :])
-                  fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
-                  tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
-                  tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
+        # Log the confusion matrix as an image summary.
+        with self.file_writer_cm.as_default():
+          tf.summary.image("Confusion Matrix", cm_image, step=epoch)
+          tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
+          for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
+              idx = class_labels.index(pdgid)
+              eff = cm[idx, idx] / np.sum(cm[idx, :])
+              fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
+              tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
+              tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
 
 def summarize_dataset(dataset):
     yclasses = []
@@ -645,11 +645,12 @@ def summarize_dataset(dataset):
 
 def load_dataset_gun():
     globs = [
-        "data/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "data/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "data/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
-        "data/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "data/SingleTauFlatPt2To150_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SinglePiFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+        "test/SingleTauFlatPt2To150_cfi/tfr/cand/chunk_0.tfrecords",
     ]
 
     tfr_files = []
@@ -657,7 +658,7 @@ def load_dataset_gun():
         tfr_files += [g]
     tfr_files = sorted(tfr_files)
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.shuffle(50000)
+    dataset = dataset.shuffle(6*500)
     return dataset
 
 def load_dataset_ttbar(datapath):
@@ -694,10 +695,10 @@ if __name__ == "__main__":
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights])
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights])
 
-    #print("train")
-    #summarize_dataset(ds_train)
-    #print("test")
-    #summarize_dataset(ds_test)
+    print("train")
+    summarize_dataset(ds_train)
+    print("test")
+    summarize_dataset(ds_test)
  
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
