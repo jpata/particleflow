@@ -8,7 +8,7 @@ samples = [
     "SingleElectronFlatPt1To100_pythia8_cfi",
     "SingleGammaFlatPt10To100_pythia8_cfi",
     "SinglePi0E10_pythia8_cfi",
-    "MinBias_14TeV_pythia8_TuneCUETP8M1_cfi",
+    #"MinBias_14TeV_pythia8_TuneCUETP8M1_cfi",
     #"TTbar_14TeV_TuneCUETP8M1_cfi",
 ]
 
@@ -16,5 +16,5 @@ if __name__ == "__main__":
     for s in samples:
         if not os.path.isdir(s):
             os.makedirs(s)
-        for iseed in range(500):
+        for iseed in range(100):
             print("{} {}".format(s, iseed+1))
