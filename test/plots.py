@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     prepare_confusion_matrix(big_df)
     prepare_resolution_plots(big_df, 211, bins[211])
-    #prepare_resolution_plots(big_df, 130, bins[130])
+    prepare_resolution_plots(big_df, 130, bins[130])
     #prepare_resolution_plots(big_df, 11, bins[11])
     #prepare_resolution_plots(big_df, 13, bins[13])
-    #prepare_resolution_plots(big_df, 22, bins[22])
+    prepare_resolution_plots(big_df, 22, bins[22])

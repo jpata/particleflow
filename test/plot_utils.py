@@ -56,9 +56,9 @@ bins = {
         "pred_val": "ML-PF",
     },
     22: {
-        "E_val": np.linspace(0, 10, 61),
+        "E_val": np.linspace(0, 2, 61),
         "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
+        "eta_val": np.linspace(-2, 2, 61),
         "eta_res": np.linspace(-0.5, 0.5, 41),
         "E_xlabel": "Energy [GeV]",
         "eta_xlabel": "$\eta$",
