@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#gun samples
 ./test/run_postprocessing.sh test/SingleGammaFlatPt10To100_pythia8_cfi -1 100
 ./test/run_postprocessing.sh test/SingleElectronFlatPt1To100_pythia8_cfi -1 100
 ./test/run_postprocessing.sh test/SingleMuFlatPt0p7To10_cfi -1 100
