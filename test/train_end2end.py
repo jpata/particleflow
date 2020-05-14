@@ -1,6 +1,8 @@
 import sys
 import os
 
+from comet_ml import Experiment
+
 if not ("CUDA_VISIBLE_DEVICES" in os.environ):
     import setGPU
 
@@ -25,6 +27,7 @@ from gravnet import GravNetConv
 from glob import glob
 import numpy as np
 import os.path as osp
+import pickle
 
 import math
 import time
@@ -54,8 +57,7 @@ def prepare_dataframe(model, loader):
     model.eval()
     dfs = []
     eval_time = 0
-    for i, data in enumerate(loader):
-
+    for i, data in tqdm.tqdm(enumerate(loader),total=len(loader)):
         if not multi_gpu:
             data = data.to(device)
 
@@ -145,7 +147,7 @@ def get_model_fname(dataset, model, n_train, lr, target_type):
 
 #Dense GCN
 class PFNet5(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=16, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=16, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet5, self).__init__()
         self.input_dim = input_dim
         act = nn.LeakyReLU
@@ -207,7 +209,7 @@ class PFNet5(nn.Module):
 
 #Baseline model with graph attention convolution & edge classification, slow to train 
 class PFNet6(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet6, self).__init__()
 
         act = nn.SELU
@@ -304,7 +306,7 @@ class PFNet6(nn.Module):
 
 #Simplified model with SGConv, no edge classification, fast to train
 class PFNet7(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet-knn", dropout_rate=0.0):
+    def __init__(self, input_dim=3, hidden_dim=32, output_dim_id=len(class_to_id), output_dim_p4=4, convlayer="gravnet-knn", space_dim=2, nearest=3, dropout_rate=0.0):
         super(PFNet7, self).__init__()
 
         act = nn.LeakyReLU
@@ -325,9 +327,9 @@ class PFNet7(nn.Module):
         #self.conv0 = SGConv(hidden_dim, hidden_dim, K=2)
 
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="knn") 
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, 2, hidden_dim, 3, neighbor_algo="radius") 
+            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius") 
         elif convlayer == "sgconv":
             self.conv1 = SGConv(hidden_dim, hidden_dim, K=3)
         elif convlayer == "gatconv":
@@ -385,7 +387,7 @@ class PFNet7(nn.Module):
         return torch.sigmoid(edge_weight), cand_ids, cand_p4
 
 class PFNet8(nn.Module):
-    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv"):
+    def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
         super(PFNet8, self).__init__()
 
         act = nn.SELU
@@ -463,20 +465,25 @@ def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_train", type=int, default=80, help="number of training events")
-    parser.add_argument("--n_test", type=int, default=20, help="number of testing events")
+    parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
+    parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
     parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
+    parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
+    parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
+    parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
+    parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
     args = parser.parse_args()
     return args
 
@@ -599,7 +606,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
     losses = losses.sum(axis=0)
     return num_samples, losses, corr, acc
 
-def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, corrs_test, accuracies, accuracies_t, test_loader):
+def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
     try:
         os.makedirs(path)
     except Exception as e:
@@ -608,15 +615,15 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
     modpath = path + 'weights.pth'
     torch.save(model.state_dict(), modpath)
 
-    df = prepare_dataframe(model, test_loader)
+    df = prepare_dataframe(model, val_loader)
     df.to_pickle(path + "df.pkl.bz2")
 
     np.savetxt(path+"losses_train.txt", losses_train)
-    np.savetxt(path+"losses_test.txt", losses_test)
+    np.savetxt(path+"losses_val.txt", losses_val)
     np.savetxt(path+"corrs_train.txt", corrs_train)
-    np.savetxt(path+"corrs_test.txt", corrs_test)
+    np.savetxt(path+"corrs_val.txt", corrs_val)
     np.savetxt(path+"accuracies_train.txt", accuracies)
-    np.savetxt(path+"accuracies_test.txt", accuracies_t)
+    np.savetxt(path+"accuracies_val.txt", accuracies_v)
 
 #    for i in range(losses_train.shape[1]):
 #        fig = plt.figure(figsize=(5,5))
@@ -624,8 +631,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_test, corrs_train, cor
 #        plt.ylabel("train loss")
 #        plt.plot(losses_train[:n_epoch, i])
 #        ax2=ax.twinx()
-#        ax2.plot(losses_test[:n_epoch, i], color="orange")
-#        ax2.set_ylabel("test loss", color="orange")
+#        ax2.plot(losses_val[:n_epoch, i], color="orange")
+#        ax2.set_ylabel("val loss", color="orange")
 #        plt.xlabel("epoch")
 #        plt.tight_layout()
 #        plt.savefig(path + "loss_{0}.pdf".format(i))
@@ -646,12 +653,12 @@ if __name__ == "__main__":
 
     edge_dim = 1
 
-    patience = args.n_epochs
+    patience = args.patience
 
     train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_test))
+    val_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
     print("train_dataset", len(train_dataset))
-    print("test_dataset", len(test_dataset))
+    print("val_dataset", len(val_dataset))
 
 
     if not multi_gpu:
@@ -665,28 +672,50 @@ if __name__ == "__main__":
 
     train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
     train_loader.collate_fn = collate
-    test_loader = DataListLoader(test_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
-    test_loader.collate_fn = collate
+    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    val_loader.collate_fn = collate
 
     model_class = model_classes[args.model]
-    model = model_class(
-        input_dim=input_dim,
-        hidden_dim=args.hidden_dim,
-        output_dim_id=output_dim_id, 
-        output_dim_p4=output_dim_p4,
-        dropout_rate=args.dropout,
-        convlayer=args.convlayer)
+    model_kwargs = {'input_dim': input_dim,
+                    'hidden_dim': args.hidden_dim,
+                    'output_dim_id': output_dim_id,
+                    'output_dim_p4': output_dim_p4,
+                    'dropout_rate': args.dropout,
+                    'convlayer': args.convlayer,
+                    'space_dim': args.space_dim,
+                    'nearest': args.nearest}
 
+    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+    experiment = Experiment(project_name="particeflow")
+    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
+                                                    'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
+                                                    'n_train':args.n_train, 'target':args.target}))
+                    
+    model = model_class(**model_kwargs)
+        
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
 
     model.to(device)
 
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
-    if os.path.isdir("data/" + model_fname):
-        print("model output data/{} already exists, please delete it".format(model_fname))
-        sys.exit(0)
+    outpath = osp.join(args.outpath, model_fname)
+    if osp.isdir(outpath):
+        if args.overwrite:
+            print("model output {} already exists, deleting it".format(outpath))
+            import shutil
+            shutil.rmtree(outpath)
+        else:
+            print("model output {} already exists, please delete it".format(outpath))
+            sys.exit(0)
+    try:
+        os.makedirs(outpath)
+    except Exception as e:
+        pass
 
+    with open('{}/model_kwargs.pkl'.format(outpath), 'wb') as f:
+        pickle.dump(model_kwargs, f,  protocol=pickle.HIGHEST_PROTOCOL)
+        
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
@@ -700,65 +729,81 @@ if __name__ == "__main__":
     model.train()
     
     losses_train = np.zeros((args.n_epochs+1, 3))
-    losses_test = np.zeros((args.n_epochs+1, 3))
+    losses_val = np.zeros((args.n_epochs+1, 3))
 
     corrs = []
-    corrs_t = []
+    corrs_v = []
     accuracies = []
-    accuracies_t = []
-    best_test_loss = 99999.9
+    accuracies_v = []
+    best_val_loss = 99999.9
     stale_epochs = 0
 
     initial_epochs = 10
    
     t0_initial = time.time()
-    print("Training over {} epochs".format(args.n_epochs)) 
+    print("Training over {} epochs".format(args.n_epochs))
     for j in range(args.n_epochs + 1):
         t0 = time.time()
-
+        
         if stale_epochs > patience:
             print("breaking due to stale epochs")
             break
-
-        model.train()
-
-        num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.l3, args.target)
-        l = sum(losses)
-        losses_train[j] = losses
-        corrs += [c]
-        accuracies += [acc]
-
-        model.eval()
-        num_samples_test, losses_t, c_t, acc_t = test(model, test_loader, j, args.l1, args.l2, args.l3, args.target)
-        l_t = sum(losses_t)
-        losses_test[j] = losses_t
-        corrs_t += [c_t]
-        accuracies_t += [acc_t]
-
-        if l_t < best_test_loss:
-            best_test_loss = l_t 
+        with experiment.train():
+            model.train()
+            num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.l3, args.target)
+            l = sum(losses)
+            losses_train[j] = losses
+            corrs += [c]
+            accuracies += [acc]
+            experiment.log_metric('loss',l, step=j)
+            experiment.log_metric('loss1',losses[0], step=j)
+            experiment.log_metric('loss2',losses[1], step=j)
+            experiment.log_metric('loss3',losses[2], step=j)
+            experiment.log_metric('corrs',c, step=j)
+            experiment.log_metric('accuracy',acc, step=j)
+            
+        with experiment.validate():
+            model.eval()
+            num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.l3, args.target)
+            l_v = sum(losses_v)
+            losses_val[j] = losses_v
+            corrs_v += [c_v]
+            accuracies_v += [acc_v]
+            experiment.log_metric('loss',l_v, step=j)
+            experiment.log_metric('loss1',losses_v[0], step=j)
+            experiment.log_metric('loss2',losses_v[1], step=j)
+            experiment.log_metric('loss3',losses_v[2], step=j)
+            experiment.log_metric('corrs',c_v, step=j)
+            experiment.log_metric('accuracy',acc_v, step=j)
+            
+        if l_v < best_val_loss:
+            best_val_loss = l_v
             stale_epochs = 0
+            make_plots(
+                model, j, "{0}/epoch_{1}/".format(outpath, "best"),
+                losses_train, losses_val, corrs, corrs_v,
+                accuracies, accuracies_v, val_loader)
         else:
             stale_epochs += 1
         if j > 0 and j%args.n_plot == 0:
             make_plots(
-                model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
-                losses_train, losses_test, corrs, corrs_t,
-                accuracies, accuracies_t, test_loader)
+                model, j, "{0}/epoch_{1}/".format(outpath, j),
+                losses_train, losses_val, corrs, corrs_v,
+                accuracies, accuracies_v, val_loader)
  
         t1 = time.time()
         epochs_remaining = args.n_epochs - j
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
         eta = epochs_remaining*time_per_epoch/60
 
-        spd = (num_samples_test+num_samples_train)/time_per_epoch
-        losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_t]) + "]"
+        spd = (num_samples_val+num_samples_train)/time_per_epoch
+        losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_v]) + "]"
         print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s".format(
             j, args.n_epochs,
-            t1 - t0, l, l_t, c, c_t, acc, acc_t,
+            t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd))
 
     make_plots(
-        model, j, "data/{0}/epoch_{1}/".format(model_fname, j),
-        losses_train, losses_test, corrs, corrs_t,
-        accuracies, accuracies_t, test_loader)
+        model, j, "{0}/epoch_{1}/".format(outpath, "last"),
+        losses_train, losses_val, corrs, corrs_v,
+        accuracies, accuracies_v, val_loader)
