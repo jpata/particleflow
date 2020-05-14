@@ -685,8 +685,8 @@ if __name__ == "__main__":
                     'space_dim': args.space_dim,
                     'nearest': args.nearest}
 
-    experiment = Experiment(api_key="Z9PGuFBhxgyL4IVzS4yucaqF5",
-                            project_name="particeflow", workspace="jmduarte")
+    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+    experiment = Experiment(project_name="particeflow")
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
                                                     'n_train':args.n_train, 'target':args.target}))
