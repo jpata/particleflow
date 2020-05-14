@@ -23,10 +23,9 @@ import itertools
 import io
 import sklearn
 import sklearn.cluster
-
 import tensorflow as tf
-
 from plot_utils import plot_confusion_matrix
+from numpy.lib.recfunctions import append_fields
 
 elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
@@ -75,9 +74,7 @@ weight_schemes = {
     "classbalanced": compute_weights_inverse,
 }
 
-from numpy.lib.recfunctions import append_fields
-
-def load_one_file(fn):
+def load_one_file(fn, num_clusters=10):
     Xs = []
     ys = []
     ys_cand = []
@@ -88,21 +85,17 @@ def load_one_file(fn):
         Xelem = event["Xelem"]
         ygen = event["ygen"]
         ycand = event["ycand"]
-        #dm = event["dm"]
-
-        #skip PS, GSF and BREM for now
-        #elem_id = Xelem[:, 0]
-        #msk = (elem_id != 2) & (elem_id != 3) & (elem_id != 7)
-        #Xelem = Xelem[msk]
-        #ygen = ygen[msk]
-        #ycand = ycand[msk]
 
         Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
         ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
         ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
-     
-        clusters = sklearn.cluster.KMeans(n_clusters=10).fit_predict(np.stack([Xelem["eta"], Xelem["phi"]], axis=-1))
-        print("clustered {} inputs for preprocessing".format(len(Xelem)))  
+    
+        #now preprocess the PFElements event up to num_clusters to simplify batched training
+        #this means that the network sees only a subset of the elements in the event in training during each weight update
+        clusters = sklearn.cluster.KMeans(n_clusters=num_clusters).fit_predict(np.stack([Xelem["eta"], Xelem["phi"]], axis=-1))
+
+        print("clustered {} inputs for preprocessing".format(len(Xelem)))
+        #save each cluster separately
         for cl in np.unique(clusters):
             msk = clusters==cl
             Xelem_flat = np.stack([Xelem[msk][k].view(np.float32).data for k in [
@@ -123,6 +116,7 @@ def load_one_file(fn):
                 ]], axis=-1
             )
 
+            #take care of outliers
             Xelem_flat[np.isnan(Xelem_flat)] = 0
             Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
             ygen_flat[np.isnan(ygen_flat)] = 0
@@ -153,15 +147,16 @@ class InputEncoding(tf.keras.layers.Layer):
         self.num_input_classes = num_input_classes
         
     def call(self, X):
-        #X - [Nelem, Nfeat] array of all the input detector element feature data
+        #X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
 
-        #X[:, 0] - categorical index of the element type
+        #X[:, :, 0] - categorical index of the element type
         Xid = tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes)
 
-        #X[:, 1:] - all the other non-categorical features
+        #X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
 
+#Given a list of [Nbatch, Nelem, Nfeat] input nodes, computes the dense [Nbatch, Nelem, Nelem] adjacency matrices
 class Distance(tf.keras.layers.Layer):
 
     def __init__(self, dist_shape, *args, **kwargs):
@@ -169,11 +164,19 @@ class Distance(tf.keras.layers.Layer):
 
     def call(self, inputs1, inputs2):
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
+        #inputs1, inputs2: [Nbatch, Nelem, distance_dim] embedded coordinates used for element-to-element distance calculation
         D =  dist(inputs1, inputs2)
-       
-        D = tf.math.exp(-1.0*D)
-        #D = tf.keras.activations.relu(D, threshold=0.01)
-        return D
+      
+        #adjacency between two elements should be high if the distance is small.
+        #this is equivalent to radial basis functions. 
+        #self-loops adj_{i,i}=1 are included, as D_{i,i}=0 by construction
+        adj = tf.math.exp(-1.0*D)
+
+        #optionally set the adjacency matrix to 0 for low values in order to make the matrix sparse.
+        #need to test if this improves the result.
+        #adj = tf.keras.activations.relu(adj, threshold=0.01)
+
+        return adj
     
 class GraphConv(tf.keras.layers.Dense):
     def __init__(self, *args, **kwargs):
@@ -184,13 +187,15 @@ class GraphConv(tf.keras.layers.Dense):
         W = self.weights[0]
         b = self.weights[1]
 
+        #compute the normalization of the adjacency matrix
         in_degrees = tf.reduce_sum(adj, axis=-1)
+        #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
         norm_k = tf.pow(norm, self.k)
 
         support = (tf.linalg.matmul(inputs, W))
-      
-        #tf.print(tf.reduce_sum(tf.cast(adj>0, tf.float32)) / tf.cast(tf.shape(adj)[0]*tf.shape(adj)[1], tf.float32))
+     
+        #k-th power of the normalized adjacency matrix is nearly equivalent to k consecutive GCN layers
         adj_k = tf.pow(adj, self.k)
         out = tf.linalg.matmul(adj_k, support)
 
@@ -364,7 +369,7 @@ def cls_accuracy(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
     msk = true_id[:, :, 0]!=0
-    return tf.keras.metrics.categorical_accuracy(true_id[msk][:, 0], pred_id[msk])
+    return tf.keras.metrics.categorical_accuracy(true_id[msk][:, 0], pred_id_onehot[msk])
 
 #@tf.function
 def num_pred(y_true, y_pred):
