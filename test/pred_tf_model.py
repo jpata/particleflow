@@ -41,7 +41,10 @@ if __name__ == "__main__":
         tf.config.set_visible_devices([], 'GPU')
 
     nev = args.ntest
-    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev)
+    ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
+    batch_size = 1
+    dataset = tf.data.TFRecordDataset(tfr_files).map(
+        _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
     model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
@@ -52,6 +55,7 @@ if __name__ == "__main__":
 
     #ensure model is compiled   
     for X in dataset_X:
+        print(X.shape)
         model(X)
         break
 
@@ -59,11 +63,12 @@ if __name__ == "__main__":
     model.load_weights(args.weights)
 
     #prepare the dataframe
-    #prepare_df(0, model, dataset, ".")
+    prepare_df(0, model, dataset, ".")
 
     print("now timing")
     t0 = time.time()
-    model.predict(dataset_X, verbose=True)
+    for X in dataset_X:
+        model.predict_on_batch(X)
     print()
     t1 = time.time()
     print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/nev))

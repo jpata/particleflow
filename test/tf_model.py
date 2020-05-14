@@ -21,6 +21,8 @@ import time
 from tqdm import tqdm
 import itertools
 import io
+import sklearn
+import sklearn.cluster
 
 import tensorflow as tf
 
@@ -29,6 +31,24 @@ from plot_utils import plot_confusion_matrix
 elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
+def summarize_dataset(dataset):
+    yclasses = []
+    nev = 0.0
+    ntot = 0.0
+    sizes = []
+
+    for X, y, w in dataset:
+        yclasses += [y[:, 0]]
+        nev += 1
+        ntot += len(y)
+        sizes += [len(y)]
+    
+    yclasses = np.concatenate(yclasses)
+    values, counts= np.unique(yclasses, return_counts=True)
+    print("nev={}".format(nev))
+    print("sizes={}".format(np.percentile(sizes, [25, 50, 95, 99])))
+    for v, c in zip(values, counts):
+        print("label={} count={} frac={:.6f}".format(class_labels[int(v)], c, c/ntot))
 
 #https://arxiv.org/pdf/1901.05555.pdf
 beta = 0.9999 #beta -> 1 means weight by inverse frequency, beta -> 0 means no reweighting
@@ -80,61 +100,49 @@ def load_one_file(fn):
         Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
         ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
         ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
-       
-        #inds_sort_energy = np.argsort(Xelem[:, 4])[::-1]
-        #Xelem = Xelem[inds_sort_energy, :]
-        #ygen = ygen[inds_sort_energy, :]
-        #ycand = ycand[inds_sort_energy, :]
+     
+        clusters = sklearn.cluster.KMeans(n_clusters=10).fit_predict(np.stack([Xelem["eta"], Xelem["phi"]], axis=-1))
+        print("clustered {} inputs for preprocessing".format(len(Xelem)))  
+        for cl in np.unique(clusters):
+            msk = clusters==cl
+            Xelem_flat = np.stack([Xelem[msk][k].view(np.float32).data for k in [
+                'typ_idx',
+                'pt', 'eta', 'phi', 'e',
+                'layer', 'depth', 'charge', 'trajpoint',
+                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+                'muon_dt_hits', 'muon_csc_hits']], axis=-1
+            )
+            ygen_flat = np.stack([ygen[msk][k].view(np.float32).data for k in [
+                'typ_idx',
+                'eta', 'phi', 'e', 'charge',
+                ]], axis=-1
+            )
+            ycand_flat = np.stack([ycand[msk][k].view(np.float32).data for k in [
+                'typ_idx',
+                'eta', 'phi', 'e', 'charge',
+                ]], axis=-1
+            )
+
+            Xelem_flat[np.isnan(Xelem_flat)] = 0
+            Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+            ygen_flat[np.isnan(ygen_flat)] = 0
+            ygen_flat[np.abs(ygen_flat) > 1e4] = 0
+            ycand_flat[np.isnan(ycand_flat)] = 0
+            ycand_flat[np.abs(ycand_flat) > 1e4] = 0
+
+            Xs += [Xelem_flat]
+            ys += [ygen_flat]
+            ys_cand += [ycand_flat]
     
-        #max_elem = 10000
-        #Xelem = Xelem[:max_elem, :]
-        #ygen = ygen[:max_elem, :]
-        #ycand = ygen[:max_elem, :]
-
-        #PID, charge, eta, phi, E
-        Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
-            'typ_idx',
-            'pt', 'eta', 'phi', 'e',
-            'layer', 'depth', 'charge', 'trajpoint',
-            'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
-            'muon_dt_hits', 'muon_csc_hits']], axis=-1
-        )
-        ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
-            'typ_idx',
-            'eta', 'phi', 'e', 'charge',
-            ]], axis=-1
-        )
-        ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
-            'typ_idx',
-            'eta', 'phi', 'e', 'charge',
-            ]], axis=-1
-        )
-
-        Xelem_flat[np.isnan(Xelem_flat)] = 0
-        Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
-        ygen_flat[np.isnan(ygen_flat)] = 0
-        ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-        ycand_flat[np.isnan(ycand_flat)] = 0
-        ycand_flat[np.abs(ycand_flat) > 1e4] = 0
-
-        #Xelem = np.pad(Xelem, ((0, max_elem - Xelem.shape[0]), (0,0)))
-        #ygen = np.pad(ygen, ((0, max_elem - ygen.shape[0]), (0,0)))
-        #ycand = np.pad(ycand, ((0, max_elem - ycand.shape[0]), (0,0)))
-        #print(Xelem.shape, ygen.shape, ycand.shape)
-
-        Xs += [Xelem_flat]
-        ys += [ygen_flat]
-        ys_cand += [ycand_flat]
-        #dms += [dm]
-
+    print("created {} blocks, max size {}".format(len(Xs), max([len(X) for X in Xs])))
     return Xs, ys, ys_cand
 
 def dist(A,B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
  
-    na = tf.reshape(na, [-1, 1])
-    nb = tf.reshape(nb, [1, -1])
+    na = tf.reshape(na, [tf.shape(na)[0], -1, 1])
+    nb = tf.reshape(nb, [tf.shape(na)[0], 1, -1])
     Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, transpose_a=False, transpose_b=True) + nb, 1e-12, 1e12)
     D = tf.sqrt(Dsq)
     return D
@@ -148,10 +156,10 @@ class InputEncoding(tf.keras.layers.Layer):
         #X - [Nelem, Nfeat] array of all the input detector element feature data
 
         #X[:, 0] - categorical index of the element type
-        Xid = tf.one_hot(tf.cast(X[:, 0], tf.int32), self.num_input_classes)
+        Xid = tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes)
 
         #X[:, 1:] - all the other non-categorical features
-        Xprop = X[:, 1:]
+        Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
 
 class Distance(tf.keras.layers.Layer):
@@ -162,35 +170,35 @@ class Distance(tf.keras.layers.Layer):
     def call(self, inputs1, inputs2):
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
         D =  dist(inputs1, inputs2)
-        
+       
         D = tf.math.exp(-1.0*D)
-        D = tf.keras.activations.relu(D, threshold=0.01)
-        
+        #D = tf.keras.activations.relu(D, threshold=0.01)
         return D
     
 class GraphConv(tf.keras.layers.Dense):
     def __init__(self, *args, **kwargs):
         super(GraphConv, self).__init__(*args, **kwargs)
+        self.k = 4
     
     def call(self, inputs, adj):
         W = self.weights[0]
         b = self.weights[1]
 
-        in_degrees = tf.reduce_sum(adj, axis=-1) 
-        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), 1)
+        in_degrees = tf.reduce_sum(adj, axis=-1)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+        norm_k = tf.pow(norm, self.k)
 
         support = (tf.linalg.matmul(inputs, W))
       
-        out = support
-
         #tf.print(tf.reduce_sum(tf.cast(adj>0, tf.float32)) / tf.cast(tf.shape(adj)[0]*tf.shape(adj)[1], tf.float32))
-        out = tf.linalg.matmul(adj, out*norm)*norm + b
+        adj_k = tf.pow(adj, self.k)
+        out = tf.linalg.matmul(adj_k, support)
 
-        return self.activation(out)
+        return self.activation(out + b)
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, dim_graph_summary=16, num_conv=1):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1):
         super(PFNet, self).__init__()
         self.activation = activation
 
@@ -200,7 +208,7 @@ class PFNet(tf.keras.Model):
 
         self.layer_distcoords1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords11")
         self.layer_distcoords21 = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords21")
-        #self.layer_distcoords22 = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords22")
+        self.layer_distcoords22 = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords22")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
@@ -213,15 +221,13 @@ class PFNet(tf.keras.Model):
         for iconv in range(self.num_conv):
             self.convlayers += [GraphConv(hidden_dim, activation=activation, name="conv{}".format(iconv))]
 
-        self.layer_summarize = tf.keras.layers.Dense(dim_graph_summary, activation=activation, name="summarize")
-        
-        self.layer_id1 = tf.keras.layers.Dense(dim_graph_summary + hidden_dim, activation=activation, name="id1")
+        self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(2, activation="linear", name="out_charge")
         
-        self.layer_momentum1 = tf.keras.layers.Dense(dim_graph_summary + hidden_dim+len(class_labels), activation=activation, name="momentum1")
+        self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim+len(class_labels), activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
@@ -235,15 +241,15 @@ class PFNet(tf.keras.Model):
 
         x = self.layer_distcoords1(enc)
         distcoords1 = self.layer_distcoords21(x)
-        #distcoords2 = self.layer_distcoords22(x)
+        distcoords2 = self.layer_distcoords22(x)
 
-        dm = self.layer_dist(distcoords1, distcoords1)
+        dm = self.layer_dist(distcoords1, distcoords2)
         return enc, dm
 
     #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
     def call(self, inputs):
         X = inputs
-
+        #tf.print(X.shape)
         enc, dm = self.predict_distancematrix(X)
 
         x = self.layer_input1(enc)
@@ -252,17 +258,14 @@ class PFNet(tf.keras.Model):
         
         for conv in self.convlayers:
             x = conv(x, dm)
-
-        summary = tf.expand_dims(tf.reduce_mean(self.layer_summarize(x), axis=0), axis=0)
-        summary = tf.tile(summary, [tf.shape(X)[0], 0])
  
-        a = self.layer_id1(tf.concat([summary, x], axis=-1))
+        a = self.layer_id1(tf.concat(x, axis=-1))
         a = self.layer_id2(a)
         a = self.layer_id3(a)
         out_id_logits = self.layer_id(a)
         out_charge = self.layer_charge(a)
         
-        x = tf.concat([summary, x, self.activation(out_id_logits)], axis=-1)
+        x = tf.concat([x, self.activation(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
         b = self.layer_momentum2(b)
         b = self.layer_momentum3(b)
@@ -272,10 +275,10 @@ class PFNet(tf.keras.Model):
         out_id = tf.argmax(out_id_logits, axis=-1)
         #msk_good = tf.cast(out_id != 0, tf.float32)
 
-        out_momentum_eta = X[:, 2] + pred_corr[:, 0]
-        new_phi = X[:, 3] + pred_corr[:, 1]
+        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
+        new_phi = X[:, :, 3] + pred_corr[:, :, 1]
         out_momentum_phi = new_phi
-        out_momentum_E = X[:, 4] + pred_corr[:, 2]
+        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
             #tf.multiply(out_momentum_eta, msk_good),
@@ -292,16 +295,16 @@ class PFNet(tf.keras.Model):
 #@tf.function
 def separate_prediction(y_pred):
     N = len(class_labels)
-    pred_id_onehot = y_pred[:, :N]
-    pred_momentum = y_pred[:, N:N+3]
-    pred_charge = y_pred[:, N+3:N+4]
+    pred_id_onehot = y_pred[:, :, :N]
+    pred_momentum = y_pred[:, :, N:N+3]
+    pred_charge = y_pred[:, :, N+3:N+4]
     return pred_id_onehot, pred_charge, pred_momentum
 
 #@tf.function
 def separate_truth(y_true):
-    true_id = tf.cast(y_true[:, :1], tf.int32)
-    true_momentum = y_true[:, 1:4]
-    true_charge = y_true[:, 4:5]
+    true_id = tf.cast(y_true[:, :, :1], tf.int32)
+    true_momentum = y_true[:, :, 1:4]
+    true_charge = y_true[:, :, 4:5]
     return true_id, true_charge, true_momentum
 
 def mse_unreduced(true, pred):
@@ -325,20 +328,19 @@ def my_loss_full(y_true, y_pred):
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
     #tf.print(pred_id_onehot)
-    l1 = 1e3 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l1 = 1e4 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
     #msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
-    #tf.print(tf.reduce_mean(pred_momentum[:, 0]))
-    l2_0 = mse_unreduced(true_momentum[:, 0], pred_momentum[:, 0])
-    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
-    l2_2 = mse_unreduced(true_momentum[:, 2], pred_momentum[:, 2])
+    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
+    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/10.0
 
     l2 = (l2_0 + l2_1 + l2_2)
     #l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
 
-    l3 = mse_unreduced(true_charge, pred_charge)
+    l3 = mse_unreduced(true_charge, pred_charge)[:, :, 0]
 
     #tf.debugging.check_numerics(l1, "l1")
     #tf.debugging.check_numerics(l2_0, "l2_0")
@@ -361,7 +363,8 @@ def cls_accuracy(y_true, y_pred):
     pred_id_onehot, pred_charge, pred_momentum = separate_prediction(y_pred)
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
-    return tf.keras.metrics.categorical_accuracy(true_id[:, 0], pred_id)
+    msk = true_id[:, :, 0]!=0
+    return tf.keras.metrics.categorical_accuracy(true_id[msk][:, 0], pred_id[msk])
 
 #@tf.function
 def num_pred(y_true, y_pred):
@@ -369,7 +372,7 @@ def num_pred(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
 
-    ntrue = tf.reduce_sum(tf.cast(true_id[:, 0]!=0, tf.int32))
+    ntrue = tf.reduce_sum(tf.cast(true_id[:, :, 0]!=0, tf.int32))
     npred = tf.reduce_sum(tf.cast(pred_id!=0, tf.int32))
     return tf.cast(ntrue - npred, tf.float32)
 
@@ -379,7 +382,8 @@ def eta_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
 
-    return tf.reduce_mean(mse_unreduced(true_momentum[:, 0], pred_momentum[:, 0]))
+    msk = true_id[:, :, 0]!=0
+    return tf.reduce_mean(mse_unreduced(true_momentum[msk][:, 0], pred_momentum[msk][:, 0]))
 
 #@tf.function
 def phi_resolution(y_true, y_pred):
@@ -387,7 +391,8 @@ def phi_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
 
-    return tf.reduce_mean(mse_unreduced(tf.math.floormod(true_momentum[:, 1] - pred_momentum[:, 1] + np.pi, 2*np.pi) - np.pi, 0.0))
+    msk = true_id[:, :, 0]!=0
+    return tf.reduce_mean(mse_unreduced(tf.math.floormod(true_momentum[msk][:, 1] - pred_momentum[msk][:, 1] + np.pi, 2*np.pi) - np.pi, 0.0))
 
 #@tf.function(experimental_relax_shapes=True)
 def energy_resolution(y_true, y_pred):
@@ -395,7 +400,8 @@ def energy_resolution(y_true, y_pred):
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
 
-    return tf.reduce_mean(mse_unreduced(true_momentum[:, 2], pred_momentum[:, 2]))
+    msk = true_id[:, :, 0]!=0
+    return tf.reduce_mean(mse_unreduced(true_momentum[msk][:, 2], pred_momentum[msk][:, 2]))
 
 def get_unique_run():
     previous_runs = os.listdir('experiments')
@@ -532,9 +538,14 @@ def prepare_df(epoch, model, data, outdir):
         X, y, w = d
         pred = model(X).numpy()
         pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-        pred_id = np.argmax(pred_id_onehot, axis=-1)
+        pred_id = np.argmax(pred_id_onehot, axis=-1).flatten()
+        pred_charge = pred_charge[:, :, 0].flatten()
+        pred_momentum = pred_momentum.reshape((pred_momentum.shape[0]*pred_momentum.shape[1], pred_momentum.shape[2]))
+
         true_id, true_charge, true_momentum = separate_truth(y)
-        true_id = true_id.numpy()
+        true_id = true_id.numpy()[:, :, 0].flatten()
+        true_charge = true_charge.numpy()[:, :, 0].flatten()
+        true_momentum = true_momentum.numpy().reshape((true_momentum.shape[0]*true_momentum.shape[1], true_momentum.shape[2]))
        
         df = pandas.DataFrame()
         df["pred_pid"] = np.array([int(class_labels[p]) for p in pred_id])
@@ -542,7 +553,7 @@ def prepare_df(epoch, model, data, outdir):
         df["pred_phi"] = np.array(pred_momentum[:, 1], dtype=np.float64)
         df["pred_e"] = np.array(pred_momentum[:, 2], dtype=np.float64)
 
-        df["target_pid"] = np.array([int(class_labels[p]) for p in true_id[:, 0]])
+        df["target_pid"] = np.array([int(class_labels[p]) for p in true_id])
         df["target_eta"] = np.array(true_momentum[:, 0], dtype=np.float64)
         df["target_phi"] = np.array(true_momentum[:, 1], dtype=np.float64)
         df["target_e"] = np.array(true_momentum[:, 2], dtype=np.float64)
@@ -587,70 +598,52 @@ class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
         self.file_writer_cm = file_writer_cm
 
     def on_epoch_end(self, epoch, logs):
-        true_ids = []
-        pred_ids = []
-        for iev, data in enumerate(self.dataset):
-            if iev>=self.ntest:
-                break
-            X, y, w = data
-            pred = self.model(X).numpy()
-            pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-            pred_id = np.argmax(pred_id_onehot, axis=-1)
-            true_id, true_charge, true_momentum = separate_truth(y)
-            true_id = true_id.numpy()
-            pred_ids += [pred_id]
-            true_ids += [true_id]
+        if True or (epoch%10==0 and epoch>0):
+            true_ids = []
+            pred_ids = []
+            for iev, data in enumerate(self.dataset):
+                if iev>=self.ntest:
+                    break
+                X, y, w = data
+                pred = self.model(X).numpy()
+                pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
+                pred_id = np.argmax(pred_id_onehot, axis=-1)
+                true_id, true_charge, true_momentum = separate_truth(y)
+                true_id = true_id.numpy()
+                pred_ids += [pred_id]
+                true_ids += [true_id]
    
-        true_ids = np.concatenate(true_ids) 
-        pred_ids = np.concatenate(pred_ids)
+            true_ids = np.concatenate(true_ids) 
+            pred_ids = np.concatenate(pred_ids)
  
-        # Calculate the confusion matrix.
-        cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
+            # Calculate the confusion matrix.
+            cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
 
-        figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
-        cm_image = plot_to_image(figure)
-        
-        figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
-        cm_image2 = plot_to_image(figure2)
+            figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
+            cm_image = plot_to_image(figure)
+            
+            figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
+            cm_image2 = plot_to_image(figure2)
     
-        # Log the confusion matrix as an image summary.
-        with self.file_writer_cm.as_default():
-          tf.summary.image("Confusion Matrix", cm_image, step=epoch)
-          tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
-          for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
-              idx = class_labels.index(pdgid)
-              eff = cm[idx, idx] / np.sum(cm[idx, :])
-              fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
-              tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
-              tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
-
-def summarize_dataset(dataset):
-    yclasses = []
-    nev = 0.0
-    ntot = 0.0
-    sizes = []
-
-    for X, y, w in dataset:
-        yclasses += [y[:, 0]]
-        nev += 1
-        ntot += len(y)
-        sizes += [len(y)]
-    
-    yclasses = np.concatenate(yclasses)
-    values, counts= np.unique(yclasses, return_counts=True)
-    print("nev={}".format(nev))
-    print("sizes={}".format(np.percentile(sizes, [0.25, 0.5, 0.95, 0.99])))
-    for v, c in zip(values, counts):
-        print("label={} count={} frac={:.2f}".format(class_labels[int(v)], c, c/ntot))
+            # Log the confusion matrix as an image summary.
+            with self.file_writer_cm.as_default():
+              tf.summary.image("Confusion Matrix", cm_image, step=epoch)
+              tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
+              for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
+                  idx = class_labels.index(pdgid)
+                  eff = cm[idx, idx] / np.sum(cm[idx, :])
+                  fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
+                  tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
+                  tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
 
 def load_dataset_gun():
     globs = [
         "test/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "test/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "test/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
-        "test/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
-        "test/SinglePiFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
-        "test/SingleTauFlatPt2To150_cfi/tfr/cand/chunk_0.tfrecords",
+        #"test/SingleElectronFlatPt1To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        #"test/SingleMuFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+        #"test/SinglePi0E10_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
+        #"test/SinglePiFlatPt0p7To10_cfi/tfr/cand/chunk_0.tfrecords",
+        #"test/SingleTauFlatPt2To150_cfi/tfr/cand/chunk_0.tfrecords",
     ]
 
     tfr_files = []
@@ -658,18 +651,18 @@ def load_dataset_gun():
         tfr_files += [g]
     tfr_files = sorted(tfr_files)
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.shuffle(6*500)
+    dataset = dataset.shuffle(5000)
     return dataset
 
 def load_dataset_ttbar(datapath):
-    tfr_files = glob.glob(datapath + "/tfr/{}/*.tfrecords".format(args.target))
+    tfr_files = glob.glob(datapath + "/tfr2/{}/*.tfrecords".format(args.target))
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     #dataset = tf.data.Dataset.from_tensor_slices(tfr_files).interleave(lambda x: tf.data.TFRecordDataset(x)).map(_parse_tfr_element)
     return dataset
 
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
-    #tf.config.experimental_run_functions_eagerly(False)
+    tf.config.experimental_run_functions_eagerly(False)
 
     args = parse_args()
 
@@ -691,14 +684,16 @@ if __name__ == "__main__":
 
     #dataset = load_dataset_gun()
     dataset = load_dataset_ttbar(datapath)
-  
-    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights])
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights])
+ 
+    ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
+    batch_size = 50
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).shuffle(10000).padded_batch(batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).shuffle(10000).padded_batch(batch_size, padded_shapes=ps)
 
-    print("train")
-    summarize_dataset(ds_train)
-    print("test")
-    summarize_dataset(ds_test)
+    #print("train")
+    #summarize_dataset(ds_train)
+    #print("test")
+    #summarize_dataset(ds_test)
  
     if not args.custom_training_loop:
         ds_train_r = ds_train.repeat(args.nepochs)
@@ -707,7 +702,7 @@ if __name__ == "__main__":
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
-   
+
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
     outdir = 'experiments/' + args.name
@@ -738,9 +733,9 @@ if __name__ == "__main__":
     cp_callback.set_model(model)
     callbacks += [cp_callback]
     
-    confusion_cb = ConfusionMatrixCallback(ds_test.repeat(), args.ntest, file_writer_cm)
-    confusion_cb.set_model(model)
-    callbacks += [confusion_cb]
+    #confusion_cb = ConfusionMatrixCallback(ds_test.repeat(), args.ntest, file_writer_cm)
+    #confusion_cb.set_model(model)
+    #callbacks += [confusion_cb]
 
     loss_fn = my_loss_full
     if args.train_cls:
@@ -755,17 +750,21 @@ if __name__ == "__main__":
         custom_training_loop(loss_fn, opt, model, ds_train, ds_test, args.ntrain, args.ntest, args.nepochs, callbacks=callbacks)
     else:
         with strategy.scope():
-            model.compile(optimizer=opt, loss=loss_fn, metrics=[num_pred, cls_accuracy, energy_resolution, eta_resolution, phi_resolution])
+            model.compile(optimizer=opt, loss=loss_fn,
+                metrics=[cls_accuracy, energy_resolution, eta_resolution, phi_resolution],
+                sample_weight_mode="temporal")
+
             if args.load:
-                #ensure model input size is known 
-                for X, y, w in dataset:
+                #ensure model input size is known
+                for X, y, w in ds_train:
                     model(X)
                     break
+   
                 model.load_weights(args.load)
             if args.nepochs > 0:
                 ret = model.fit(ds_train_r,
                     validation_data=ds_test_r, epochs=args.nepochs,
-                    steps_per_epoch=args.ntrain, validation_steps=args.ntest,
+                    steps_per_epoch=args.ntrain/batch_size, validation_steps=args.ntest/batch_size,
                     verbose=True,
                     callbacks=callbacks
                 )
