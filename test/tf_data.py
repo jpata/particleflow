@@ -119,7 +119,7 @@ if __name__ == "__main__":
     filelist = sorted(glob.glob("{}/raw/*.pkl".format(datapath)))
     print("found {} files".format(len(filelist)))
     #means, stds = extract_means_stds(filelist)
-    outpath = "{}/tfr/{}".format(datapath, args.target)
+    outpath = "{}/tfr2/{}".format(datapath, args.target)
 
     if not os.path.isdir(outpath):
         os.makedirs(outpath)
