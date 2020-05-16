@@ -16,5 +16,5 @@ if __name__ == "__main__":
     for s in samples:
         if not os.path.isdir(s):
             os.makedirs(s)
-        for iseed in range(100):
+        for iseed in range(2000):
             print("{} {}".format(s, iseed+1))
