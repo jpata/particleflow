@@ -14,6 +14,10 @@
 
 ###Keras model trainings - experimental
 
-CUDA_VISIBLE_DEVICES=2,3,4,5 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
-  python3 test/tf_model.py --target cand --ntrain 400000 --ntest 100000 --nepochs 100 --lr 0.00001 \
-  --nhidden 1024 --distance-dim 256 --num-conv 4 --weights inverse
+#CUDA_VISIBLE_DEVICES=2,3,4,5 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+#  python3 test/tf_model.py --target cand --ntrain 400000 --ntest 100000 --nepochs 500 --lr 0.00001 \
+#  --nhidden 512 --distance-dim 256 --num-conv 4 --weights inverse
+
+singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+  python3 test/tf_model.py --target cand --ntrain 400000 --ntest 100000 --nepochs 500 --lr 0.00001 \
+  --nhidden 256 --distance-dim 256 --num-conv 4 --weights inverse

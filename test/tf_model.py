@@ -174,7 +174,7 @@ class Distance(tf.keras.layers.Layer):
 
         #optionally set the adjacency matrix to 0 for low values in order to make the matrix sparse.
         #need to test if this improves the result.
-        adj = tf.keras.activations.relu(adj, threshold=0.01)
+        #adj = tf.keras.activations.relu(adj, threshold=0.01)
 
         return adj
     
@@ -239,7 +239,7 @@ class PFNet(tf.keras.Model):
         #self.inp_dm = tf.keras.Input(batch_size=None, shape=(None, ), sparse=True, name="dm")
         #self._set_inputs(self.inp_X)
  
-    def predict_distancematrix(self, inputs):
+    def predict_distancematrix(self, inputs, training=True):
 
         enc = self.activation(self.enc(inputs))
 
@@ -252,18 +252,16 @@ class PFNet(tf.keras.Model):
         return enc, dm
 
     #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
-    def call(self, inputs):
+    def call(self, inputs, training=True):
         X = inputs
         #tf.print(X.shape)
-        enc, dm = self.predict_distancematrix(X)
+        enc, dm = self.predict_distancematrix(X, training=training)
 
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
 
         x1 = self.layer_conv1(x, dm)
-        x2 = self.layer_conv2(x, dm)
- 
         a = self.layer_id1(tf.concat(x1, axis=-1))
         a = self.layer_id2(a)
         a = self.layer_id3(a)
@@ -271,6 +269,7 @@ class PFNet(tf.keras.Model):
         out_id_logits = self.layer_id(a)
         out_charge = self.layer_charge(a)
         
+        x2 = self.layer_conv2(x, dm)
         x = tf.concat([x2, self.activation(out_id_logits)], axis=-1)
         b = self.layer_momentum1(x)
         b = self.layer_momentum2(b)
@@ -280,7 +279,7 @@ class PFNet(tf.keras.Model):
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
-        #msk_good = tf.cast(out_id != 0, tf.float32)
+        msk_good = tf.cast(out_id != 0, tf.float32)
 
         #out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
         #new_phi = X[:, :, 3] + pred_corr[:, :, 1]
@@ -288,15 +287,15 @@ class PFNet(tf.keras.Model):
         #out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
-            #tf.multiply(out_momentum_eta, msk_good),
-            #tf.multiply(out_momentum_phi, msk_good),
-            #tf.multiply(out_momentum_E, msk_good)
+            tf.multiply(pred_corr[:, :, 0], msk_good),
+            tf.multiply(pred_corr[:, :, 1], msk_good),
+            tf.multiply(pred_corr[:, :, 2], msk_good)
             #out_momentum_eta,
             #out_momentum_phi,
             #out_momentum_E,
-            pred_corr[:, :, 0],
-            pred_corr[:, :, 1],
-            pred_corr[:, :, 2],
+            #pred_corr[:, :, 0],
+            #pred_corr[:, :, 1],
+            #pred_corr[:, :, 2],
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
@@ -328,6 +327,7 @@ def my_loss_cls(y_true, y_pred):
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
     #predict the particle class labels
     l1 = 1e4*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    #l1 = 1e4*tf.keras.losses.categorical_crossentropy(true_id_onehot[:, :, 0], pred_id_onehot, from_logits=True)
     return 1e3*l1
 
 #@tf.function
@@ -654,8 +654,8 @@ if __name__ == "__main__":
  
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
     batch_size = 50
-    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).shuffle(10000).padded_batch(batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).shuffle(10000).padded_batch(batch_size, padded_shapes=ps)
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
 
     #print("train")
     #summarize_dataset(ds_train)
@@ -706,9 +706,11 @@ if __name__ == "__main__":
     loss_fn = my_loss_full
     if args.train_cls:
         loss_fn = my_loss_cls
+        model.layer_conv2.trainable = False
         model.layer_momentum1.trainable = False
         model.layer_momentum2.trainable = False
         model.layer_momentum3.trainable = False
+        model.layer_momentum4.trainable = False
         model.layer_momentum.trainable = False
 
     with strategy.scope():
