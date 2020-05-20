@@ -77,12 +77,14 @@ if __name__ == "__main__":
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     full_model = tf.function(lambda x: model(x))
     full_model = full_model.get_concrete_function(
-        tf.TensorSpec(model.inputs[0].shape, model.inputs[0].dtype))
+        tf.TensorSpec((None, None, model.inputs[0].shape[-1]), model.inputs[0].dtype))
 
     # Get frozen ConcreteFunction
     from tensorflow.python.framework import convert_to_constants
     frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
     frozen_func.graph.as_graph_def()
+    print(full_model.graph.inputs)
+    print(full_model.graph.outputs)
 
     tf.io.write_graph(graph_or_graph_def=frozen_func.graph,
                       logdir="./model",

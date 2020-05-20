@@ -665,8 +665,14 @@ if __name__ == "__main__":
     ds_train_r = ds_train.repeat(args.nepochs)
     ds_test_r = ds_test.repeat(args.nepochs)
 
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        args.lr,
+        decay_steps=10*int(args.ntrain/batch_size),
+        decay_rate=0.95
+    )
+
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
 
     if args.name is None:
