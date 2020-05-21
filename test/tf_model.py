@@ -27,6 +27,9 @@ import tensorflow as tf
 from plot_utils import plot_confusion_matrix
 from numpy.lib.recfunctions import append_fields
 
+import scipy
+import scipy.special
+
 elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
@@ -495,7 +498,29 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def prepare_df(epoch, model, data, outdir):
+def assign_label(pred_id_onehot_linear):
+    #multiclass_pred = scipy.special.softmax(pred_id_onehot_linear, axis=-1)
+    #threshold = {
+    #    1: 3.6917E-03,
+    #    2: 1.8936E-04,
+    #    11: 9.7604E-02,
+    #    13: 4.1055E-01,
+    #    22: 9.4114E-01,
+    #    130: 8.6218E-01,
+    #    211: 9.4886E-01,
+    #}
+    #
+    #ret = np.copy(multiclass_pred)
+    #for pid in [211, 130, 1, 2, 11, 13, 22]:
+    #    msk = (ret[:, :, class_labels.index(pid)] > threshold[pid])[0]
+    #    ret[:, :, class_labels.index(pid)] *= msk
+  
+    #ret2 = np.argmax(ret, axis=-1)
+
+    ret2 = np.argmax(pred_id_onehot_linear, axis=-1)
+    return ret2
+
+def prepare_df(epoch, model, data, outdir, save_raw=False):
     tf.print("\nprepare_df")
 
     dfs = []
@@ -505,7 +530,13 @@ def prepare_df(epoch, model, data, outdir):
         X, y, w = d
         pred = model(X).numpy()
         pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-        pred_id = np.argmax(pred_id_onehot, axis=-1).flatten()
+
+        #pred_id = np.argmax(pred_id_onehot, axis=-1).flatten()
+        pred_id = assign_label(pred_id_onehot).flatten()
+ 
+        if save_raw:
+            np.savez_compressed("ev_{}.npz".format(iev), X=X.numpy(), y=y.numpy(), w=w.numpy(), y_pred=pred)
+
         pred_charge = pred_charge[:, :, 0].flatten()
         pred_momentum = pred_momentum.reshape((pred_momentum.shape[0]*pred_momentum.shape[1], pred_momentum.shape[2]))
 

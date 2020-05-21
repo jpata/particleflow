@@ -63,7 +63,7 @@ if __name__ == "__main__":
     model.load_weights(args.weights)
 
     #prepare the dataframe
-    prepare_df(0, model, dataset, ".")
+    prepare_df(0, model, dataset, ".", save_raw=True)
 
     print("now timing")
     t0 = time.time()
