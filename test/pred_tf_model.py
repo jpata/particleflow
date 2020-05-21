@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--gpu", action="store_true", help="use GPU")
+    parser.add_argument("--convlayer", type=str, default="sgconv", choices=["sgconv", "ghconv"], help="Type of graph convolutional layer")
     args = parser.parse_args()
     return args
 
@@ -47,7 +48,7 @@ if __name__ == "__main__":
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
-    model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
+    model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
 
     num_particles = []
     for X,y,w in dataset:
