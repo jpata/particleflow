@@ -180,10 +180,43 @@ class Distance(tf.keras.layers.Layer):
         #adj = tf.keras.activations.relu(adj, threshold=0.01)
 
         return adj
-    
-class GraphConv(tf.keras.layers.Dense):
+
+#https://arxiv.org/pdf/2004.04635.pdf
+#https://github.com/gcucurull/jax-ghnet/blob/master/models.py 
+class GHConv(tf.keras.layers.Layer):
     def __init__(self, k, *args, **kwargs):
-        super(GraphConv, self).__init__(*args, **kwargs)
+        self.activation = kwargs.pop("activation")
+        self.hidden_dim = args[0]
+        self.k = k
+
+        super(GHConv, self).__init__(*args, **kwargs)
+
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
+        self.b_t = self.add_weight(shape=(self.hidden_dim, ), name="b_t", initializer="zeros")
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
+ 
+    def call(self, x, adj):
+        #compute the normalization of the adjacency matrix
+        in_degrees = tf.reduce_sum(adj, axis=-1)
+        #add epsilon to prevent numerical issues from 1/sqrt(x)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+        norm_k = tf.pow(norm, self.k)
+        adj_k = tf.pow(adj, self.k)
+
+        f_hom = tf.linalg.matmul(x, self.theta)
+        f_hom = tf.linalg.matmul(adj_k, f_hom*norm_k)*norm_k
+
+        f_het = tf.linalg.matmul(x, self.W_h)
+        gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
+        #tf.print(tf.reduce_mean(f_hom), tf.reduce_mean(f_het), tf.reduce_mean(gate))
+
+        out = gate*f_hom + (1-gate)*f_het
+        return out
+
+class SGConv(tf.keras.layers.Dense):
+    def __init__(self, k, *args, **kwargs):
+        super(SGConv, self).__init__(*args, **kwargs)
         self.k = k
     
     def call(self, inputs, adj):
@@ -206,7 +239,7 @@ class GraphConv(tf.keras.layers.Dense):
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv"):
         super(PFNet, self).__init__()
         self.activation = activation
 
@@ -223,8 +256,12 @@ class PFNet(tf.keras.Model):
         
         self.layer_dist = Distance(distance_dim, name="distance")
 
-        self.layer_conv1 = GraphConv(num_conv, hidden_dim, activation=activation, name="conv1")
-        self.layer_conv2 = GraphConv(num_conv, hidden_dim, activation=activation, name="conv2")
+        if convlayer == "sgconv":
+            self.layer_conv1 = SGConv(num_conv, hidden_dim, activation=activation, name="conv1")
+            self.layer_conv2 = SGConv(num_conv, hidden_dim, activation=activation, name="conv2")
+        elif convlayer == "ghconv":
+            self.layer_conv1 = GHConv(num_conv, hidden_dim, activation=activation, name="conv1")
+            self.layer_conv2 = GHConv(num_conv, hidden_dim, activation=activation, name="conv2")
 
         self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
@@ -484,17 +521,18 @@ def parse_args():
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--nhidden", type=int, default=256, help="hidden dimension")
-    parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers")
+    parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalanced"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
+    parser.add_argument("--convlayer", type=str, default="sgconv", choices=["sgconv", "ghconv"], help="Type of graph convolutional layer")
     parser.add_argument("--load", type=str, default=None, help="model to load")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
+    parser.add_argument("--lr-decay", type=float, default=0.95, help="learning rate decay")
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
     #parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
-    #parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     args = parser.parse_args()
     return args
 
@@ -699,12 +737,12 @@ if __name__ == "__main__":
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         args.lr,
         decay_steps=10*int(args.ntrain/batch_size),
-        decay_rate=0.95
+        decay_rate=args.lr_decay
     )
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv)
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, conv_layer=args.convlayer)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
