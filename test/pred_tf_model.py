@@ -32,7 +32,7 @@ if __name__ == "__main__":
     import tensorflow as tf
     from tf_model import PFNet, prepare_df
     from tf_data import _parse_tfr_element
-    tfr_files = glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/cand/*.tfrecords")
+    tfr_files = glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords")
     #tf.config.optimizer.set_jit(True)
 
     if args.nthreads > 0:
