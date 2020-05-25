@@ -30,7 +30,7 @@ from numpy.lib.recfunctions import append_fields
 import scipy
 import scipy.special
 
-elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
 def summarize_dataset(dataset):
@@ -88,6 +88,19 @@ def load_one_file(fn, num_clusters=10):
         Xelem = event["Xelem"]
         ygen = event["ygen"]
         ycand = event["ycand"]
+
+        #keep only ECAL, HCAL, HF and tracks
+        #msk = (
+        #    (Xelem["typ"] == 1) | (Xelem["typ"] == 4) |
+        #    (Xelem["typ"] == 5) | (Xelem["typ"] == 8) |
+        #    (Xelem["typ"] == 9)
+        #)
+        #Xelem = Xelem[msk]
+        #ygen = ygen[msk]
+        #ycand = ycand[msk]
+        #ycand["typ"][ycand["typ"]==13] = 211
+        #msk2 = (ycand["typ"] == 1) | (ycand["typ"] == 2) | (ycand["typ"] == 211) | (ycand["typ"] == 130)
+        #ycand["typ"][~msk2] = 0
 
         Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
         ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
@@ -168,7 +181,7 @@ class Distance(tf.keras.layers.Layer):
     def call(self, inputs1, inputs2):
         #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
         #inputs1, inputs2: [Nbatch, Nelem, distance_dim] embedded coordinates used for element-to-element distance calculation
-        D =  dist(inputs1, inputs2)
+        D = dist(inputs1, inputs2)
       
         #adjacency between two elements should be high if the distance is small.
         #this is equivalent to radial basis functions. 
@@ -282,6 +295,7 @@ class PFNet(tf.keras.Model):
     def predict_distancematrix(self, inputs, training=True):
 
         enc = self.activation(self.enc(inputs))
+        msk_elem = tf.expand_dims(tf.cast(inputs[:, :, 0] != 0, dtype=tf.float32), -1)
 
         x = self.layer_distcoords1(enc)
         x = self.layer_distcoords2(x)
@@ -289,6 +303,9 @@ class PFNet(tf.keras.Model):
         distcoords = self.layer_distcoords(x)
 
         dm = self.layer_dist(distcoords, distcoords)
+
+        dm = dm*msk_elem
+
         return enc, dm
 
     #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
@@ -321,15 +338,17 @@ class PFNet(tf.keras.Model):
         out_id = tf.argmax(out_id_logits, axis=-1)
         msk_good = tf.cast(out_id != 0, tf.float32)
 
-        #out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
-        #new_phi = X[:, :, 3] + pred_corr[:, :, 1]
-        #out_momentum_phi = new_phi
-        #out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
+        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
+        out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
+        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
-            tf.multiply(pred_corr[:, :, 0], msk_good),
-            tf.multiply(pred_corr[:, :, 1], msk_good),
-            tf.multiply(pred_corr[:, :, 2], msk_good)
+            #tf.multiply(pred_corr[:, :, 0], msk_good),
+            #tf.multiply(pred_corr[:, :, 1], msk_good),
+            #tf.multiply(pred_corr[:, :, 2], msk_good)
+            tf.multiply(out_momentum_eta, msk_good),
+            tf.multiply(out_momentum_phi, msk_good),
+            tf.multiply(out_momentum_E, msk_good)
             #out_momentum_eta,
             #out_momentum_phi,
             #out_momentum_E,
@@ -734,15 +753,18 @@ if __name__ == "__main__":
     ds_train_r = ds_train.repeat(args.nepochs)
     ds_test_r = ds_test.repeat(args.nepochs)
 
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        args.lr,
-        decay_steps=10*int(args.ntrain/batch_size),
-        decay_rate=args.lr_decay
-    )
+    if args.lr_decay > 0:
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            args.lr,
+            decay_steps=10*int(args.ntrain/batch_size),
+            decay_rate=args.lr_decay
+        )
+    else:
+        lr_schedule = args.lr
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, conv_layer=args.convlayer)
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())

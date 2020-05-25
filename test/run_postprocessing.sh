@@ -12,10 +12,10 @@ PERFILE=$2
 MERGE=$3
 
 #Produce pickle files
-mkdir -p $DATASET/raw
-\ls -1 $DATASET/*.root | parallel -j20 --gnu singularity exec $IMG \
-  python test/postprocessing2.py --input {} \
-    --events-per-file $PERFILE --outpath $DATASET/raw --save-normalized-table
+#mkdir -p $DATASET/raw
+#\ls -1 $DATASET/*.root | parallel -j20 --gnu singularity exec $IMG \
+#  python test/postprocessing2.py --input {} \
+#    --events-per-file $PERFILE --outpath $DATASET/raw --save-normalized-table
 
 #Produce TFRecords
 mkdir -p $DATASET/tfr/cand
