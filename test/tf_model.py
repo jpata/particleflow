@@ -252,7 +252,7 @@ class SGConv(tf.keras.layers.Dense):
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv"):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.0):
         super(PFNet, self).__init__()
         self.activation = activation
 
@@ -271,10 +271,10 @@ class PFNet(tf.keras.Model):
 
         if convlayer == "sgconv":
             self.layer_conv1 = SGConv(num_conv, hidden_dim, activation=activation, name="conv1")
-            self.layer_conv2 = SGConv(num_conv, hidden_dim, activation=activation, name="conv2")
+            self.layer_conv2 = SGConv(num_conv, hidden_dim+len(class_labels), activation=activation, name="conv2")
         elif convlayer == "ghconv":
             self.layer_conv1 = GHConv(num_conv, hidden_dim, activation=activation, name="conv1")
-            self.layer_conv2 = GHConv(num_conv, hidden_dim, activation=activation, name="conv2")
+            self.layer_conv2 = GHConv(num_conv, hidden_dim+len(class_labels), activation=activation, name="conv2")
 
         self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
@@ -283,14 +283,11 @@ class PFNet(tf.keras.Model):
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
         
-        self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim+len(class_labels), activation=activation, name="momentum1")
+        self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum4 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum4")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
-        self.inp_X = tf.keras.Input(batch_size=None, shape=(15, ), name="X")
-        #self.inp_dm = tf.keras.Input(batch_size=None, shape=(None, ), sparse=True, name="dm")
-        #self._set_inputs(self.inp_X)
  
     def predict_distancematrix(self, inputs, training=True):
 
@@ -326,9 +323,9 @@ class PFNet(tf.keras.Model):
         out_id_logits = self.layer_id(a)
         out_charge = self.layer_charge(a)
         
+        x = tf.concat([x, out_id_logits], axis=-1)
         x2 = self.layer_conv2(x, dm)
-        x = tf.concat([x2, self.activation(out_id_logits)], axis=-1)
-        b = self.layer_momentum1(x)
+        b = self.layer_momentum1(x2)
         b = self.layer_momentum2(b)
         b = self.layer_momentum3(b)
         b = self.layer_momentum4(b)
@@ -343,18 +340,9 @@ class PFNet(tf.keras.Model):
         out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
-            #tf.multiply(pred_corr[:, :, 0], msk_good),
-            #tf.multiply(pred_corr[:, :, 1], msk_good),
-            #tf.multiply(pred_corr[:, :, 2], msk_good)
             tf.multiply(out_momentum_eta, msk_good),
             tf.multiply(out_momentum_phi, msk_good),
             tf.multiply(out_momentum_E, msk_good)
-            #out_momentum_eta,
-            #out_momentum_phi,
-            #out_momentum_E,
-            #pred_corr[:, :, 0],
-            #pred_corr[:, :, 1],
-            #pred_corr[:, :, 2],
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
@@ -388,6 +376,21 @@ def my_loss_cls(y_true, y_pred):
     l1 = 1e4*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
     #l1 = 1e4*tf.keras.losses.categorical_crossentropy(true_id_onehot[:, :, 0], pred_id_onehot, from_logits=True)
     return 1e3*l1
+
+def my_loss_reg(y_true, y_pred):
+    pred_id_onehot, pred_charge, pred_momentum = separate_prediction(y_pred)
+    pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
+    true_id, true_charge, true_momentum = separate_truth(y_true)
+
+    true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
+
+    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
+    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/10.0
+
+    l2 = (l2_0 + l2_1 + l2_2)
+    
+    return 1e3*l2
 
 #@tf.function
 def my_loss_full(y_true, y_pred):
@@ -549,9 +552,10 @@ def parse_args():
     parser.add_argument("--load", type=str, default=None, help="model to load")
     #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
-    parser.add_argument("--lr-decay", type=float, default=0.95, help="learning rate decay")
+    parser.add_argument("--lr-decay", type=float, default=0.0, help="learning rate decay")
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
-    #parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
+    parser.add_argument("--train-reg", action="store_true", help="Train only the regression part")
+    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     args = parser.parse_args()
     return args
 
@@ -764,7 +768,7 @@ if __name__ == "__main__":
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
 
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
@@ -809,6 +813,15 @@ if __name__ == "__main__":
         model.layer_momentum3.trainable = False
         model.layer_momentum4.trainable = False
         model.layer_momentum.trainable = False
+    elif args.train_reg:
+        loss_fn = my_loss_reg
+        model.trainable = False
+        model.layer_conv2.trainable = True
+        model.layer_momentum1.trainable = True
+        model.layer_momentum2.trainable = True
+        model.layer_momentum3.trainable = True
+        model.layer_momentum4.trainable = True
+        model.layer_momentum.trainable = True
 
     with strategy.scope():
         model.compile(optimizer=opt, loss=loss_fn,
