@@ -267,6 +267,10 @@ class PFNet(tf.keras.Model):
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
         self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3")
         
+        self.layer_input1_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1_momentum")
+        self.layer_input2_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2_momentum")
+        self.layer_input3_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3_momentum")
+        
         self.layer_dist = Distance(distance_dim, name="distance")
 
         if convlayer == "sgconv":
@@ -314,22 +318,24 @@ class PFNet(tf.keras.Model):
         x = self.layer_input1(enc)
         x = self.layer_input2(x)
         x = self.layer_input3(x)
-
-        x1 = self.layer_conv1(x, dm)
-        a = self.layer_id1(tf.concat(x1, axis=-1))
-        a = self.layer_id2(a)
-        a = self.layer_id3(a)
-        a = self.layer_id4(a)
-        out_id_logits = self.layer_id(a)
-        out_charge = self.layer_charge(a)
+        x = self.layer_conv1(x, dm)
+        x = self.layer_id1(x)
+        x = self.layer_id2(x)
+        x = self.layer_id3(x)
+        x = self.layer_id4(x)
+        out_id_logits = self.layer_id(x)
+        out_charge = self.layer_charge(x)
         
+        x = self.layer_input1_momentum(enc)
+        x = self.layer_input2_momentum(x)
+        x = self.layer_input3_momentum(x)
         x = tf.concat([x, out_id_logits], axis=-1)
-        x2 = self.layer_conv2(x, dm)
-        b = self.layer_momentum1(x2)
-        b = self.layer_momentum2(b)
-        b = self.layer_momentum3(b)
-        b = self.layer_momentum4(b)
-        pred_corr = self.layer_momentum(b)
+        x = self.layer_conv2(x, dm)
+        x = self.layer_momentum1(x)
+        x = self.layer_momentum2(x)
+        x = self.layer_momentum3(x)
+        x = self.layer_momentum4(x)
+        pred_corr = self.layer_momentum(x)
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
@@ -386,7 +392,7 @@ def my_loss_reg(y_true, y_pred):
 
     l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
     l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
-    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/10.0
+    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/100.0
 
     l2 = (l2_0 + l2_1 + l2_2)
     
@@ -400,9 +406,9 @@ def my_loss_full(y_true, y_pred):
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
     #tf.print(pred_id_onehot)
-    l1 = 1e4 * tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
-    #msk_good = (true_id[:, 0] == pred_id)
+    msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
     l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
@@ -410,7 +416,7 @@ def my_loss_full(y_true, y_pred):
     l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/10.0
 
     l2 = (l2_0 + l2_1 + l2_2)
-    #l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
+    l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
 
     l3 = mse_unreduced(true_charge, pred_charge)[:, :, 0]
 
@@ -815,7 +821,8 @@ if __name__ == "__main__":
         model.layer_momentum.trainable = False
     elif args.train_reg:
         loss_fn = my_loss_reg
-        model.trainable = False
+        for layer in model.layers:
+            layer.trainable = False
         model.layer_conv2.trainable = True
         model.layer_momentum1.trainable = True
         model.layer_momentum2.trainable = True
