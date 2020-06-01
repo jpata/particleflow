@@ -39,6 +39,10 @@ ls data/PFNet*/epoch*/
 
 ## Presentations
 
+- FastML meeting, 2020-05-29: https://indico.cern.ch/event/923986/contributions/3883991/attachments/2047940/3431648/2020_05_28.pdf
+- CMS PF group, 2020-05-22: https://indico.cern.ch/event/921949/contributions/3873351/attachments/2042984/3422056/2020_05_22.pdf
+- CMS scouting group, 2020-05-15: https://indico.cern.ch/event/894101/contributions/3862093/attachments/2038019/3412747/2020_05_13.pdf
+- CMS PF group, 2020-04-24: https://indico.cern.ch/event/912351/contributions/3839281/attachments/2026117/3389540/2020_04_24.pdf
 - Caltech CMS group ML meeting, 2020-04-16: https://indico.cern.ch/event/909688/contributions/3826957/attachments/2021475/3380133/2020_04_15_caltechml.pdf
 - ML4RECO meeting, 2020-04-09: https://indico.cern.ch/event/908361/contributions/3821957/attachments/2017888/3373038/2020_04_08.pdf
 - CMS PF group, 2020-03-13: https://indico.cern.ch/event/897397/contributions/3786360/attachments/2003108/3344534/2020_03_13.pdf
