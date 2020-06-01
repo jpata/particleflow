@@ -252,7 +252,7 @@ class SGConv(tf.keras.layers.Dense):
 
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.0):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.1):
         super(PFNet, self).__init__()
         self.activation = activation
 
@@ -264,30 +264,36 @@ class PFNet(tf.keras.Model):
         self.layer_distcoords = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
+        self.layer_input1_do = tf.keras.layers.Dropout(dropout)
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
-        self.layer_input3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3")
+        self.layer_input2_do = tf.keras.layers.Dropout(dropout)
+        self.layer_input3 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="input3")
+        self.layer_input3_do = tf.keras.layers.Dropout(dropout)
         
         self.layer_input1_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1_momentum")
+        self.layer_input1_momentum_do = tf.keras.layers.Dropout(dropout)
         self.layer_input2_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2_momentum")
-        self.layer_input3_momentum = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input3_momentum")
+        self.layer_input2_momentum_do = tf.keras.layers.Dropout(dropout)
+        self.layer_input3_momentum = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="input3_momentum")
+        self.layer_input3_momentum_do = tf.keras.layers.Dropout(dropout)
         
         self.layer_dist = Distance(distance_dim, name="distance")
 
         if convlayer == "sgconv":
-            self.layer_conv1 = SGConv(num_conv, hidden_dim, activation=activation, name="conv1")
-            self.layer_conv2 = SGConv(num_conv, hidden_dim+len(class_labels), activation=activation, name="conv2")
+            self.layer_conv1 = SGConv(num_conv, 2*hidden_dim, activation=activation, name="conv1")
+            self.layer_conv2 = SGConv(num_conv, 2*hidden_dim+len(class_labels), activation=activation, name="conv2")
         elif convlayer == "ghconv":
-            self.layer_conv1 = GHConv(num_conv, hidden_dim, activation=activation, name="conv1")
-            self.layer_conv2 = GHConv(num_conv, hidden_dim+len(class_labels), activation=activation, name="conv2")
+            self.layer_conv1 = GHConv(num_conv, 2*hidden_dim, activation=activation, name="conv1")
+            self.layer_conv2 = GHConv(num_conv, 2*hidden_dim+len(class_labels), activation=activation, name="conv2")
 
-        self.layer_id1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id1")
+        self.layer_id1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
         self.layer_id4 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id4")
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
         
-        self.layer_momentum1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum1")
+        self.layer_momentum1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum4 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum4")
@@ -316,8 +322,11 @@ class PFNet(tf.keras.Model):
         enc, dm = self.predict_distancematrix(X, training=training)
 
         x = self.layer_input1(enc)
+        x = self.layer_input1_do(x, training)
         x = self.layer_input2(x)
+        x = self.layer_input2_do(x, training)
         x = self.layer_input3(x)
+        x = self.layer_input3_do(x, training)
         x = self.layer_conv1(x, dm)
         x = self.layer_id1(x)
         x = self.layer_id2(x)
@@ -327,8 +336,11 @@ class PFNet(tf.keras.Model):
         out_charge = self.layer_charge(x)
         
         x = self.layer_input1_momentum(enc)
+        x = self.layer_input1_momentum_do(x, training)
         x = self.layer_input2_momentum(x)
+        x = self.layer_input2_momentum_do(x, training)
         x = self.layer_input3_momentum(x)
+        x = self.layer_input3_momentum_do(x, training)
         x = tf.concat([x, out_id_logits], axis=-1)
         x = self.layer_conv2(x, dm)
         x = self.layer_momentum1(x)
@@ -341,9 +353,12 @@ class PFNet(tf.keras.Model):
         out_id = tf.argmax(out_id_logits, axis=-1)
         msk_good = tf.cast(out_id != 0, tf.float32)
 
-        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
-        out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
-        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
+        out_momentum_eta = X[:, :, 2]+pred_corr[:, :, 0]
+        out_momentum_phi = X[:, :, 3]+pred_corr[:, :, 1] 
+        out_momentum_E = X[:, :, 4]+pred_corr[:, :, 2]
+        #out_momentum_eta = pred_corr[:, :, 0]
+        #out_momentum_phi = pred_corr[:, :, 1] 
+        #out_momentum_E = pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
             tf.multiply(out_momentum_eta, msk_good),
@@ -372,6 +387,9 @@ def separate_truth(y_true):
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
 
+def msle_unreduced(true, pred):
+    return tf.math.pow(tf.math.log(tf.math.abs(true) + 1.0) - tf.math.log(tf.math.abs(pred) + 1.0), 2)
+
 def my_loss_cls(y_true, y_pred):
     pred_id_onehot, pred_charge, pred_momentum = separate_prediction(y_pred)
     pred_id = tf.cast(tf.argmax(pred_id_onehot, axis=-1), tf.int32)
@@ -390,8 +408,8 @@ def my_loss_reg(y_true, y_pred):
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
 
-    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
-    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
+    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])*10
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)*10
     l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/100.0
 
     l2 = (l2_0 + l2_1 + l2_2)
@@ -411,9 +429,9 @@ def my_loss_full(y_true, y_pred):
     msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
-    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
-    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
-    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/10.0
+    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])*10.0
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)*10.0
+    l2_2 = msle_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/100.0
 
     l2 = (l2_0 + l2_1 + l2_2)
     l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
@@ -823,6 +841,9 @@ if __name__ == "__main__":
         loss_fn = my_loss_reg
         for layer in model.layers:
             layer.trainable = False
+        model.layer_input1_momentum.trainable = True
+        model.layer_input2_momentum.trainable = True
+        model.layer_input3_momentum.trainable = True
         model.layer_conv2.trainable = True
         model.layer_momentum1.trainable = True
         model.layer_momentum2.trainable = True
