@@ -289,14 +289,12 @@ class PFNet(tf.keras.Model):
         self.layer_id1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="id1")
         self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
         self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
-        self.layer_id4 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id4")
         self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
         
         self.layer_momentum1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="momentum1")
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
-        self.layer_momentum4 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum4")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
  
     def predict_distancematrix(self, inputs, training=True):
@@ -331,7 +329,6 @@ class PFNet(tf.keras.Model):
         x = self.layer_id1(x)
         x = self.layer_id2(x)
         x = self.layer_id3(x)
-        x = self.layer_id4(x)
         out_id_logits = self.layer_id(x)
         out_charge = self.layer_charge(x)
         
@@ -346,24 +343,20 @@ class PFNet(tf.keras.Model):
         x = self.layer_momentum1(x)
         x = self.layer_momentum2(x)
         x = self.layer_momentum3(x)
-        x = self.layer_momentum4(x)
         pred_corr = self.layer_momentum(x)
 
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
         msk_good = tf.cast(out_id != 0, tf.float32)
 
-        out_momentum_eta = X[:, :, 2]+pred_corr[:, :, 0]
-        out_momentum_phi = X[:, :, 3]+pred_corr[:, :, 1] 
-        out_momentum_E = X[:, :, 4]+pred_corr[:, :, 2]
-        #out_momentum_eta = pred_corr[:, :, 0]
-        #out_momentum_phi = pred_corr[:, :, 1] 
-        #out_momentum_E = pred_corr[:, :, 2]
+        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
+        out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
+        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
 
         out_momentum = tf.stack([
-            tf.multiply(out_momentum_eta, msk_good),
-            tf.multiply(out_momentum_phi, msk_good),
-            tf.multiply(out_momentum_E, msk_good)
+            out_momentum_eta,
+            out_momentum_phi,
+            out_momentum_E,
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
@@ -674,51 +667,6 @@ def plot_to_image(figure):
     image = tf.expand_dims(image, 0)
     return image
 
-class ConfusionMatrixCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset, ntest, file_writer_cm):
-        self.dataset = dataset
-        self.ntest = ntest
-        self.file_writer_cm = file_writer_cm
-
-    def on_epoch_end(self, epoch, logs):
-        if True or (epoch%10==0 and epoch>0):
-            true_ids = []
-            pred_ids = []
-            for iev, data in enumerate(self.dataset):
-                if iev>=self.ntest:
-                    break
-                X, y, w = data
-                pred = self.model(X).numpy()
-                pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-                pred_id = np.argmax(pred_id_onehot, axis=-1)
-                true_id, true_charge, true_momentum = separate_truth(y)
-                true_id = true_id.numpy()
-                pred_ids += [pred_id]
-                true_ids += [true_id]
-   
-            true_ids = np.concatenate(true_ids) 
-            pred_ids = np.concatenate(pred_ids)
- 
-            # Calculate the confusion matrix.
-            cm = confusion_matrix(true_ids, pred_ids, labels=range(len(class_labels)))
-
-            figure, _ = plot_confusion_matrix(cm, [int(x) for x in class_labels], cmap="Blues")
-            cm_image = plot_to_image(figure)
-            
-            figure2 = plot_confusion_matrix(np.round(100.0*cm/np.sum(cm), 1), [int(x) for x in class_labels], cmap="Blues", normalize=False)
-            cm_image2 = plot_to_image(figure2)
-    
-            # Log the confusion matrix as an image summary.
-            with self.file_writer_cm.as_default():
-              tf.summary.image("Confusion Matrix", cm_image, step=epoch)
-              tf.summary.image("Confusion Matrix (unnormalized)", cm_image2, step=epoch)
-              for pdgid in [211, 130, 13, 11, 22, 1, 2, 0]:
-                  idx = class_labels.index(pdgid)
-                  eff = cm[idx, idx] / np.sum(cm[idx, :])
-                  fake = (np.sum(cm[:, idx]) - cm[idx, idx]) / np.sum(cm[:, idx])
-                  tf.summary.scalar("eff_{}".format(pdgid), eff, step=epoch)
-                  tf.summary.scalar("fake_{}".format(pdgid), fake, step=epoch)
-
 def load_dataset_gun():
     globs = [
         "test/SingleGammaFlatPt10To100_pythia8_cfi/tfr/cand/chunk_0.tfrecords",
@@ -749,8 +697,8 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    #datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
+    datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
+    #datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     try:
         num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
@@ -809,7 +757,6 @@ if __name__ == "__main__":
         #profile_batch=(10,90),
         profile_batch=0,
     )
-    file_writer_cm = tf.summary.create_file_writer(outdir + '/cm')
     tb.set_model(model)
     callbacks += [tb]
 
@@ -823,10 +770,6 @@ if __name__ == "__main__":
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
-    
-    #confusion_cb = ConfusionMatrixCallback(ds_test.repeat(), args.ntest, file_writer_cm)
-    #confusion_cb.set_model(model)
-    #callbacks += [confusion_cb]
 
     loss_fn = my_loss_full
     if args.train_cls:
@@ -870,9 +813,3 @@ if __name__ == "__main__":
                 verbose=True,
                 callbacks=callbacks
             )
-
-    #prepare_df(args.nepochs, model, ds_test, outdir)
-
-    #ensure model is compiled
-    #model.predict((X, dm))
-    #tf.keras.models.save_model(model, outdir + "/model.tf", save_format="tf")
