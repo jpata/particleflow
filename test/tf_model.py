@@ -417,17 +417,17 @@ def my_loss_full(y_true, y_pred):
 
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=len(class_labels))
     #tf.print(pred_id_onehot)
-    l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
+    l1 = 1e3*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_onehot)
   
-    msk_good = (true_id[:, 0] == pred_id)
+    #msk_good = (true_id[:, 0] == pred_id)
     #nsamp = tf.cast(tf.size(y_pred), tf.float32)
 
-    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])*10.0
-    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)*10.0
-    l2_2 = msle_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/100.0
+    l2_0 = mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
+    l2_1 = mse_unreduced(tf.math.floormod(true_momentum[:, :, 1] - pred_momentum[:, :, 1] + np.pi, 2*np.pi) - np.pi, 0.0)
+    l2_2 = mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])/100.0
 
     l2 = (l2_0 + l2_1 + l2_2)
-    l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
+    #l2 = tf.multiply(tf.cast(msk_good, tf.float32), l2)
 
     l3 = mse_unreduced(true_charge, pred_charge)[:, :, 0]
 
