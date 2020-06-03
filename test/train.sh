@@ -1,7 +1,6 @@
 #!/bin/bash
 
-### PyTorch model training - SOTA
-
+### PyTorch model training - WIP
 #singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
 #  python3 test/train_end2end.py \
 #  --dataset /storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi \
@@ -12,8 +11,7 @@
 #  --target gen \
 #  --dropout 0.2
 
-###Keras model trainings - experimental
-
-CUDA_VISIBLE_DEVICES=2,3,4,5 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+###Keras model trainings - current SOTA
+singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
   python3 test/tf_model.py --target cand --ntrain 400000 --ntest 100000 --nepochs 200 --lr 0.00005 \
-  --nhidden 256 --distance-dim 256 --num-conv 4 --weights inverse --lr-decay 0.0 --convlayer ghconv
+  --nhidden 256 --distance-dim 256 --num-conv 4 --weights inverse --lr-decay 0.99 --convlayer ghconv
