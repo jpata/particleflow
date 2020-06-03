@@ -567,7 +567,7 @@ def parse_args():
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
     parser.add_argument("--convlayer", type=str, default="sgconv", choices=["sgconv", "ghconv"], help="Type of graph convolutional layer")
     parser.add_argument("--load", type=str, default=None, help="model to load")
-    #parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
+    parser.add_argument("--datapath", type=str, help="Input data path", required=True)
     parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
     parser.add_argument("--lr-decay", type=float, default=0.0, help="learning rate decay")
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
@@ -688,7 +688,6 @@ def load_dataset_gun():
 def load_dataset_ttbar(datapath):
     tfr_files = glob.glob(datapath + "/tfr2/{}/*.tfrecords".format(args.target))
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    #dataset = tf.data.Dataset.from_tensor_slices(tfr_files).interleave(lambda x: tf.data.TFRecordDataset(x)).map(_parse_tfr_element)
     return dataset
 
 if __name__ == "__main__":
@@ -696,9 +695,6 @@ if __name__ == "__main__":
     tf.config.experimental_run_functions_eagerly(False)
 
     args = parse_args()
-
-    datapath = "/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi"
-    #datapath = "data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
     try:
         num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
@@ -709,22 +705,17 @@ if __name__ == "__main__":
     except Exception as e:
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
-    filelist = sorted(glob.glob(datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
+    filelist = sorted(glob.glob(args.datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
 
     from tf_data import _parse_tfr_element
 
     #dataset = load_dataset_gun()
-    dataset = load_dataset_ttbar(datapath)
+    dataset = load_dataset_ttbar(args.datapath)
  
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
     batch_size = 50
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
-
-    #print("train")
-    #summarize_dataset(ds_train)
-    #print("test")
-    #summarize_dataset(ds_test)
  
     ds_train_r = ds_train.repeat(args.nepochs)
     ds_test_r = ds_test.repeat(args.nepochs)
@@ -742,9 +733,14 @@ if __name__ == "__main__":
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
 
+    if not os.path.isdir("experiments"):
+        os.makedirs("experiments")
+
     if args.name is None:
         args.name =  'run_{:02}'.format(get_unique_run())
+
     outdir = 'experiments/' + args.name
+
     if os.path.isdir(outdir):
         print("Output directory exists: {}".format(outdir), file=sys.stderr)
         sys.exit(1)
