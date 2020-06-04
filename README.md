@@ -28,8 +28,8 @@ ls data/PFNet*/epoch*/
   - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
   - [ ] Improve ML-PF model physics performance 
   - [ ] Improve ML-PF model computational performance 
-  - [ ] Create CMSSW EDProducer for ML-PF particles
-    - [ ] Implement a simple tensorflow or ONNX based ML-PF training for evalutation in CMSSW
+  - [x] Create CMSSW EDProducer for ML-PF particles
+  - [ ] GPU-evaluation of MLPFProducer in CMSSW
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
