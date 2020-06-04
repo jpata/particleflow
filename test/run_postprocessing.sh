@@ -12,10 +12,12 @@ PERFILE=$2
 MERGE=$3
 
 #Produce pickle files
-\ls -1 $DATASET/*.root | parallel -j20 --gnu singularity exec --nv $IMG \
+#mkdir -p $DATASET/raw
+\ls -1 $DATASET/*.root | parallel -j20 --gnu singularity exec $IMG \
   python test/postprocessing2.py --input {} \
-    --events-per-file $PERFILE --outpath raw --save-normalized-table
+    --events-per-file $PERFILE --outpath $DATASET/raw --save-normalized-table
 
 #Produce TFRecords
-singularity exec -B /storage --nv $IMG \
+mkdir -p $DATASET/tfr/cand
+singularity exec -B /storage $IMG \
   python3 test/tf_data.py --target cand --datapath $DATASET --num-files-per-tfr $MERGE
