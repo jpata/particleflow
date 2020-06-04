@@ -598,7 +598,7 @@ def assign_label(pred_id_onehot_linear):
     ret2 = np.argmax(pred_id_onehot_linear, axis=-1)
     return ret2
 
-def prepare_df(epoch, model, data, outdir, save_raw=False):
+def prepare_df(epoch, model, data, outdir, target, save_raw=False):
     tf.print("\nprepare_df")
 
     dfs = []
@@ -629,10 +629,10 @@ def prepare_df(epoch, model, data, outdir, save_raw=False):
         df["pred_phi"] = np.array(pred_momentum[:, 1], dtype=np.float64)
         df["pred_e"] = np.array(pred_momentum[:, 2], dtype=np.float64)
 
-        df["target_pid"] = np.array([int(class_labels[p]) for p in true_id])
-        df["target_eta"] = np.array(true_momentum[:, 0], dtype=np.float64)
-        df["target_phi"] = np.array(true_momentum[:, 1], dtype=np.float64)
-        df["target_e"] = np.array(true_momentum[:, 2], dtype=np.float64)
+        df["{}_pid".format(target)] = np.array([int(class_labels[p]) for p in true_id])
+        df["{}_eta".format(target)] = np.array(true_momentum[:, 0], dtype=np.float64)
+        df["{}_phi".format(target)] = np.array(true_momentum[:, 1], dtype=np.float64)
+        df["{}_e".format(target)] = np.array(true_momentum[:, 2], dtype=np.float64)
 
         df["iev"] = iev
         dfs += [df]
