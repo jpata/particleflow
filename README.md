@@ -1,4 +1,4 @@
-Notes on modernizing CMS particle flow, in particular [PFBlockAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFBlockAlgo.cc) and [PFAlgo](https://github.com/cms-sw/cmssw/blob/master/RecoParticleFlow/PFProducer/src/PFAlgo.cc).
+Notes on modernizing CMS particle flow with machine learning.
 
 Quickstart on Caltech iBanks:
 
@@ -115,12 +115,13 @@ cmsDriver.py step3 --runUnscheduled --conditions auto:phase1_2021_realistic \
 
 ## Datasets
 
-- April 2020
+- May 2020
   - TTbar with PU for PhaseI, privately generated, 20k events 
-    - flat ROOT: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
-    - pickled graph data: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
+    - flat ROOT: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
+    - pickled graph data: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
     - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/processed/*.pt`
-
+    - processed TFRecord: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords`
+    
 ## Creating the datasets
 
 ```bash
