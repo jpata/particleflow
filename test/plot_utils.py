@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import mplhep
+import os.path as osp
 
 pid_to_text = {
     211: r"charged hadrons ($\pi^\pm$, ...)",
@@ -228,7 +229,7 @@ def plot_confusion_matrix(cm,
     return fig, ax
 
 
-def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
+def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='target', outpath='./'):
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
@@ -242,7 +243,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
         [bins["E_val"][0], bins["E_val"][-1]],
         [bins["E_val"][0], bins["E_val"][-1]],
         color="black", ls="--", lw=0.5)
-    plt.savefig("energy_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"energy_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     plt.figure(figsize=(4,4))
     ax = plt.axes()
@@ -255,7 +256,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     sample_label(ax)
     particle_label(ax, pid)
     ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
-    plt.savefig("energy_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"energy_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
 
@@ -271,16 +272,16 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     cms_label()
     sample_label(ax)
     particle_label(ax, pid)
-    plt.savefig("energy_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"energy_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()
-    big_df["bins_target_e"] = np.searchsorted(bins["E_val"], big_df["target_e"])
+    big_df["bins_{}_e".format(target)] = np.searchsorted(bins["E_val"], big_df["{}_e".format(target)])
     big_df["bins_pred_e"] = np.searchsorted(bins["E_val"], big_df["pred_e"])
 
-    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_e")["pred_pid"].apply(get_eff, pid)
-    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_e")["target_pid"].apply(get_fake, pid)
+    vals_eff = big_df[(big_df["{}_pid".format(target)]==pid)].groupby("bins_{}_e".format(target))["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_e")["{}_pid".format(target)].apply(get_fake, pid)
 
     out_eff = np.zeros((len(bins["E_val"]), 2))
     out_fake = np.zeros((len(bins["E_val"]), 2))
@@ -310,9 +311,9 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig("energy_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"energy_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
 
-def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
+def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='target', outpath='./'):
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["eta_val"], bins["eta_val"]))
@@ -326,7 +327,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
         [bins["eta_val"][0], bins["eta_val"][-1]],
         [bins["eta_val"][0], bins["eta_val"][-1]],
         color="black", ls="--", lw=0.5)
-    plt.savefig("eta_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"eta_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     plt.figure(figsize=(4,4))
     ax = plt.axes()
@@ -339,7 +340,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     sample_label(ax)
     particle_label(ax, pid)
     ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
-    plt.savefig("eta_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"eta_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
 
@@ -355,16 +356,16 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     cms_label()
     sample_label(ax)
     particle_label(ax, pid)
-    plt.savefig("eta_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"eta_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()
-    big_df["bins_target_eta"] = np.searchsorted(bins["eta_val"], big_df["target_eta"])
+    big_df["bins_{}_eta".format(target)] = np.searchsorted(bins["eta_val"], big_df["{}_eta".format(target)])
     big_df["bins_pred_eta"] = np.searchsorted(bins["eta_val"], big_df["pred_eta"])
 
-    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_eta")["pred_pid"].apply(get_eff, pid)
-    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_eta")["target_pid"].apply(get_fake, pid)
+    vals_eff = big_df[(big_df["{}_pid".format(target)]==pid)].groupby("bins_{}_eta".format(target))["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_eta")["{}_pid".format(target)].apply(get_fake, pid)
 
     out_eff = np.zeros((len(bins["eta_val"]), 2))
     out_fake = np.zeros((len(bins["eta_val"]), 2))
@@ -394,9 +395,9 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig("eta_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"eta_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
 
-def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
+def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='target', outpath='./'):
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["phi_val"], bins["phi_val"]))
@@ -410,7 +411,7 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
         [bins["phi_val"][0], bins["phi_val"][-1]],
         [bins["phi_val"][0], bins["phi_val"][-1]],
         color="black", ls="--", lw=0.5)
-    plt.savefig("phi_2d_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"phi_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     plt.figure(figsize=(4,4))
     ax = plt.axes()
@@ -422,7 +423,7 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     cms_label()
     sample_label(ax)
     particle_label(ax, pid)
-    plt.savefig("phi_hist_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"phi_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
     ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
 
     res = (v0[msk_both, 1] - v0[msk_both, 0])
@@ -437,16 +438,16 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     cms_label()
     sample_label(ax)
     particle_label(ax, pid)
-    plt.savefig("phi_ratio_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"phi_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
     
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()
-    big_df["bins_target_phi"] = np.searchsorted(bins["phi_val"], big_df["target_phi"])
+    big_df["bins_{}_phi".format(target)] = np.searchsorted(bins["phi_val"], big_df["{}_phi".format(target)])
     big_df["bins_pred_phi"] = np.searchsorted(bins["phi_val"], big_df["pred_phi"])
 
-    vals_eff = big_df[(big_df["target_pid"]==pid)].groupby("bins_target_phi")["pred_pid"].apply(get_eff, pid)
-    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_phi")["target_pid"].apply(get_fake, pid)
+    vals_eff = big_df[(big_df["{}_pid".format(target)]==pid)].groupby("bins_{}_phi".format(target))["pred_pid"].apply(get_eff, pid)
+    vals_fake = big_df[(big_df["pred_pid"]==pid)].groupby("bins_pred_phi")["{}_pid".format(target)].apply(get_fake, pid)
 
     out_eff = np.zeros((len(bins["phi_val"]), 2))
     out_fake = np.zeros((len(bins["phi_val"]), 2))
@@ -476,4 +477,4 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins):
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig("phi_eff_fake_pid{}.pdf".format(pid), bbox_inches="tight")
+    plt.savefig(osp.join(outpath,"phi_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
