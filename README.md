@@ -39,6 +39,10 @@ ls data/PFNet*/epoch*/
 
 ## Presentations
 
+- FastML meeting, 2020-05-29: https://indico.cern.ch/event/923986/contributions/3883991/attachments/2047940/3431648/2020_05_28.pdf
+- CMS PF group, 2020-05-22: https://indico.cern.ch/event/921949/contributions/3873351/attachments/2042984/3422056/2020_05_22.pdf
+- CMS scouting group, 2020-05-15: https://indico.cern.ch/event/894101/contributions/3862093/attachments/2038019/3412747/2020_05_13.pdf
+- CMS PF group, 2020-04-24: https://indico.cern.ch/event/912351/contributions/3839281/attachments/2026117/3389540/2020_04_24.pdf
 - Caltech CMS group ML meeting, 2020-04-16: https://indico.cern.ch/event/909688/contributions/3826957/attachments/2021475/3380133/2020_04_15_caltechml.pdf
 - ML4RECO meeting, 2020-04-09: https://indico.cern.ch/event/908361/contributions/3821957/attachments/2017888/3373038/2020_04_08.pdf
 - CMS PF group, 2020-03-13: https://indico.cern.ch/event/897397/contributions/3786360/attachments/2003108/3344534/2020_03_13.pdf
@@ -65,13 +69,11 @@ In case the above links do not load, the presentations are also mirrored on the 
 
 ## Setting up the code
 
-From [setup.sh](test/setup.sh):
+CMSSW recipe from [setup.sh](test/setup.sh):
 
 ```bash
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 export SCRAM_ARCH=slc7_amd64_gcc820
-git clone https://github.com/jpata/particleflow
-cd particleflow
 
 scramv1 project CMSSW CMSSW_11_1_0_pre5
 cd CMSSW_11_1_0_pre5/src
@@ -81,13 +83,34 @@ git cms-init
 git remote add -f jpata https://github.com/jpata/cmssw
 git fetch -a jpata
 
+git cms-addpkg RecoParticleFlow/PFProducer
 git cms-addpkg Validation/RecoParticleFlow
 git cms-addpkg SimGeneral/CaloAnalysis/
 git cms-addpkg SimGeneral/MixingModule/
+
 git checkout -b jpata_pfntuplizer --track jpata/jpata_pfntuplizer
 
+#just to get an exact version of the code
+git checkout 0fdcc0e8b6d848473170f0dc904468fa8a953aa8
+
+#download the MLPF weight file
+mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
+wget http://login-1.hep.caltech.edu/~jpata/particleflow/2020-05/models/mlpf_2020_05_19.pb -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_05_19.pb
+
 scram b
-cd ../..
+
+#Run a small test of ML-PF
+cmsRun RecoParticleFlow/PFProducer/test/mlpf_producer.py
+edmDumpEventContent test.root | grep -i mlpf
+
+#Run ML-PF within the reco framework up to ak4PFJets / ak4MLPFJets
+cmsDriver.py step3 --runUnscheduled --conditions auto:phase1_2021_realistic \
+  -s RAW2DIGI,L1Reco,RECO,RECOSIM,EI,PAT \
+  --datatier MINIAODSIM --nThreads 1 -n 10 --era Run3 \
+  --eventcontent MINIAODSIM --geometry=DB.Extended \
+  --filein /store/relval/CMSSW_11_0_0_patch1/RelValQCD_FlatPt_15_3000HS_14/GEN-SIM-DIGI-RAW/PU_110X_mcRun3_2021_realistic_v6-v1/20000/087F3A84-A56F-784B-BE13-395D75616CC5.root \
+  --customise RecoParticleFlow/PFProducer/mlpfproducer_customize.customize_step3 \
+  --fileout file:step3_inMINIAODSIM.root
 ```
 
 ## Datasets

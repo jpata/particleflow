@@ -13,12 +13,12 @@ sleep $((RANDOM % 120))
 SAMPLE=$1
 SEED=$2
 
-PILEUP=NoPileUp
-#PILEUP=Run3_Flat55To75_PoissonOOTPU
+#PILEUP=NoPileUp
+PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:/storage/user/jpata/particleflow/test/pu_files.txt
 #--pileup_input $PILEUP_INPUT \
 
-N=100
+N=5
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -42,6 +42,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \

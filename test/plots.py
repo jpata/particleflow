@@ -45,12 +45,12 @@ if __name__ == "__main__":
 
     #msk = (big_df["{}_pid".format(args.target)] != 0) & ((big_df["pred_pid"] != 0))
     msk = np.ones(len(big_df), dtype=np.bool)
+    
     confusion2 = sklearn.metrics.confusion_matrix(
         big_df["{}_pid".format(args.target)][msk], big_df["pred_pid"][msk],
         labels=class_labels
     )
 
-    print(class_labels)
     fig, ax = plot_confusion_matrix(
         cm=confusion2, target_names=[int(x) for x in class_labels], normalize=True
     )
