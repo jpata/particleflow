@@ -9,7 +9,7 @@ try:
     if not ("CUDA_VISIBLE_DEVICES" in os.environ):
         import setGPU
 except:
-    print("Coult not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
+    print("Could not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
     pass
 
 import pickle
