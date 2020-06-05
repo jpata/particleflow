@@ -69,3 +69,5 @@ if __name__ == "__main__":
     prepare_resolution_plots(big_df, 11, bins[11], target=args.target, outpath=osp.dirname(args.pkl))
     prepare_resolution_plots(big_df, 13, bins[13], target=args.target, outpath=osp.dirname(args.pkl))
     prepare_resolution_plots(big_df, 22, bins[22], target=args.target, outpath=osp.dirname(args.pkl))
+    prepare_resolution_plots(big_df, 1, bins[1], target=args.target, outpath=osp.dirname(args.pkl))
+    prepare_resolution_plots(big_df, 2, bins[2], target=args.target, outpath=osp.dirname(args.pkl))
