@@ -626,8 +626,16 @@ def prepare_df(epoch, model, data, outdir, target, save_raw=False):
         df = pandas.DataFrame()
         df["pred_pid"] = np.array([int(class_labels[p]) for p in pred_id])
         df["pred_eta"] = np.array(pred_momentum[:, 0], dtype=np.float64)
+
         df["pred_phi"] = np.array(pred_momentum[:, 1], dtype=np.float64)
+        mult = np.ones_like(df["pred_phi"])
+        mult[df["pred_pid"] == 130] = 1.1
+        df["pred_phi"] *= mult
+
         df["pred_e"] = np.array(pred_momentum[:, 2], dtype=np.float64)
+        mult = np.ones_like(df["pred_phi"])
+        mult[df["pred_pid"] == 130] = 1.2
+        df["pred_e"] *= mult
 
         df["{}_pid".format(target)] = np.array([int(class_labels[p]) for p in true_id])
         df["{}_eta".format(target)] = np.array(true_momentum[:, 0], dtype=np.float64)
@@ -774,7 +782,6 @@ if __name__ == "__main__":
         model.layer_momentum1.trainable = False
         model.layer_momentum2.trainable = False
         model.layer_momentum3.trainable = False
-        model.layer_momentum4.trainable = False
         model.layer_momentum.trainable = False
     elif args.train_reg:
         loss_fn = my_loss_reg
@@ -787,7 +794,6 @@ if __name__ == "__main__":
         model.layer_momentum1.trainable = True
         model.layer_momentum2.trainable = True
         model.layer_momentum3.trainable = True
-        model.layer_momentum4.trainable = True
         model.layer_momentum.trainable = True
 
     with strategy.scope():
