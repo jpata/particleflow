@@ -29,7 +29,8 @@ ls data/PFNet*/epoch*/
   - [ ] Improve ML-PF model physics performance 
   - [ ] Improve ML-PF model computational performance 
   - [x] Create CMSSW EDProducer for ML-PF particles
-  - [ ] GPU-evaluation of MLPFProducer in CMSSW
+  - [x] GPU-evaluation of MLPFProducer in CMSSW
+  - [x] Implement a simple tensorflow based ML-PF training for evalutation in CMSSW
 - [ ] GPU code for existing PF algorithms
   - [x] test CLUE for element to block clustering
   - [ ] port CLUE to PFBlockAlgo in CMSSW
@@ -39,6 +40,7 @@ ls data/PFNet*/epoch*/
 
 ## Presentations
 
+- CMS ML Town Hall, 2020-07-03: https://indico.cern.ch/event/922319/contributions/3928284/attachments/2068518/3472668/2020_07_02.pdf
 - FastML meeting, 2020-05-29: https://indico.cern.ch/event/923986/contributions/3883991/attachments/2047940/3431648/2020_05_28.pdf
 - CMS PF group, 2020-05-22: https://indico.cern.ch/event/921949/contributions/3873351/attachments/2042984/3422056/2020_05_22.pdf
 - CMS scouting group, 2020-05-15: https://indico.cern.ch/event/894101/contributions/3862093/attachments/2038019/3412747/2020_05_13.pdf

@@ -30,9 +30,13 @@ if __name__ == "__main__":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
     import tensorflow as tf
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+    tf.gfile = tf.io.gfile
     from tf_model import PFNet, prepare_df
     from tf_data import _parse_tfr_element
-    tfr_files = glob.glob("data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords")
+    tfr_files = glob.glob("/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords")
     #tf.config.optimizer.set_jit(True)
 
     if args.nthreads > 0:
@@ -43,16 +47,12 @@ if __name__ == "__main__":
 
     nev = args.ntest
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
-    batch_size = 1
+    batch_size = 10
     dataset = tf.data.TFRecordDataset(tfr_files).map(
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
     model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
-
-    num_particles = []
-    for X,y,w in dataset:
-        num_particles += [len(y)]
 
     #ensure model is compiled   
     for X in dataset_X:
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     model.load_weights(args.weights)
 
     #prepare the dataframe
-    prepare_df(0, model, dataset, ".", "cand", save_raw=True)
+    prepare_df(0, model, dataset, ".", "cand", save_raw=False)
 
     print("now timing")
     t0 = time.time()
@@ -72,13 +72,12 @@ if __name__ == "__main__":
         model.predict_on_batch(X)
     print()
     t1 = time.time()
-    print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/nev))
-    print("prediction time per particle: {:.2f} us".format(1000000.0*(t1-t0)/np.median(num_particles)))
+    print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/(nev/batch_size)))
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     full_model = tf.function(lambda x: model(x))
     full_model = full_model.get_concrete_function(
-        tf.TensorSpec((None, None, model.inputs[0].shape[-1]), model.inputs[0].dtype))
+        tf.TensorSpec((10, 1000, 15), tf.float32))
 
     # Get frozen ConcreteFunction
     from tensorflow.python.framework import convert_to_constants
@@ -88,11 +87,8 @@ if __name__ == "__main__":
     print(full_model.graph.outputs)
 
     tf.io.write_graph(graph_or_graph_def=frozen_func.graph,
-                      logdir="./model",
+                      logdir="./model_frozen",
                       name="frozen_graph.pb",
                       as_text=False)
 
-    #signatures = {
-    #    'serving_default': model.call,
-    #}
-    #model.save('model', save_format='tf', overwrite=True, include_optimizer=False)
+    model.save('model', overwrite=True, include_optimizer=False)
