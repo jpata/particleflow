@@ -300,8 +300,6 @@ class PFNet(tf.keras.Model):
     def predict_distancematrix(self, inputs, training=True):
 
         enc = self.activation(self.enc(inputs))
-        msk_elem = tf.expand_dims(tf.cast(inputs[:, :, 0] != 0, dtype=tf.float32), -1)
-
         x = self.layer_distcoords1(enc)
         x = self.layer_distcoords2(x)
         x = self.layer_distcoords3(x)
@@ -309,6 +307,7 @@ class PFNet(tf.keras.Model):
 
         dm = self.layer_dist(distcoords, distcoords)
 
+        msk_elem = tf.expand_dims(tf.cast(inputs[:, :, 0] != 0, dtype=tf.float32), -1)
         dm = dm*msk_elem
 
         return enc, dm
@@ -316,7 +315,8 @@ class PFNet(tf.keras.Model):
     #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
     def call(self, inputs, training=True):
         X = inputs
-        #tf.print(X.shape)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+
         enc, dm = self.predict_distancematrix(X, training=training)
 
         x = self.layer_input1(enc)
@@ -348,7 +348,6 @@ class PFNet(tf.keras.Model):
         #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
         out_id = tf.argmax(out_id_logits, axis=-1)
         msk_good = tf.cast(out_id != 0, tf.float32)
-
         out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
         out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
         out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
@@ -359,7 +358,7 @@ class PFNet(tf.keras.Model):
             out_momentum_E,
         ], axis=-1)
 
-        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
+        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
         return ret
 
 #@tf.function
@@ -606,37 +605,34 @@ def prepare_df(epoch, model, data, outdir, target, save_raw=False):
         if iev%50==0:
             tf.print(".", end="")
         X, y, w = d
+        msk = (X[:, :, 0]!=0).numpy()
         pred = model(X).numpy()
         pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-
-        #pred_id = np.argmax(pred_id_onehot, axis=-1).flatten()
-        pred_id = assign_label(pred_id_onehot).flatten()
+        pred_id = assign_label(pred_id_onehot)[msk]
  
         if save_raw:
             np.savez_compressed("ev_{}.npz".format(iev), X=X.numpy(), y=y.numpy(), w=w.numpy(), y_pred=pred)
 
-        pred_charge = pred_charge[:, :, 0].flatten()
-        pred_momentum = pred_momentum.reshape((pred_momentum.shape[0]*pred_momentum.shape[1], pred_momentum.shape[2]))
+        pred_charge = pred_charge[:, :, 0][msk]
+        pred_momentum = pred_momentum.reshape((pred_momentum.shape[0], pred_momentum.shape[1], pred_momentum.shape[2]))[msk]
 
         true_id, true_charge, true_momentum = separate_truth(y)
-        true_id = true_id.numpy()[:, :, 0].flatten()
-        true_charge = true_charge.numpy()[:, :, 0].flatten()
-        true_momentum = true_momentum.numpy().reshape((true_momentum.shape[0]*true_momentum.shape[1], true_momentum.shape[2]))
+        true_id = true_id.numpy()[:, :, 0][msk]
+        true_charge = true_charge.numpy()[:, :, 0][msk]
+        true_momentum = true_momentum.numpy().reshape((true_momentum.shape[0], true_momentum.shape[1], true_momentum.shape[2]))[msk]
        
         df = pandas.DataFrame()
         df["pred_pid"] = np.array([int(class_labels[p]) for p in pred_id])
         df["pred_eta"] = np.array(pred_momentum[:, 0], dtype=np.float64)
 
         df["pred_phi"] = np.array(pred_momentum[:, 1], dtype=np.float64)
-        mult = np.ones_like(df["pred_phi"])
-        mult[df["pred_pid"] == 130] = 1.1
-        df["pred_phi"] *= mult
+        df.loc[df["pred_pid"]==130, "pred_phi"] *= 1.1
 
         df["pred_e"] = np.array(pred_momentum[:, 2], dtype=np.float64)
-        mult = np.ones_like(df["pred_phi"])
-        mult[df["pred_pid"] == 130] = 1.2
-        df["pred_e"] *= mult
-
+        #mult = np.ones_like(df["pred_phi"])
+        #mult[df["pred_pid"] == 130] = 1.05
+        #df["pred_e"] *= mult
+        df.loc[df["pred_pid"]==22, "pred_e"] -= 0.05
         df["{}_pid".format(target)] = np.array([int(class_labels[p]) for p in true_id])
         df["{}_eta".format(target)] = np.array(true_momentum[:, 0], dtype=np.float64)
         df["{}_phi".format(target)] = np.array(true_momentum[:, 1], dtype=np.float64)
