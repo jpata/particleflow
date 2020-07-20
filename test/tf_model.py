@@ -4,9 +4,9 @@ import random
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import glob
-
 try:
     if not ("CUDA_VISIBLE_DEVICES" in os.environ):
+        print("importing setGPU")
         import setGPU
 except:
     print("Could not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
@@ -768,11 +768,13 @@ if __name__ == "__main__":
 
     try:
         num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+        print("num_gpus=", num_gpus)
         if num_gpus > 1:
             strategy = tf.distribute.MirroredStrategy()
         else:
             strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     except Exception as e:
+        print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     filelist = sorted(glob.glob(args.datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
@@ -801,8 +803,8 @@ if __name__ == "__main__":
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        #model = PFNet2(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
-        model = PFNet2(hidden_sizes = [128, 128], num_outputs = 128, state_dim = 16, update_steps = 3,hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        #model = PFNet2(hidden_sizes = [128, 128], num_outputs = 128, state_dim = 16, update_steps = 3,hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
 
     if not os.path.isdir("experiments"):
         os.makedirs("experiments")
