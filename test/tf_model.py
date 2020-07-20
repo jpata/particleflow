@@ -30,6 +30,8 @@ from numpy.lib.recfunctions import append_fields
 import scipy
 import scipy.special
 
+from mpnn import MessagePassing, ReadoutGraph, Aggregation
+
 elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
@@ -250,6 +252,7 @@ class SGConv(tf.keras.layers.Dense):
 
         return self.activation(out + b)
 
+#Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     
     def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.1):
@@ -359,6 +362,77 @@ class PFNet(tf.keras.Model):
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
+        return ret
+
+#Based on MPNN, implemented by KX
+class PFNet2(tf.keras.Model):
+    def __init__(self, hidden_sizes = [256, 256], num_outputs = 256, state_dim = 64, update_steps = 5, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.1):
+        super(PFNet2, self).__init__()
+        self.activation = activation
+
+        self.enc = InputEncoding(len(elem_labels))
+
+        self.update_steps = int(update_steps)
+        self.node_embedding = tf.keras.layers.Dense(units=state_dim, activation=activation)
+        self.message_passing = MessagePassing(state_dim=state_dim)
+        self.readout_func = ReadoutGraph(hidden_sizes, num_outputs, Aggregation('sum', 2))
+
+        self.layer_id1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="id1")
+        self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
+        self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
+        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
+        
+        self.layer_momentum1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="momentum1")
+        self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
+        self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
+        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
+ 
+
+    #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
+    def call(self, inputs, training=True):
+        x = self.enc(inputs)
+        nodes = x
+        bs = nodes.shape[0] 
+        bs = 10
+        node_elem = nodes.shape[1] # number of particles (elements)
+        node_cols = nodes.shape[2] #25 is the node.shape[1] after encoding
+        edges = tf.constant(0, dtype = "float32", shape= [bs,  np.power(node_elem, 2), 1])
+        edge_masks = tf.cast(tf.random.uniform([bs,np.power(node_elem,2), 1], 
+                                        minval=0, maxval=2, dtype=tf.dtypes.int32), dtype=tf.dtypes.float32)
+        states = self.node_embedding(nodes)
+
+        for time_step in range(self.update_steps):
+            states = self.message_passing(states, edges, edge_masks, training=training)
+        node_masks = tf.constant(1., dtype = "float32", shape= [bs, node_elem,1]) 
+        readout = self.readout_func(states, node_masks, training=training)
+        
+        x = self.layer_id1(readout)
+        x = self.layer_id2(x)
+        x = self.layer_id3(x)
+        out_id_logits = self.layer_id(x)
+        out_charge = self.layer_charge(x)
+
+        x = self.layer_momentum1(readout)
+        x = self.layer_momentum2(x)
+        x = self.layer_momentum3(x)
+        pred_corr = self.layer_momentum(x)
+
+        #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
+        out_id = tf.argmax(out_id_logits, axis=-1)
+        msk_good = tf.cast(out_id != 0, tf.float32)
+
+        out_momentum_eta = inputs[:, :, 2] + pred_corr[:, :, 0]
+        out_momentum_phi = inputs[:, :, 3] + pred_corr[:, :, 1] 
+        out_momentum_E = inputs[:, :, 4] + pred_corr[:, :, 2]
+
+        out_momentum = tf.stack([
+            out_momentum_eta,
+            out_momentum_phi,
+            out_momentum_E,
+        ], axis=-1)
+
+        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
         return ret
 
 #@tf.function
@@ -605,34 +679,27 @@ def prepare_df(epoch, model, data, outdir, target, save_raw=False):
         if iev%50==0:
             tf.print(".", end="")
         X, y, w = d
-        msk = (X[:, :, 0]!=0).numpy()
         pred = model(X).numpy()
         pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
-        pred_id = assign_label(pred_id_onehot)[msk]
+        pred_id = assign_label(pred_id_onehot).flatten()
  
         if save_raw:
             np.savez_compressed("ev_{}.npz".format(iev), X=X.numpy(), y=y.numpy(), w=w.numpy(), y_pred=pred)
 
-        pred_charge = pred_charge[:, :, 0][msk]
-        pred_momentum = pred_momentum.reshape((pred_momentum.shape[0], pred_momentum.shape[1], pred_momentum.shape[2]))[msk]
+        pred_charge = pred_charge[:, :, 0].flatten()
+        pred_momentum = pred_momentum.reshape((pred_momentum.shape[0]*pred_momentum.shape[1], pred_momentum.shape[2]))
 
         true_id, true_charge, true_momentum = separate_truth(y)
-        true_id = true_id.numpy()[:, :, 0][msk]
-        true_charge = true_charge.numpy()[:, :, 0][msk]
-        true_momentum = true_momentum.numpy().reshape((true_momentum.shape[0], true_momentum.shape[1], true_momentum.shape[2]))[msk]
+        true_id = true_id.numpy()[:, :, 0].flatten()
+        true_charge = true_charge.numpy()[:, :, 0].flatten()
+        true_momentum = true_momentum.numpy().reshape((true_momentum.shape[0]*true_momentum.shape[1], true_momentum.shape[2]))
        
         df = pandas.DataFrame()
         df["pred_pid"] = np.array([int(class_labels[p]) for p in pred_id])
         df["pred_eta"] = np.array(pred_momentum[:, 0], dtype=np.float64)
-
         df["pred_phi"] = np.array(pred_momentum[:, 1], dtype=np.float64)
-        df.loc[df["pred_pid"]==130, "pred_phi"] *= 1.1
-
         df["pred_e"] = np.array(pred_momentum[:, 2], dtype=np.float64)
-        #mult = np.ones_like(df["pred_phi"])
-        #mult[df["pred_pid"] == 130] = 1.05
-        #df["pred_e"] *= mult
-        df.loc[df["pred_pid"]==22, "pred_e"] -= 0.05
+
         df["{}_pid".format(target)] = np.array([int(class_labels[p]) for p in true_id])
         df["{}_eta".format(target)] = np.array(true_momentum[:, 0], dtype=np.float64)
         df["{}_phi".format(target)] = np.array(true_momentum[:, 1], dtype=np.float64)
@@ -640,7 +707,6 @@ def prepare_df(epoch, model, data, outdir, target, save_raw=False):
 
         df["iev"] = iev
         dfs += [df]
-    assert(len(dfs) > 0)
     df = pandas.concat(dfs, ignore_index=True)
     fn = outdir + "/df_{}.pkl.bz2".format(epoch + 1)
     df.to_pickle(fn)
@@ -690,13 +756,13 @@ def load_dataset_gun():
     return dataset
 
 def load_dataset_ttbar(datapath):
-    tfr_files = glob.glob(datapath + "/tfr2/{}/*.tfrecords".format(args.target))
+    tfr_files = glob.glob(datapath + "/tfr3/{}/*.tfrecords".format(args.target))
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
-    tf.config.experimental_run_functions_eagerly(False)
+    tf.config.experimental_run_functions_eagerly(True)
 
     args = parse_args()
 
@@ -717,7 +783,7 @@ if __name__ == "__main__":
     dataset = load_dataset_ttbar(args.datapath)
  
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
-    batch_size = 50
+    batch_size = 10
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
  
@@ -735,7 +801,8 @@ if __name__ == "__main__":
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        #model = PFNet2(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        model = PFNet2(hidden_sizes = [128, 128], num_outputs = 128, state_dim = 16, update_steps = 3,hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
 
     if not os.path.isdir("experiments"):
         os.makedirs("experiments")
