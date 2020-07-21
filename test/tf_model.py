@@ -756,7 +756,10 @@ def load_dataset_gun():
     return dataset
 
 def load_dataset_ttbar(datapath):
-    tfr_files = glob.glob(datapath + "/tfr3/{}/*.tfrecords".format(args.target))
+    path = datapath + "/tfr3/{}/*.tfrecords".format(args.target)
+    tfr_files = glob.glob(path)
+    if len(tfr_files) == 0:
+        raise Exception("Could not find any files in {}".format(path))
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
@@ -783,7 +786,7 @@ if __name__ == "__main__":
 
     #dataset = load_dataset_gun()
     dataset = load_dataset_ttbar(args.datapath)
- 
+
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
     batch_size = 10
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
