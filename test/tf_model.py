@@ -255,7 +255,7 @@ class SGConv(tf.keras.layers.Dense):
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     
-    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.1):
+    def __init__(self, activation=tf.nn.selu, hidden_dim=256, distance_dim=256, num_conv=4, convlayer="ghconv", dropout=0.1):
         super(PFNet, self).__init__()
         self.activation = activation
 
@@ -366,7 +366,7 @@ class PFNet(tf.keras.Model):
 
 #Based on MPNN, implemented by KX
 class PFNet2(tf.keras.Model):
-    def __init__(self, hidden_sizes = [256, 256], num_outputs = 256, state_dim = 64, update_steps = 5, activation=tf.nn.selu, hidden_dim=256, distance_dim=32, num_conv=1, convlayer="sgconv", dropout=0.1):
+    def __init__(self, hidden_sizes=[128, 128], num_outputs=128, state_dim=16, update_steps=3, activation=tf.nn.selu, hidden_dim=256):
         super(PFNet2, self).__init__()
         self.activation = activation
 
@@ -629,6 +629,7 @@ def get_unique_run():
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet", "PFNet2"])
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
@@ -650,24 +651,6 @@ def parse_args():
     return args
 
 def assign_label(pred_id_onehot_linear):
-    #multiclass_pred = scipy.special.softmax(pred_id_onehot_linear, axis=-1)
-    #threshold = {
-    #    1: 3.6917E-03,
-    #    2: 1.8936E-04,
-    #    11: 9.7604E-02,
-    #    13: 4.1055E-01,
-    #    22: 9.4114E-01,
-    #    130: 8.6218E-01,
-    #    211: 9.4886E-01,
-    #}
-    #
-    #ret = np.copy(multiclass_pred)
-    #for pid in [211, 130, 1, 2, 11, 13, 22]:
-    #    msk = (ret[:, :, class_labels.index(pid)] > threshold[pid])[0]
-    #    ret[:, :, class_labels.index(pid)] *= msk
-  
-    #ret2 = np.argmax(ret, axis=-1)
-
     ret2 = np.argmax(pred_id_onehot_linear, axis=-1)
     return ret2
 
@@ -806,8 +789,10 @@ if __name__ == "__main__":
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
-        #model = PFNet2(hidden_sizes = [128, 128], num_outputs = 128, state_dim = 16, update_steps = 3,hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        if args.model == "PFNet":
+            model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+        elif args.model == "PFNet2":
+            model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
 
     if not os.path.isdir("experiments"):
         os.makedirs("experiments")
