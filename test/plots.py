@@ -9,12 +9,21 @@ import mplhep
 
 import sys
 import os.path as osp
+import os
 
 from plot_utils import plot_confusion_matrix, cms_label, particle_label, sample_label
 from plot_utils import plot_E_reso, plot_eta_reso, plot_phi_reso, bins
 
 #from tf_model import class_labels
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
+
+def get_unique_run():
+    previous_runs = os.listdir('plots')
+    if len(previous_runs) == 0:
+        run_number = 1
+    else:
+        run_number = max([int(s.split('run_')[1]) for s in previous_runs]) + 1
+    return run_number
 
 def deltaphi(phi1, phi2):
     return np.fmod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
@@ -54,6 +63,15 @@ if __name__ == "__main__":
     fig, ax = plot_confusion_matrix(
         cm=confusion2, target_names=[int(x) for x in class_labels], normalize=True
     )
+    if not os.path.isdir("plots"):
+        os.makedirs("plots")
+    
+    name =  'run_{:02}'.format(get_unique_run())
+    outdir = 'plots/' + name
+
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
+    print(outdir)
 
     acc = sklearn.metrics.accuracy_score(big_df["{}_pid".format(args.target)][msk], big_df["pred_pid"][msk])
     plt.title("")
@@ -62,12 +80,15 @@ if __name__ == "__main__":
     plt.xlabel("predicted PID\nML-PF candidate,\naccuracy: {:.2f}".format(acc))
     cms_label(x0=0.20, x1=0.26, y=0.95)
     sample_label(ax, y=0.995)
-    plt.savefig(osp.join(osp.dirname(args.pkl),"confusion_mlpf.pdf"), bbox_inches="tight")
+#     plt.savefig(osp.join(osp.dirname(args.pkl),"confusion_mlpf.pdf"), bbox_inches="tight")
+    plt.savefig("{}/confusion_mlpf.pdf".format(outdir), bbox_inches="tight")
+#     print('osp dir is  {}'.format(osp.dirname(args.pkl)))
 
-    prepare_resolution_plots(big_df, 211, bins[211], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 130, bins[130], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 11, bins[11], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 13, bins[13], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 22, bins[22], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 1, bins[1], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 2, bins[2], target=args.target, outpath=osp.dirname(args.pkl))
+
+    prepare_resolution_plots(big_df, 211, bins[211], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 130, bins[130], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 11, bins[11], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 13, bins[13], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 22, bins[22], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 1, bins[1], target=args.target, outpath=outdir)
+    prepare_resolution_plots(big_df, 2, bins[2], target=args.target, outpath=outdir)
