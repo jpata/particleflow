@@ -8,6 +8,7 @@ from torch_geometric.data import Dataset, Data, Batch
 import itertools
 from glob import glob
 import numba
+from numpy.lib.recfunctions import append_fields
 
 import pickle
 import scipy
@@ -85,6 +86,7 @@ def data_prep(data, device=torch.device('cpu')):
 class PFGraphDataset(Dataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
+        self._processed_dir = Dataset.processed_dir.fget(self)
 
     @property
     def raw_file_names(self):
@@ -97,6 +99,10 @@ class PFGraphDataset(Dataset):
 
     def _process(self):
         pass
+
+    @property
+    def processed_dir(self):
+        return self._processed_dir
  
     @property
     def processed_file_names(self):
@@ -136,9 +142,30 @@ class PFGraphDataset(Dataset):
                 mat_reco_cand = scipy.sparse.coo_matrix(np.zeros((mat.shape[0], mat.shape[1])))
                 mat_reco_gen = scipy.sparse.coo_matrix(np.zeros((mat.shape[0], mat.shape[1])))
 
-            X = data["Xelem"]
-            ygen = data['ygen']
-            ycand = data['ycand']
+            Xelem = data["Xelem"]
+            ygen = data["ygen"]
+            ycand = data["ycand"]
+            Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
+            ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
+            ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
+
+            Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
+                'typ_idx',
+                'pt', 'eta', 'phi', 'e',
+                'layer', 'depth', 'charge', 'trajpoint',
+                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+                'muon_dt_hits', 'muon_csc_hits']], axis=-1
+            )
+            ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
+                'typ_idx',
+                'eta', 'phi', 'e', 'charge',
+                ]], axis=-1
+            )
+            ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
+                'typ_idx',
+                'eta', 'phi', 'e', 'charge',
+                ]], axis=-1
+            )
             #node_sel = X[:, 4] > 0.2
             #row_index, col_index, dm_data = mat.row, mat.col, mat.data
 
@@ -165,9 +192,9 @@ class PFGraphDataset(Dataset):
             #edge_index, edge_attr = torch_geometric.utils.subgraph(torch.tensor(node_sel, dtype=torch.bool),
             #    edge_index, edge_attr, relabel_nodes=True, num_nodes=len(X))
 
-            x = torch.tensor(X, dtype=torch.float)
-            ygen = torch.tensor(ygen, dtype=torch.float)
-            ycand = torch.tensor(ycand, dtype=torch.float)
+            x = torch.tensor(Xelem_flat, dtype=torch.float)
+            ygen = torch.tensor(ygen_flat, dtype=torch.float)
+            ycand = torch.tensor(ycand_flat, dtype=torch.float)
 
             data = Data(
                 x=x,
@@ -216,10 +243,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="dataset path", required=True)
+    parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
     parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
     args = parser.parse_args()
  
     pfgraphdataset = PFGraphDataset(root=args.dataset)
+
+    if args.processed_dir:
+        pfgraphdataset._processed_dir = args.processed_dir
+ 
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
