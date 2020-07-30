@@ -12,6 +12,7 @@ except Exception as e:
 multi_gpu = False
 
 import torch
+use_gpu = torch.cuda.device_count()>0
 print("torch", torch.__version__)
 import torch_geometric
 print("torch_geometric", torch_geometric.__version__)
@@ -53,8 +54,10 @@ from plot_utils import plot_confusion_matrix
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
-device = torch.device('cuda')
-#device = torch.device("cuda:0")
+if use_gpu:
+    device = torch.device('cuda:0')
+else:
+    device = torch.device('cpu')
 
 def prepare_dataframe(model, loader):
     model.eval()
@@ -675,9 +678,9 @@ if __name__ == "__main__":
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
                                                     'n_train':args.n_train, 'target':args.target}))
-                    
+
     model = model_class(**model_kwargs)
-        
+
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
 
