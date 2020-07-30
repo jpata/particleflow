@@ -3,8 +3,11 @@ import os
 
 from comet_ml import Experiment
 
-if not ("CUDA_VISIBLE_DEVICES" in os.environ):
-    import setGPU
+try:
+    if not ("CUDA_VISIBLE_DEVICES" in os.environ):
+        import setGPU
+except Exception as e:
+    print("Could not import setGPU, running CPU-only")
 
 multi_gpu = False
 
