@@ -480,6 +480,7 @@ def parse_args():
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
+    parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
     args = parser.parse_args()
     return args
 
@@ -668,7 +669,7 @@ if __name__ == "__main__":
                     'nearest': args.nearest}
 
     # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
-    experiment = Experiment(project_name="particeflow", disabled=False)
+    experiment = Experiment(project_name="particeflow", disabled=args.disable_comet)
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
                                                     'n_train':args.n_train, 'target':args.target}))

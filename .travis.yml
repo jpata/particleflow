@@ -30,7 +30,7 @@ install:
   - pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
   - pip install torch_geometric
   - pip install uproot
-  - pip install matplotlib networkx numba scipy numpy
+  - pip install matplotlib networkx numba scipy numpy comet_ml
 
 script:
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
@@ -46,4 +46,4 @@ script:
     --hidden_dim 256 --n_epochs 10 \
     --l1 1.0 --l2 0.001 --l3 0.0 \
     --target cand --batch_size 1 \
-    --dropout 0.2
+    --dropout 0.2 --disable-comet
