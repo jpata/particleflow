@@ -34,3 +34,4 @@ script:
   - cd ../..
   - mkdir data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
   - python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --outpath data/TTbar_14TeV_TuneCUETP8M1_cfi/raw --save-normalized-table
+  - du -csh data/TTbar_14TeV_TuneCUETP8M1_cfi/raw 
