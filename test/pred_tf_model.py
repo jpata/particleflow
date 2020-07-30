@@ -9,6 +9,7 @@ def get_X(X,y,w):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet", "PFNet2"])
     parser.add_argument("--weights", type=str, default=None, help="model weights to load")
     parser.add_argument("--nhidden", type=int, default=256, help="hidden dimension")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
@@ -18,6 +19,8 @@ def parse_args():
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--gpu", action="store_true", help="use GPU")
     parser.add_argument("--convlayer", type=str, default="sgconv", choices=["sgconv", "ghconv"], help="Type of graph convolutional layer")
+    parser.add_argument("--datapath", type=str, help="Input data path", required=True)
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     args = parser.parse_args()
     return args
 
@@ -31,12 +34,13 @@ if __name__ == "__main__":
 
     import tensorflow as tf
     physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    if len(physical_devices) > 0:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
     tf.gfile = tf.io.gfile
-    from tf_model import PFNet, prepare_df
+    from tf_model import PFNet, PFNet2, prepare_df
     from tf_data import _parse_tfr_element
-    tfr_files = glob.glob("/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords")
+    tfr_files = glob.glob("{}/{}/*.tfrecords".format(args.datapath, args.target))
     #tf.config.optimizer.set_jit(True)
 
     if args.nthreads > 0:
@@ -52,7 +56,10 @@ if __name__ == "__main__":
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
-    model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
+    if args.model == "PFNet":
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
+    elif args.model == "PFNet2":
+        model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
 
     #ensure model is compiled   
     for X in dataset_X:

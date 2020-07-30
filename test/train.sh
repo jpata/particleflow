@@ -12,7 +12,7 @@ singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/mlpf.simg
   --dropout 0.2
 
 ###Keras model trainings - current SOTA
-#CUDA_VISIBLE_DEVICES=0,1,2,3 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
-#  python3 test/tf_model.py --target cand --ntrain 400000 --ntest 100000 --nepochs 100 --lr 0.00001 \
-#  --datapath /storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi \
-#  --nhidden 256 --distance-dim 256 --num-conv 4 --weights inverse --lr-decay 0 --convlayer ghconv --load experiments/run_04/weights.100-68.877221.hdf5
+singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/pytorch.simg \
+  python3 test/tf_model.py --target cand --ntrain 10000 --ntest 10000 --nepochs 100 --lr 0.00001 \
+  --datapath /storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi \
+  --nhidden 256 --distance-dim 256 --num-conv 4 --weights inverse --lr-decay 0 --convlayer ghconv
