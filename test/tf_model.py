@@ -630,8 +630,8 @@ def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet", "PFNet2"])
-    parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
-    parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
+    parser.add_argument("--ntrain", type=int, default=100, help="number of training events")
+    parser.add_argument("--ntest", type=int, default=100, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--nhidden", type=int, default=256, help="hidden dimension")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
@@ -854,6 +854,10 @@ if __name__ == "__main__":
         model.compile(optimizer=opt, loss=loss_fn,
             metrics=[cls_130, cls_211, cls_22, energy_resolution, eta_resolution, phi_resolution],
             sample_weight_mode="temporal")
+
+        for X, y, w in ds_train:
+            ypred = model(X)
+            l = loss_fn(y, ypred)
 
         if args.load:
             #ensure model input size is known
