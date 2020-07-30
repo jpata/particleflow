@@ -33,10 +33,10 @@ install:
   - pip install matplotlib networkx numba scipy numpy
 
 script:
-  - mkdir data/TTbar_14TeV_TuneCUETP8M1_cfi
+  - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
   - cd data/TTbar_14TeV_TuneCUETP8M1_cfi
   - wget https://login-1.hep.caltech.edu/~jpata/particleflow/2020-07/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
   - cd ../..
-  - mkdir data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+  - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
   - python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --outpath data/TTbar_14TeV_TuneCUETP8M1_cfi/raw --save-normalized-table
   - du -csh data/TTbar_14TeV_TuneCUETP8M1_cfi/raw 
