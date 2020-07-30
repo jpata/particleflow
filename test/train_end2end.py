@@ -57,11 +57,12 @@ def prepare_dataframe(model, loader):
     model.eval()
     dfs = []
     eval_time = 0
-    for i, data in tqdm.tqdm(enumerate(loader),total=len(loader)):
+    #for i, data in tqdm.tqdm(enumerate(loader),total=len(loader)):
+    for i, data in enumerate(loader):
         if not multi_gpu:
             data = data.to(device)
 
-        _, pred_id_onehot, pred_momentum = model(data)
+        pred_id_onehot, pred_momentum = model(data)
         _, pred_id = torch.max(pred_id_onehot, -1)
         pred_momentum[pred_id==0] = 0
         if not multi_gpu:
@@ -100,29 +101,29 @@ def prepare_dataframe(model, loader):
     df = pandas.concat(dfs, ignore_index=True)
  
     #Print some stats for each target particle type 
-    for pid in [211, -211, 130, 22, -11, 11, 13, -13, 1, 2]:
-        msk_gen = df["gen_pid"] == pid
-        msk_pred = df["pred_pid"] == pid
+    #for pid in [211, -211, 130, 22, -11, 11, 13, -13, 1, 2]:
+    #    msk_gen = df["gen_pid"] == pid
+    #    msk_pred = df["pred_pid"] == pid
 
-        npred = int(np.sum(msk_pred))
-        ngen = int(np.sum(msk_gen))
-        tpr = np.sum(msk_gen & msk_pred) / npred
-        fpr = np.sum(~msk_gen & msk_pred) / npred
-        eff = np.sum(msk_gen & msk_pred) / ngen
+    #    npred = int(np.sum(msk_pred))
+    #    ngen = int(np.sum(msk_gen))
+    #    tpr = np.sum(msk_gen & msk_pred) / npred
+    #    fpr = np.sum(~msk_gen & msk_pred) / npred
+    #    eff = np.sum(msk_gen & msk_pred) / ngen
 
-        mu = 0.0
-        sigma = 0.0
-        if np.sum(msk_pred) > 0:
-            pts = df[msk_gen & msk_pred][["gen_pt", "pred_pt"]].values
-            r = pts[:, 1]/pts[:, 0]
-            mu, sigma = np.mean(r), np.std(r)
-        print("pid={pid} Ngen={ngen} Npred={npred} eff={eff:.4f} tpr={tpr:.4f} fpr={fpr:.4f} pt_mu={pt_mu:.4f} pt_s={pt_s:.4f}".format(
-            pid=pid, ngen=ngen, npred=npred, eff=eff, tpr=tpr, fpr=fpr, pt_mu=mu, pt_s=sigma
-        ))
-    sumpt_cand = df[df["cand_pid"]!=0]["cand_pt"].sum()/len(dfs)
-    sumpt_gen = df[df["gen_pid"]!=0]["gen_pt"].sum()/len(dfs)
-    sumpt_pred = df[df["pred_pid"]!=0]["pred_pt"].sum()/len(dfs)
-    print("sumpt_cand={:.2f} sumpt_gen={:.2f} sumpt_pred={:.2f}".format(sumpt_cand, sumpt_gen, sumpt_pred))
+    #    mu = 0.0
+    #    sigma = 0.0
+    #    if np.sum(msk_pred) > 0:
+    #        pts = df[msk_gen & msk_pred][["gen_pt", "pred_pt"]].values
+    #        r = pts[:, 1]/pts[:, 0]
+    #        mu, sigma = np.mean(r), np.std(r)
+    #    print("pid={pid} Ngen={ngen} Npred={npred} eff={eff:.4f} tpr={tpr:.4f} fpr={fpr:.4f} pt_mu={pt_mu:.4f} pt_s={pt_s:.4f}".format(
+    #        pid=pid, ngen=ngen, npred=npred, eff=eff, tpr=tpr, fpr=fpr, pt_mu=mu, pt_s=sigma
+    #    ))
+    #sumpt_cand = df[df["cand_pid"]!=0]["cand_pt"].sum()/len(dfs)
+    #sumpt_gen = df[df["gen_pid"]!=0]["gen_pt"].sum()/len(dfs)
+    #sumpt_pred = df[df["pred_pid"]!=0]["pred_pt"].sum()/len(dfs)
+    #print("sumpt_cand={:.2f} sumpt_gen={:.2f} sumpt_pred={:.2f}".format(sumpt_cand, sumpt_gen, sumpt_pred))
  
     return df
 
@@ -364,27 +365,22 @@ class PFNet7(nn.Module):
 
     def forward(self, data):
         #print("forward", data.batch.device, len(torch.unique(data.batch)))
-        edge_weight = data.edge_attr.squeeze(-1)
-        edge_index = data.edge_index
+        #edge_weight = data.edge_attr.squeeze(-1)
+        #edge_index = data.edge_index
         
         x = self.nn1(data.x)
         #x = torch.nn.functional.leaky_relu(self.conv0(x, edge_index))
         #x = data.x
         
         #Run a convolution
-        if self.convlayer == "gravnet-knn" or self.convlayer == "gravnet-radius":
-            new_edge_index, x = self.conv1(x)
-            #print("edges", len(new_edge_index[0]))
-            x = torch.nn.functional.leaky_relu(x)
-        else:
-            x = torch.nn.functional.leaky_rely(self.conv1(x, edge_index=edge_index))
+        new_edge_index, x = self.conv1(x)
+        x = torch.nn.functional.leaky_relu(x)
         
         #Decode convolved graph nodes to pdgid and p4
         cand_ids = self.nn2(x)
         cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
 
-        #print("forward done", data.batch.device)
-        return torch.sigmoid(edge_weight), cand_ids, cand_p4
+        return cand_ids, cand_p4
 
 class PFNet8(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=32, embedding_dim=64, output_dim_id=len(class_to_id), output_dim_p4=4, dropout_rate=0.5, convlayer="sgconv", space_dim=2, nearest=3):
@@ -514,7 +510,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
 
     num_samples = 0
     for i, data in enumerate(loader):
-
         t0 = time.time()
         num_samples += len(data)
         
@@ -525,8 +520,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
             optimizer.zero_grad()
 
         #print("Calling model with N={}".format(len(data)))
-        edges, cand_id_onehot, cand_momentum = model(data)
-        _dev = edges.device
+        cand_id_onehot, cand_momentum = model(data)
+        _dev = cand_id_onehot.device
         _, indices = torch.max(cand_id_onehot, -1)
         if not multi_gpu:
             data = [data]
@@ -534,11 +529,9 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         if args.target == "gen":
             target_ids = torch.cat([d.y_gen_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ygen[:, :4] for d in data]).to(_dev)
-            target_edges = torch.cat([d.target_edge_attr_gen for d in data]).to(_dev)
         elif args.target == "cand":
             target_ids = torch.cat([d.y_candidates_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
-            target_edges = torch.cat([d.target_edge_attr_cand for d in data]).to(_dev)
 
         vs, cs = torch.unique(target_ids, return_counts=True)
         weights = torch.zeros(len(class_to_id)).to(device=_dev)
@@ -565,22 +558,11 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
         if l2m > 0.0:
             #l2 = l2m*torch.nn.functional.mse_loss(cand_momentum, target[1])
             #modular loss for phi, seems to consume more memory
-            l2_0 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2, 0], target_p4[msk2, 0])
-            l2_1 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2, 1], target_p4[msk2, 1])
-            l2_2 = l2m*torch.pow(torch.fmod(cand_momentum[msk2, 2] - target_p4[msk2, 2] + np.pi, 2*np.pi) - np.pi, 2).mean()
-            l2_3 = l2m*torch.nn.functional.mse_loss(torch.log(torch.abs(cand_momentum[msk2, 3] + 0.0001)), torch.log(torch.abs(target_p4[msk2, 3] + 0.0001)))
-            l2 = l2_0 + l2_1*10.0 + l2_2*10.0 + l2_3
-            #print(l2_0.item(), l2_1.item(), l2_2.item(), l2_3.item())
-        #Loss for edges enabled/disabled in clustering (binary)
-        if l3m > 0.0:
-            l3 = l3m*torch.nn.functional.binary_cross_entropy(edges, target_edges)
-        else:
-            l3 = torch.tensor(0.0).to(device=_dev)
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
 
-        batch_loss = l1 + l2 + l3
+        batch_loss = l1 + l2
         losses[i, 0] = l1.item()
         losses[i, 1] = l2.item()
-        losses[i, 2] = l3.item()
         
         if is_train:
             batch_loss.backward()
@@ -645,7 +627,7 @@ if __name__ == "__main__":
     full_dataset = PFGraphDataset(args.dataset)
 
     #one-hot encoded element ID + element parameters
-    input_dim = 23
+    input_dim = 26
 
     #one-hot particle ID and momentum
     output_dim_id = len(class_to_id)
@@ -686,7 +668,7 @@ if __name__ == "__main__":
                     'nearest': args.nearest}
 
     # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
-    experiment = Experiment(project_name="particeflow")
+    experiment = Experiment(project_name="particeflow", disabled=False)
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
                                                     'n_train':args.n_train, 'target':args.target}))
@@ -785,6 +767,7 @@ if __name__ == "__main__":
                 accuracies, accuracies_v, val_loader)
         else:
             stale_epochs += 1
+
         if j > 0 and j%args.n_plot == 0:
             make_plots(
                 model, j, "{0}/epoch_{1}/".format(outpath, j),

@@ -16,11 +16,8 @@ import scipy.sparse
 import math
 import multiprocessing
 
-#all candidate pdg-ids (multiclass labels)
-class_labels = [0., -211., -13., -11., 1., 2., 11.0, 13., 22., 130., 211.]
-
-#detector element labels
-elem_labels = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]
+elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
 #map these to ids 0...Nclass
 class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
@@ -45,25 +42,6 @@ def chunks(lst, n):
 
 #Do any in-memory transformations to data
 def data_prep(data, device=torch.device('cpu')):
-    new_ids = torch.zeros_like(data.x[:, 0])
-    for k, v in elem_to_id.items():
-        m = data.x[:, 0] == v
-        new_ids[m] = k
-    data.x[:, 0] = new_ids
-
-    #Convert pdg-ids to consecutive class labels
-    new_ids = torch.zeros_like(data.ycand[:, 0])
-    for k, v in class_to_id.items():
-        m = data.ycand[:, 0] == v
-        new_ids[m] = k
-    data.ycand[:, 0] = new_ids
-    
-    new_ids = torch.zeros_like(data.ygen[:, 0])
-    for k, v in class_to_id.items():
-        m = data.ygen[:, 0] == v
-        new_ids[m] = k
-    data.ygen[:, 0] = new_ids
-
     #Create a one-hot encoded vector of the class labels
     data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
     data.y_gen_id = data.ygen[:, 0].to(dtype=torch.long)
@@ -82,6 +60,11 @@ def data_prep(data, device=torch.device('cpu')):
     data.ycand[torch.isnan(data.ycand)] = 0.0
     data.ygen[torch.isnan(data.ygen)] = 0.0
     data.ygen[data.ygen.abs()>1e4] = 0
+    #print("x=", data.x)
+    #print("y_candidates_id=", data.y_candidates_id)
+    #print("y_gen_id=", data.y_gen_id)
+    #print("ycand=", data.ycand)
+    #print("ygen=", data.ygen)
 
 class PFGraphDataset(Dataset):
     def __init__(self, root, transform=None, pre_transform=None):
@@ -123,24 +106,6 @@ class PFGraphDataset(Dataset):
         batch_data = []
         for idata, data in enumerate(all_data):
             mat = data["dm"].copy()
-            #set all edges with distance greater than 0.5 to 0
-            md = mat.todense()
-            md[md>0.5] = 0
-            mat = scipy.sparse.coo_matrix(md)
-
-            mat_reco_cand = data["dm_elem_cand"].copy()
-            mat_reco_gen = data["dm_elem_gen"].copy()
-
-            mul1 = mat.multiply(mat_reco_cand)
-            mul2 = mat.multiply(mat_reco_gen)
-            mul1 = mul1>0
-            mul2 = mul2>0
-            if len(mat.row) > 0:
-                mat_reco_cand = scipy.sparse.coo_matrix((np.array(mul1[mat.row, mat.col]).squeeze(), (mat.row, mat.col)), shape=(mat.shape[0], mat.shape[1]))
-                mat_reco_gen = scipy.sparse.coo_matrix((np.array(mul2[mat.row, mat.col]).squeeze(), (mat.row, mat.col)), shape=(mat.shape[0], mat.shape[1]))
-            else:
-                mat_reco_cand = scipy.sparse.coo_matrix(np.zeros((mat.shape[0], mat.shape[1])))
-                mat_reco_gen = scipy.sparse.coo_matrix(np.zeros((mat.shape[0], mat.shape[1])))
 
             Xelem = data["Xelem"]
             ygen = data["ygen"]
@@ -166,31 +131,7 @@ class PFGraphDataset(Dataset):
                 'eta', 'phi', 'e', 'charge',
                 ]], axis=-1
             )
-            #node_sel = X[:, 4] > 0.2
-            #row_index, col_index, dm_data = mat.row, mat.col, mat.data
-
-            #num_elements = X.shape[0]
-            #num_edges = row_index.shape[0]
-
-            #edge_index = np.zeros((2, 2*num_edges))
-            #edge_index[0, :num_edges] = row_index
-            #edge_index[1, :num_edges] = col_index
-            #edge_index[0, num_edges:] = col_index
-            #edge_index[1, num_edges:] = row_index
-            #edge_index = torch.tensor(edge_index, dtype=torch.long)
-
-            #edge_data = dm_data
-            #edge_attr = np.zeros((2*num_edges, 1))
-            #edge_attr[:num_edges,0] = edge_data
-            #edge_attr[num_edges:,0] = edge_data
-            #edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-
             r = torch_geometric.utils.from_scipy_sparse_matrix(mat)
-            rc = torch_geometric.utils.from_scipy_sparse_matrix(mat_reco_cand)
-            rg = torch_geometric.utils.from_scipy_sparse_matrix(mat_reco_gen)
-
-            #edge_index, edge_attr = torch_geometric.utils.subgraph(torch.tensor(node_sel, dtype=torch.bool),
-            #    edge_index, edge_attr, relabel_nodes=True, num_nodes=len(X))
 
             x = torch.tensor(Xelem_flat, dtype=torch.float)
             ygen = torch.tensor(ygen_flat, dtype=torch.float)
@@ -198,11 +139,9 @@ class PFGraphDataset(Dataset):
 
             data = Data(
                 x=x,
-                edge_index=r[0].to(dtype=torch.long),
-                edge_attr=r[1].to(dtype=torch.float),
+                #edge_index=r[0].to(dtype=torch.long),
+                #edge_attr=r[1].to(dtype=torch.float),
                 ygen=ygen, ycand=ycand,
-                target_edge_attr_cand = rc[1].to(dtype=torch.float),
-                target_edge_attr_gen = rg[1].to(dtype=torch.float),
             )
             data_prep(data)
             batch_data += [data]
@@ -225,7 +164,7 @@ class PFGraphDataset(Dataset):
     def process_parallel(self, num_files_to_batch, num_proc):
         pars = []
         idx_file = 0
-        for fns in chunks(self.raw_file_names, num_files_to_batch):
+        for fns in chunks(self.raw_file_names[:10000], num_files_to_batch):
             pars += [(self, fns, idx_file)]
             idx_file += 1
         pool = multiprocessing.Pool(num_proc)
