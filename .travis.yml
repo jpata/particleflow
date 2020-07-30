@@ -24,8 +24,11 @@ install:
   - conda create -n myenv python=3.7
   - conda activate myenv
   - pip install tensorflow==2.3 torch==1.5
-
-  - pip install torch_geometric torch_scatter torch_sparse torch_gather torch-spline-conv
+  - pip install torch_scatter==latest-cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
+  - pip install torch_cluster==latest-cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
+  - pip install torch_sparse==latest-cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
+  - pip install torch-spline-conv==latest-cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
+  - pip install torch_geometric
   - pip install uproot
   - pip install matplotlib networkx numba scipy numpy
 
