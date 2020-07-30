@@ -3,7 +3,7 @@
 ### PyTorch model training - WIP
 singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/mlpf.simg \
   python3 test/train_end2end.py \
-  --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi \
+  --dataset /storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi \
   --n_train 4000 --n_val 1000 \
   --model PFNet7 --convlayer gravnet-radius --lr 0.0001 \
   --hidden_dim 256 --n_epochs 50 \
