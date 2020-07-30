@@ -23,7 +23,8 @@ install:
   - conda config --add channels conda-forge
   - conda create -n myenv python=3.7
   - conda activate myenv
-  - pip install tensorflow==2.3 torch==1.4 torch_geometric torch_scatter torch_sparse torch_gather
+  - pip install tensorflow==2.3 torch==1.5
+  - pip install torch_geometric torch_scatter torch_sparse torch_gather torch-spline-conv
   - pip install uproot
   - pip install matplotlib networkx numba scipy numpy
 
