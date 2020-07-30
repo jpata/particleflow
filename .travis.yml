@@ -41,11 +41,4 @@ script:
   - cd ../..
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
   - python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --outpath data/TTbar_14TeV_TuneCUETP8M1_cfi/raw --save-normalized-table
-  - python test/train_end2end.py \
-    --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi \
-    --n_train 3 --n_val 2 \
-    --model PFNet7 --convlayer gravnet-radius --lr 0.0001 \
-    --hidden_dim 256 --n_epochs 10 \
-    --l1 1.0 --l2 0.001 --l3 0.0 \
-    --target cand --batch_size 1 \
-    --dropout 0.2 --disable-comet
+  - python test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --n_train 3 --n_val 2 --model PFNet7 --convlayer gravnet-radius --lr 0.0001 --hidden_dim 256 --n_epochs 10 --l1 1.0 --l2 0.001 --l3 0.0 --target cand --batch_size 1 --dropout 0.2 --disable-comet
