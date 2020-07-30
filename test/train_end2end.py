@@ -78,23 +78,22 @@ def prepare_dataframe(model, loader):
 
         df["elem_type"] = [int(graph_data.elem_labels[i]) for i in torch.argmax(x[:, :len(graph_data.elem_labels)], axis=-1).numpy()]
         df["gen_pid"] = [int(graph_data.class_labels[i]) for i in gen_id.numpy()]
-        df["gen_pt"] = gen_p4[:, 0].numpy()
-        df["gen_eta"] = gen_p4[:, 1].numpy()
-        df["gen_phi"] = gen_p4[:, 2].numpy()
-        df["gen_e"] = gen_p4[:, 3].numpy()
+        df["gen_eta"] = gen_p4[:, 0].numpy()
+        df["gen_phi"] = gen_p4[:, 1].numpy()
+        df["gen_e"] = gen_p4[:, 2].numpy()
+        df["gen_charge"] = gen_p4[:, 3].numpy()
 
         df["cand_pid"] = [int(graph_data.class_labels[i]) for i in cand_id.numpy()]
-        df["cand_pt"] = cand_p4[:, 0].numpy()
-        df["cand_eta"] = cand_p4[:, 1].numpy()
-        df["cand_phi"] = cand_p4[:, 2].numpy()
-        df["cand_e"] = cand_p4[:, 3].numpy()
+        df["cand_eta"] = cand_p4[:, 0].numpy()
+        df["cand_phi"] = cand_p4[:, 1].numpy()
+        df["cand_e"] = cand_p4[:, 2].numpy()
+        df["cand_charge"] = cand_p4[:, 3].numpy()
         df["pred_pid"] = [int(graph_data.class_labels[i]) for i in pred_id.detach().cpu().numpy()]
 
-        df["pred_pt"] = pred_momentum[:, 0].detach().cpu().numpy()
-        df.loc[df["pred_pid"]==0, "pred_pt"] = 0
-        df["pred_eta"] = pred_momentum[:, 1].detach().cpu().numpy()
-        df["pred_phi"] = pred_momentum[:, 2].detach().cpu().numpy()
-        df["pred_e"] = pred_momentum[:, 3].detach().cpu().numpy()
+        df["pred_eta"] = pred_momentum[:, 0].detach().cpu().numpy()
+        df["pred_phi"] = pred_momentum[:, 1].detach().cpu().numpy()
+        df["pred_e"] = pred_momentum[:, 2].detach().cpu().numpy()
+        df["pred_charge"] = pred_momentum[:, 3].detach().cpu().numpy()
 
         dfs += [df]
 

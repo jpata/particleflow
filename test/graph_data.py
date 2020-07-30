@@ -164,7 +164,7 @@ class PFGraphDataset(Dataset):
     def process_parallel(self, num_files_to_batch, num_proc):
         pars = []
         idx_file = 0
-        for fns in chunks(self.raw_file_names[:10000], num_files_to_batch):
+        for fns in chunks(self.raw_file_names, num_files_to_batch):
             pars += [(self, fns, idx_file)]
             idx_file += 1
         pool = multiprocessing.Pool(num_proc)
