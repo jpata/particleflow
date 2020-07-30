@@ -1,0 +1,36 @@
+language: python
+
+os:
+  - linux
+
+python:
+  - 3.6
+
+addons:
+  apt:
+    packages:
+    - python-setuptools
+
+install:
+  - sudo apt-get update
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - source "$HOME/miniconda/etc/profile.d/conda.sh"
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  - conda info -a
+  - conda config --add channels conda-forge
+  - conda create -n myenv python=3.7
+  - conda activate myenv
+  - pip install tensorflow==2.3 torch==1.4 torch_geometric torch_scatter torch_sparse torch_gather
+  - pip install uproot
+  - pip install matplotlib networkx numba scipy numpy
+
+script:
+  - mkdir data/TTbar_14TeV_TuneCUETP8M1_cfi
+  - cd data/TTbar_14TeV_TuneCUETP8M1_cfi
+  - wget https://login-1.hep.caltech.edu/~jpata/particleflow/2020-07/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
+  - cd ../..
+  - mkdir data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+  - python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --outpath data/TTbar_14TeV_TuneCUETP8M1_cfi/raw --save-normalized-table
