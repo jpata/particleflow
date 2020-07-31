@@ -79,7 +79,7 @@ weight_schemes = {
     "classbalanced": compute_weights_inverse,
 }
 
-def load_one_file(fn, num_clusters=500): #changed 10->100
+def load_one_file(fn, num_clusters=500):
     Xs = []
     ys = []
     ys_cand = []
