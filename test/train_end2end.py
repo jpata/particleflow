@@ -451,8 +451,8 @@ if __name__ == "__main__":
     
     model.train()
     
-    losses_train = np.zeros((args.n_epochs+1, 3))
-    losses_val = np.zeros((args.n_epochs+1, 3))
+    losses_train = np.zeros((args.n_epochs+1, 2))
+    losses_val = np.zeros((args.n_epochs+1, 2))
 
     corrs = []
     corrs_v = []
