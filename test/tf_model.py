@@ -79,7 +79,7 @@ weight_schemes = {
     "classbalanced": compute_weights_inverse,
 }
 
-def load_one_file(fn, num_clusters=100): #changed 10->100
+def load_one_file(fn, num_clusters=500): #changed 10->100
     Xs = []
     ys = []
     ys_cand = []
@@ -739,7 +739,7 @@ def load_dataset_gun():
     return dataset
 
 def load_dataset_ttbar(datapath):
-    path = datapath + "/tfr3/{}/*.tfrecords".format(args.target)
+    path = datapath + "/tfr4/{}/*.tfrecords".format(args.target)
     tfr_files = glob.glob(path)
     if len(tfr_files) == 0:
         raise Exception("Could not find any files in {}".format(path))
@@ -806,6 +806,7 @@ if __name__ == "__main__":
         print("Output directory exists: {}".format(outdir), file=sys.stderr)
         sys.exit(1)
 
+    print('USING MODEL {}'.format(args.model))
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
