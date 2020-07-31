@@ -1,3 +1,5 @@
+# Reference: https://github.com/ryancheunggit/tensorflow2_model_zoo/blob/master/graph/mpnn.py 
+
 import tensorflow as tf
 
 class EdgeNetwork(tf.keras.Model):
