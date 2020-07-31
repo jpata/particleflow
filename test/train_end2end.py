@@ -481,7 +481,6 @@ if __name__ == "__main__":
             experiment.log_metric('loss',l, step=j)
             experiment.log_metric('loss1',losses[0], step=j)
             experiment.log_metric('loss2',losses[1], step=j)
-            experiment.log_metric('loss3',losses[2], step=j)
             experiment.log_metric('corrs',c, step=j)
             experiment.log_metric('accuracy',acc, step=j)
             
@@ -495,7 +494,6 @@ if __name__ == "__main__":
             experiment.log_metric('loss',l_v, step=j)
             experiment.log_metric('loss1',losses_v[0], step=j)
             experiment.log_metric('loss2',losses_v[1], step=j)
-            experiment.log_metric('loss3',losses_v[2], step=j)
             experiment.log_metric('corrs',c_v, step=j)
             experiment.log_metric('accuracy',acc_v, step=j)
             
