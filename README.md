@@ -1,3 +1,5 @@
+https://travis-ci.org/jpata/particleflow.svg?branch=master
+
 Notes on modernizing CMS particle flow with machine learning. Internal documentation and results can be found at https://twiki.cern.ch/twiki/bin/view/CMS/MLParticleFlow.
 
 Quickstart on Caltech iBanks:
