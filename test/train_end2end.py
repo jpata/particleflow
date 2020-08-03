@@ -142,23 +142,10 @@ class PFNet7(nn.Module):
         act = nn.LeakyReLU
         self.convlayer = convlayer
 
-        self.nn1 = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Dropout(dropout_rate),
-            act(),
-            nn.Linear(hidden_dim, hidden_dim),
-            act(),
-        )
-
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
+            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(hidden_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius") 
+            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius") 
 
         self.nn2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
@@ -190,11 +177,10 @@ class PFNet7(nn.Module):
     def forward(self, data):
        
         #encode the inputs 
-        x = self.nn1(data.x)
-        
+        x = data.x
+ 
         #Run a clustering of the inputs that returns the new_edge_index
         new_edge_index, x = self.conv1(x)
-
         x = torch.nn.functional.leaky_relu(x)
         
         #Decode convolved graph nodes to pdgid and p4
@@ -224,7 +210,6 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
-    parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering classification")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
@@ -241,12 +226,12 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, epoch, l1m, l2m, l3m, target_type):
+def test(model, loader, epoch, l1m, l2m, target_type):
     with torch.no_grad(): 
-        ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type)
+        ret = train(model, loader, epoch, None, l1m, l2m, target_type)
     return ret
 
-def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
+def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
     is_train = not (optimizer is None)
 
@@ -269,7 +254,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type):
     for i, data in enumerate(loader):
         t0 = time.time()
         num_samples += len(data)
-        
+
         if not multi_gpu:
             data = data.to(device)
 
@@ -410,7 +395,7 @@ if __name__ == "__main__":
     # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
     experiment = Experiment(project_name="particeflow", disabled=args.disable_comet)
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
-                                                    'l1': args.l1, 'l2':args.l2, 'l3':args.l3,
+                                                    'l1': args.l1, 'l2':args.l2,
                                                     'n_train':args.n_train, 'target':args.target}))
 
     #instantiate the model
@@ -473,7 +458,7 @@ if __name__ == "__main__":
             break
         with experiment.train():
             model.train()
-            num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.l3, args.target)
+            num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.target)
             l = sum(losses)
             losses_train[j] = losses
             corrs += [c]
@@ -486,7 +471,7 @@ if __name__ == "__main__":
             
         with experiment.validate():
             model.eval()
-            num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.l3, args.target)
+            num_samples_val, losses_v, c_v, acc_v = test(model, val_loader, j, args.l1, args.l2, args.target)
             l_v = sum(losses_v)
             losses_val[j] = losses_v
             corrs_v += [c_v]
