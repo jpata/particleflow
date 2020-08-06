@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 
 from comet_ml import Experiment
 
@@ -167,16 +168,10 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
             nn.Linear(hidden_dim + output_dim_id, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -256,7 +251,7 @@ def compute_weights(target_ids, device):
     vs, cs = torch.unique(target_ids, return_counts=True)
     weights = torch.zeros(len(class_to_id)).to(device=device)
     for k, v in zip(vs, cs):
-        weights[k] = 1.0/float(v)
+        weights[k] = 1.0/math.sqrt(float(v))
     return weights
 
 def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
@@ -303,7 +298,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
         elif args.target == "cand":
             target_ids = torch.cat([d.y_candidates_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
-
 
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
