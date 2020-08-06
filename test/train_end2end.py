@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 
 from comet_ml import Experiment
 
@@ -9,7 +10,6 @@ try:
         import setGPU
 except Exception as e:
     print("Could not import setGPU, running CPU-only")
-
 
 import torch
 use_gpu = torch.cuda.device_count()>0
@@ -135,40 +135,51 @@ class PFNet7(nn.Module):
         output_dim_id=len(class_to_id),
         output_dim_p4=4,
         convlayer="gravnet-knn",
-        space_dim=2, nearest=3, dropout_rate=0.0):
+        convlayer2="none",
+        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu"):
 
         super(PFNet7, self).__init__()
 
-        act = nn.LeakyReLU
+     
+        if activation == "leaky_relu": 
+            self.act = nn.LeakyReLU
+            self.act_f = torch.nn.functional.leaky_relu
+        elif activation == "selu": 
+            self.act = nn.SELU
+            self.act_f = torch.nn.functional.selu
         self.convlayer = convlayer
 
         if convlayer == "gravnet-knn":
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius") 
+            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
+        
+        self.conv2 = None 
+        if convlayer2 == "sgconv":
+            self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
 
         self.nn2 = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
             nn.Linear(hidden_dim + output_dim_id, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
             nn.Dropout(dropout_rate),
-            act(),
             nn.Linear(hidden_dim, output_dim_p4),
         )
         self.input_dim = input_dim
@@ -181,8 +192,11 @@ class PFNet7(nn.Module):
  
         #Run a clustering of the inputs that returns the new_edge_index
         new_edge_index, x = self.conv1(x)
-        x = torch.nn.functional.leaky_relu(x)
-        
+        x = self.act_f(x)
+
+        if not (self.conv2 is None): 
+            x = self.act_f(self.conv2(x, new_edge_index))
+
         #Decode convolved graph nodes to pdgid and p4
         cand_ids = self.nn2(x)
         cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
@@ -200,18 +214,20 @@ def parse_args():
     parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
-    parser.add_argument("--n_plot", type=int, default=10, help="make plots every iterations")
+    parser.add_argument("--n_plot", type=int, default=0, help="make plots every iterations")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
+    parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu"], help="activation function")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
+    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv"], help="Convolutional layer", default="none")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
@@ -230,6 +246,13 @@ def test(model, loader, epoch, l1m, l2m, target_type):
     with torch.no_grad(): 
         ret = train(model, loader, epoch, None, l1m, l2m, target_type)
     return ret
+
+def compute_weights(target_ids, device):
+    vs, cs = torch.unique(target_ids, return_counts=True)
+    weights = torch.zeros(len(class_to_id)).to(device=device)
+    for k, v in zip(vs, cs):
+        weights[k] = 1.0/math.sqrt(float(v))
+    return weights
 
 def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
@@ -256,6 +279,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
         num_samples += len(data)
 
         if not multi_gpu:
+            data.ygen = None
+            data.y_gen_id = None
             data = data.to(device)
 
         if is_train:
@@ -274,11 +299,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
             target_ids = torch.cat([d.y_candidates_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
 
-        vs, cs = torch.unique(target_ids, return_counts=True)
-        weights = torch.zeros(len(class_to_id)).to(device=_dev)
-        for k, v in zip(vs, cs):
-            weights[k] = 1.0/float(v)
-
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
         msk = ((indices != 0) & (target_ids != 0)).detach().cpu()
@@ -286,6 +306,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
         accuracies_batch[i] = accuracy_score(target_ids[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
 
+        weights = compute_weights(target_ids, _dev)
+ 
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
             l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
@@ -305,8 +327,10 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
         
         if is_train:
             batch_loss.backward()
+
         batch_loss_item = batch_loss.item()
         t1 = time.time()
+
         print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), batch_loss_item, t1-t0), end='\r', flush=True)
         if is_train:
             optimizer.step()
@@ -377,9 +401,9 @@ if __name__ == "__main__":
             l = sum(items, [])
             return l
 
-    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False, num_workers=1)
     train_loader.collate_fn = collate
-    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=True, shuffle=False)
+    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False, num_workers=1)
     val_loader.collate_fn = collate
 
     model_class = model_classes[args.model]
@@ -389,11 +413,12 @@ if __name__ == "__main__":
                     'output_dim_p4': output_dim_p4,
                     'dropout_rate': args.dropout,
                     'convlayer': args.convlayer,
+                    'convlayer2': args.convlayer2,
                     'space_dim': args.space_dim,
                     'nearest': args.nearest}
 
     # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
-    experiment = Experiment(project_name="particeflow", disabled=args.disable_comet)
+    experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2,
                                                     'n_train':args.n_train, 'target':args.target}))
@@ -456,6 +481,7 @@ if __name__ == "__main__":
         if stale_epochs > patience:
             print("breaking due to stale epochs")
             break
+
         with experiment.train():
             model.train()
             num_samples_train, losses, c, acc = train(model, train_loader, j, optimizer, args.l1, args.l2, args.target)
@@ -485,14 +511,14 @@ if __name__ == "__main__":
         if l_v < best_val_loss:
             best_val_loss = l_v
             stale_epochs = 0
-            make_plots(
-                model, j, "{0}/epoch_{1}/".format(outpath, "best"),
-                losses_train, losses_val, corrs, corrs_v,
-                accuracies, accuracies_v, val_loader)
+            #make_plots(
+            #    model, j, "{0}/epoch_{1}/".format(outpath, "best"),
+            #    losses_train, losses_val, corrs, corrs_v,
+            #    accuracies, accuracies_v, val_loader)
         else:
             stale_epochs += 1
 
-        if j > 0 and j%args.n_plot == 0:
+        if args.n_plot > 0 and j > 0 and j%args.n_plot == 0:
             make_plots(
                 model, j, "{0}/epoch_{1}/".format(outpath, j),
                 losses_train, losses_val, corrs, corrs_v,
