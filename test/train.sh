@@ -7,7 +7,7 @@ singularity exec -B /storage --nv ~jpata/gpuservers/singularity/images/mlpf.simg
   --n_train 4000 --n_val 1000 \
   --model PFNet7 --convlayer gravnet-radius --lr 0.0001 \
   --hidden_dim 256 --n_epochs 50 \
-  --l1 1.0 --l2 0.001 --l3 0.0 \
+  --l1 1.0 --l2 0.001 \
   --target cand --batch_size 1 \
   --dropout 0.2
 
