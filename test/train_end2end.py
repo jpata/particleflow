@@ -153,13 +153,20 @@ class PFNet7(nn.Module):
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
-        
+
+        #decoding layer receives the raw inputs and the gravnet output        
+        num_decode_in = input_dim + hidden_dim
+
+        #run a second convolution
         self.conv2 = None 
         if convlayer2 == "sgconv":
             self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+            #decoding layer receives also the outputs from the second convlution
+            num_decode_in += hidden_dim
+
 
         self.nn2 = nn.Sequential(
-            nn.Linear(input_dim + 2*hidden_dim, hidden_dim),
+            nn.Linear(num_decode_in, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -171,7 +178,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
-            nn.Linear(input_dim + 2*hidden_dim + output_dim_id, hidden_dim),
+            nn.Linear(num_decode_in + output_dim_id, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -194,11 +201,20 @@ class PFNet7(nn.Module):
         new_edge_index, x = self.conv1(x)
         x1 = self.act_f(x)
 
-        x2 = self.act_f(self.conv2(x1, new_edge_index))
+        if self.conv2:
+            x2 = self.act_f(self.conv2(x1, new_edge_index))
+            nn2_input = torch.cat([data.x, x1, x2], axis=-1)
+        else:
+            nn2_input = torch.cat([data.x, x1], axis=-1)
 
         #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(torch.cat([data.x, x1, x2], axis=-1))
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([data.x, x1, x2, cand_ids], axis=-1))
+        cand_ids = self.nn2(nn2_input)
+        if self.conv2:
+            nn3_input = torch.cat([data.x, x1, x2, cand_ids], axis=-1)
+        else:
+            nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
+
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(nn3_input)
 
         return cand_ids, cand_p4
 
