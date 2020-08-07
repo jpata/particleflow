@@ -159,7 +159,7 @@ class PFNet7(nn.Module):
             self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
 
         self.nn2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(input_dim + 2*hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -171,7 +171,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
-            nn.Linear(hidden_dim + output_dim_id, hidden_dim),
+            nn.Linear(input_dim + 2*hidden_dim + output_dim_id, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -192,14 +192,13 @@ class PFNet7(nn.Module):
  
         #Run a clustering of the inputs that returns the new_edge_index
         new_edge_index, x = self.conv1(x)
-        x = self.act_f(x)
+        x1 = self.act_f(x)
 
-        if not (self.conv2 is None): 
-            x = self.act_f(self.conv2(x, new_edge_index))
+        x2 = self.act_f(self.conv2(x1, new_edge_index))
 
         #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(x)
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
+        cand_ids = self.nn2(torch.cat([data.x, x1, x2], axis=-1))
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([data.x, x1, x2, cand_ids], axis=-1))
 
         return cand_ids, cand_p4
 
