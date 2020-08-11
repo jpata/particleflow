@@ -153,6 +153,8 @@ class PFNet7(nn.Module):
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
+        else:
+            raise Exception("Unknown convolution layer: {}".format(convlayer))
 
         #decoding layer receives the raw inputs and the gravnet output        
         num_decode_in = input_dim + hidden_dim
@@ -161,8 +163,15 @@ class PFNet7(nn.Module):
         self.conv2 = None 
         if convlayer2 == "sgconv":
             self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
-            #decoding layer receives also the outputs from the second convlution
             num_decode_in += hidden_dim
+        elif convlayer2 == "graphunet":
+            self.conv2 = GraphUNet(hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            num_decode_in += hidden_dim
+        elif convlayer2 == "gatconv":
+            self.conv2 = GATConv(hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            num_decode_in += hidden_dim
+        else:
+            raise Exception("Unknown convolution layer: {}".format(convlayer2))
 
 
         self.nn2 = nn.Sequential(
@@ -242,7 +251,7 @@ def parse_args():
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv"], help="Convolutional layer", default="none")
+    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv", "graphunet", "gatconv"], help="Convolutional layer", default="none")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
