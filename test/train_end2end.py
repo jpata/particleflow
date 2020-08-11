@@ -256,6 +256,7 @@ def parse_args():
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
     parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
+    parser.add_argument("--load", type=str, help="Load the weight file", required=False, default=None)
     args = parser.parse_args()
     return args
 
@@ -449,6 +450,11 @@ if __name__ == "__main__":
 
     #instantiate the model
     model = model_class(**model_kwargs)
+    if args.load:
+        s1 = torch.load(args.load, map_location=torch.device('cpu'))
+        s2 = {k.replace("module.", ""): v for k, v in s1.items()}
+        import pdb;pdb.set_trace()
+        model.load_state_dict(s2)
 
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
