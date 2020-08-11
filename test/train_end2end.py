@@ -153,13 +153,29 @@ class PFNet7(nn.Module):
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
             self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
-        
+        else:
+            raise Exception("Unknown convolution layer: {}".format(convlayer))
+
+        #decoding layer receives the raw inputs and the gravnet output        
+        num_decode_in = input_dim + hidden_dim
+
+        #run a second convolution
         self.conv2 = None 
         if convlayer2 == "sgconv":
             self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+            num_decode_in += hidden_dim
+        elif convlayer2 == "graphunet":
+            self.conv2 = GraphUNet(hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            num_decode_in += hidden_dim
+        elif convlayer2 == "gatconv":
+            self.conv2 = GATConv(hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            num_decode_in += hidden_dim
+        else:
+            raise Exception("Unknown convolution layer: {}".format(convlayer2))
+
 
         self.nn2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(num_decode_in, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -171,7 +187,7 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
-            nn.Linear(hidden_dim + output_dim_id, hidden_dim),
+            nn.Linear(num_decode_in + output_dim_id, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -192,14 +208,22 @@ class PFNet7(nn.Module):
  
         #Run a clustering of the inputs that returns the new_edge_index
         new_edge_index, x = self.conv1(x)
-        x = self.act_f(x)
+        x1 = self.act_f(x)
 
-        if not (self.conv2 is None): 
-            x = self.act_f(self.conv2(x, new_edge_index))
+        if self.conv2:
+            x2 = self.act_f(self.conv2(x1, new_edge_index))
+            nn2_input = torch.cat([data.x, x1, x2], axis=-1)
+        else:
+            nn2_input = torch.cat([data.x, x1], axis=-1)
 
         #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(x)
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(torch.cat([x, cand_ids], axis=-1))
+        cand_ids = self.nn2(nn2_input)
+        if self.conv2:
+            nn3_input = torch.cat([data.x, x1, x2, cand_ids], axis=-1)
+        else:
+            nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
+
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(nn3_input)
 
         return cand_ids, cand_p4
 
@@ -227,7 +251,7 @@ def parse_args():
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv"], help="Convolutional layer", default="none")
+    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv", "graphunet", "gatconv"], help="Convolutional layer", default="none")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
