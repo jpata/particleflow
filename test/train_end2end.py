@@ -135,7 +135,7 @@ class PFNet7(nn.Module):
         output_dim_id=len(class_to_id),
         output_dim_p4=4,
         convlayer="gravnet-knn",
-        convlayer2="none",
+        convlayer2=None,
         space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu"):
 
         super(PFNet7, self).__init__()
@@ -160,8 +160,9 @@ class PFNet7(nn.Module):
         num_decode_in = input_dim + hidden_dim
 
         #run a second convolution
-        self.conv2 = None 
-        if convlayer2 == "sgconv":
+        if convlayer2 is None:
+            self.conv2 = None 
+        elif convlayer2 == "sgconv":
             self.conv2 = SGConv(input_dim + hidden_dim, hidden_dim, K=1)
             num_decode_in += hidden_dim
         elif convlayer2 == "graphunet":
@@ -252,7 +253,7 @@ def parse_args():
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv", "graphunet", "gatconv"], help="Convolutional layer", default="none")
+    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv"], help="Convolutional layer", default=None)
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
