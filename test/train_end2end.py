@@ -162,13 +162,13 @@ class PFNet7(nn.Module):
         #run a second convolution
         self.conv2 = None 
         if convlayer2 == "sgconv":
-            self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+            self.conv2 = SGConv(input_dim + hidden_dim, hidden_dim, K=1)
             num_decode_in += hidden_dim
         elif convlayer2 == "graphunet":
-            self.conv2 = GraphUNet(hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            self.conv2 = GraphUNet(input_dim + hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
             num_decode_in += hidden_dim
         elif convlayer2 == "gatconv":
-            self.conv2 = GATConv(hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            self.conv2 = GATConv(input_dim + hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
             num_decode_in += hidden_dim
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer2))
@@ -211,7 +211,8 @@ class PFNet7(nn.Module):
         x1 = self.act_f(x)
 
         if self.conv2:
-            x2 = self.act_f(self.conv2(x1, new_edge_index))
+            conv2_input = torch.cat([data.x, x1], axis=-1)
+            x2 = self.act_f(self.conv2(conv2_input, new_edge_index))
             nn2_input = torch.cat([data.x, x1, x2], axis=-1)
         else:
             nn2_input = torch.cat([data.x, x1], axis=-1)
@@ -453,7 +454,6 @@ if __name__ == "__main__":
     if args.load:
         s1 = torch.load(args.load, map_location=torch.device('cpu'))
         s2 = {k.replace("module.", ""): v for k, v in s1.items()}
-        import pdb;pdb.set_trace()
         model.load_state_dict(s2)
 
     if multi_gpu:
