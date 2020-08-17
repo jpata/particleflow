@@ -1,10 +1,9 @@
 
 #Multiplicities = [123,234,122,567,456,789,876,534]
 #running_time = [1.2,1.2,1.5,1.3,1.1,1.2,1.7,1.1]
+#results=[]
 
-results=[]
-
-class time_and_multiplicity:
+class TimeMultPack:
     
     
     def __init__(self,multiplicity,time):
@@ -21,7 +20,7 @@ class time_and_multiplicity:
 
 
 
-class slice_time_multiplicity:
+class SliceTimeMult:
 
 
     def __init__(self,a_list):
@@ -37,11 +36,23 @@ class slice_time_multiplicity:
         a_multiplicity = self.a_list[0]
         return  a_multiplicity
 
+
+
+#lass PackReps:
+#   def __init__(self,a_list):
+#   self.a_list = a_list
+
+
+#Multiplicities = [123,234,122,567,456,789,876,534]
+#running_time = [1.2,1.2,1.5,1.3,1.1,1.2,1.7,1.1]
+#results=[]
+
 #for i in range(8):
-#    time_mult= time_and_multiplicity(Multiplicities[i],running_time[i])
+#    time_mult= TimeMultPack(Multiplicities[i],running_time[i])
 #    results.append(time_mult.spit_out())
 #print(results)
 
-#time = slice_time_multiplicity(results[2])
+#time = SliceTimeMult(results[2])
 #print(time.get_multiplicity())
 #print(time.get_time())
+
