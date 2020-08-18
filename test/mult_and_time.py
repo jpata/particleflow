@@ -1,10 +1,27 @@
 
-#Multiplicities = [123,234,122,567,456,789,876,534]
-#running_time = [1.2,1.2,1.5,1.3,1.1,1.2,1.7,1.1]
-#results=[]
 
 class TimeMultPack:
+    '''
+    TimeMultPack packs together multiplicity and evaluation time by the model for the same event.
     
+    Paramaters
+    ---------
+
+    multiplicity : int
+        This resembles the event multiplicity
+
+    time : int/float
+        This resembles the time a each event takes with the model evaluation
+
+    Attributes
+    ----------
+
+    multiplicity : int
+        This is where the multiplicity is stored
+    
+    time : int/float
+        This is where time of the model evaluation is stored
+    '''    
     
     def __init__(self,multiplicity,time):
         self.multiplicity = multiplicity
@@ -16,11 +33,33 @@ class TimeMultPack:
         result.append(self.time)
         
         return result
-
+    '''
+    Returns
+    -------
+    
+    result
+        A list that contains multiplicity and time [mult,time]
+   
+    '''
 
 
 
 class SliceTimeMult:
+    '''
+    TimeMultPack unpacks together multiplicity and evaluation time from the PackTimeMult object.
+    
+    Paramaters
+    ---------
+
+    a_list : list
+        a_list is the PackTimeMult object
+
+    Attributes
+    ----------
+
+    a_list : list
+        This stores the list
+    '''   
 
 
     def __init__(self,a_list):
@@ -35,24 +74,16 @@ class SliceTimeMult:
     def get_multiplicity(self):
         a_multiplicity = self.a_list[0]
         return  a_multiplicity
+    '''
+    Returns
+    -------
+    
+    a_time
+        Retruns just the time
 
+    a_multiplicity
+        Returns just the multiplicity
+   
+    '''
 
-
-#lass PackReps:
-#   def __init__(self,a_list):
-#   self.a_list = a_list
-
-
-#Multiplicities = [123,234,122,567,456,789,876,534]
-#running_time = [1.2,1.2,1.5,1.3,1.1,1.2,1.7,1.1]
-#results=[]
-
-#for i in range(8):
-#    time_mult= TimeMultPack(Multiplicities[i],running_time[i])
-#    results.append(time_mult.spit_out())
-#print(results)
-
-#time = SliceTimeMult(results[2])
-#print(time.get_multiplicity())
-#print(time.get_time())
 
