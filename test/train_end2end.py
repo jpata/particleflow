@@ -185,10 +185,16 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
+            nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
             nn.Linear(num_decode_in + output_dim_id, hidden_dim),
+            self.act(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -211,6 +217,7 @@ class PFNet7(nn.Module):
         new_edge_index, x = self.conv1(x)
         x1 = self.act_f(x)
 
+        #run a second convolution
         if self.conv2:
             conv2_input = torch.cat([data.x, x1], axis=-1)
             x2 = self.act_f(self.conv2(conv2_input, new_edge_index))
@@ -220,6 +227,7 @@ class PFNet7(nn.Module):
 
         #Decode convolved graph nodes to pdgid and p4
         cand_ids = self.nn2(nn2_input)
+
         if self.conv2:
             nn3_input = torch.cat([data.x, x1, x2, cand_ids], axis=-1)
         else:
