@@ -135,7 +135,7 @@ class PFNet7(nn.Module):
         output_dim_id=len(class_to_id),
         output_dim_p4=4,
         convlayer="gravnet-knn",
-        convlayer2="none",
+        convlayer2=None,
         space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu"):
 
         super(PFNet7, self).__init__()
@@ -160,15 +160,16 @@ class PFNet7(nn.Module):
         num_decode_in = input_dim + hidden_dim
 
         #run a second convolution
-        self.conv2 = None 
-        if convlayer2 == "sgconv":
-            self.conv2 = SGConv(hidden_dim, hidden_dim, K=1)
+        if convlayer2 is None:
+            self.conv2 = None 
+        elif convlayer2 == "sgconv":
+            self.conv2 = SGConv(input_dim + hidden_dim, hidden_dim, K=1)
             num_decode_in += hidden_dim
         elif convlayer2 == "graphunet":
-            self.conv2 = GraphUNet(hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            self.conv2 = GraphUNet(input_dim + hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
             num_decode_in += hidden_dim
         elif convlayer2 == "gatconv":
-            self.conv2 = GATConv(hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            self.conv2 = GATConv(input_dim + hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
             num_decode_in += hidden_dim
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer2))
@@ -184,10 +185,16 @@ class PFNet7(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
+            nn.Linear(hidden_dim, hidden_dim),
+            self.act(),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
             nn.Linear(num_decode_in + output_dim_id, hidden_dim),
+            self.act(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(hidden_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, hidden_dim),
@@ -210,14 +217,17 @@ class PFNet7(nn.Module):
         new_edge_index, x = self.conv1(x)
         x1 = self.act_f(x)
 
+        #run a second convolution
         if self.conv2:
-            x2 = self.act_f(self.conv2(x1, new_edge_index))
+            conv2_input = torch.cat([data.x, x1], axis=-1)
+            x2 = self.act_f(self.conv2(conv2_input, new_edge_index))
             nn2_input = torch.cat([data.x, x1, x2], axis=-1)
         else:
             nn2_input = torch.cat([data.x, x1], axis=-1)
 
         #Decode convolved graph nodes to pdgid and p4
         cand_ids = self.nn2(nn2_input)
+
         if self.conv2:
             nn3_input = torch.cat([data.x, x1, x2, cand_ids], axis=-1)
         else:
@@ -251,11 +261,12 @@ def parse_args():
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["none", "sgconv", "graphunet", "gatconv"], help="Convolutional layer", default="none")
+    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv"], help="Convolutional layer", default=None)
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
     parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
+    parser.add_argument("--load", type=str, help="Load the weight file", required=False, default=None)
     args = parser.parse_args()
     return args
 
@@ -449,6 +460,10 @@ if __name__ == "__main__":
 
     #instantiate the model
     model = model_class(**model_kwargs)
+    if args.load:
+        s1 = torch.load(args.load, map_location=torch.device('cpu'))
+        s2 = {k.replace("module.", ""): v for k, v in s1.items()}
+        model.load_state_dict(s2)
 
     if multi_gpu:
         model = torch_geometric.nn.DataParallel(model)
