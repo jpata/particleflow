@@ -314,8 +314,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
         num_samples += len(data)
 
         if not multi_gpu:
-            data.ygen = None
-            data.y_gen_id = None
             data = data.to(device)
 
         if is_train:
