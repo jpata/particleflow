@@ -57,6 +57,7 @@ from sklearn.metrics import accuracy_score
 import graph_data
 from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from plot_utils import plot_confusion_matrix
+from sklearn.metrics import confusion_matrix
                                                                                     
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
@@ -312,6 +313,9 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
     #correlation values for each batch (monitor regression performance)
     corrs_batch = np.zeros(len(loader))
 
+    #epoch confusion matrix
+    conf_matrix = np.zeros((len(class_labels), len(class_labels)))
+    
     #keep track of how many data points were processed
     num_samples = 0
     for i, data in enumerate(loader):
@@ -382,12 +386,15 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
         corrs_batch[i] = corr_pt
 
+        conf_matrix += confusion_matrix(target_ids.detach().cpu().numpy(),
+                                        np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1))
+        
         i += 1
 
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
     losses = losses.sum(axis=0)
-    return num_samples, losses, corr, acc, onehot(target_ids.detach().cpu().numpy()), cand_id_onehot.detach().cpu().numpy()
+    return num_samples, losses, corr, acc, conf_matrix
 
 def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
     try:
@@ -526,8 +533,8 @@ if __name__ == "__main__":
 
         with experiment.train():
             model.train()
-            num_samples_train, losses, c, acc, target_ids_onehot, cand_id_onehot  = train(model, train_loader, j, optimizer,
-                                                                                          args.l1, args.l2, args.target)
+            num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
+                                                                   args.l1, args.l2, args.target)
             l = sum(losses)
             losses_train[j] = losses
             corrs += [c]
@@ -537,7 +544,7 @@ if __name__ == "__main__":
             experiment.log_metric('loss2',losses[1], step=j)
             experiment.log_metric('corrs',c, step=j)
             experiment.log_metric('accuracy',acc, step=j)
-            experiment.log_confusion_matrix(target_ids_onehot, cand_id_onehot, step=j,
+            experiment.log_confusion_matrix(matrix=conf_matrix, step=j,
                                             title='Confusion Matrix Full',
                                             file_name='confusion-matrix-full-train-%03d.json' % j,
                                             labels = [str(c) for c in class_labels])
@@ -545,8 +552,8 @@ if __name__ == "__main__":
                 
         with experiment.validate():
             model.eval()
-            num_samples_val, losses_v, c_v, acc_v, target_ids_onehot_v, cand_id_onehot_v  = test(model, val_loader, j,
-                                                                                                 args.l1, args.l2, args.target)
+            num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, val_loader, j,
+                                                                        args.l1, args.l2, args.target)
             l_v = sum(losses_v)
             losses_val[j] = losses_v
             corrs_v += [c_v]
@@ -556,7 +563,7 @@ if __name__ == "__main__":
             experiment.log_metric('loss2',losses_v[1], step=j)
             experiment.log_metric('corrs',c_v, step=j)
             experiment.log_metric('accuracy',acc_v, step=j)
-            experiment.log_confusion_matrix(target_ids_onehot_v, cand_id_onehot_v, step=j,
+            experiment.log_confusion_matrix(matrix=conf_matrix_v, step=j,
                                             title='Confusion Matrix Full',
                                             file_name='confusion-matrix-full-val-%03d.json' % j,
                                             labels = [str(c) for c in class_labels])
