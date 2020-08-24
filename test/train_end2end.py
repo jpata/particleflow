@@ -71,13 +71,15 @@ def onehot(a):
 def prepare_dataframe(model, loader, multi_gpu, device):
     model.eval()
     dfs = []
+    dfs_edges = []
     eval_time = 0
 
     for i, data in enumerate(loader):
         if not multi_gpu:
             data = data.to(device)
 
-        pred_id_onehot, pred_momentum = model(data)
+        pred_id_onehot, pred_momentum, edges = model(data, return_edges=True)
+        print(edges)
         _, pred_id = torch.max(pred_id_onehot, -1)
         pred_momentum[pred_id==0] = 0
         if not multi_gpu:
@@ -111,9 +113,14 @@ def prepare_dataframe(model, loader, multi_gpu, device):
         df["pred_charge"] = pred_momentum[:, 3].detach().cpu().numpy()
 
         dfs += [df]
+        df_edges = pandas.DataFrame()
+        df_edges["edge0"] = edges[0].to("cpu")
+        df_edges["edge1"] = edges[1].to("cpu")
+        dfs_edges += [df_edges]
 
     df = pandas.concat(dfs, ignore_index=True)
-    return df
+    df_edges = pandas.concat(dfs_edges, ignore_index=True)
+    return df, df_edges
 
 #Get a unique directory name for the model 
 def get_model_fname(dataset, model, n_train, lr, target_type):
@@ -145,7 +152,6 @@ class PFNet7(nn.Module):
         space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu"):
 
         super(PFNet7, self).__init__()
-
      
         if activation == "leaky_relu": 
             self.act = nn.LeakyReLU
@@ -214,7 +220,7 @@ class PFNet7(nn.Module):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
 
-    def forward(self, data):
+    def forward(self, data, return_edges=False):
        
         #encode the inputs 
         x = data.x
@@ -240,8 +246,10 @@ class PFNet7(nn.Module):
             nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
 
         cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(nn3_input)
-
-        return cand_ids, cand_p4
+        if not return_edges:
+            return cand_ids, cand_p4
+        else:
+            return cand_ids, cand_p4, new_edge_index
 
 model_classes = {
     "PFNet7": PFNet7,
@@ -407,7 +415,7 @@ def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corr
     modpath = path + 'weights.pth'
     torch.save(model.state_dict(), modpath)
 
-    df = prepare_dataframe(model, val_loader, multi_gpu, device)
+    df, _ = prepare_dataframe(model, val_loader, multi_gpu, device)
     df.to_pickle(path + "df.pkl.bz2")
 
     np.savetxt(path+"losses_train.txt", losses_train)
