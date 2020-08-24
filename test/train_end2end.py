@@ -362,14 +362,14 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
  
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
-            l1 = 1000.0 * l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
+            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
         else:
             l1 = torch.tensor(0.0).to(device=_dev)
 
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=_dev)
         if l2m > 0.0:
-            l2 = 1000.0 * l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
+            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
         else:
             l2 = torch.tensor(0.0).to(device=_dev)
 
@@ -403,7 +403,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
-    losses = losses.sum(axis=0)
+    losses = losses.mean(axis=0)
     return num_samples, losses, corr, acc, conf_matrix
 
 def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
