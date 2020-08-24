@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 8
+#SBATCH --gpus 5
 
 cd ~/particleflow
 
@@ -14,6 +14,6 @@ singularity exec -B /scratch -B /home --nv /home/software/singularity/base.simg:
   --n_train 4000 --n_val 1000 \
   --model PFNet7 --convlayer gravnet-radius --lr 0.0001 \
   --hidden_dim 256 --n_epochs 500 \
-  --l1 1.0 --l2 0 --space_dim 3 \
-  --target cand --batch_size 4 --activation leaky_relu \
+  --l1 1000.0 --l2 0 --space_dim 3 \
+  --target cand --batch_size 2 --activation leaky_relu \
   --dropout 0.3 --n_plot 50 --encoding_dim 512
