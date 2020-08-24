@@ -79,7 +79,6 @@ def prepare_dataframe(model, loader, multi_gpu, device):
             data = data.to(device)
 
         pred_id_onehot, pred_momentum, edges = model(data, return_edges=True)
-        print(edges)
         _, pred_id = torch.max(pred_id_onehot, -1)
         pred_momentum[pred_id==0] = 0
         if not multi_gpu:
