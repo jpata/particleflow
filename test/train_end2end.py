@@ -136,7 +136,7 @@ def get_model_fname(dataset, model, n_train, lr, target_type):
 #Model with gravnet clustering
 class PFNet7(nn.Module):
     def __init__(self,
-        input_dim=3, hidden_dim=32,
+        input_dim=3, hidden_dim=32, encoding_dim=256,
         output_dim_id=len(class_to_id),
         output_dim_p4=4,
         convlayer="gravnet-knn",
@@ -155,26 +155,26 @@ class PFNet7(nn.Module):
         self.convlayer = convlayer
 
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
+            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(input_dim, hidden_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
+            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer))
 
         #decoding layer receives the raw inputs and the gravnet output        
-        num_decode_in = input_dim + hidden_dim
+        num_decode_in = input_dim + encoding_dim
 
         #run a second convolution
         if convlayer2 is None:
             self.conv2 = None 
         elif convlayer2 == "sgconv":
-            self.conv2 = SGConv(input_dim + hidden_dim, hidden_dim, K=1)
+            self.conv2 = SGConv(num_decode_in, hidden_dim, K=1)
             num_decode_in += hidden_dim
         elif convlayer2 == "graphunet":
-            self.conv2 = GraphUNet(input_dim + hidden_dim, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            self.conv2 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
             num_decode_in += hidden_dim
         elif convlayer2 == "gatconv":
-            self.conv2 = GATConv(input_dim + hidden_dim, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            self.conv2 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
             num_decode_in += hidden_dim
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer2))
@@ -255,12 +255,14 @@ def parse_args():
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
     parser.add_argument("--n_plot", type=int, default=0, help="make plots every iterations")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
+    parser.add_argument("--encoding_dim", type=int, default=256, help="encoded element dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
     parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu"], help="activation function")
+    parser.add_argument("--optimizer", type=str, default='adam', choices=["adam", "adamw"], help="optimizer to use")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
@@ -348,14 +350,14 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
  
         #Loss for output candidate id (multiclass)
         if l1m > 0.0:
-            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
+            l1 = 1000.0 * l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
         else:
             l1 = torch.tensor(0.0).to(device=_dev)
 
         #Loss for candidate p4 properties (regression)
         l2 = torch.tensor(0.0).to(device=_dev)
         if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
+            l2 = 1000.0 * l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
         else:
             l2 = torch.tensor(0.0).to(device=_dev)
 
@@ -386,7 +388,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
 
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
-    losses = losses.sum(axis=0)
+    losses = losses.mean(axis=0)
     return num_samples, losses, corr, acc, onehot(target_ids.detach().cpu().numpy()), cand_id_onehot.detach().cpu().numpy()
 
 def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
@@ -447,6 +449,7 @@ if __name__ == "__main__":
     model_class = model_classes[args.model]
     model_kwargs = {'input_dim': input_dim,
                     'hidden_dim': args.hidden_dim,
+                    'encoding_dim': args.encoding_dim,
                     'output_dim_id': output_dim_id,
                     'output_dim_p4': output_dim_p4,
                     'dropout_rate': args.dropout,
@@ -459,7 +462,7 @@ if __name__ == "__main__":
     experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
     experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
                                                     'l1': args.l1, 'l2':args.l2,
-                                                    'n_train':args.n_train, 'target':args.target}))
+                                                    'n_train':args.n_train, 'target':args.target, 'optimizer': args.optimizer}))
 
     #instantiate the model
     model = model_class(**model_kwargs)
@@ -490,8 +493,11 @@ if __name__ == "__main__":
 
     with open('{}/model_kwargs.pkl'.format(outpath), 'wb') as f:
         pickle.dump(model_kwargs, f,  protocol=pickle.HIGHEST_PROTOCOL)
-        
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+      
+    if args.optimizer == "adam":  
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    elif args.optimizer == "adamw":  
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
     
@@ -589,7 +595,7 @@ if __name__ == "__main__":
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd))
 
-    make_plots(
-        model, j, "{0}/epoch_{1}/".format(outpath, "last"),
-        losses_train, losses_val, corrs, corrs_v,
-        accuracies, accuracies_v, val_loader)
+    #make_plots(
+    #    model, j, "{0}/epoch_{1}/".format(outpath, "last"),
+    #    losses_train, losses_val, corrs, corrs_v,
+    #    accuracies, accuracies_v, val_loader)
