@@ -37,7 +37,7 @@ install:
 script:
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
   - cd data/TTbar_14TeV_TuneCUETP8M1_cfi
-  - wget https://login-1.hep.caltech.edu/~jpata/particleflow/2020-07/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
+  - wget --no-check-certificate https://login-1.hep.caltech.edu/~jpata/particleflow/2020-07/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
   - cd ../..
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/processed
