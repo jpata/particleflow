@@ -47,3 +47,4 @@ script:
   - export OUT=`find data -name df.pkl.bz2 | head -n1`
   - du $OUT
   - python test/plots.py --pkl $OUT
+  - python test/eval_end2end.py --path data/PFNet* --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi/ --epoch 2 --model PFNet7 --start 0 --stop 1
