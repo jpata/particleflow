@@ -17,7 +17,7 @@ bin_errors= []
 evaluation = 0#counter
 for a_bin in range(3,13):
     #loading pickle
-    pickling_list = torch.load("/home/aadi/praktika/pickle_lists_final3/mult_time_{}k_bin.pkl".format(a_bin))    
+    pickling_list = torch.load("/home/aadi/praktika/pickle_lists_final4/mult_time_{}k_bin.pkl".format(a_bin))    
     #30 repetitions individual mean will be stored in repetitions
     repetitions = []
     #a rep is taken from 30 reps
@@ -75,6 +75,6 @@ ay.set_xticks(x_value)
 ay.set_xticklabels(x_labels)
 #Saving/showing
 #plt.show()
-fig.savefig('Fifth_graph.png') 
+fig.savefig('Seventh_graph.png') 
 
 
