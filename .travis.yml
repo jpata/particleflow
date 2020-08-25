@@ -49,7 +49,7 @@ script:
   - python test/plots.py --pkl $OUT
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/sorting_pickle
   - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_pickles
-  -python data/pickle_for_sorting.py --bunch_size 10 --path_in data/TTbar_14TeV_TuneCUETP8M1_cfi --path_out data/TTbar_14TeV_TuneCUETP8M1_cfi/sorting_pickle --file_name pickled_data.pkl
-  -python data/sorting_machine.py --pickle_file data/TTbar_14TeV_TuneCUETP8M1_cfi/sorting_pickle/pickled_data.pkl --bins_path data/TTbar_14TeV_TuneCUETP8M1_cfi
-  -python data/model_time_eval.py --kwargs_path data/forAadi/model_kwargs.pkl --weights_path data/forAadi/weights.pth --bins_dir_path data/TTbar_14TeV_TuneCUETP8M1_cfi/bins --save_path data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_pickles --repetitions 30 --sample_size 1000 --device gpu
+  -python test/pickle_for_sorting.py --bunch_size 10 --path_in data/TTbar_14TeV_TuneCUETP8M1_cfi --path_out data/TTbar_14TeV_TuneCUETP8M1_cfi/sorting_pickle --file_name pickled_data.pkl
+  -python test/sorting_machine.py --pickle_file data/TTbar_14TeV_TuneCUETP8M1_cfi/sorting_pickle/pickled_data.pkl --bins_path data/TTbar_14TeV_TuneCUETP8M1_cfi
+  -python test/model_time_eval.py --kwargs_path data/forAadi/model_kwargs.pkl --weights_path data/forAadi/weights.pth --bins_dir_path data/TTbar_14TeV_TuneCUETP8M1_cfi/bins --save_path data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_pickles --repetitions 30 --sample_size 1000 --device gpu
 
