@@ -201,7 +201,7 @@ subword-nmt==0.3.3
 tabledata==0.9.1
 tabulate==0.8.5
 tensorboard==2.1.0
-tensorflow==2.1.0
+tensorflow==2.1.2
 tensorflow-estimator==2.1.0
 tensorrt==6.0.1.5
 termcolor==1.1.0
