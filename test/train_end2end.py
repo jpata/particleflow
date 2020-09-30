@@ -35,6 +35,8 @@ from torch_geometric.nn.inits import reset
 from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 from gravnet import GravNetConv
 
+import torch_cluster
+
 from glob import glob
 import numpy as np
 import os.path as osp
@@ -156,7 +158,7 @@ class PFNet7(nn.Module):
         output_dim_p4=4,
         convlayer="gravnet-knn",
         convlayer2="none",
-        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu", return_edges=False, radius=0.1):
+        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu", return_edges=False, radius=0.1, input_encoding=0):
 
         super(PFNet7, self).__init__()
 
@@ -172,11 +174,27 @@ class PFNet7(nn.Module):
             self.act = nn.ReLU
             self.act_f = torch.nn.functional.relu
         self.convlayer = convlayer
+        self.input_encoding = input_encoding
+
+        conv_in_dim = input_dim
+        if self.input_encoding>0:
+            self.nn1 = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                self.act(),
+                nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
+                nn.Linear(hidden_dim, hidden_dim),
+                self.act(),
+                nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
+                nn.Linear(hidden_dim, hidden_dim),
+                self.act(),
+                nn.Linear(hidden_dim, encoding_dim),
+            )
+            conv_in_dim = encoding_dim
 
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
+            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
+            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer))
 
@@ -184,6 +202,7 @@ class PFNet7(nn.Module):
         num_decode_in = input_dim + encoding_dim
 
         #run a second convolution
+        self.convlayer2 = convlayer2
         if convlayer2 == "none":
             self.conv2_1 = None 
             self.conv2_2 = None 
@@ -234,12 +253,15 @@ class PFNet7(nn.Module):
         #encode the inputs 
         x = data.x
  
+        if self.input_encoding:
+            x = self.nn1(x)
+
         #Run a clustering of the inputs that returns the new_edge_index
         new_edge_index, x = self.conv1(x)
         x1 = self.act_f(x)
 
         #run a second convolution
-        if self.conv2:
+        if self.convlayer2 != "none":
             conv2_input = torch.cat([data.x, x1], axis=-1)
             x2_1 = self.act_f(self.conv2_1(conv2_input, new_edge_index))
             x2_2 = self.act_f(self.conv2_2(conv2_input, new_edge_index))
@@ -250,7 +272,7 @@ class PFNet7(nn.Module):
         #Decode convolved graph nodes to pdgid and p4
         cand_ids = self.nn2(self.dropout1(nn2_input))
 
-        if self.conv2:
+        if self.convlayer2 != "none":
             nn3_input = torch.cat([data.x, x1, x2_2, cand_ids], axis=-1)
         else:
             nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
@@ -292,7 +314,9 @@ def parse_args():
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
     parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
+    parser.add_argument("--input-encoding", type=int, help="use an input encoding layer", default=0)
     parser.add_argument("--load", type=str, help="Load the weight file", required=False, default=None)
+    parser.add_argument("--scheduler", type=str, help="LR scheduler", required=False, default="none", choices=["none", "onecycle"])
     args = parser.parse_args()
     return args
 
@@ -340,7 +364,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
     num_samples = 0
     for i, data in enumerate(loader):
         t0 = time.time()
-        num_samples += len(data)
+        num_samples += data.batch[-1].cpu()+1.0
 
         if not multi_gpu:
             data = data.to(device)
@@ -396,7 +420,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), batch_loss_item, t1-t0), end='\r', flush=True)
         if is_train:
             optimizer.step()
-            scheduler.step()
+            if not scheduler is None:
+                scheduler.step()
 
         #Compute correlation of predicted and true pt values for monitoring
         corr_pt = 0.0 
@@ -437,118 +462,9 @@ def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corr
     np.savetxt(path+"accuracies_train.txt", accuracies)
     np.savetxt(path+"accuracies_val.txt", accuracies_v)
 
-if __name__ == "__main__":
-    args = parse_args()
-    
-    full_dataset = PFGraphDataset(args.dataset)
+def train_loop():
+    t0_initial = time.time()
 
-    #one-hot encoded element ID + element parameters
-    input_dim = 26
-
-    #one-hot particle ID and momentum
-    output_dim_id = len(class_to_id)
-    output_dim_p4 = 4
-
-    edge_dim = 1
-
-    patience = args.patience
-
-    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    val_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
-    print("train_dataset", len(train_dataset))
-    print("val_dataset", len(val_dataset))
-
-    #hack for multi-gpu training
-    if not multi_gpu:
-        def collate(items):
-            l = sum(items, [])
-            return Batch.from_data_list(l)
-    else:
-        def collate(items):
-            l = sum(items, [])
-            return l
-
-    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
-    train_loader.collate_fn = collate
-    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
-    val_loader.collate_fn = collate
-
-    model_class = model_classes[args.model]
-    model_kwargs = {'input_dim': input_dim,
-                    'hidden_dim': args.hidden_dim,
-                    'encoding_dim': args.encoding_dim,
-                    'output_dim_id': output_dim_id,
-                    'output_dim_p4': output_dim_p4,
-                    'dropout_rate': args.dropout,
-                    'convlayer': args.convlayer,
-                    'convlayer2': args.convlayer2,
-                    'radius': args.radius,
-                    'space_dim': args.space_dim,
-                    'activation': args.activation,
-                    'nearest': args.nearest}
-
-
-    #instantiate the model
-    model = model_class(**model_kwargs)
-    if args.load:
-        s1 = torch.load(args.load, map_location=torch.device('cpu'))
-        s2 = {k.replace("module.", ""): v for k, v in s1.items()}
-        model.load_state_dict(s2)
-
-    if multi_gpu:
-        model = torch_geometric.nn.DataParallel(model)
-
-    model.to(device)
-
-    model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
-    
-    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
-    experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
-    experiment.set_model_graph(repr(model))
-    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr, 'model_fname': model_fname,
-                                                    'l1': args.l1, 'l2':args.l2,
-                                                    'n_train':args.n_train, 'target':args.target, 'optimizer': args.optimizer}))
-    outpath = osp.join(args.outpath, model_fname)
-    if osp.isdir(outpath):
-        if args.overwrite:
-            print("model output {} already exists, deleting it".format(outpath))
-            import shutil
-            shutil.rmtree(outpath)
-        else:
-            print("model output {} already exists, please delete it".format(outpath))
-            sys.exit(0)
-    try:
-        os.makedirs(outpath)
-    except Exception as e:
-        pass
-
-    with open('{}/model_kwargs.pkl'.format(outpath), 'wb') as f:
-        pickle.dump(model_kwargs, f,  protocol=pickle.HIGHEST_PROTOCOL)
-      
-    if args.optimizer == "adam":  
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    elif args.optimizer == "adamw":  
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=args.lr,
-        steps_per_epoch=int(len(train_loader)),
-        epochs=args.n_epochs + 1,
-        anneal_strategy='linear',
-    )
-
-    loss = torch.nn.MSELoss()
-    loss2 = torch.nn.BCELoss()
-    
-    print(model)
-    print(model_fname)
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    print("params", params)
-    
-    model.train()
-    
     losses_train = np.zeros((args.n_epochs+1, 2))
     losses_val = np.zeros((args.n_epochs+1, 2))
 
@@ -559,9 +475,6 @@ if __name__ == "__main__":
     best_val_loss = 99999.9
     stale_epochs = 0
 
-    initial_epochs = 10
-   
-    t0_initial = time.time()
     print("Training over {} epochs".format(args.n_epochs))
     for j in range(args.n_epochs + 1):
         t0 = time.time()
@@ -625,7 +538,128 @@ if __name__ == "__main__":
 
         torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, j))
         
-        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
+        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.6f}/{:.6f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
             j, args.n_epochs,
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd, optimizer.param_groups[0]['lr']))
+
+if __name__ == "__main__":
+    args = parse_args()
+    
+    full_dataset = PFGraphDataset(args.dataset)
+
+    #one-hot encoded element ID + element parameters
+    input_dim = 26
+
+    #one-hot particle ID and momentum
+    output_dim_id = len(class_to_id)
+    output_dim_p4 = 4
+
+    edge_dim = 1
+
+    patience = args.patience
+
+    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
+    val_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
+    print("train_dataset", len(train_dataset))
+    print("val_dataset", len(val_dataset))
+
+    #hack for multi-gpu training
+    if not multi_gpu:
+        def collate(items):
+            l = sum(items, [])
+            return Batch.from_data_list(l)
+    else:
+        def collate(items):
+            l = sum(items, [])
+            return l
+
+    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
+    train_loader.collate_fn = collate
+    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
+    val_loader.collate_fn = collate
+
+    model_class = model_classes[args.model]
+    model_kwargs = {'input_dim': input_dim,
+                    'hidden_dim': args.hidden_dim,
+                    'encoding_dim': args.encoding_dim,
+                    'output_dim_id': output_dim_id,
+                    'output_dim_p4': output_dim_p4,
+                    'dropout_rate': args.dropout,
+                    'convlayer': args.convlayer,
+                    'convlayer2': args.convlayer2,
+                    'radius': args.radius,
+                    'space_dim': args.space_dim,
+                    'activation': args.activation,
+                    'nearest': args.nearest,
+                    'input_encoding': args.input_encoding}
+
+
+    #instantiate the model
+    model = model_class(**model_kwargs)
+    if args.load:
+        s1 = torch.load(args.load, map_location=torch.device('cpu'))
+        s2 = {k.replace("module.", ""): v for k, v in s1.items()}
+        model.load_state_dict(s2)
+
+    if multi_gpu:
+        model = torch_geometric.nn.DataParallel(model)
+
+    model.to(device)
+
+    model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
+    
+    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+    experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
+    experiment.set_model_graph(repr(model))
+    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr, 'model_fname': model_fname,
+                                                    'l1': args.l1, 'l2':args.l2,
+                                                    'n_train':args.n_train, 'target':args.target, 'optimizer': args.optimizer}))
+    outpath = osp.join(args.outpath, model_fname)
+    if osp.isdir(outpath):
+        if args.overwrite:
+            print("model output {} already exists, deleting it".format(outpath))
+            import shutil
+            shutil.rmtree(outpath)
+        else:
+            print("model output {} already exists, please delete it".format(outpath))
+            sys.exit(0)
+    try:
+        os.makedirs(outpath)
+    except Exception as e:
+        pass
+
+    with open('{}/model_kwargs.pkl'.format(outpath), 'wb') as f:
+        pickle.dump(model_kwargs, f,  protocol=pickle.HIGHEST_PROTOCOL)
+      
+    if args.optimizer == "adam":  
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    elif args.optimizer == "adamw":  
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+
+    scheduler = None
+    if args.scheduler == "onecycle":
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=args.lr,
+            steps_per_epoch=int(len(train_loader)),
+            epochs=args.n_epochs + 1,
+            anneal_strategy='linear',
+        )
+
+    loss = torch.nn.MSELoss()
+    loss2 = torch.nn.BCELoss()
+    
+    print(model)
+    print(model_fname)
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print("params", params)
+    
+    model.train()
+
+    train_loop()   
+    # with torch.autograd.profiler.profile(use_cuda=True) as prof:
+    #     train_loop()
+
+    # print(prof.key_averages().table(sort_by="cuda_time_total"))
