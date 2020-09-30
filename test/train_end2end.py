@@ -78,7 +78,7 @@ def prepare_dataframe(model, loader, multi_gpu, device):
         if not multi_gpu:
             data = data.to(device)
 
-        pred_id_onehot, pred_momentum, edges = model(data, return_edges=True)
+        pred_id_onehot, pred_momentum, new_edges = model(data)
         _, pred_id = torch.max(pred_id_onehot, -1)
         pred_momentum[pred_id==0] = 0
         if not multi_gpu:
@@ -91,6 +91,14 @@ def prepare_dataframe(model, loader, multi_gpu, device):
         cand_p4 = torch.cat([d.ycand[:, :4].to("cpu") for d in data])
 
         df = pandas.DataFrame()
+
+        df["elem_type"] = [int(graph_data.elem_labels[i]) for i in torch.argmax(x[:, :len(graph_data.elem_labels)], axis=-1).numpy()]
+        for ifeat, feat in enumerate([
+                'pt', 'eta', 'phi', 'e',
+                'layer', 'depth', 'charge', 'trajpoint',
+                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+                'muon_dt_hits', 'muon_csc_hits']):
+            df["elem_{}".format(feat)] = x[:, len(graph_data.elem_labels)+ifeat].numpy()
 
         df["elem_type"] = [int(graph_data.elem_labels[i]) for i in torch.argmax(x[:, :len(graph_data.elem_labels)], axis=-1).numpy()]
         df["gen_pid"] = [int(graph_data.class_labels[i]) for i in gen_id.numpy()]
@@ -111,15 +119,15 @@ def prepare_dataframe(model, loader, multi_gpu, device):
         df["pred_e"] = pred_momentum[:, 2].detach().cpu().numpy()
         df["pred_charge"] = pred_momentum[:, 3].detach().cpu().numpy()
 
-        dfs += [df]
-        df_edges = pandas.DataFrame()
-        df_edges["edge0"] = edges[0].to("cpu")
-        df_edges["edge1"] = edges[1].to("cpu")
-        dfs_edges += [df_edges]
+        #dfs += [df]
+        #df_edges = pandas.DataFrame()
+        #df_edges["edge0"] = edges[0].to("cpu")
+        #df_edges["edge1"] = edges[1].to("cpu")
+        #dfs_edges += [df_edges]
 
     df = pandas.concat(dfs, ignore_index=True)
-    df_edges = pandas.concat(dfs_edges, ignore_index=True)
-    return df, df_edges
+    #df_edges = pandas.concat(dfs_edges, ignore_index=True)
+    return df#, df_edges
 
 #Get a unique directory name for the model 
 def get_model_fname(dataset, model, n_train, lr, target_type):
@@ -147,23 +155,28 @@ class PFNet7(nn.Module):
         output_dim_id=len(class_to_id),
         output_dim_p4=4,
         convlayer="gravnet-knn",
-        convlayer2=None,
-        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu"):
+        convlayer2="none",
+        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu", return_edges=False, radius=0.1):
 
         super(PFNet7, self).__init__()
-     
+
+        self.return_edges = return_edges
+ 
         if activation == "leaky_relu": 
             self.act = nn.LeakyReLU
             self.act_f = torch.nn.functional.leaky_relu
         elif activation == "selu": 
             self.act = nn.SELU
             self.act_f = torch.nn.functional.selu
+        elif activation == "relu": 
+            self.act = nn.ReLU
+            self.act_f = torch.nn.functional.relu
         self.convlayer = convlayer
 
         if convlayer == "gravnet-knn":
             self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn") 
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius")
+            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer))
 
@@ -171,55 +184,52 @@ class PFNet7(nn.Module):
         num_decode_in = input_dim + encoding_dim
 
         #run a second convolution
-        if convlayer2 is None:
-            self.conv2 = None 
+        if convlayer2 == "none":
+            self.conv2_1 = None 
+            self.conv2_2 = None 
         elif convlayer2 == "sgconv":
-            self.conv2 = SGConv(num_decode_in, hidden_dim, K=1)
+            self.conv2_1 = SGConv(num_decode_in, hidden_dim, K=1)
+            self.conv2_2 = SGConv(num_decode_in, hidden_dim, K=1)
             num_decode_in += hidden_dim
         elif convlayer2 == "graphunet":
-            self.conv2 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            self.conv2_1 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
+            self.conv2_2 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
             num_decode_in += hidden_dim
         elif convlayer2 == "gatconv":
-            self.conv2 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            self.conv2_1 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
+            self.conv2_2 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
             num_decode_in += hidden_dim
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer2))
 
+        self.dropout1 = nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity()
 
         self.nn2 = nn.Sequential(
             nn.Linear(num_decode_in, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
+            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
+            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, output_dim_id),
         )
         self.nn3 = nn.Sequential(
             nn.Linear(num_decode_in + output_dim_id, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
+            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
+            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
             self.act(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim, output_dim_p4),
         )
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
 
-    def forward(self, data, return_edges=False):
+    def forward(self, data):
        
         #encode the inputs 
         x = data.x
@@ -231,24 +241,25 @@ class PFNet7(nn.Module):
         #run a second convolution
         if self.conv2:
             conv2_input = torch.cat([data.x, x1], axis=-1)
-            x2 = self.act_f(self.conv2(conv2_input, new_edge_index))
-            nn2_input = torch.cat([data.x, x1, x2], axis=-1)
+            x2_1 = self.act_f(self.conv2_1(conv2_input, new_edge_index))
+            x2_2 = self.act_f(self.conv2_2(conv2_input, new_edge_index))
+            nn2_input = torch.cat([data.x, x1, x2_1], axis=-1)
         else:
             nn2_input = torch.cat([data.x, x1], axis=-1)
 
         #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(nn2_input)
+        cand_ids = self.nn2(self.dropout1(nn2_input))
 
         if self.conv2:
-            nn3_input = torch.cat([data.x, x1, x2, cand_ids], axis=-1)
+            nn3_input = torch.cat([data.x, x1, x2_2, cand_ids], axis=-1)
         else:
             nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
 
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(nn3_input)
-        if not return_edges:
-            return cand_ids, cand_p4
-        else:
+        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(self.dropout1(nn3_input))
+        if self.return_edges:
             return cand_ids, cand_p4, new_edge_index
+        else:
+            return cand_ids, cand_p4
 
 model_classes = {
     "PFNet7": PFNet7,
@@ -261,7 +272,6 @@ def parse_args():
     parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
-    parser.add_argument("--n_plot", type=int, default=0, help="make plots every iterations")
     parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
     parser.add_argument("--encoding_dim", type=int, default=256, help="encoded element dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
@@ -269,14 +279,15 @@ def parse_args():
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
-    parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu"], help="activation function")
+    parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu", "relu"], help="activation function")
     parser.add_argument("--optimizer", type=str, default='adam', choices=["adam", "adamw"], help="optimizer to use")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
+    parser.add_argument("--radius", type=float, default=0.1, help="Radius-graph radius")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv"], help="Convolutional layer", default=None)
+    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv", "none"], help="Convolutional layer", default="none")
     parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
     parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
@@ -294,7 +305,7 @@ def weighted_mse_loss(input, target, weight):
 @torch.no_grad()
 def test(model, loader, epoch, l1m, l2m, target_type):
     with torch.no_grad(): 
-        ret = train(model, loader, epoch, None, l1m, l2m, target_type)
+        ret = train(model, loader, epoch, None, l1m, l2m, target_type, None)
     return ret
 
 def compute_weights(target_ids, device):
@@ -304,7 +315,7 @@ def compute_weights(target_ids, device):
         weights[k] = 1.0/math.sqrt(float(v))
     return weights
 
-def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
+def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
 
     is_train = not (optimizer is None)
 
@@ -385,6 +396,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
         print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), batch_loss_item, t1-t0), end='\r', flush=True)
         if is_train:
             optimizer.step()
+            scheduler.step()
 
         #Compute correlation of predicted and true pt values for monitoring
         corr_pt = 0.0 
@@ -406,6 +418,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type):
     return num_samples, losses, corr, acc, conf_matrix
 
 def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corrs_val, accuracies, accuracies_v, val_loader):
+    assert("DataParallel" not in model.__class__.__name__)
     try:
         os.makedirs(path)
     except Exception as e:
@@ -455,9 +468,9 @@ if __name__ == "__main__":
             l = sum(items, [])
             return l
 
-    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False, num_workers=1)
+    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
     train_loader.collate_fn = collate
-    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False, num_workers=1)
+    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
     val_loader.collate_fn = collate
 
     model_class = model_classes[args.model]
@@ -469,14 +482,11 @@ if __name__ == "__main__":
                     'dropout_rate': args.dropout,
                     'convlayer': args.convlayer,
                     'convlayer2': args.convlayer2,
+                    'radius': args.radius,
                     'space_dim': args.space_dim,
+                    'activation': args.activation,
                     'nearest': args.nearest}
 
-    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
-    experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
-    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr,
-                                                    'l1': args.l1, 'l2':args.l2,
-                                                    'n_train':args.n_train, 'target':args.target, 'optimizer': args.optimizer}))
 
     #instantiate the model
     model = model_class(**model_kwargs)
@@ -491,6 +501,13 @@ if __name__ == "__main__":
     model.to(device)
 
     model_fname = get_model_fname(args.dataset, model, args.n_train, args.lr, args.target)
+    
+    # need your api key in a .comet.config file: see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+    experiment = Experiment(project_name="particleflow", disabled=args.disable_comet)
+    experiment.set_model_graph(repr(model))
+    experiment.log_parameters(dict(model_kwargs, **{'model': args.model, 'lr':args.lr, 'model_fname': model_fname,
+                                                    'l1': args.l1, 'l2':args.l2,
+                                                    'n_train':args.n_train, 'target':args.target, 'optimizer': args.optimizer}))
     outpath = osp.join(args.outpath, model_fname)
     if osp.isdir(outpath):
         if args.overwrite:
@@ -512,6 +529,15 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     elif args.optimizer == "adamw":  
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=args.lr,
+        steps_per_epoch=int(len(train_loader)),
+        epochs=args.n_epochs + 1,
+        anneal_strategy='linear',
+    )
+
     loss = torch.nn.MSELoss()
     loss2 = torch.nn.BCELoss()
     
@@ -547,7 +573,8 @@ if __name__ == "__main__":
         with experiment.train():
             model.train()
             num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
-                                                                   args.l1, args.l2, args.target)
+                                                                   args.l1, args.l2, args.target, scheduler)
+            experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=j)
             l = sum(losses)
             losses_train[j] = losses
             corrs += [c]
@@ -584,32 +611,21 @@ if __name__ == "__main__":
         if l_v < best_val_loss:
             best_val_loss = l_v
             stale_epochs = 0
-            #make_plots(
-            #    model, j, "{0}/epoch_{1}/".format(outpath, "best"),
-            #    losses_train, losses_val, corrs, corrs_v,
-            #    accuracies, accuracies_v, val_loader)
         else:
             stale_epochs += 1
-
-        if args.n_plot > 0 and j > 0 and j%args.n_plot == 0:
-            make_plots(
-                model, j, "{0}/epoch_{1}/".format(outpath, j),
-                losses_train, losses_val, corrs, corrs_v,
-                accuracies, accuracies_v, val_loader)
  
         t1 = time.time()
         epochs_remaining = args.n_epochs - j
         time_per_epoch = (t1 - t0_initial)/(j + 1) 
+        experiment.log_metric('time_per_epoch', time_per_epoch, step=j)
         eta = epochs_remaining*time_per_epoch/60
 
         spd = (num_samples_val+num_samples_train)/time_per_epoch
         losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_v]) + "]"
-        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s".format(
+
+        torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, j))
+        
+        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.2f}/{:.2f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
             j, args.n_epochs,
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
-            losses_str, stale_epochs, eta, spd))
-
-    #make_plots(
-    #    model, j, "{0}/epoch_{1}/".format(outpath, "last"),
-    #    losses_train, losses_val, corrs, corrs_v,
-    #    accuracies, accuracies_v, val_loader)
+            losses_str, stale_epochs, eta, spd, optimizer.param_groups[0]['lr']))
