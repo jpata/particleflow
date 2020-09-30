@@ -34,7 +34,7 @@ class GravNetConv(MessagePassing):
     """
 
     def __init__(self, in_channels, out_channels, space_dimensions,
-                 propagate_dimensions, k, neighbor_algo="knn", **kwargs):
+                 propagate_dimensions, k, neighbor_algo="knn", radius=0.1, **kwargs):
         super(GravNetConv, self).__init__(**kwargs)
 
         if knn_graph is None:
@@ -43,6 +43,7 @@ class GravNetConv(MessagePassing):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.k = k
+        self.radius = radius
 
         self.lin_s = Linear(in_channels, space_dimensions)
         self.lin_flr = Linear(in_channels, propagate_dimensions)
@@ -65,7 +66,7 @@ class GravNetConv(MessagePassing):
             edge_index = knn_graph(spatial, self.k, batch, loop=False,
                                    flow=self.flow, cosine=True)
         elif self.neighbor_algo == "radius":
-            edge_index = radius_graph(spatial, 0.1, batch, loop=False,
+            edge_index = radius_graph(spatial, self.radius, batch, loop=False,
                                    flow=self.flow, max_num_neighbors=self.k)
         else:
             raise Exception("Unknown neighbor algo {}".format(self.neighbor_algo))

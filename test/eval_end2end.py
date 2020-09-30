@@ -59,7 +59,7 @@ if __name__ == "__main__":
     
     big_df, edges_df = train_end2end.prepare_dataframe(model, loader, False, device)
     
-    big_df.to_pickle("{}/test.pkl.bz2".format(path))
-    edges_df.to_pickle("{}/edges.pkl.bz2".format(path))
+    big_df.to_csv("{}/test.csv".format(path))
+    edges_df.to_csv("{}/edges.csv".format(path))
     print(big_df)
     print(edges_df)
