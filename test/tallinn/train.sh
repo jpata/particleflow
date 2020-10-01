@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 1
+#SBATCH --gpus 4
 
 cd ~/particleflow
 
@@ -11,9 +11,9 @@ cd ~/particleflow
 singularity exec -B /scratch -B /home --nv /home/software/singularity/base.simg:2020-09-04 \
   python3 test/train_end2end.py \
   --dataset /home/joosep/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi \
-  --n_train 100 --n_val 100 \
+  --n_train 4000 --n_val 1000 \
   --model PFNet7 --convlayer gravnet-radius --lr 0.0001 \
-  --hidden_dim 256 --n_epochs 20 \
-  --l1 1000.0 --l2 1.0 --space_dim 3 --nearest 3 --convlayer2 sgconv \
-  --target cand --batch_size 1 --activation leaky_relu \
+  --hidden_dim 256 --n_epochs 100 \
+  --l1 1000.0 --l2 0.0 --space_dim 3 --nearest 5 --convlayer2 sgconv \
+  --target cand --batch_size 4 --activation leaky_relu \
   --dropout 0.0 --encoding_dim 256 --optimizer adamw --radius 1.0

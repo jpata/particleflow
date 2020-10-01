@@ -364,7 +364,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
     num_samples = 0
     for i, data in enumerate(loader):
         t0 = time.time()
-        num_samples += data.batch[-1].cpu()+1.0
 
         if not multi_gpu:
             data = data.to(device)
@@ -377,6 +376,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         _, indices = torch.max(cand_id_onehot, -1)
         if not multi_gpu:
             data = [data]
+        num_samples += len(cand_id_onehot)
         
         if args.target == "gen":
             target_ids = torch.cat([d.y_gen_id for d in data]).to(_dev)
