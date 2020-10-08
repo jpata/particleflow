@@ -127,7 +127,7 @@ if __name__ == "__main__":
     pars = []
     for ichunk, files in enumerate(chunks(filelist, args.num_files_per_tfr)):
         pars += [(outpath, files, ichunk, args.target)]
-
+    #serialize_chunk(pars[0])
     pool = multiprocessing.Pool(20)
     pool.map(serialize_chunk, pars)
 
