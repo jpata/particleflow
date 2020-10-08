@@ -2,6 +2,7 @@ import os
 import time
 import glob
 import numpy as np
+from tf_model import batch_size
 
 def get_X(X,y,w):
     return X
@@ -33,6 +34,9 @@ if __name__ == "__main__":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
     import tensorflow as tf
+
+    tf.config.experimental_run_functions_eagerly(True)
+
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -41,6 +45,7 @@ if __name__ == "__main__":
     from tf_model import PFNet, PFNet2, prepare_df
     from tf_data import _parse_tfr_element
     tfr_files = glob.glob("{}/{}/*.tfrecords".format(args.datapath, args.target))
+    assert(len(tfr_files)>0)
     #tf.config.optimizer.set_jit(True)
 
     if args.nthreads > 0:
@@ -51,7 +56,6 @@ if __name__ == "__main__":
 
     nev = args.ntest
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
-    batch_size = 10
     dataset = tf.data.TFRecordDataset(tfr_files).map(
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
@@ -61,11 +65,14 @@ if __name__ == "__main__":
     elif args.model == "PFNet2":
         model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
 
-    #ensure model is compiled   
+    #ensure model is compiled
+    neval = 0
     for X in dataset_X:
         print(X.shape)
         model(X)
+        neval += 1
         break
+    assert(neval > 0)
 
     #load the weights
     model.load_weights(args.weights)
@@ -82,11 +89,12 @@ if __name__ == "__main__":
     print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/(nev/batch_size)))
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
-    full_model = tf.function(lambda x: model(x))
-    full_model = full_model.get_concrete_function(
-        tf.TensorSpec((10, 1000, 15), tf.float32))
+    
 
     # Get frozen ConcreteFunction
+    full_model = tf.function(lambda x: model(x))
+    full_model = full_model.get_concrete_function(
+        tf.TensorSpec((batch_size, 5000, 15), tf.float32))
     from tensorflow.python.framework import convert_to_constants
     frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
     frozen_func.graph.as_graph_def()

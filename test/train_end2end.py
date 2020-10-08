@@ -184,9 +184,6 @@ class PFNet7(nn.Module):
                 nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
                 nn.Linear(hidden_dim, hidden_dim),
                 self.act(),
-                nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-                nn.Linear(hidden_dim, hidden_dim),
-                self.act(),
                 nn.Linear(hidden_dim, encoding_dim),
             )
             conv_in_dim = encoding_dim
@@ -278,10 +275,7 @@ class PFNet7(nn.Module):
             nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
 
         cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(self.dropout1(nn3_input))
-        if self.return_edges:
-            return cand_ids, cand_p4, new_edge_index
-        else:
-            return cand_ids, cand_p4
+        return cand_ids, cand_p4, new_edge_index
 
 model_classes = {
     "PFNet7": PFNet7,
@@ -306,6 +300,7 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
     parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
+    parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--radius", type=float, default=0.1, help="Radius-graph radius")
     parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
@@ -327,9 +322,9 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, epoch, l1m, l2m, target_type):
+def test(model, loader, epoch, l1m, l2m, l3m, target_type):
     with torch.no_grad(): 
-        ret = train(model, loader, epoch, None, l1m, l2m, target_type, None)
+        ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type, None)
     return ret
 
 def compute_weights(target_ids, device):
@@ -339,7 +334,7 @@ def compute_weights(target_ids, device):
         weights[k] = 1.0/math.sqrt(float(v))
     return weights
 
-def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
+def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler):
 
     is_train = not (optimizer is None)
 
@@ -349,7 +344,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         model.eval()
 
     #loss values for each batch: classification, regression
-    losses = np.zeros((len(loader), 2))
+    losses = np.zeros((len(loader), 3))
 
     #accuracy values for each batch (monitor classification performance)
     accuracies_batch = np.zeros(len(loader))
@@ -371,7 +366,13 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         if is_train:
             optimizer.zero_grad()
 
-        cand_id_onehot, cand_momentum = model(data)
+        cand_id_onehot, cand_momentum, new_edge_index = model(data)
+        
+        nelem = data.x.shape[0]
+        assert(len(new_edge_index[0])>0)
+        mat1 = torch_geometric.utils.to_dense_adj(data.edge_index, max_num_nodes=nelem).flatten()
+        mat2 = torch_geometric.utils.to_dense_adj(new_edge_index, max_num_nodes=nelem).flatten()
+
         _dev = cand_id_onehot.device
         _, indices = torch.max(cand_id_onehot, -1)
         if not multi_gpu:
@@ -407,9 +408,12 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         else:
             l2 = torch.tensor(0.0).to(device=_dev)
 
+        l3 = l3m*torch.nn.functional.binary_cross_entropy(mat2, mat1)
+
         batch_loss = l1 + l2
         losses[i, 0] = l1.item()
         losses[i, 1] = l2.item()
+        losses[i, 2] = l3.item()
         
         if is_train:
             batch_loss.backward()
@@ -433,7 +437,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, target_type, scheduler):
         corrs_batch[i] = corr_pt
 
         conf_matrix += confusion_matrix(target_ids.detach().cpu().numpy(),
-                                        np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1))
+                                        np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1), labels=range(8))
         
         i += 1
 
@@ -465,8 +469,8 @@ def make_plots(model, n_epoch, path, losses_train, losses_val, corrs_train, corr
 def train_loop():
     t0_initial = time.time()
 
-    losses_train = np.zeros((args.n_epochs+1, 2))
-    losses_val = np.zeros((args.n_epochs+1, 2))
+    losses_train = np.zeros((args.n_epochs, 3))
+    losses_val = np.zeros((args.n_epochs, 3))
 
     corrs = []
     corrs_v = []
@@ -476,7 +480,7 @@ def train_loop():
     stale_epochs = 0
 
     print("Training over {} epochs".format(args.n_epochs))
-    for j in range(args.n_epochs + 1):
+    for j in range(args.n_epochs):
         t0 = time.time()
         
         if stale_epochs > patience:
@@ -486,7 +490,7 @@ def train_loop():
         with experiment.train():
             model.train()
             num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
-                                                                   args.l1, args.l2, args.target, scheduler)
+                                                                   args.l1, args.l2, args.l3, args.target, scheduler)
             experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=j)
             l = sum(losses)
             losses_train[j] = losses
@@ -495,6 +499,7 @@ def train_loop():
             experiment.log_metric('loss',l, step=j)
             experiment.log_metric('loss1',losses[0], step=j)
             experiment.log_metric('loss2',losses[1], step=j)
+            experiment.log_metric('loss3',losses[2], step=j)
             experiment.log_metric('corrs',c, step=j)
             experiment.log_metric('accuracy',acc, step=j)
             experiment.log_confusion_matrix(matrix=conf_matrix, step=j,
@@ -506,7 +511,7 @@ def train_loop():
         with experiment.validate():
             model.eval()
             num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, val_loader, j,
-                                                                        args.l1, args.l2, args.target)
+                                                                        args.l1, args.l2, args.l3, args.target)
             l_v = sum(losses_v)
             losses_val[j] = losses_v
             corrs_v += [c_v]
@@ -514,6 +519,7 @@ def train_loop():
             experiment.log_metric('loss',l_v, step=j)
             experiment.log_metric('loss1',losses_v[0], step=j)
             experiment.log_metric('loss2',losses_v[1], step=j)
+            experiment.log_metric('loss3',losses_v[2], step=j)
             experiment.log_metric('corrs',c_v, step=j)
             experiment.log_metric('accuracy',acc_v, step=j)
             experiment.log_confusion_matrix(matrix=conf_matrix_v, step=j,

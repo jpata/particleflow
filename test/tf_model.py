@@ -32,8 +32,93 @@ import scipy.special
 
 from mpnn import MessagePassing, ReadoutGraph, Aggregation
 
+#physical_devices = tf.config.list_physical_devices('GPU')
+#tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
+
+nbins = tf.constant(16)
+max_per_bin = tf.constant(128)
+min_per_bin = tf.constant(8)
+top_n_bins = tf.constant(16)
+bins = tf.cast(tf.linspace(-1.0, 1.0, nbins), tf.float32)
+batch_size = 4
+
+def sparse_dense_matmult_batch(sp_a, b):
+
+    def map_function(x):
+        i, dense_slice = x[0], x[1]
+        sparse_slice = tf.sparse.reshape(tf.sparse.slice(
+            sp_a, [i, 0, 0], [1, sp_a.dense_shape[1], sp_a.dense_shape[2]]),
+            [sp_a.dense_shape[1], sp_a.dense_shape[2]])
+        mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
+        return mult_slice
+
+    elems = (tf.range(0, sp_a.dense_shape[0], delta=1, dtype=tf.int64), b)
+    return tf.map_fn(map_function, elems, dtype=tf.float32, back_prop=True)
+
+@tf.function
+def valid_sparse_mat(n_points, sinds, bin_idx, bi, sp0, sp1):
+    dm = tf.reduce_sum(tf.math.squared_difference(sp0, sp1), axis=2)
+    
+    dists, top_inds = tf.nn.top_k(-dm, k=2)
+
+    nn_inds = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 1:])], axis=1)
+    nn_inds = tf.cast(nn_inds, dtype=tf.int64)
+
+    spt_this = tf.sparse.reorder(tf.sparse.SparseTensor(
+        nn_inds, tf.cast(-dists[:, 1], tf.float32), (n_points, n_points))
+    )
+    return spt_this
+
+@tf.function
+def loop_cond(spt, inds, bin_idx, bi, good_bin_inds, p0, p1):
+    return tf.less(bi, top_n_bins)
+
+@tf.function
+def loop_body(spt, inds, bin_idx, bi, good_bin_inds, p0, p1):
+    n_points = inds.shape[0]
+    mask = bin_idx == good_bin_inds[bi]
+    sinds = inds[mask][:max_per_bin]
+    sp0 = tf.gather(p0, sinds, axis=0)
+    sp1 = tf.gather(p1, sinds, axis=1)
+
+    spt_this = valid_sparse_mat(n_points, sinds, bin_idx, bi, sp0, sp1)
+    tf.sparse.add(spt, spt_this)
+    return [spt, inds, bin_idx, tf.add(bi, 1), good_bin_inds, p0, p1]
+
+@tf.function
+def construct_sparse_dm(points, points_lsh):
+    p0 = tf.expand_dims(points, 1)
+    p1 = tf.expand_dims(points, 0)
+    n_points = tf.constant(points.shape[0])
+    inds = tf.range(n_points)
+    
+    bin_idx1 = tf.searchsorted(bins, points_lsh[:, 0])
+    bin_idx2 = tf.searchsorted(bins, points_lsh[:, 1])
+    bin_idx = bin_idx1*nbins + bin_idx2
+    #bin_idx = tf.argmax(tf.nn.softmax(points_lsh, axis=-1), axis=-1)
+    uniqs = tf.unique_with_counts(bin_idx)
+    big_bins_mask = uniqs.count > min_per_bin
+
+    big_bins_y = uniqs.y[big_bins_mask]
+    big_bins_count = uniqs.count[big_bins_mask]
+    #tf.print(big_bins_count)
+
+    sort_inds = tf.argsort(big_bins_count, direction="DESCENDING")[:top_n_bins]
+    good_bin_inds = tf.gather(big_bins_y, sort_inds)
+    good_bin_counts = tf.gather(big_bins_count, sort_inds)
+
+    spt = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
+
+    # for bi in good_bin_inds:
+    #     spt_this = loop_body(spt, inds, bin_idx, bi, p0, p1)
+    #     spt = tf.sparse.add(spt, spt_this)
+    bi = tf.constant(0)
+    tf.while_loop(loop_cond, loop_body, [spt, inds, bin_idx, bi, good_bin_inds, p0, p1], parallel_iterations=1)
+
+    return spt
 
 def summarize_dataset(dataset):
     yclasses = []
@@ -91,60 +176,46 @@ def load_one_file(fn, num_clusters=10):
         ygen = event["ygen"]
         ycand = event["ycand"]
 
-        #keep only ECAL, HCAL, HF and tracks
-        #msk = (
-        #    (Xelem["typ"] == 1) | (Xelem["typ"] == 4) |
-        #    (Xelem["typ"] == 5) | (Xelem["typ"] == 8) |
-        #    (Xelem["typ"] == 9)
-        #)
-        #Xelem = Xelem[msk]
-        #ygen = ygen[msk]
-        #ycand = ycand[msk]
-        #ycand["typ"][ycand["typ"]==13] = 211
-        #msk2 = (ycand["typ"] == 1) | (ycand["typ"] == 2) | (ycand["typ"] == 211) | (ycand["typ"] == 130)
-        #ycand["typ"][~msk2] = 0
+        #remove PS from inputs, they don't seem to be very useful
+        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3)
+
+        Xelem = Xelem[~msk_ps]
+        ygen = ygen[~msk_ps]
+        ycand = ycand[~msk_ps]
 
         Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
         ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
         ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
     
-        #now preprocess the PFElements event up to num_clusters to simplify batched training
-        #this means that the network sees only a subset of the elements in the event in training during each weight update
-        clusters = sklearn.cluster.KMeans(n_clusters=num_clusters).fit_predict(np.stack([Xelem["eta"], Xelem["phi"]], axis=-1))
+        Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
+            'typ_idx',
+            'pt', 'eta', 'phi', 'e',
+            'layer', 'depth', 'charge', 'trajpoint',
+            'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+            'muon_dt_hits', 'muon_csc_hits']], axis=-1
+        )
+        ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
+            'typ_idx',
+            'eta', 'phi', 'e', 'charge',
+            ]], axis=-1
+        )
+        ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
+            'typ_idx',
+            'eta', 'phi', 'e', 'charge',
+            ]], axis=-1
+        )
 
-        print("clustered {} inputs for preprocessing".format(len(Xelem)))
-        #save each cluster separately
-        for cl in np.unique(clusters):
-            msk = clusters==cl
-            Xelem_flat = np.stack([Xelem[msk][k].view(np.float32).data for k in [
-                'typ_idx',
-                'pt', 'eta', 'phi', 'e',
-                'layer', 'depth', 'charge', 'trajpoint',
-                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
-                'muon_dt_hits', 'muon_csc_hits']], axis=-1
-            )
-            ygen_flat = np.stack([ygen[msk][k].view(np.float32).data for k in [
-                'typ_idx',
-                'eta', 'phi', 'e', 'charge',
-                ]], axis=-1
-            )
-            ycand_flat = np.stack([ycand[msk][k].view(np.float32).data for k in [
-                'typ_idx',
-                'eta', 'phi', 'e', 'charge',
-                ]], axis=-1
-            )
+        #take care of outliers
+        Xelem_flat[np.isnan(Xelem_flat)] = 0
+        Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+        ygen_flat[np.isnan(ygen_flat)] = 0
+        ygen_flat[np.abs(ygen_flat) > 1e4] = 0
+        ycand_flat[np.isnan(ycand_flat)] = 0
+        ycand_flat[np.abs(ycand_flat) > 1e4] = 0
 
-            #take care of outliers
-            Xelem_flat[np.isnan(Xelem_flat)] = 0
-            Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
-            ygen_flat[np.isnan(ygen_flat)] = 0
-            ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-            ycand_flat[np.isnan(ycand_flat)] = 0
-            ycand_flat[np.abs(ycand_flat) > 1e4] = 0
-
-            Xs += [Xelem_flat]
-            ys += [ygen_flat]
-            ys_cand += [ycand_flat]
+        Xs += [Xelem_flat]
+        ys += [ygen_flat]
+        ys_cand += [ycand_flat]
     
     print("created {} blocks, max size {}".format(len(Xs), max([len(X) for X in Xs])))
     return Xs, ys, ys_cand
@@ -164,6 +235,7 @@ class InputEncoding(tf.keras.layers.Layer):
         super(InputEncoding, self).__init__()
         self.num_input_classes = num_input_classes
         
+    @tf.function
     def call(self, X):
         #X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
 
@@ -173,28 +245,6 @@ class InputEncoding(tf.keras.layers.Layer):
         #X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
-
-#Given a list of [Nbatch, Nelem, Nfeat] input nodes, computes the dense [Nbatch, Nelem, Nelem] adjacency matrices
-class Distance(tf.keras.layers.Layer):
-
-    def __init__(self, dist_shape, *args, **kwargs):
-        super(Distance, self).__init__(*args, **kwargs)
-
-    def call(self, inputs1, inputs2):
-        #compute the pairwise distance matrix between the vectors defined by the first two components of the input array
-        #inputs1, inputs2: [Nbatch, Nelem, distance_dim] embedded coordinates used for element-to-element distance calculation
-        D = dist(inputs1, inputs2)
-      
-        #adjacency between two elements should be high if the distance is small.
-        #this is equivalent to radial basis functions. 
-        #self-loops adj_{i,i}=1 are included, as D_{i,i}=0 by construction
-        adj = tf.math.exp(-1.0*D)
-
-        #optionally set the adjacency matrix to 0 for low values in order to make the matrix sparse.
-        #need to test if this improves the result.
-        #adj = tf.keras.activations.relu(adj, threshold=0.01)
-
-        return adj
 
 #https://arxiv.org/pdf/2004.04635.pdf
 #https://github.com/gcucurull/jax-ghnet/blob/master/models.py 
@@ -211,16 +261,17 @@ class GHConv(tf.keras.layers.Layer):
         self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
         self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
  
+    @tf.function
     def call(self, x, adj):
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.reduce_sum(adj, axis=-1)
+        in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
         #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
-        norm_k = tf.pow(norm, self.k)
-        adj_k = tf.pow(adj, self.k)
+        #norm_k = tf.pow(norm, self.k)
+        #adj_k = tf.pow(adj, self.k)
 
         f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = tf.linalg.matmul(adj_k, f_hom*norm_k)*norm_k
+        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm)*norm
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
@@ -234,21 +285,22 @@ class SGConv(tf.keras.layers.Dense):
         super(SGConv, self).__init__(*args, **kwargs)
         self.k = k
     
+    @tf.function
     def call(self, inputs, adj):
         W = self.weights[0]
         b = self.weights[1]
 
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.reduce_sum(adj, axis=-1)
+        in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
         #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
         norm_k = tf.pow(norm, self.k)
 
-        support = (tf.linalg.matmul(inputs, W))
+        support = tf.linalg.matmul(inputs, W)
      
         #k-th power of the normalized adjacency matrix is nearly equivalent to k consecutive GCN layers
-        adj_k = tf.pow(adj, self.k)
-        out = tf.linalg.matmul(adj_k, support*norm_k)*norm_k
+        #adj_k = tf.pow(adj, self.k)
+        out = sparse_dense_matmult_batch(adj, support*norm)*norm
 
         return self.activation(out + b)
 
@@ -261,12 +313,7 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
 
-        self.layer_distcoords1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords1")
-        self.layer_distcoords2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords2")
-        self.layer_distcoords3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="distcoords3")
-        self.layer_distcoords = tf.keras.layers.Dense(distance_dim, activation="linear", name="distcoords")
-
-        self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
+        self.layer_input1 = tf.keras.layers.Dense(hidden_dim*2, activation=activation, name="input1")
         self.layer_input1_do = tf.keras.layers.Dropout(dropout)
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
         self.layer_input2_do = tf.keras.layers.Dropout(dropout)
@@ -280,7 +327,7 @@ class PFNet(tf.keras.Model):
         self.layer_input3_momentum = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="input3_momentum")
         self.layer_input3_momentum_do = tf.keras.layers.Dropout(dropout)
         
-        self.layer_dist = Distance(distance_dim, name="distance")
+        #self.layer_dist = Distance(distance_dim, name="distance")
 
         if convlayer == "sgconv":
             self.layer_conv1 = SGConv(num_conv, 2*hidden_dim, activation=activation, name="conv1")
@@ -300,30 +347,26 @@ class PFNet(tf.keras.Model):
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
  
+    @tf.function
     def predict_distancematrix(self, inputs, training=True):
+        distcoords = inputs
 
-        enc = self.activation(self.enc(inputs))
-        x = self.layer_distcoords1(enc)
-        x = self.layer_distcoords2(x)
-        x = self.layer_distcoords3(x)
-        distcoords = self.layer_distcoords(x)
+        dms = []
+        for ibatch in range(batch_size):
+            dms.append(tf.sparse.expand_dims(construct_sparse_dm(distcoords[ibatch, :, :-2], distcoords[ibatch, :, -2:]), 0))
 
-        dm = self.layer_dist(distcoords, distcoords)
+        dms = tf.sparse.concat(0, dms)
+        return dms
 
-        msk_elem = tf.expand_dims(tf.cast(inputs[:, :, 0] != 0, dtype=tf.float32), -1)
-        dm = dm*msk_elem
-
-        return enc, dm
-
-    #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
+    #@tf.function
     def call(self, inputs, training=True):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
-
-        enc, dm = self.predict_distancematrix(X, training=training)
+        enc = self.activation(self.enc(inputs))
 
         x = self.layer_input1(enc)
-        x = self.layer_input1_do(x, training)
+        dm = self.predict_distancematrix(x[:, :, :256], training=training)
+        x = self.layer_input1_do(x[:, :, 256:], training)
         x = self.layer_input2(x)
         x = self.layer_input2_do(x, training)
         x = self.layer_input3(x)
@@ -530,7 +573,6 @@ def cls_130(y_true, y_pred):
     msk_pos = pred_id == class_labels.index(130)
     num_true_pos = tf.reduce_sum(tf.cast(msk_true&msk_pos, tf.float32))
     num_true = tf.reduce_sum(tf.cast(msk_true, tf.float32))
-
     return num_true_pos/num_true
 
 def cls_211(y_true, y_pred):
@@ -739,7 +781,7 @@ def load_dataset_gun():
     return dataset
 
 def load_dataset_ttbar(datapath):
-    path = datapath + "/tfr3/{}/*.tfrecords".format(args.target)
+    path = datapath + "/tfr/{}/*.tfrecords".format(args.target)
     tfr_files = glob.glob(path)
     if len(tfr_files) == 0:
         raise Exception("Could not find any files in {}".format(path))
@@ -749,6 +791,7 @@ def load_dataset_ttbar(datapath):
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
     tf.config.experimental_run_functions_eagerly(True)
+
 
     args = parse_args()
 
@@ -771,10 +814,9 @@ if __name__ == "__main__":
     dataset = load_dataset_ttbar(args.datapath)
 
     ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
-    batch_size = 10
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
- 
+
     ds_train_r = ds_train.repeat(args.nepochs)
     ds_test_r = ds_test.repeat(args.nepochs)
 
@@ -855,9 +897,10 @@ if __name__ == "__main__":
             metrics=[cls_130, cls_211, cls_22, energy_resolution, eta_resolution, phi_resolution],
             sample_weight_mode="temporal")
 
-        for X, y, w in ds_train:
-            ypred = model(X)
-            l = loss_fn(y, ypred)
+        # for X, y, w in ds_train:
+        #     ypred = model(X)
+        #     l = loss_fn(y, ypred)
+        #     cls_130(y, ypred)
 
         if args.load:
             #ensure model input size is known
