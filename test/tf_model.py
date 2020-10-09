@@ -30,7 +30,6 @@ from numpy.lib.recfunctions import append_fields
 import scipy
 import scipy.special
 
-from mpnn import MessagePassing, ReadoutGraph, Aggregation
 
 #physical_devices = tf.config.list_physical_devices('GPU')
 #tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -39,7 +38,7 @@ elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
 #LSH bins
-nbins = 8
+nbins = 16
 bins = tf.cast(tf.linspace(-1.0, 1.0, nbins), tf.float32)
 
 #truncate elements beyond this cutoff in a single bin (to avoid too large dense-dense multiplications)
@@ -190,7 +189,7 @@ weight_schemes = {
     "classbalanced": compute_weights_classbalanced,
 }
 
-def load_one_file(fn, num_clusters=10):
+def load_one_file(fn):
     Xs = []
     ys = []
     ys_cand = []
@@ -341,7 +340,7 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
 
-        self.layer_input_dist = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input_dist")
+        self.layer_input_dist = tf.keras.layers.Dense(distance_dim, activation=activation, name="input_dist")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input1_do = tf.keras.layers.Dropout(dropout)
@@ -356,8 +355,6 @@ class PFNet(tf.keras.Model):
         self.layer_input2_momentum_do = tf.keras.layers.Dropout(dropout)
         self.layer_input3_momentum = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="input3_momentum")
         self.layer_input3_momentum_do = tf.keras.layers.Dropout(dropout)
-        
-        #self.layer_dist = Distance(distance_dim, name="distance")
 
         if convlayer == "sgconv":
             self.layer_conv1 = SGConv(num_conv, 2*hidden_dim, activation=activation, name="conv1")
@@ -430,77 +427,6 @@ class PFNet(tf.keras.Model):
         ], axis=-1)
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
-        return ret
-
-#Based on MPNN, implemented by KX
-class PFNet2(tf.keras.Model):
-    def __init__(self, hidden_sizes=[128, 128], num_outputs=128, state_dim=16, update_steps=3, activation=tf.nn.selu, hidden_dim=256):
-        #super(PFNet2, self).__init__()
-        self.activation = activation
-
-        self.enc = InputEncoding(len(elem_labels))
-
-        self.update_steps = int(update_steps)
-        self.node_embedding = tf.keras.layers.Dense(units=state_dim, activation=activation)
-        self.message_passing = MessagePassing(state_dim=state_dim)
-        self.readout_func = ReadoutGraph(hidden_sizes, num_outputs, Aggregation('sum', 2))
-
-        self.layer_id1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="id1")
-        self.layer_id2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id2")
-        self.layer_id3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="id3")
-        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
-        self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
-        
-        self.layer_momentum1 = tf.keras.layers.Dense(2*hidden_dim, activation=activation, name="momentum1")
-        self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
-        self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
-        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
- 
-
-    #@tf.function(input_signature=[tf.TensorSpec(shape=[None, 15], dtype=tf.float32)])
-    def call(self, inputs, training=True):
-        x = self.enc(inputs)
-        nodes = x
-        bs = nodes.shape[0] 
-        bs = 10
-        node_elem = nodes.shape[1] # number of particles (elements)
-        node_cols = nodes.shape[2] #25 is the node.shape[1] after encoding
-        edges = tf.constant(0, dtype = "float32", shape= [bs,  np.power(node_elem, 2), 1])
-        edge_masks = tf.cast(tf.random.uniform([bs,np.power(node_elem,2), 1], 
-                                        minval=0, maxval=2, dtype=tf.dtypes.int32), dtype=tf.dtypes.float32)
-        states = self.node_embedding(nodes)
-
-        for time_step in range(self.update_steps):
-            states = self.message_passing(states, edges, edge_masks, training=training)
-        node_masks = tf.constant(1., dtype = "float32", shape= [bs, node_elem,1]) 
-        readout = self.readout_func(states, node_masks, training=training)
-        
-        x = self.layer_id1(readout)
-        x = self.layer_id2(x)
-        x = self.layer_id3(x)
-        out_id_logits = self.layer_id(x)
-        out_charge = self.layer_charge(x)
-
-        x = self.layer_momentum1(readout)
-        x = self.layer_momentum2(x)
-        x = self.layer_momentum3(x)
-        pred_corr = self.layer_momentum(x)
-
-        #add predicted momentum correction to original momentum components (2,3,4) = (eta, phi, E) 
-        out_id = tf.argmax(out_id_logits, axis=-1)
-        msk_good = tf.cast(out_id != 0, tf.float32)
-
-        out_momentum_eta = inputs[:, :, 2] + pred_corr[:, :, 0]
-        out_momentum_phi = inputs[:, :, 3] + pred_corr[:, :, 1] 
-        out_momentum_E = inputs[:, :, 4] + pred_corr[:, :, 2]
-
-        out_momentum = tf.stack([
-            out_momentum_eta,
-            out_momentum_phi,
-            out_momentum_E,
-        ], axis=-1)
-
-        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)
         return ret
 
 #@tf.function
@@ -697,7 +623,7 @@ def get_unique_run():
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet", "PFNet2"])
+    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet"])
     parser.add_argument("--ntrain", type=int, default=100, help="number of training events")
     parser.add_argument("--ntest", type=int, default=100, help="number of testing events")
     parser.add_argument("--nepochs", type=int, default=100, help="number of training epochs")
@@ -820,11 +746,13 @@ if __name__ == "__main__":
 
     args = parse_args()
 
+    global_batch_size = batch_size
     try:
         num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
         print("num_gpus=", num_gpus)
         if num_gpus > 1:
             strategy = tf.distribute.MirroredStrategy()
+            global_batch_size = num_gpus * batch_size
         else:
             strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     except Exception as e:
@@ -835,12 +763,11 @@ if __name__ == "__main__":
 
     from tf_data import _parse_tfr_element
 
-    #dataset = load_dataset_gun()
     dataset = load_dataset_ttbar(args.datapath)
 
     ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
-    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
 
     ds_train_r = ds_train.repeat(args.nepochs)
     ds_test_r = ds_test.repeat(args.nepochs)
@@ -848,7 +775,7 @@ if __name__ == "__main__":
     if args.lr_decay > 0:
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             args.lr,
-            decay_steps=10*int(args.ntrain/batch_size),
+            decay_steps=10*int(args.ntrain/global_batch_size),
             decay_rate=args.lr_decay
         )
     else:
@@ -857,10 +784,8 @@ if __name__ == "__main__":
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
-        if args.model == "PFNet":
-            model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
-        elif args.model == "PFNet2":
-            model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
+        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
+
         if use_eager:
             model(np.random.randn(batch_size, num_max_elems, 15).astype(np.float32))
         else:
@@ -882,7 +807,7 @@ if __name__ == "__main__":
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=10, write_graph=True, write_images=False,
+        log_dir=outdir, histogram_freq=0, write_graph=True, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,90),
         profile_batch=0,
@@ -943,7 +868,7 @@ if __name__ == "__main__":
         if args.nepochs > 0:
             ret = model.fit(ds_train_r,
                 validation_data=ds_test_r, epochs=args.nepochs,
-                steps_per_epoch=args.ntrain/batch_size, validation_steps=args.ntest/batch_size,
+                steps_per_epoch=args.ntrain/global_batch_size, validation_steps=args.ntest/global_batch_size,
                 verbose=True,
                 callbacks=callbacks
             )
