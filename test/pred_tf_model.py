@@ -2,7 +2,6 @@ import os
 import time
 import glob
 import numpy as np
-from tf_model import batch_size
 
 def get_X(X,y,w):
     return X
@@ -35,11 +34,12 @@ if __name__ == "__main__":
 
     import tensorflow as tf
 
-    tf.config.experimental_run_functions_eagerly(True)
-
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.config.experimental_run_functions_eagerly(False)
+
+    from tf_model import batch_size, num_max_elems
 
     tf.gfile = tf.io.gfile
     from tf_model import PFNet, PFNet2, prepare_df
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         tf.config.set_visible_devices([], 'GPU')
 
     nev = args.ntest
-    ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
+    ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
     dataset = tf.data.TFRecordDataset(tfr_files).map(
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
@@ -64,6 +64,7 @@ if __name__ == "__main__":
         model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
     elif args.model == "PFNet2":
         model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
+    model = model.create_model()
 
     #ensure model is compiled
     neval = 0
@@ -86,6 +87,7 @@ if __name__ == "__main__":
         model.predict_on_batch(X)
     print()
     t1 = time.time()
+    time_per_dsrow = (t1-t0)/len(dataset_X)
     print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/(nev/batch_size)))
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
@@ -94,7 +96,7 @@ if __name__ == "__main__":
     # Get frozen ConcreteFunction
     full_model = tf.function(lambda x: model(x))
     full_model = full_model.get_concrete_function(
-        tf.TensorSpec((batch_size, 5000, 15), tf.float32))
+        tf.TensorSpec((batch_size, num_max_elems, 15), tf.float32))
     from tensorflow.python.framework import convert_to_constants
     frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
     frozen_func.graph.as_graph_def()
@@ -106,4 +108,4 @@ if __name__ == "__main__":
                       name="frozen_graph.pb",
                       as_text=False)
 
-    model.save('model', overwrite=True, include_optimizer=False)
+    #model.save('model', overwrite=True, include_optimizer=False)

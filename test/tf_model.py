@@ -38,13 +38,19 @@ from mpnn import MessagePassing, ReadoutGraph, Aggregation
 elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
 
-nbins = tf.constant(16)
-max_per_bin = tf.constant(128)
-min_per_bin = tf.constant(8)
-top_n_bins = tf.constant(16)
+#LSH bins
+nbins = 8
 bins = tf.cast(tf.linspace(-1.0, 1.0, nbins), tf.float32)
-batch_size = 4
 
+#truncate elements beyond this cutoff in a single bin (to avoid too large dense-dense multiplications)
+max_per_bin = tf.constant(256)
+top_n_bins = nbins*nbins
+batch_size = 10
+num_max_elems = 5000
+use_eager = False
+attention_layer_cutoff = 0.2
+
+#@tf.function
 def sparse_dense_matmult_batch(sp_a, b):
 
     def map_function(x):
@@ -58,67 +64,87 @@ def sparse_dense_matmult_batch(sp_a, b):
     elems = (tf.range(0, sp_a.dense_shape[0], delta=1, dtype=tf.int64), b)
     return tf.map_fn(map_function, elems, dtype=tf.float32, back_prop=True)
 
-@tf.function
-def valid_sparse_mat(n_points, sinds, bin_idx, bi, sp0, sp1):
-    dm = tf.reduce_sum(tf.math.squared_difference(sp0, sp1), axis=2)
-    
-    dists, top_inds = tf.nn.top_k(-dm, k=2)
+#@tf.function
+def valid_sparse_mat(n_points, sinds, bin_idx, bi, subpoints):
+    #dm = tf.reduce_sum(tf.math.squared_difference(sp0, sp1), axis=2)
+    dm = tf.matmul(subpoints, subpoints, transpose_a=True)
+    dm = tf.nn.softmax(dm)
 
-    nn_inds = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 1:])], axis=1)
-    nn_inds = tf.cast(nn_inds, dtype=tf.int64)
+    mask = tf.cast(dm>attention_layer_cutoff, tf.float32)
+    dm = dm * mask
+    spt_small = tf.sparse.from_dense(dm)
+    spt_this = tf.sparse.SparseTensor(tf.cast(tf.gather(sinds, spt_small.indices), tf.int64), tf.exp(-1.0*spt_small.values), (n_points, n_points))
 
-    spt_this = tf.sparse.reorder(tf.sparse.SparseTensor(
-        nn_inds, tf.cast(-dists[:, 1], tf.float32), (n_points, n_points))
-    )
+    #print(len(spt_this.indices))
+    #tf.print(spt_this.indices)
+    # dists, top_inds = tf.nn.top_k(-dm, k=4)
+
+    # #top_inds[:, 1:2] are the indices of the nearest neighbor, excluding the element itself
+    # #create a [src, dst] pair array by concatenating the original index and the found neighbor 
+    # nn_inds1 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 1:2])], axis=1)
+    # nn_inds1 = tf.cast(nn_inds1, dtype=tf.int64)
+
+    # #top_inds[:, 2:3] are the indices of the second nearest neighbor, excluding the element itself
+    # nn_inds2 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 2:3])], axis=1)
+    # nn_inds2 = tf.cast(nn_inds2, dtype=tf.int64)
+
+    # nn_inds3 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 3:4])], axis=1)
+    # nn_inds3 = tf.cast(nn_inds3, dtype=tf.int64)
+
+    # spt_this1 = tf.sparse.reorder(tf.sparse.SparseTensor(
+    #     nn_inds1, tf.cast(-dists[:, 1], tf.float32), (n_points, n_points))
+    # )
+    # spt_this2 = tf.sparse.reorder(tf.sparse.SparseTensor(
+    #     nn_inds2, tf.cast(-dists[:, 2], tf.float32), (n_points, n_points))
+    # )
+    # spt_this3 = tf.sparse.reorder(tf.sparse.SparseTensor(
+    #     nn_inds2, tf.cast(-dists[:, 3], tf.float32), (n_points, n_points))
+    # )
+    # spt_this = tf.sparse.add(spt_this1, spt_this2)
+    # spt_this = tf.sparse.add(spt_this, spt_this3)
+
     return spt_this
 
-@tf.function
-def loop_cond(spt, inds, bin_idx, bi, good_bin_inds, p0, p1):
-    return tf.less(bi, top_n_bins)
+#@tf.function
+def loop_cond(spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points):
+    return tf.math.less(lsh_bin_index, tf.math.minimum(tf.shape(good_bin_inds)[0], top_n_bins))
 
-@tf.function
-def loop_body(spt, inds, bin_idx, bi, good_bin_inds, p0, p1):
+#@tf.function
+def loop_body(spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points):
     n_points = inds.shape[0]
-    mask = bin_idx == good_bin_inds[bi]
+    #in case the bin index is out of range, take the last bin
+    mask = bin_idx == good_bin_inds[tf.minimum(lsh_bin_index, tf.shape(good_bin_inds)[0]-1)]
     sinds = inds[mask][:max_per_bin]
-    sp0 = tf.gather(p0, sinds, axis=0)
-    sp1 = tf.gather(p1, sinds, axis=1)
+    subpoints = tf.gather(points, sinds, axis=0)
 
-    spt_this = valid_sparse_mat(n_points, sinds, bin_idx, bi, sp0, sp1)
+    spt_this = valid_sparse_mat(n_points, sinds, bin_idx, lsh_bin_index, subpoints)
     tf.sparse.add(spt, spt_this)
-    return [spt, inds, bin_idx, tf.add(bi, 1), good_bin_inds, p0, p1]
+    return [spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points]
 
-@tf.function
+#@tf.function(input_signature=[tf.TensorSpec(shape=(6000,254)), tf.TensorSpec(shape=(6000, 2)), ])
 def construct_sparse_dm(points, points_lsh):
-    p0 = tf.expand_dims(points, 1)
-    p1 = tf.expand_dims(points, 0)
     n_points = tf.constant(points.shape[0])
     inds = tf.range(n_points)
-    
-    bin_idx1 = tf.searchsorted(bins, points_lsh[:, 0])
-    bin_idx2 = tf.searchsorted(bins, points_lsh[:, 1])
-    bin_idx = bin_idx1*nbins + bin_idx2
-    #bin_idx = tf.argmax(tf.nn.softmax(points_lsh, axis=-1), axis=-1)
+
+    #put each input item into a bin defined by the softmax ouptut across the LSH embedding
+    bin_idx = tf.argmax(tf.nn.softmax(points_lsh, axis=-1), axis=-1)
     uniqs = tf.unique_with_counts(bin_idx)
-    big_bins_mask = uniqs.count > min_per_bin
 
-    big_bins_y = uniqs.y[big_bins_mask]
-    big_bins_count = uniqs.count[big_bins_mask]
-    #tf.print(big_bins_count)
+    sort_inds = tf.argsort(uniqs.count, direction="DESCENDING")[:top_n_bins]
+    good_bin_inds = tf.gather(uniqs.y, sort_inds)
+    good_bin_counts = tf.gather(uniqs.count, sort_inds)
 
-    sort_inds = tf.argsort(big_bins_count, direction="DESCENDING")[:top_n_bins]
-    good_bin_inds = tf.gather(big_bins_y, sort_inds)
-    good_bin_counts = tf.gather(big_bins_count, sort_inds)
+    sparse_distance_matrix = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
 
-    spt = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
+    #loop over each LSH bin, prepare sparse distance matrix in bin, update final sparse distance matrix
+    lsh_bin_index = tf.constant(0)
 
-    # for bi in good_bin_inds:
-    #     spt_this = loop_body(spt, inds, bin_idx, bi, p0, p1)
-    #     spt = tf.sparse.add(spt, spt_this)
-    bi = tf.constant(0)
-    tf.while_loop(loop_cond, loop_body, [spt, inds, bin_idx, bi, good_bin_inds, p0, p1], parallel_iterations=1)
+    #manually unrolled while_loop, otherwise can't profile or run in graph mode
+    for i in range(top_n_bins):
+        loop_body(sparse_distance_matrix, inds, bin_idx, i, good_bin_inds, points)
+    #tf.while_loop(loop_cond, loop_body, [sparse_distance_matrix, inds, bin_idx, lsh_bin_index, good_bin_inds, points], parallel_iterations=1)
 
-    return spt
+    return sparse_distance_matrix
 
 def summarize_dataset(dataset):
     yclasses = []
@@ -161,7 +187,7 @@ def compute_weights_inverse(X, y, w):
 weight_schemes = {
     "uniform": compute_weights_uniform,
     "inverse": compute_weights_inverse,
-    "classbalanced": compute_weights_inverse,
+    "classbalanced": compute_weights_classbalanced,
 }
 
 def load_one_file(fn, num_clusters=10):
@@ -213,34 +239,25 @@ def load_one_file(fn, num_clusters=10):
         ycand_flat[np.isnan(ycand_flat)] = 0
         ycand_flat[np.abs(ycand_flat) > 1e4] = 0
 
-        Xs += [Xelem_flat]
-        ys += [ygen_flat]
-        ys_cand += [ycand_flat]
+        Xs += [Xelem_flat[:num_max_elems]]
+        ys += [ygen_flat[:num_max_elems]]
+        ys_cand += [ycand_flat[:num_max_elems]]
     
     print("created {} blocks, max size {}".format(len(Xs), max([len(X) for X in Xs])))
     return Xs, ys, ys_cand
 
-def dist(A,B):
-    na = tf.reduce_sum(tf.square(A), -1)
-    nb = tf.reduce_sum(tf.square(B), -1)
- 
-    na = tf.reshape(na, [tf.shape(na)[0], -1, 1])
-    nb = tf.reshape(nb, [tf.shape(na)[0], 1, -1])
-    Dsq = tf.clip_by_value(na - 2*tf.linalg.matmul(A, B, transpose_a=False, transpose_b=True) + nb, 1e-12, 1e12)
-    D = tf.sqrt(Dsq)
-    return D
 
 class InputEncoding(tf.keras.layers.Layer):
     def __init__(self, num_input_classes):
         super(InputEncoding, self).__init__()
         self.num_input_classes = num_input_classes
         
-    @tf.function
+    #@tf.function
     def call(self, X):
         #X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
 
         #X[:, :, 0] - categorical index of the element type
-        Xid = tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes)
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=tf.float32)
 
         #X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
@@ -261,7 +278,7 @@ class GHConv(tf.keras.layers.Layer):
         self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
         self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
  
-    @tf.function
+    #@tf.function
     def call(self, x, adj):
         #compute the normalization of the adjacency matrix
         in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
@@ -285,7 +302,7 @@ class SGConv(tf.keras.layers.Dense):
         super(SGConv, self).__init__(*args, **kwargs)
         self.k = k
     
-    @tf.function
+    #@tf.function
     def call(self, inputs, adj):
         W = self.weights[0]
         b = self.weights[1]
@@ -304,6 +321,17 @@ class SGConv(tf.keras.layers.Dense):
 
         return self.activation(out + b)
 
+#@tf.function
+def predict_distancematrix(inputs):
+    distcoords = inputs
+
+    dms = []
+    for ibatch in range(batch_size):
+        dms.append(tf.sparse.expand_dims(construct_sparse_dm(distcoords[ibatch, :, top_n_bins:], distcoords[ibatch, :, :top_n_bins]), 0))
+
+    dms = tf.sparse.concat(0, dms)
+    return dms
+
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     
@@ -313,7 +341,9 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
 
-        self.layer_input1 = tf.keras.layers.Dense(hidden_dim*2, activation=activation, name="input1")
+        self.layer_input_dist = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input_dist")
+
+        self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input1_do = tf.keras.layers.Dropout(dropout)
         self.layer_input2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input2")
         self.layer_input2_do = tf.keras.layers.Dropout(dropout)
@@ -346,27 +376,22 @@ class PFNet(tf.keras.Model):
         self.layer_momentum2 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum2")
         self.layer_momentum3 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="momentum3")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
- 
-    @tf.function
-    def predict_distancematrix(self, inputs, training=True):
-        distcoords = inputs
 
-        dms = []
-        for ibatch in range(batch_size):
-            dms.append(tf.sparse.expand_dims(construct_sparse_dm(distcoords[ibatch, :, :-2], distcoords[ibatch, :, -2:]), 0))
+    def create_model(self):
+        inputs = tf.keras.Input(shape=(num_max_elems,15,))
+        return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs), name="MLPFNet")
 
-        dms = tf.sparse.concat(0, dms)
-        return dms
-
-    #@tf.function
+    #@tf.function#(input_signature=[tf.TensorSpec(shape=(4,6000,15)), ])
     def call(self, inputs, training=True):
-        X = inputs
+        X = tf.cast(inputs, tf.float32)
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
-        enc = self.activation(self.enc(inputs))
+        enc = self.enc(inputs)
+
+        x = self.layer_input_dist(enc)
+        dm = predict_distancematrix(x)
 
         x = self.layer_input1(enc)
-        dm = self.predict_distancematrix(x[:, :, :256], training=training)
-        x = self.layer_input1_do(x[:, :, 256:], training)
+        x = self.layer_input1_do(x, training)
         x = self.layer_input2(x)
         x = self.layer_input2_do(x, training)
         x = self.layer_input3(x)
@@ -410,7 +435,7 @@ class PFNet(tf.keras.Model):
 #Based on MPNN, implemented by KX
 class PFNet2(tf.keras.Model):
     def __init__(self, hidden_sizes=[128, 128], num_outputs=128, state_dim=16, update_steps=3, activation=tf.nn.selu, hidden_dim=256):
-        super(PFNet2, self).__init__()
+        #super(PFNet2, self).__init__()
         self.activation = activation
 
         self.enc = InputEncoding(len(elem_labels))
@@ -523,7 +548,7 @@ def my_loss_reg(y_true, y_pred):
 
     l2 = (l2_0 + l2_1 + l2_2)
     
-    return 1e3*l2
+    return l2
 
 #@tf.function
 def my_loss_full(y_true, y_pred):
@@ -560,7 +585,8 @@ def my_loss_full(y_true, y_pred):
     #tf.print("l3", tf.reduce_mean(l3))
 
     #tf.print("\n")
-    l = l1 + l2 + l3
+    l = (l1 + l2 + l3)
+
     return 1e3*l
 
 #TODO: put these in a class
@@ -790,8 +816,7 @@ def load_dataset_ttbar(datapath):
 
 if __name__ == "__main__":
     #tf.debugging.enable_check_numerics()
-    tf.config.experimental_run_functions_eagerly(True)
-
+    tf.config.run_functions_eagerly(use_eager)
 
     args = parse_args()
 
@@ -813,7 +838,7 @@ if __name__ == "__main__":
     #dataset = load_dataset_gun()
     dataset = load_dataset_ttbar(args.datapath)
 
-    ps = (tf.TensorShape([None, 15]), tf.TensorShape([None, 5]), tf.TensorShape([None, ]))
+    ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
     ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
     ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(batch_size, padded_shapes=ps)
 
@@ -831,10 +856,16 @@ if __name__ == "__main__":
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+
         if args.model == "PFNet":
             model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer, dropout=args.dropout)
         elif args.model == "PFNet2":
             model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
+        if use_eager:
+            model(np.random.randn(batch_size, num_max_elems, 15).astype(np.float32))
+        else:
+            model = model.create_model()
+        model.summary()
 
     if not os.path.isdir("experiments"):
         os.makedirs("experiments")
