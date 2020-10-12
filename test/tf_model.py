@@ -312,7 +312,11 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
 
         for i in range(self.nbins):
             sparse_distance_matrix = self.loop_body(sparse_distance_matrix, inds, bin_idx, i, good_bin_inds, points)
-
+        sparse_distance_matrix = tf.sparse.SparseTensor(
+            indices=sparse_distance_matrix.indices,
+            values=tf.cast(sparse_distance_matrix.values > 0.0, tf.float32),
+            dense_shape=sparse_distance_matrix.dense_shape)
+        #print(tf.sparse.reduce_sum(sparse_distance_matrix, axis=0))
         return sparse_distance_matrix
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
