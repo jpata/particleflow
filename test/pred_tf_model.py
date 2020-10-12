@@ -9,7 +9,7 @@ def get_X(X,y,w):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet", "PFNet2"])
+    parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet"])
     parser.add_argument("--weights", type=str, default=None, help="model weights to load")
     parser.add_argument("--nhidden", type=int, default=256, help="hidden dimension")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
@@ -42,9 +42,9 @@ if __name__ == "__main__":
     from tf_model import batch_size, num_max_elems
 
     tf.gfile = tf.io.gfile
-    from tf_model import PFNet, PFNet2, prepare_df
+    from tf_model import PFNet, prepare_df
     from tf_data import _parse_tfr_element
-    tfr_files = glob.glob("{}/{}/*.tfrecords".format(args.datapath, args.target))
+    tfr_files = glob.glob("{}/tfr/{}/*.tfrecords".format(args.datapath, args.target))
     assert(len(tfr_files)>0)
     #tf.config.optimizer.set_jit(True)
 
@@ -60,10 +60,7 @@ if __name__ == "__main__":
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
-    if args.model == "PFNet":
-        model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
-    elif args.model == "PFNet2":
-        model = PFNet2(hidden_sizes = [args.nhidden, args.nhidden], num_outputs=128, state_dim=16, update_steps=3, hidden_dim=args.nhidden)
+    model = PFNet(hidden_dim=args.nhidden, distance_dim=args.distance_dim, num_conv=args.num_conv, convlayer=args.convlayer)
     model = model.create_model()
 
     #ensure model is compiled
