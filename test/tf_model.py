@@ -49,7 +49,10 @@ num_max_elems = 5000
 use_eager = False
 attention_layer_cutoff = 0.2
 
-#@tf.function
+"""
+sp_a: (nbatch, nelem, nelem) sparse distance matrices
+b: (nbatch, nelem, ncol) dense per-elemenet feature matrices
+"""
 def sparse_dense_matmult_batch(sp_a, b):
 
     def map_function(x):
@@ -63,9 +66,7 @@ def sparse_dense_matmult_batch(sp_a, b):
     elems = (tf.range(0, sp_a.dense_shape[0], delta=1, dtype=tf.int64), b)
     return tf.map_fn(map_function, elems, dtype=tf.float32, back_prop=True)
 
-#@tf.function
 def valid_sparse_mat(n_points, sinds, bin_idx, bi, subpoints):
-    #dm = tf.reduce_sum(tf.math.squared_difference(sp0, sp1), axis=2)
     dm = tf.matmul(subpoints, subpoints, transpose_a=True)
     dm = tf.nn.softmax(dm)
 
@@ -74,43 +75,11 @@ def valid_sparse_mat(n_points, sinds, bin_idx, bi, subpoints):
     spt_small = tf.sparse.from_dense(dm)
     spt_this = tf.sparse.SparseTensor(tf.cast(tf.gather(sinds, spt_small.indices), tf.int64), tf.exp(-1.0*spt_small.values), (n_points, n_points))
 
-    #print(len(spt_this.indices))
-    #tf.print(spt_this.indices)
-    # dists, top_inds = tf.nn.top_k(-dm, k=4)
-
-    # #top_inds[:, 1:2] are the indices of the nearest neighbor, excluding the element itself
-    # #create a [src, dst] pair array by concatenating the original index and the found neighbor 
-    # nn_inds1 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 1:2])], axis=1)
-    # nn_inds1 = tf.cast(nn_inds1, dtype=tf.int64)
-
-    # #top_inds[:, 2:3] are the indices of the second nearest neighbor, excluding the element itself
-    # nn_inds2 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 2:3])], axis=1)
-    # nn_inds2 = tf.cast(nn_inds2, dtype=tf.int64)
-
-    # nn_inds3 = tf.concat([tf.expand_dims(sinds, 1), tf.gather(sinds, top_inds[:, 3:4])], axis=1)
-    # nn_inds3 = tf.cast(nn_inds3, dtype=tf.int64)
-
-    # spt_this1 = tf.sparse.reorder(tf.sparse.SparseTensor(
-    #     nn_inds1, tf.cast(-dists[:, 1], tf.float32), (n_points, n_points))
-    # )
-    # spt_this2 = tf.sparse.reorder(tf.sparse.SparseTensor(
-    #     nn_inds2, tf.cast(-dists[:, 2], tf.float32), (n_points, n_points))
-    # )
-    # spt_this3 = tf.sparse.reorder(tf.sparse.SparseTensor(
-    #     nn_inds2, tf.cast(-dists[:, 3], tf.float32), (n_points, n_points))
-    # )
-    # spt_this = tf.sparse.add(spt_this1, spt_this2)
-    # spt_this = tf.sparse.add(spt_this, spt_this3)
-
     return spt_this
 
-#@tf.function
-def loop_cond(spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points):
-    return tf.math.less(lsh_bin_index, tf.math.minimum(tf.shape(good_bin_inds)[0], top_n_bins))
-
-#@tf.function
 def loop_body(spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points):
     n_points = inds.shape[0]
+
     #in case the bin index is out of range, take the last bin
     mask = bin_idx == good_bin_inds[tf.minimum(lsh_bin_index, tf.shape(good_bin_inds)[0]-1)]
     sinds = inds[mask][:max_per_bin]
@@ -120,7 +89,6 @@ def loop_body(spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points):
     tf.sparse.add(spt, spt_this)
     return [spt, inds, bin_idx, lsh_bin_index, good_bin_inds, points]
 
-#@tf.function(input_signature=[tf.TensorSpec(shape=(6000,254)), tf.TensorSpec(shape=(6000, 2)), ])
 def construct_sparse_dm(points, points_lsh):
     n_points = tf.constant(points.shape[0])
     inds = tf.range(n_points)
@@ -138,10 +106,8 @@ def construct_sparse_dm(points, points_lsh):
     #loop over each LSH bin, prepare sparse distance matrix in bin, update final sparse distance matrix
     lsh_bin_index = tf.constant(0)
 
-    #manually unrolled while_loop, otherwise can't profile or run in graph mode
     for i in range(top_n_bins):
         loop_body(sparse_distance_matrix, inds, bin_idx, i, good_bin_inds, points)
-    #tf.while_loop(loop_cond, loop_body, [sparse_distance_matrix, inds, bin_idx, lsh_bin_index, good_bin_inds, points], parallel_iterations=1)
 
     return sparse_distance_matrix
 
@@ -281,17 +247,15 @@ class GHConv(tf.keras.layers.Layer):
     def call(self, x, adj):
         #compute the normalization of the adjacency matrix
         in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
+
         #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
-        #norm_k = tf.pow(norm, self.k)
-        #adj_k = tf.pow(adj, self.k)
 
         f_hom = tf.linalg.matmul(x, self.theta)
         f_hom = sparse_dense_matmult_batch(adj, f_hom*norm)*norm
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
-        #tf.print(tf.reduce_mean(f_hom), tf.reduce_mean(f_het), tf.reduce_mean(gate))
 
         out = gate*f_hom + (1-gate)*f_het
         return out
@@ -320,7 +284,6 @@ class SGConv(tf.keras.layers.Dense):
 
         return self.activation(out + b)
 
-#@tf.function
 def predict_distancematrix(inputs):
     distcoords = inputs
 
@@ -340,7 +303,7 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
 
-        self.layer_input_dist = tf.keras.layers.Dense(distance_dim, activation=activation, name="input_dist")
+        self.layer_input_dist = tf.keras.layers.Dense(distance_dim, activation="tanh", name="input_dist")
 
         self.layer_input1 = tf.keras.layers.Dense(hidden_dim, activation=activation, name="input1")
         self.layer_input1_do = tf.keras.layers.Dropout(dropout)
@@ -378,7 +341,6 @@ class PFNet(tf.keras.Model):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
         return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs), name="MLPFNet")
 
-    #@tf.function#(input_signature=[tf.TensorSpec(shape=(4,6000,15)), ])
     def call(self, inputs, training=True):
         X = tf.cast(inputs, tf.float32)
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
@@ -853,11 +815,6 @@ if __name__ == "__main__":
             metrics=[cls_130, cls_211, cls_22, energy_resolution, eta_resolution, phi_resolution],
             sample_weight_mode="temporal")
 
-        # for X, y, w in ds_train:
-        #     ypred = model(X)
-        #     l = loss_fn(y, ypred)
-        #     cls_130(y, ypred)
-
         if args.load:
             #ensure model input size is known
             for X, y, w in ds_train:
@@ -865,6 +822,7 @@ if __name__ == "__main__":
                 break
    
             model.load_weights(args.load)
+
         if args.nepochs > 0:
             ret = model.fit(ds_train_r,
                 validation_data=ds_test_r, epochs=args.nepochs,
