@@ -6,9 +6,9 @@ IMG=/home/software/singularity/base.simg:latest
 cd ~/particleflow
 
 #TF training
-singularity exec --nv $IMG python3 test/tf_model.py --datapath data/TTbar_14TeV_TuneCUETP8M1_cfi --target cand --ntrain 16000 --ntest 4000 --convlayer ghconv --dropout 0.2 --lr 1e-4
+singularity exec --nv $IMG python3 test/tf_model.py --datapath data/TTbar_14TeV_TuneCUETP8M1_cfi --target cand --ntrain 16000 --ntest 4000 --convlayer ghconv --lr 1e-4 --nepochs 1000
 
-#Pytorch training
+#Pytorch  training
 #singularity exec -B /home --nv $IMG \
 #  python3 test/train_end2end.py \
 #  --dataset /home/joosep/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi \
