@@ -185,7 +185,7 @@ class GHConv(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
-        self.b_t = self.add_weight(shape=(self.hidden_dim, ), name="b_t", initializer="zeros")
+        self.b_t = self.add_weight(shape=(self.hidden_dim, ), name="b_t", initializer="random_normal")
         self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
         self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
  
@@ -200,8 +200,7 @@ class GHConv(tf.keras.layers.Layer):
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
 
         f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = sparse_dense_matmult_batch(adj, f_hom)
-        f_hom = f_hom*norm*norm
+        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm)*norm
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
@@ -235,13 +234,12 @@ class SGConv(tf.keras.layers.Dense):
 
 
 class SparseAttentionDistance(tf.keras.layers.Layer):
-    def __init__(self, nbins=128, max_per_bin=256, attention_layer_cutoff=0.2, exp_spread=-1.0, batch_size=10):
+    def __init__(self, nbins=128, max_per_bin=256, attention_layer_cutoff=0.2, batch_size=10):
         super(SparseAttentionDistance, self).__init__()
         self.nbins = nbins
         self.max_per_bin = max_per_bin
         self.batch_size = batch_size
         self.attention_layer_cutoff = attention_layer_cutoff
-        self.exp_spread = exp_spread
 
 
     def call(self, inputs):
@@ -269,7 +267,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         spt_small = tf.sparse.from_dense(dm)
 
         #generate an [n_points, n_points] sparse matrix where we update the distances between all elements, rather than the ones between the subpoints
-        spt_this = tf.sparse.SparseTensor(tf.cast(tf.gather(sinds, spt_small.indices), tf.int64), tf.exp(self.exp_spread*spt_small.values), (n_points, n_points))
+        spt_this = tf.sparse.SparseTensor(tf.cast(tf.gather(sinds, spt_small.indices), tf.int64), spt_small.values, (n_points, n_points))
 
         return spt_this
 
@@ -369,12 +367,11 @@ class PFNet(tf.keras.Model):
         nbins=128,
         max_per_bin=256,
         attention_layer_cutoff=0.2,
-        exp_spread=-1.0,
         batch_size=10,
-        encoding_id=[128,256,None],
-        decoding_id=[512,256,128],
-        encoding_reg=[128,256,None],
-        decoding_reg=[None,256,128]):
+        encoding_id=[128,None],
+        decoding_id=[None,128],
+        encoding_reg=[128,None],
+        decoding_reg=[None,128]):
 
         super(PFNet, self).__init__()
         self.activation = activation
@@ -386,12 +383,16 @@ class PFNet(tf.keras.Model):
         decoding_reg[0] = hidden_dim
 
         self.enc = InputEncoding(len(elem_labels))
-        self.dist = SparseAttentionDistance(nbins, max_per_bin, attention_layer_cutoff, exp_spread, batch_size)
+        self.dist0 = SparseAttentionDistance(nbins, max_per_bin, attention_layer_cutoff, batch_size)
 
-        self.layer_input_dist = tf.keras.layers.Dense(distance_dim, activation="tanh", name="input_dist")
+        self.layer_input_dist = tf.keras.layers.Dense(distance_dim, activation=activation, name="input_dist")
+        
+        conv = GHConv(hidden_dim, activation=activation, name="conv")
+        self.gnn = EncoderDecoderGNN([128, ], [128, ], dropout, activation, conv, name="gnn")
+        self.dist1 = SparseAttentionDistance(nbins, max_per_bin, attention_layer_cutoff, batch_size)
         
         if convlayer == "sgconv":
-            conv_id = SGConv(hidden_dim, activation=activation, name="conv_id")
+            self.conv_id = SGConv(hidden_dim, activation=activation, name="conv_id")
             conv_reg = SGConv(hidden_dim, activation=activation, name="conv_reg")
         elif convlayer == "ghconv":
             conv_id = GHConv(hidden_dim, activation=activation, name="conv_id")
@@ -418,7 +419,11 @@ class PFNet(tf.keras.Model):
         x = self.layer_input_dist(enc)
 
         #create graph structure by predicting a sparse distance matrix
-        dm = self.dist(x)
+        dm = self.dist0(x)
+
+        #run a base gnn to mix up the elements and predict a new graph structure
+        x = self.gnn(tf.concat([enc, x], axis=-1), dm, training)
+        dm = self.dist1(x)
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(tf.concat([enc, x], axis=-1), dm, training)
