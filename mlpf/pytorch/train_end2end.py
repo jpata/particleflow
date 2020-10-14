@@ -58,7 +58,6 @@ from sklearn.metrics import accuracy_score
 
 import graph_data
 from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
-from plot_utils import plot_confusion_matrix
 from sklearn.metrics import confusion_matrix
                                                                                     
 #Ignore divide by 0 errors
@@ -121,7 +120,7 @@ def prepare_dataframe(model, loader, multi_gpu, device):
         df["pred_e"] = pred_momentum[:, 2].detach().cpu().numpy()
         df["pred_charge"] = pred_momentum[:, 3].detach().cpu().numpy()
 
-        #dfs += [df]
+        dfs.append(df)
         #df_edges = pandas.DataFrame()
         #df_edges["edge0"] = edges[0].to("cpu")
         #df_edges["edge1"] = edges[1].to("cpu")

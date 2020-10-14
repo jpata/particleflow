@@ -23,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, choices=sorted(train_end2end.model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--path", type=str, help="path to model", default="data/PFNet7_TTbar_14TeV_TuneCUETP8M1_cfi_gen__npar_221073__cfg_ee19d91068__user_jovyan__ntrain_400__lr_0.0001__1588215695")
-    parser.add_argument("--epoch", type=str, default="best", help="Epoch to use; could be 'last' or 'best'")
+    parser.add_argument("--epoch", type=str, default=0, help="Epoch to use")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--start", type=int, default=3800, help="first file index to evaluate")
     parser.add_argument("--stop", type=int, default=4000, help="last file index to evaluate")
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     epoch = args.epoch
     model = args.model
     path = args.path
-    weights = torch.load("{}/epoch_{}/weights.pth".format(path, epoch), map_location=device)
+    weights = torch.load("{}/epoch_{}_weights.pth".format(path, epoch), map_location=device)
     weights = {k.replace("module.", ""): v for k, v in weights.items()}
 
     with open('{}/model_kwargs.pkl'.format(path),'rb') as f:
@@ -52,14 +52,16 @@ if __name__ == "__main__":
     
     print(args.dataset)    
     full_dataset = graph_data.PFGraphDataset(root=args.dataset)
+    print("full_dataset", len(full_dataset))
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.start, stop=args.stop))
-    
+    assert(len(test_dataset)>0)
+
     loader = DataListLoader(test_dataset, batch_size=1, pin_memory=False, shuffle=False)
     loader.collate_fn = collate
     
-    big_df, edges_df = train_end2end.prepare_dataframe(model, loader, False, device)
+    big_df = train_end2end.prepare_dataframe(model, loader, False, device)
     
-    big_df.to_csv("{}/test.csv".format(path))
-    edges_df.to_csv("{}/edges.csv".format(path))
+    big_df.to_pickle("{}/df.pkl.bz2".format(path))
+    #edges_df.to_csv("{}/edges.csv".format(path))
     print(big_df)
-    print(edges_df)
+    #print(edges_df)
