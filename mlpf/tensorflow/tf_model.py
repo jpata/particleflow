@@ -18,24 +18,14 @@ import numpy as np
 from sklearn.metrics import confusion_matrix, accuracy_score
 import pandas
 import time
-from tqdm import tqdm
 import itertools
 import io
-import sklearn
-import sklearn.cluster
 import tensorflow as tf
 
 #physical_devices = tf.config.list_physical_devices('GPU')
 #tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-from plot_utils import plot_confusion_matrix
 from numpy.lib.recfunctions import append_fields
-
-import scipy
-import scipy.special
-
-#physical_devices = tf.config.list_physical_devices('GPU')
-#tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
@@ -643,6 +633,8 @@ def parse_args():
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
     parser.add_argument("--nbins", type=int, default=128, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--bin_size", type=int, default=256, help="Number of points to consider per LSH bin")
+    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
+    parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalanced"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
@@ -654,8 +646,6 @@ def parse_args():
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
     parser.add_argument("--train-reg", action="store_true", help="Train only the regression part")
     parser.add_argument("--eager", action="store_true", help="Run in eager mode for debugging")
-    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
-    parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
     args = parser.parse_args()
     return args
 
@@ -663,8 +653,8 @@ def assign_label(pred_id_onehot_linear):
     ret2 = np.argmax(pred_id_onehot_linear, axis=-1)
     return ret2
 
-def prepare_df(epoch, model, data, outdir, target, save_raw=False):
-    tf.print("\nprepare_df")
+def prepare_df(model, data, outdir, target, save_raw=False):
+    print("prepare_df")
 
     dfs = []
     for iev, d in enumerate(data):
@@ -700,19 +690,9 @@ def prepare_df(epoch, model, data, outdir, target, save_raw=False):
         df["iev"] = iev
         dfs += [df]
     df = pandas.concat(dfs, ignore_index=True)
-    fn = outdir + "/df_{}.pkl.bz2".format(epoch + 1)
+    fn = outdir + "/df.pkl.bz2"
     df.to_pickle(fn)
-    tf.print("\nprepare_df done", fn)
-
-class DataFrameCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset, outdir, freq=5):
-        self.dataset = dataset
-        self.outdir = outdir
-        self.freq = freq
-
-    def on_epoch_end(self, epoch, logs):
-        if epoch > 0 and (epoch + 1)%self.freq == 0:
-            prepare_df(epoch, self.model, self.dataset, self.outdir)
+    print("prepare_df done", fn)
 
 def plot_to_image(figure):
     """Converts the matplotlib plot specified by 'figure' to a PNG image and

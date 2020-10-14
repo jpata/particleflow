@@ -24,27 +24,15 @@ install:
   - conda create -n myenv python=3.7
   - conda activate myenv
   - pip install tensorflow==2.3
-  - pip install torch==1.5.0+cpu torchvision==0.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
-  - pip install torch_scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
-  - pip install torch_cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
-  - pip install torch_sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
-  - pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.5.0.html
+  - pip install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+  - pip install torch_scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+  - pip install torch_cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+  - pip install torch_sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+  - pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
   - pip install torch_geometric
   - pip install uproot
   - pip install matplotlib networkx numba scipy numpy comet_ml setGPU pandas mplhep tqdm sklearn
 
 
 script:
-  - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
-  - cd data/TTbar_14TeV_TuneCUETP8M1_cfi
-  - wget --no-check-certificate https://login-1.hep.caltech.edu/~jpata/particleflow/2020-07/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
-  - cd ../..
-  - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-  - mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/processed
-  - python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --outpath data/TTbar_14TeV_TuneCUETP8M1_cfi/raw --save-normalized-table
-  - python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir data/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
-  - COMET_API_KEY="bla" python test/train_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --space_dim 2 --n_train 3 --n_val 2 --model PFNet7 --convlayer gravnet-radius --convlayer2 sgconv --lr 0.0001 --hidden_dim 32 --n_epochs 2 --l1 1.0 --l2 0.001 --target cand --batch_size 1 --dropout 0.2 --disable-comet
-  - export OUT=`find data -name df.pkl.bz2 | head -n1`
-  - du $OUT
-  - python test/plots.py --pkl $OUT
-  - python test/eval_end2end.py --path data/PFNet* --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi/ --epoch 2 --model PFNet7 --start 0 --stop 1
+  - ./scripts/local_test.sh
