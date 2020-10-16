@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
-    parser.add_argument("--bin_size", type=int, default=256, help="Number of points to consider per LSH bin")
+    parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
     parser.add_argument("--nthreads", type=int, default=-1, help="number of threads to use")
@@ -52,13 +52,13 @@ if __name__ == "__main__":
     from tf_data import _parse_tfr_element
     tfr_files = glob.glob("{}/tfr/{}/*.tfrecords".format(args.datapath, args.target))
     assert(len(tfr_files)>0)
-    #tf.config.optimizer.set_jit(True)
+    tf.config.optimizer.set_jit(True)
 
-    # if args.nthreads > 0:
-    #     tf.config.threading.set_inter_op_parallelism_threads(args.nthreads)
-    #     tf.config.threading.set_intra_op_parallelism_threads(args.nthreads)
-    # if not args.gpu:
-    #     tf.config.set_visible_devices([], 'GPU')
+    if args.nthreads > 0:
+        tf.config.threading.set_inter_op_parallelism_threads(args.nthreads)
+        tf.config.threading.set_intra_op_parallelism_threads(args.nthreads)
+    if not args.gpu:
+        tf.config.set_visible_devices([], 'GPU')
 
     nev = args.ntest
     ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
@@ -73,17 +73,9 @@ if __name__ == "__main__":
         dropout=args.dropout,
         batch_size=args.batch_size,
         attention_layer_cutoff=args.attention_layer_cutoff,
-        bin_size=args.bin_size
+        nbins=args.nbins
     )
     model = model.create_model()
-
-    #ensure model is compiled
-    neval = 0
-    for X in dataset_X:
-        print(X.shape)
-        model(X)
-        neval += 1
-    assert(neval > 0)
 
     #load the weights
     model.load_weights(args.weights)
@@ -93,17 +85,20 @@ if __name__ == "__main__":
     prepare_df(model, dataset, model_dir, args.target, save_raw=False)
 
     print("now timing")
+    neval = 0
     t0 = time.time()
     for X in dataset_X:
-        model.predict_on_batch(X)
+        model(X, training=False)
+        neval += 1
     print()
     t1 = time.time()
     time_per_dsrow = (t1-t0)/neval
-    print("prediction time per event: {:.2f} ms".format(1000.0*(t1-t0)/(nev/args.batch_size)))
+    time_per_event = time_per_dsrow/args.batch_size
+    print("prediction time per event: {:.2f} ms".format(1000.0*time_per_event))
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     # Get frozen ConcreteFunction
-    full_model = tf.function(lambda x: model(x))
+    full_model = tf.function(lambda x: model(x, training=False))
     full_model = full_model.get_concrete_function(
         tf.TensorSpec((args.batch_size, num_max_elems, 15), tf.float32))
     from tensorflow.python.framework import convert_to_constants
@@ -116,5 +111,8 @@ if __name__ == "__main__":
                       logdir="{}/model_frozen".format(model_dir),
                       name="frozen_graph.pb",
                       as_text=False)
-
+    tf.io.write_graph(graph_or_graph_def=frozen_func.graph,
+                      logdir="{}/model_frozen".format(model_dir),
+                      name="frozen_graph.pbtxt",
+                      as_text=True)
     #model.save('model', overwrite=True, include_optimizer=False)
