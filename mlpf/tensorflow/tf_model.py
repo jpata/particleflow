@@ -250,6 +250,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         self.nbins = nbins
         self.batch_size = batch_size
         self.attention_layer_cutoff = attention_layer_cutoff
+        self.max_indices_per_bin = 20000
 
         self.random_rotations = tf.constant(tf.random.normal((distance_dim, nbins//2)))
 
@@ -257,7 +258,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
     def call(self, inputs, training=True):
         point_embedding = inputs
 
-        #cannot concat sparse tensors directly as that eats the gradient, see
+        #cannot concat sparse tensors directly as that incorrectly destroys the gradient, see
         #https://github.com/tensorflow/tensorflow/blob/df3a3375941b9e920667acfe72fb4c33a8f45503/tensorflow/python/ops/sparse_grad.py#L33
         dms = []
         if training:
@@ -283,19 +284,20 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
     def valid_sparse_mat(self, n_points, subindices, subpoints):
 
         #find the self-attention-based distance between the given points using dense matrix multiplication
-        normed = tf.nn.l2_normalize(subpoints, axis = 1)
+        normed = tf.nn.l2_normalize(subpoints, axis=1)
         dm = tf.matmul(normed, normed, transpose_b=True)
+        dm = tf.nn.softmax(dm, axis=-1)
 
-        #make the output sparse according to a cutoff
+        #make the output sparse according to a cutoff (mask small abs values)
         mask = tf.cast(dm>self.attention_layer_cutoff, tf.float32)
         dm = dm * mask
 
         spt_small = tf.sparse.from_dense(dm)
+
         #take only up to a certain number of top distance indices to prevent the sparse matrix from blowing up
-        best_ind_sorting = tf.argsort(spt_small.values)[:10000]
+        best_ind_sorting = tf.argsort(spt_small.values, direction="DESCENDING")[:self.max_indices_per_bin]
         small_sparse_inds = tf.gather(spt_small.indices, best_ind_sorting)
         small_sparse_vals = tf.gather(spt_small.values, best_ind_sorting)
-        #print(dm.shape, spt_small.indices.shape, small_sparse_inds.shape)
 
         indices_in_full = tf.gather(subindices, small_sparse_inds)
 
@@ -383,10 +385,10 @@ class PFNet(tf.keras.Model):
         nbins=10,
         attention_layer_cutoff=0.2,
         batch_size=10,
-        encoding_id=[128,None],
-        decoding_id=[None,128],
-        encoding_reg=[128,None],
-        decoding_reg=[None,128]):
+        encoding_id=[128,128,None],
+        decoding_id=[None,128,128],
+        encoding_reg=[128,128,None],
+        decoding_reg=[None,128,128]):
 
         super(PFNet, self).__init__()
         self.activation = activation
@@ -812,7 +814,7 @@ if __name__ == "__main__":
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=0, write_graph=False, write_images=False,
         update_freq='epoch',
-        #profile_batch=(10,90),
+        #profile_batch=(10,40),
         profile_batch=0,
     )
     tb.set_model(model)
