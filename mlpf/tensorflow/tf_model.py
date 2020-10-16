@@ -39,9 +39,9 @@ mult_phi_loss = 10.0
 mult_eta_loss = 10.0
 mult_total_loss = 1e3
 
-def my_softmax_split(cmul, bin_size):
+def my_softmax_split(cmul, nbins):
     bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), bin_size)
+    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), nbins)
     return bins_split
 
 def softargmax(x, beta, xrange):
@@ -245,9 +245,9 @@ class SGConv(tf.keras.layers.Dense):
 
 
 class SparseAttentionDistance(tf.keras.layers.Layer):
-    def __init__(self, distance_dim, nbins, bin_size=100, attention_layer_cutoff=0.2, batch_size=10):
+    def __init__(self, distance_dim, nbins=10, attention_layer_cutoff=0.2, batch_size=10):
         super(SparseAttentionDistance, self).__init__()
-        self.bin_size = bin_size
+        self.nbins = nbins
         self.batch_size = batch_size
         self.attention_layer_cutoff = attention_layer_cutoff
 
@@ -283,18 +283,24 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
     def valid_sparse_mat(self, n_points, subindices, subpoints):
 
         #find the self-attention-based distance between the given points using dense matrix multiplication
-        dm = tf.matmul(subpoints, subpoints, transpose_b=True)
-        dm = tf.nn.softmax(dm)
+        normed = tf.nn.l2_normalize(subpoints, axis = 1)
+        dm = tf.matmul(normed, normed, transpose_b=True)
 
         #make the output sparse according to a cutoff
         mask = tf.cast(dm>self.attention_layer_cutoff, tf.float32)
         dm = dm * mask
 
         spt_small = tf.sparse.from_dense(dm)
-        indices_in_full = tf.gather(subindices, spt_small.indices)
+        #take only up to a certain number of top distance indices to prevent the sparse matrix from blowing up
+        best_ind_sorting = tf.argsort(spt_small.values)[:10000]
+        small_sparse_inds = tf.gather(spt_small.indices, best_ind_sorting)
+        small_sparse_vals = tf.gather(spt_small.values, best_ind_sorting)
+        #print(dm.shape, spt_small.indices.shape, small_sparse_inds.shape)
+
+        indices_in_full = tf.gather(subindices, small_sparse_inds)
 
         #generate an [n_points, n_points] sparse matrix where we update the distances between all elements, rather than the ones between the subpoints
-        spt_this = tf.sparse.SparseTensor(indices_in_full, spt_small.values, (n_points, n_points))
+        spt_this = tf.sparse.reorder(tf.sparse.SparseTensor(indices_in_full, small_sparse_vals, (n_points, n_points)))
 
         return spt_this
 
@@ -318,7 +324,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         #put each input item into a bin defined by the softmax output across the LSH embedding
         mul = tf.linalg.matmul(points, self.random_rotations)
         cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = my_softmax_split(cmul, self.bin_size)
+        bins_split = my_softmax_split(cmul, self.nbins)
 
         #loop over each LSH bin, prepare sparse distance matrix in bin, update final sparse distance matrix
         sparse_distance_matrix = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
@@ -374,8 +380,7 @@ class PFNet(tf.keras.Model):
         distance_dim=256,
         convlayer="ghconv",
         dropout=0.1,
-        nbins=128,
-        bin_size=256,
+        nbins=10,
         attention_layer_cutoff=0.2,
         batch_size=10,
         encoding_id=[128,None],
@@ -394,7 +399,7 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
         self.layer_embedding = tf.keras.layers.Dense(distance_dim, activation=activation, name="embedding_attention")
-        self.dist = SparseAttentionDistance(distance_dim, nbins, bin_size, attention_layer_cutoff, batch_size)
+        self.dist = SparseAttentionDistance(distance_dim, nbins, attention_layer_cutoff, batch_size)
 
         if convlayer == "sgconv":
             self.conv_id = SGConv(hidden_dim, activation=activation, name="conv_id")
@@ -631,8 +636,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
-    parser.add_argument("--nbins", type=int, default=128, help="number of locality-sensitive hashing (LSH) bins")
-    parser.add_argument("--bin_size", type=int, default=256, help="Number of points to consider per LSH bin")
+    parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
@@ -709,8 +713,9 @@ def plot_to_image(figure):
     image = tf.expand_dims(image, 0)
     return image
 
-def load_dataset_ttbar(datapath):
-    path = datapath + "/tfr/{}/*.tfrecords".format(args.target)
+def load_dataset_ttbar(datapath, target):
+    from tf_data import _parse_tfr_element
+    path = datapath + "/tfr/{}/*.tfrecords".format(target)
     tfr_files = glob.glob(path)
     if len(tfr_files) == 0:
         raise Exception("Could not find any files in {}".format(path))
@@ -739,9 +744,7 @@ if __name__ == "__main__":
 
     filelist = sorted(glob.glob(args.datapath + "/raw/*.pkl"))[:args.ntrain+args.ntest]
 
-    from tf_data import _parse_tfr_element
-
-    dataset = load_dataset_ttbar(args.datapath)
+    dataset = load_dataset_ttbar(args.datapath, args.target)
 
     #create padded input data
     ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
@@ -774,7 +777,6 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             nbins=args.nbins,
             attention_layer_cutoff=args.attention_layer_cutoff,
-            bin_size=args.bin_size
         )
 
         if args.train_cls:
