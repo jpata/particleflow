@@ -17,7 +17,6 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
-    parser.add_argument("--nbins", type=int, default=128, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--bin_size", type=int, default=256, help="Number of points to consider per LSH bin")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
@@ -73,7 +72,6 @@ if __name__ == "__main__":
         convlayer=args.convlayer,
         dropout=args.dropout,
         batch_size=args.batch_size,
-        nbins=args.nbins,
         attention_layer_cutoff=args.attention_layer_cutoff,
         bin_size=args.bin_size
     )
