@@ -288,12 +288,12 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
     @tf.function
     def valid_sparse_mat(self, n_points, subindices, subpoints):
 
-        #find the self-attention-based distance between the given points using dense matrix multiplication
+        #find the cosine distance between the given points using dense matrix multiplication
         normed = tf.nn.l2_normalize(subpoints, axis=1)
         dm = tf.matmul(normed, normed, transpose_b=True)
         dm = tf.nn.softmax(dm, axis=-1)
 
-        #run KNN, accumulate each index pair into a sparse distance matrix
+        #run KNN in the distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
         for i in range(self.num_neighbors):
@@ -664,6 +664,8 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-convs-id", type=int, default=1, help="number of convolution layers")
     parser.add_argument("--num-convs-reg", type=int, default=1, help="number of convolution layers")
+    parser.add_argument("--num-hidden-id", type=int, default=2, help="number of hidden layers")
+    parser.add_argument("--num-hidden-reg", type=int, default=2, help="number of hidden layers")
     parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
     parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
@@ -803,6 +805,8 @@ if __name__ == "__main__":
             hidden_dim_reg=args.hidden_dim_reg,
             num_convs_id=args.num_convs_id,
             num_convs_reg=args.num_convs_reg,
+            num_hidden_id=args.num_hidden_id,
+            num_hidden_reg=args.num_hidden_reg,
             distance_dim=args.distance_dim,
             convlayer=args.convlayer,
             dropout=args.dropout,
