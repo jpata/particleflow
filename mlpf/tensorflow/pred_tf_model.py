@@ -13,10 +13,16 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="PFNet", help="type of model to train", choices=["PFNet"])
     parser.add_argument("--weights", type=str, default=None, help="model weights to load")
-    parser.add_argument("--hidden-dim", type=int, default=256, help="hidden dimension")
+    parser.add_argument("--hidden-dim-id", type=int, default=256, help="hidden dimension")
+    parser.add_argument("--hidden-dim-reg", type=int, default=256, help="hidden dimension")
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
-    parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
+    parser.add_argument("--num-convs-id", type=int, default=1, help="number of convolution layers")
+    parser.add_argument("--num-convs-reg", type=int, default=1, help="number of convolution layers")
+    parser.add_argument("--num-hidden-id", type=int, default=2, help="number of hidden layers")
+    parser.add_argument("--num-hidden-reg", type=int, default=2, help="number of hidden layers")
+    parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
+    parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
@@ -52,7 +58,7 @@ if __name__ == "__main__":
     from tf_data import _parse_tfr_element
     tfr_files = glob.glob("{}/tfr/{}/*.tfrecords".format(args.datapath, args.target))
     assert(len(tfr_files)>0)
-    tf.config.optimizer.set_jit(True)
+    tf.config.optimizer.set_jit(False)
 
     if args.nthreads > 0:
         tf.config.threading.set_inter_op_parallelism_threads(args.nthreads)
@@ -67,15 +73,20 @@ if __name__ == "__main__":
     dataset_X = dataset.map(get_X)
 
     model = PFNet(
-        hidden_dim=args.hidden_dim,
+        hidden_dim_id=args.hidden_dim_id,
+        hidden_dim_reg=args.hidden_dim_reg,
+        num_convs_id=args.num_convs_id,
+        num_convs_reg=args.num_convs_reg,
+        num_hidden_id=args.num_hidden_id,
+        num_hidden_reg=args.num_hidden_reg,
         distance_dim=args.distance_dim,
         convlayer=args.convlayer,
         dropout=args.dropout,
         batch_size=args.batch_size,
-        attention_layer_cutoff=args.attention_layer_cutoff,
-        nbins=args.nbins
+        nbins=args.nbins,
+        num_neighbors=args.num_neighbors
     )
-    model = model.create_model()
+    model = model.create_model(training=False)
 
     #load the weights
     model.load_weights(args.weights)
@@ -88,7 +99,8 @@ if __name__ == "__main__":
     neval = 0
     t0 = time.time()
     for X in dataset_X:
-        model(X, training=False)
+        ret = model(X)
+        print(".")
         neval += 1
     print()
     t1 = time.time()
