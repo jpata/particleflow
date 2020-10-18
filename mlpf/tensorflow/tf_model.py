@@ -41,7 +41,7 @@ mult_total_loss = 1e3
 
 def my_softmax_split(cmul, nbins):
     bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), nbins)
+    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), nbins, axis=0)
     return bins_split
 
 def softargmax(x, beta, xrange):
@@ -278,6 +278,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
                 (shp[0], shp[1], shp[1])
             )
         else:
+            dms = []
             for ibatch in range(self.batch_size):
                 dms.append(tf.sparse.expand_dims(self.construct_sparse_dm(
                     point_embedding[ibatch]), 0))
@@ -289,33 +290,42 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
     def valid_sparse_mat(self, n_points, subindices, subpoints):
 
         #find the cosine distance between the given points using dense matrix multiplication
-        normed = tf.nn.l2_normalize(subpoints, axis=1)
-        dm = tf.matmul(normed, normed, transpose_b=True)
+        normed = tf.nn.l2_normalize(subpoints, axis=-1)
+        dm = tf.linalg.matmul(normed, normed, transpose_b=True)
         dm = tf.nn.softmax(dm, axis=-1)
+
+        dmshape = tf.shape(dm)
+        nbins = dmshape[0]
+        nelems = dmshape[1]
 
         #run KNN in the distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
+        top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
+
+        indices_gathered = tf.vectorized_map(
+            lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
+            tf.range(self.num_neighbors, dtype=tf.int64))
+        indices_gathered = tf.transpose(indices_gathered, [1,2,0])
+
+        # the same thing in raw python, to verify for debugging
+        # my_subindices = np.zeros((dmshape[0], dmshape[1], self.num_neighbors),dtype=np.int32)
+        # for ibin in range(dmshape[0]):
+        #     for ielem in range(dmshape[1]):
+        #         for ineigh in range(self.num_neighbors):
+        #             my_subindices[ibin, ielem, ineigh] = subindices[ibin][top_k.indices[ibin, ielem, ineigh].numpy()].numpy()
+        # assert(np.all(indices_gathered.numpy() == my_subindices))
+
         sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
+        
         for i in range(self.num_neighbors):
-            inds_to_gather = tf.transpose(tf.stack([tf.range(tf.shape(dm)[0]), top_k.indices[:, i]]))
-            indices_in_full = tf.gather(subindices, inds_to_gather)
-            sp_sum = tf.sparse.add(sp_sum, tf.sparse.SparseTensor(indices_in_full, top_k.values[:, i], (n_points, n_points)))
+            dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
+            dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
+            src_ind = tf.tile(tf.range(nelems, dtype=tf.int64), [nbins, ])
+            src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
+            sp_sum = tf.sparse.add(sp_sum, tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
 
         spt_this = tf.sparse.reorder(sp_sum)
 
-        return spt_this
-
-    @tf.function
-    def loop_body(self, subindices, points):
-        n_points = points.shape[0]
-
-        #get the embedding data for the chosen points
-        subpoints = tf.gather(points, subindices, axis=0)
-
-        #generate a sparse distance matrix with size [n_points, n_points] between these points 
-        spt_this = self.valid_sparse_mat(n_points, subindices, subpoints)
-
-        #add the distance matrix between the chosen points to the total distance matrix
         return spt_this
 
     @tf.function
@@ -327,12 +337,9 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         cmul = tf.concat([mul, -mul], axis=-1)
         bins_split = my_softmax_split(cmul, self.nbins)
 
-        #loop over each LSH bin, prepare sparse distance matrix in bin, update final sparse distance matrix
-        sparse_distance_matrix = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
-        for bin_inds in bins_split:
-            sparse_distance_matrix = tf.sparse.add(sparse_distance_matrix, self.loop_body(bin_inds, points))
-
-        return tf.sparse.reorder(sparse_distance_matrix)
+        parts = tf.gather(points, bins_split)
+        sparse_distance_matrix = self.valid_sparse_mat(n_points, bins_split, parts)
+        return sparse_distance_matrix
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
     def __init__(self, encoders, decoders, dropout, activation, conv, **kwargs):
@@ -431,9 +438,9 @@ class PFNet(tf.keras.Model):
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
 
-    def create_model(self):
+    def create_model(self, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
-        return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs), name="MLPFNet")
+        return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
 
     def call(self, inputs, training=True):
         X = tf.cast(inputs, tf.float32)
@@ -696,7 +703,7 @@ def prepare_df(model, data, outdir, target, save_raw=False):
         if iev%50==0:
             tf.print(".", end="")
         X, y, w = d
-        pred = model(X).numpy()
+        pred = model(X, training=False).numpy()
         pred_id_onehot, pred_charge, pred_momentum = separate_prediction(pred)
         pred_id = assign_label(pred_id_onehot).flatten()
  
