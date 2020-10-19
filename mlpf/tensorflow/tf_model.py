@@ -244,6 +244,7 @@ class SGConv(tf.keras.layers.Dense):
         return self.activation(out + b)
 
 
+iepoch = 0
 class SparseAttentionDistance(tf.keras.layers.Layer):
     def __init__(self, distance_dim, nbins=10, batch_size=10, num_neighbors=5):
         super(SparseAttentionDistance, self).__init__()
@@ -251,7 +252,9 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         self.batch_size = batch_size
         self.num_neighbors = num_neighbors
 
-        self.random_rotations = tf.constant(tf.random.normal((distance_dim, nbins//2)))
+        self.random_rotations = self.add_weight(
+            shape=(distance_dim, nbins//2), initializer="random_normal", trainable=False
+        )
 
     @tf.function
     def call(self, inputs, training=True):
@@ -307,24 +310,20 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
             tf.range(self.num_neighbors, dtype=tf.int64))
         indices_gathered = tf.transpose(indices_gathered, [1,2,0])
 
-        # the same thing in raw python, to verify for debugging
-        # my_subindices = np.zeros((dmshape[0], dmshape[1], self.num_neighbors),dtype=np.int32)
-        # for ibin in range(dmshape[0]):
-        #     for ielem in range(dmshape[1]):
-        #         for ineigh in range(self.num_neighbors):
-        #             my_subindices[ibin, ielem, ineigh] = subindices[ibin][top_k.indices[ibin, ielem, ineigh].numpy()].numpy()
-        # assert(np.all(indices_gathered.numpy() == my_subindices))
-
-        sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
-        
+        sp_sum = tf.sparse.eye(n_points)
         for i in range(self.num_neighbors):
             dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
             dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
-            src_ind = tf.tile(tf.range(nelems, dtype=tf.int64), [nbins, ])
+            src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
             src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
-            sp_sum = tf.sparse.add(sp_sum, tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
-
+            sp_sum = tf.sparse.add(sp_sum, tf.sparse.SparseTensor(src_dst_inds, 100.0*top_k_vals[:, i], (n_points, n_points)))
         spt_this = tf.sparse.reorder(sp_sum)
+
+        # global iepoch
+        # if iepoch%100==0:
+        #     dm = tf.sparse.to_dense(spt_this, validate_indices=False).numpy()
+        #     np.savez("dm_{}.npz".format(iepoch), dm=dm)
+        # iepoch += 1
 
         return spt_this
 
@@ -786,8 +785,8 @@ if __name__ == "__main__":
 
     #create padded input data
     ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
-    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps).cache().prefetch(tf.data.experimental.AUTOTUNE)
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps).cache().prefetch(tf.data.experimental.AUTOTUNE)
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
 
     #repeat needed for keras api
     ds_train_r = ds_train.repeat(args.nepochs)
