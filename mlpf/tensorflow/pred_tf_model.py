@@ -18,10 +18,13 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-convs-id", type=int, default=1, help="number of convolution layers")
     parser.add_argument("--num-convs-reg", type=int, default=1, help="number of convolution layers")
-    parser.add_argument("--num-hidden-id", type=int, default=2, help="number of hidden layers")
-    parser.add_argument("--num-hidden-reg", type=int, default=2, help="number of hidden layers")
+    parser.add_argument("--num-hidden-id-enc", type=int, default=2, help="number of encoder layers for multiclass")
+    parser.add_argument("--num-hidden-id-dec", type=int, default=2, help="number of decoder layers for multiclass")
+    parser.add_argument("--num-hidden-reg-enc", type=int, default=2, help="number of encoder layers for regression")
+    parser.add_argument("--num-hidden-reg-dec", type=int, default=2, help="number of decoder layers for regression")
     parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
+    parser.add_argument("--dist-mult", type=float, default=1.0, help="Exponential multiplier")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
     parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
@@ -77,14 +80,17 @@ if __name__ == "__main__":
         hidden_dim_reg=args.hidden_dim_reg,
         num_convs_id=args.num_convs_id,
         num_convs_reg=args.num_convs_reg,
-        num_hidden_id=args.num_hidden_id,
-        num_hidden_reg=args.num_hidden_reg,
+        num_hidden_id_enc=args.num_hidden_id_enc,
+        num_hidden_id_dec=args.num_hidden_id_dec,
+        num_hidden_reg_enc=args.num_hidden_reg_enc,
+        num_hidden_reg_dec=args.num_hidden_reg_dec,
         distance_dim=args.distance_dim,
         convlayer=args.convlayer,
         dropout=args.dropout,
         batch_size=args.batch_size,
         nbins=args.nbins,
-        num_neighbors=args.num_neighbors
+        num_neighbors=args.num_neighbors,
+        dist_mult=args.dist_mult
     )
     model = model.create_model(training=False)
 
@@ -100,7 +106,7 @@ if __name__ == "__main__":
     t0 = time.time()
     for X in dataset_X:
         ret = model(X)
-        print(".")
+        print(".", end="")
         neval += 1
     print()
     t1 = time.time()
