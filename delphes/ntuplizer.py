@@ -2,7 +2,7 @@ import ROOT
 import numpy as np
 import networkx as nx
 from collections import Counter
-import numba
+#import numba
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
@@ -10,28 +10,6 @@ ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 #Bins for tiling to create graph edges
 bins_eta = np.linspace(-8, 8, 50, dtype=np.float32)
 bins_phi = np.linspace(-4, 4, 50, dtype=np.float32)
-
-@numba.njit
-def fill_adj_matrix(src, bins_eta, bins_phi, adj_matrix):
-    n = len(adj_matrix)
-
-    for iel1 in range(n):
-        t1 = src[iel1, 0]
-        bin_eta1 = np.searchsorted(bins_eta, src[iel1, 1])  
-        bin_phi1 = np.searchsorted(bins_phi, src[iel1, 2])  
-        for iel2 in range(iel1+1, n): 
-            t2 = src[iel2, 0]
-            #tower vs track, use track outer position
-            if t1 == 0 and t2 == 1:
-                bin_eta2 = np.searchsorted(bins_eta, src[iel2, 5]) 
-                bin_phi2 = np.searchsorted(bins_phi, src[iel2, 6])
-            else:
-                bin_eta2 = np.searchsorted(bins_eta, src[iel2, 1]) 
-                bin_phi2 = np.searchsorted(bins_phi, src[iel2, 2])
-
-            if abs(bin_eta1 - bin_eta2) <= 1:
-                if np.mod(abs(bin_phi1 - bin_phi2), len(bins_phi)) <= 1:
-                    adj_matrix[iel1, iel2] = 1
 
 class Output:
     def __init__(self, outfile):
@@ -149,13 +127,15 @@ if __name__ == "__main__":
         out.clear()
 
         tree.GetEntry(iev)
-        particles = list(tree.Particle)
+        #particles = list(tree.Particle)
         pileupmix = list(tree.PileUpMix)
+        pfparticles = list(tree.PFO)
         pileupmix_idxdict = {}
         for ip, p in enumerate(pileupmix):
             pileupmix_idxdict[p] = ip
         towers = list(tree.Tower)
         tracks = list(tree.Track)
+        import pdb;pdb.set_trace()
 
         #Create a graph with particles, tracks and towers as nodes and gen-level information as edges
         graph = nx.Graph()
