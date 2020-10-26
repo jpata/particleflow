@@ -543,7 +543,10 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
         self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
-        self.embedding_dropout = tf.keras.layers.Dropout(dropout)
+        
+        self.embedding_dropout = None
+        if dropout > 0.0:
+            self.embedding_dropout = tf.keras.layers.Dropout(dropout)
 
         self.dists = []
         for idist in range(self.num_dists):
@@ -583,7 +586,8 @@ class PFNet(tf.keras.Model):
 
         #embed inputs for graph structure prediction
         embedding_attention = self.layer_embedding(enc)
-        embedding_attention = self.embedding_dropout(embedding_attention, training)
+        if self.embedding_dropout:
+            embedding_attention = self.embedding_dropout(embedding_attention, training)
 
         #create graph structure by predicting a sparse distance matrix
         dms = [dist(embedding_attention, training) for dist in self.dists]

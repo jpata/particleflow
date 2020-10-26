@@ -7,12 +7,12 @@ import kerastuner as kt
 
 args = Namespace()
 args.datapath = "./data/TTbar_14TeV_TuneCUETP8M1_cfi"
-args.ntrain = 1000
-args.ntest = 500
+args.ntrain = 10000
+args.ntest = 1000
 args.weights = "inverse"
 args.convlayer = "ghconv"
 args.batch_size = 5
-args.nepochs = 10
+args.nepochs = 20
 args.target = "cand"
 args.lr = 0.0001
 args.outdir = "testout"
@@ -27,7 +27,7 @@ def model_builder(hp):
     args.num_hidden_id_dec = hp.Choice('hidden_dim_id_dec', values = [0, 1, 2, 3])
     args.num_convs_id = hp.Choice('num_convs_id', values = [1, 2, 3, 4])
     args.distance_dim = hp.Choice('distance_dim', values = [16, 32, 64, 128, 256])
-    args.num_neighbors = hp.Choice('num_neighbors', [2, 3, 4, 5, 6, 7, 8, 9, 10, 20])
+    args.num_neighbors = hp.Choice('num_neighbors', [2, 3, 4, 5, 6, 7, 8, 9, 10])
     args.dropout = hp.Choice('dropout', values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
     args.nbins = hp.Choice('nbins', values = [10, 20, 50])
     args.dist_mult = hp.Choice('dist_mult', values = [0.1, 1.0, 10.0])
@@ -49,7 +49,7 @@ def model_builder(hp):
         nbins=args.nbins,
         num_neighbors=args.num_neighbors,
         dist_mult=args.dist_mult,
-        cosine_dist=cosine_dist
+        cosine_dist=args.cosine_dist
     )
     loss_fn = my_loss_cls
     model.gnn_reg.trainable = False
@@ -78,17 +78,17 @@ if __name__ == "__main__":
         objective = 'val_loss', 
         max_epochs = args.nepochs,
         factor = 3,
-        hyperband_iterations = 3,
-        directory = 'kerastuner_out',
+        hyperband_iterations = 1,
+        directory = '/scratch/joosep/kerastuner_out',
         project_name = 'mlpf')
     
-    # tuner.search(
-    #     ds_train_r,
-    #     validation_data=ds_test_r,
-    #     steps_per_epoch=args.ntrain/args.batch_size,
-    #     validation_steps=args.ntest/args.batch_size,
-    #     #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
-    # )
-    tuner.results_summary()
-    for trial in tuner.oracle.get_best_trials(num_trials=10):
-        print(trial.hyperparameters.values, trial.score)
+    tuner.search(
+        ds_train_r,
+        validation_data=ds_test_r,
+        steps_per_epoch=args.ntrain/args.batch_size,
+        validation_steps=args.ntest/args.batch_size,
+        #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
+    )
+    #tuner.results_summary()
+    #for trial in tuner.oracle.get_best_trials(num_trials=10):
+    #    print(trial.hyperparameters.values, trial.score)

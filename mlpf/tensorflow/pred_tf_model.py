@@ -75,7 +75,7 @@ if __name__ == "__main__":
         _parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE).skip(args.ntrain).take(nev).padded_batch(args.batch_size, padded_shapes=ps)
     dataset_X = dataset.map(get_X)
 
-    model = PFNet(
+    base_model = PFNet(
         hidden_dim_id=args.hidden_dim_id,
         hidden_dim_reg=args.hidden_dim_reg,
         num_convs_id=args.num_convs_id,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         num_neighbors=args.num_neighbors,
         dist_mult=args.dist_mult
     )
-    model = model.create_model(training=False)
+    model = base_model.create_model(training=False)
 
     #load the weights
     model.load_weights(args.weights)
@@ -116,9 +116,26 @@ if __name__ == "__main__":
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     # Get frozen ConcreteFunction
+    base_model = PFNet(
+        hidden_dim_id=args.hidden_dim_id,
+        hidden_dim_reg=args.hidden_dim_reg,
+        num_convs_id=args.num_convs_id,
+        num_convs_reg=args.num_convs_reg,
+        num_hidden_id_enc=args.num_hidden_id_enc,
+        num_hidden_id_dec=args.num_hidden_id_dec,
+        num_hidden_reg_enc=args.num_hidden_reg_enc,
+        num_hidden_reg_dec=args.num_hidden_reg_dec,
+        distance_dim=args.distance_dim,
+        convlayer=args.convlayer,
+        dropout=args.dropout,
+        batch_size=args.batch_size,
+        nbins=None,
+        num_neighbors=args.num_neighbors,
+        dist_mult=args.dist_mult
+    )
     full_model = tf.function(lambda x: model(x, training=False))
     full_model = full_model.get_concrete_function(
-        tf.TensorSpec((args.batch_size, num_max_elems, 15), tf.float32))
+        tf.TensorSpec((None, None, 15), tf.float32))
     from tensorflow.python.framework import convert_to_constants
     frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
     frozen_func.graph.as_graph_def()
