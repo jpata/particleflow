@@ -543,7 +543,7 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
         self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
-        self.embedding_dropout = tf.keras.layers.Dropout(0.2)
+        self.embedding_dropout = tf.keras.layers.Dropout(dropout)
 
         self.dists = []
         for idist in range(self.num_dists):
