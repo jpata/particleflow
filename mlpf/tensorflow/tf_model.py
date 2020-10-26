@@ -12,6 +12,9 @@ except:
     print("Could not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
     pass
 
+from comet_ml import Experiment
+
+
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,6 +42,11 @@ mult_phi_loss = 10.0
 mult_eta_loss = 10.0
 mult_total_loss = 1e3
 
+def split_indices_to_bins(cmul, nbins, bin_size):
+    bin_idx = tf.argmax(cmul, axis=-1)
+    bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
+    return bins_split
+
 def pairwise_dist(A, B):  
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
@@ -51,31 +59,27 @@ def pairwise_dist(A, B):
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
 
-def my_softmax_split(cmul, nbins):
-    bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), nbins, axis=0)
-    return bins_split
-
-def softargmax(x, beta, xrange):
-    return tf.reduce_sum(tf.nn.softmax(x*beta) * xrange, axis=-1)
-
 """
 sp_a: (nbatch, nelem, nelem) sparse distance matrices
-b: (nbatch, nelem, ncol) dense per-elemenet feature matrices
+b: (nbatch, nelem, ncol) dense per-element feature matrices
 """
 def sparse_dense_matmult_batch(sp_a, b):
 
+    num_batches = tf.shape(b)[0]
     def map_function(x):
         i, dense_slice = x[0], x[1]
+        num_points = tf.shape(b)[1]
+
         sparse_slice = tf.sparse.reshape(tf.sparse.slice(
-            sp_a, [i, 0, 0], [1, sp_a.dense_shape[1], sp_a.dense_shape[2]]),
-            [sp_a.dense_shape[1], sp_a.dense_shape[2]])
+            sp_a, [i, 0, 0], [1, num_points, num_points]),
+            [num_points, num_points])
         mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
         return mult_slice
 
-    elems = (tf.range(0, sp_a.dense_shape[0], delta=1, dtype=tf.int64), b)
+    elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.float32, back_prop=True)
     return ret 
+
 
 def summarize_dataset(dataset):
     yclasses = []
@@ -231,6 +235,38 @@ class GHConv(tf.keras.layers.Layer):
         out = gate*f_hom + (1-gate)*f_het
         return self.activation(out)
 
+class GHConvDense(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        self.activation = kwargs.pop("activation")
+        self.hidden_dim = args[0]
+        super(GHConvDense, self).__init__(*args, **kwargs)
+
+    def build(self, input_shape):
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
+        self.b_t = self.add_weight(shape=(self.hidden_dim, ), name="b_t", initializer="random_normal")
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
+ 
+    #@tf.function
+    def call(self, inputs):
+        x, adj = inputs
+
+        #compute the normalization of the adjacency matrix
+        in_degrees = tf.reduce_sum(adj, axis=-1)
+        in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
+
+        #add epsilon to prevent numerical issues from 1/sqrt(x)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+
+        f_hom = tf.linalg.matmul(x, self.theta)
+        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+
+        f_het = tf.linalg.matmul(x, self.W_h)
+        gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
+
+        out = gate*f_hom + (1-gate)*f_het
+        return self.activation(out)
+
 class SGConv(tf.keras.layers.Dense):
     def __init__(self, k, *args, **kwargs):
         super(SGConv, self).__init__(*args, **kwargs)
@@ -255,62 +291,81 @@ class SGConv(tf.keras.layers.Dense):
 
         return self.activation(out + b)
 
+class DenseDistance(tf.keras.layers.Layer):
+    def __init__(self, dist_mult=0.1, **kwargs):
+        super(DenseDistance, self).__init__(**kwargs)
+        self.dist_mult = dist_mult
+   
+    def call(self, inputs, training=True):
+        dm = pairwise_dist(inputs, inputs)
+        dm = tf.exp(-self.dist_mult*dm)
+        return dm 
 
-iepoch = 0
-class SparseAttentionDistance(tf.keras.layers.Layer):
-    def __init__(self, distance_dim, nbins=10, batch_size=10, num_neighbors=5, dist_mult=1000.0, cosine_dist=False):
-        super(SparseAttentionDistance, self).__init__()
-        self.nbins = nbins
-        self.batch_size = batch_size
+class SparseHashedNNDistance(tf.keras.layers.Layer):
+    def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, cosine_dist=False, **kwargs):
+        super(SparseHashedNNDistance, self).__init__(**kwargs)
         self.num_neighbors = num_neighbors
         self.dist_mult = dist_mult
 
-        self.random_rotations = self.add_weight(
-            shape=(distance_dim, nbins//2), initializer="random_normal", trainable=False, name="lsh_projections"
+        self.cosine_dist = cosine_dist
+
+        #generate the codebook for LSH hashing at model instantiation for up to this many bins
+        #set this to a high-enough value at model generation to take into account the largest possible input 
+        self.max_num_bins = max_num_bins
+
+        #each bin will receive this many input elements, in total we can accept max_num_bins*bin_size input elements
+        #in each bin, we will do a dense top_k evaluation
+        self.bin_size = bin_size
+
+    def build(self, input_shape):
+        #(n_batch, n_points, n_features)
+
+        #generate the LSH codebook for random rotations
+        self.codebook_random_rotations = self.add_weight(
+            shape=(input_shape[-1], self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
         )
-        self.cosine_dist = False
 
     @tf.function
     def call(self, inputs, training=True):
+
+        #(n_batch, n_points, n_features)
         point_embedding = inputs
+
+        n_batches = tf.shape(point_embedding)[0]
+        n_points = tf.shape(point_embedding)[1]
 
         #cannot concat sparse tensors directly as that incorrectly destroys the gradient, see
         #https://github.com/tensorflow/tensorflow/blob/df3a3375941b9e920667acfe72fb4c33a8f45503/tensorflow/python/ops/sparse_grad.py#L33
         #therefore, for training, we implement sparse concatenation by hand 
-        if training:
-            indices_all = []
-            values_all = []
-            for ibatch in range(self.batch_size):
-                dm = self.construct_sparse_dm(point_embedding[ibatch])
-                indices_all.append(
-                    tf.concat([tf.expand_dims(ibatch*tf.ones(tf.shape(dm.indices)[0], dtype=tf.int64), -1), dm.indices], axis=-1)
-                )
-                values_all.append(dm.values)
+        indices_all = []
+        values_all = []
 
-            #now create a new sparsetensor that is a concatenation of the previous ones
-            shp = tf.shape(inputs)
-            dms = tf.SparseTensor(
-                tf.concat(indices_all, axis=0),
-                tf.concat(values_all, axis=0),
-                (shp[0], shp[1], shp[1])
-            )
-        else:
-            dms = []
-            for ibatch in range(self.batch_size):
-                dms.append(tf.sparse.expand_dims(self.construct_sparse_dm(
-                    point_embedding[ibatch]), 0))
-            dms = tf.sparse.concat(0, dms)
+        def func(args):
+            ibatch, points_batch = args[0], args[1]
+            dm = self.construct_sparse_dm_batch(points_batch)
+            inds = tf.concat([tf.expand_dims(tf.cast(ibatch, tf.int64)*tf.ones(tf.shape(dm.indices)[0], dtype=tf.int64), -1), dm.indices], axis=-1)
+            vals = dm.values
+            return inds, vals
+
+        elems = (tf.range(0, n_batches, delta=1, dtype=tf.int64), point_embedding)
+        ret = tf.map_fn(func, elems, fn_output_signature=(tf.int64, tf.float32), parallel_iterations=1)
+
+        shp = tf.shape(ret[0])
+        # #now create a new SparseTensor that is a concatenation of the previous ones
+        dms = tf.SparseTensor(
+            tf.reshape(ret[0], (shp[0]*shp[1], shp[2])),
+            tf.reshape(ret[1], (shp[0]*shp[1],)),
+            (n_batches, n_points, n_points)
+        )
 
         return tf.sparse.reorder(dms)
 
-    @tf.function
-    def valid_sparse_mat(self, n_points, subindices, subpoints):
+    def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
 
-        #find the distance between the given points using dense matrix multiplication
+        #find the distance matrix between the given points using dense matrix multiplication
         if self.cosine_dist:
             normed = tf.nn.l2_normalize(subpoints, axis=-1)
             dm = tf.linalg.matmul(subpoints, subpoints, transpose_b=True)
-            #dm = tf.nn.softmax(dm, axis=-1)
         else:
             dm = pairwise_dist(subpoints, subpoints)
             dm = tf.exp(-self.dist_mult*dm)
@@ -319,7 +374,7 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         nbins = dmshape[0]
         nelems = dmshape[1]
 
-        #run KNN in the distance matrix, accumulate each index pair into a sparse distance matrix
+        #run KNN in the dense distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
 
@@ -329,14 +384,15 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
 
         indices_gathered = tf.transpose(indices_gathered, [1,2,0])
 
-        sp_sum = tf.zeros((n_points, n_points))
-        for i in range(self.num_neighbors):
-            dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
-            dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
-            src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
-            src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
-            sp_sum += tf.scatter_nd(src_dst_inds, top_k_vals[:, i], (n_points, n_points))
-
+        #add the neighbors up to a big matrix using dense matrices, then convert to sparse (mainly for testing)
+        # sp_sum = tf.zeros((n_points, n_points))
+        # for i in range(self.num_neighbors):
+        #     dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
+        #     dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
+        #     src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
+        #     src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
+        #     sp_sum += tf.scatter_nd(src_dst_inds, top_k_vals[:, i], (n_points, n_points))
+        # spt_this = tf.sparse.from_dense(sp_sum)
         # validate that the vectorized ops are doing what we want by hand while debugging
         # dm = np.eye(n_points)
         # for ibin in range(nbins):
@@ -347,25 +403,50 @@ class SparseAttentionDistance(tf.keras.layers.Layer):
         #             val = top_k.values[ibin, ielem, ineigh]
         #             dm[idx0, idx1] += val
         # assert(np.all(sp_sum.numpy() == dm))
-        # global iepoch
-        # if iepoch%100==0:
-        #     np.savez("dm_{}.npz".format(iepoch), dm=sp_sum)
-        # iepoch += 1
 
-        spt_this = tf.sparse.from_dense(sp_sum)
+        #update the output using intermediate sparse matrices, which may result in some inconsistencies from duplicated indices
+        sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=tf.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
+        for i in range(self.num_neighbors):
+           dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
+           dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
+           src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
+           src_dst_inds = tf.cast(tf.transpose(tf.stack([src_ind, dst_ind])), dtype=tf.int64)
+           sp_sum = tf.sparse.add(
+               sp_sum,
+               tf.sparse.reorder(tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
+           )
+        spt_this = tf.sparse.reorder(sp_sum)
+
         return spt_this
 
-    @tf.function
-    def construct_sparse_dm(self, points):
+    def construct_sparse_dm_batch(self, points):
+
+        #points: (n_points, n_features) input elements for graph construction
         n_points = tf.shape(points)[0]
+        n_features = tf.shape(points)[1]
+
+        #compute the number of LSH bins to divide the input points into on the fly
+        #n_points must be divisible by bin_size exactly due to the use of reshape
+        n_bins = tf.math.floordiv(n_points, self.bin_size)
+        #tf.debugging.assert_greater(n_bins, 0)
 
         #put each input item into a bin defined by the softmax output across the LSH embedding
-        mul = tf.linalg.matmul(points, self.random_rotations)
-        cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = my_softmax_split(cmul, self.nbins)
+        mul = tf.linalg.matmul(points, self.codebook_random_rotations[:, :n_bins//2])
+        #tf.debugging.assert_greater(tf.shape(mul)[2], 0)
 
+        cmul = tf.concat([mul, -mul], axis=-1)
+
+        #cmul is now an integer in [0..nbins) for each input point
+        #bins_split: (n_bins, bin_size) of integer bin indices, which put each input point into a bin of size (n_points/n_bins)
+        bins_split = split_indices_to_bins(cmul, n_bins, self.bin_size)
+
+        #parts: (n_bins, bin_size, n_features), the input points divided up into bins
         parts = tf.gather(points, bins_split)
-        sparse_distance_matrix = self.valid_sparse_mat(n_points, bins_split, parts)
+
+        #sparse_distance_matrix: (n_points, n_points) sparse distance matrix
+        #where higher values (closer to 1) are associated with points that are closely related
+        sparse_distance_matrix = self.subpoints_to_sparse_matrix(n_points, bins_split, parts)
+
         return sparse_distance_matrix
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
@@ -408,6 +489,16 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
 
         return x
 
+class AddSparse(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(AddSparse, self).__init__(**kwargs)
+
+    def call(self, matrices):
+        ret = matrices[0]
+        for mat in matrices[1:]:
+            ret = tf.sparse.add(ret, mat)
+        return ret
+
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     def __init__(self,
@@ -417,8 +508,7 @@ class PFNet(tf.keras.Model):
         distance_dim=256,
         convlayer="ghconv",
         dropout=0.1,
-        nbins=10,
-        batch_size=10,
+        bin_size=10,
         num_convs_id=1,
         num_convs_reg=1,
         num_hidden_id_enc=1,
@@ -431,6 +521,7 @@ class PFNet(tf.keras.Model):
 
         super(PFNet, self).__init__()
         self.activation = activation
+        self.num_dists = 1
 
         encoding_id = []
         decoding_id = []
@@ -452,8 +543,13 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(len(elem_labels))
         self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
-        #self.embedding_dropout = tf.keras.layers.Dropout(dropout)
-        self.dist = SparseAttentionDistance(distance_dim, nbins, batch_size, num_neighbors, dist_mult=dist_mult, cosine_dist=cosine_dist)
+        self.embedding_dropout = tf.keras.layers.Dropout(0.2)
+
+        self.dists = []
+        for idist in range(self.num_dists):
+            self.dists.append(SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult, cosine_dist=cosine_dist))
+        self.addsparse = AddSparse()
+        #self.dist = DenseDistance(dist_mult=dist_mult)
 
         convs_id = []
         convs_reg = []
@@ -475,7 +571,7 @@ class PFNet(tf.keras.Model):
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
         self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
 
-    def create_model(self, training=True):
+    def create_model(self, num_max_elems, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
         return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
 
@@ -487,10 +583,11 @@ class PFNet(tf.keras.Model):
 
         #embed inputs for graph structure prediction
         embedding_attention = self.layer_embedding(enc)
-        #embedding_attention = self.embedding_dropout(embedding_attention, training)
+        embedding_attention = self.embedding_dropout(embedding_attention, training)
 
         #create graph structure by predicting a sparse distance matrix
-        dm = self.dist(embedding_attention, training)
+        dms = [dist(embedding_attention, training) for dist in self.dists]
+        dm = self.addsparse(dms)
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm, training)
@@ -717,7 +814,7 @@ def parse_args():
     parser.add_argument("--num-hidden-reg-dec", type=int, default=2, help="number of decoder layers for regression")
     parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
-    parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
+    parser.add_argument("--bin-size", type=int, default=100, help="number of points per LSH bin")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--dist-mult", type=float, default=1.0, help="Exponential multiplier")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
@@ -807,6 +904,8 @@ if __name__ == "__main__":
     args = parse_args()
     print(args)
     
+    experiment = Experiment(project_name="particleflow_tf")
+
     #tf.debugging.enable_check_numerics()
     tf.config.run_functions_eagerly(args.eager)
 
@@ -863,8 +962,7 @@ if __name__ == "__main__":
             distance_dim=args.distance_dim,
             convlayer=args.convlayer,
             dropout=args.dropout,
-            batch_size=args.batch_size,
-            nbins=args.nbins,
+            bin_size=args.bin_size,
             num_neighbors=args.num_neighbors,
             dist_mult=args.dist_mult
         )
@@ -882,7 +980,7 @@ if __name__ == "__main__":
 
         #model(np.random.randn(args.batch_size, num_max_elems, 15).astype(np.float32))
         if not args.eager:
-            model = model.create_model()
+            model = model.create_model(num_max_elems)
             model.summary()
 
     if not os.path.isdir("experiments"):
