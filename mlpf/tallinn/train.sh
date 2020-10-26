@@ -1,17 +1,21 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 1
+#SBATCH --gpus 2
 
 IMG=/home/software/singularity/base.simg:latest
 cd ~/particleflow
 
 #TF training
-singularity exec -B /scratch --nv $IMG python3 mlpf/tensorflow/tf_model.py \
-  --datapath /scratch/joosep/TTbar_14TeV_TuneCUETP8M1_cfi \
+singularity exec --nv $IMG python3 mlpf/tensorflow/tf_model.py \
+  --datapath ./data/TTbar_14TeV_TuneCUETP8M1_cfi \
   --target cand --ntrain 70000 --ntest 20000 --convlayer ghconv \
-  --lr 1e-3 --nepochs 100 --num-neighbors 20 --num-hidden-id 2 --num-hidden-reg 2 \
-  --nbins 10 --hidden-dim-id 512 --hidden-dim-reg 512 --batch-size 5 --distance-dim 512 \
-  --dropout 0.3 --train-cls --num-convs-id 2 --num-convs-reg 2
+  --lr 1e-4 --nepochs 100 --num-neighbors 10 \
+  --num-hidden-id-enc 0 --num-hidden-id-dec 2 \
+  --num-hidden-reg-enc 0 --num-hidden-reg-dec 2 \
+  --bin-size 100 --hidden-dim-id 256 --hidden-dim-reg 256 \
+  --batch-size 5 --distance-dim 256 \
+  --dropout 0.0 --train-cls \
+  --num-convs-id 3 --num-convs-reg 3
 
 #Pytorch  training
 #singularity exec -B /home --nv $IMG \
