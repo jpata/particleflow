@@ -146,3 +146,9 @@ python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-file
 ## Acknowledgements
 
 Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**.
+
+
+
+```
+runTheMatrix.py -l 23434.21 --command="--customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3" --dryRun
+```
