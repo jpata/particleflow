@@ -24,10 +24,9 @@ def parse_args():
     parser.add_argument("--num-hidden-reg-dec", type=int, default=2, help="number of decoder layers for regression")
     parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
+    parser.add_argument("--bin-size", type=int, default=100, help="number of points per LSH bin")
     parser.add_argument("--dist-mult", type=float, default=1.0, help="Exponential multiplier")
     parser.add_argument("--num-conv", type=int, default=1, help="number of convolution layers (powers)")
-    parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
-    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument("--attention-layer-cutoff", type=float, default=0.2, help="Sparsify attention matrix by masking values below this threshold")
     parser.add_argument("--nthreads", type=int, default=-1, help="number of threads to use")
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
@@ -86,13 +85,12 @@ if __name__ == "__main__":
         num_hidden_reg_dec=args.num_hidden_reg_dec,
         distance_dim=args.distance_dim,
         convlayer=args.convlayer,
-        dropout=args.dropout,
-        batch_size=args.batch_size,
-        nbins=args.nbins,
+        dropout=0.0,
+        bin_size=args.bin_size,
         num_neighbors=args.num_neighbors,
         dist_mult=args.dist_mult
     )
-    model = base_model.create_model(training=False)
+    model = base_model.create_model(num_max_elems, training=False)
 
     #load the weights
     model.load_weights(args.weights)
@@ -116,24 +114,7 @@ if __name__ == "__main__":
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     # Get frozen ConcreteFunction
-    base_model = PFNet(
-        hidden_dim_id=args.hidden_dim_id,
-        hidden_dim_reg=args.hidden_dim_reg,
-        num_convs_id=args.num_convs_id,
-        num_convs_reg=args.num_convs_reg,
-        num_hidden_id_enc=args.num_hidden_id_enc,
-        num_hidden_id_dec=args.num_hidden_id_dec,
-        num_hidden_reg_enc=args.num_hidden_reg_enc,
-        num_hidden_reg_dec=args.num_hidden_reg_dec,
-        distance_dim=args.distance_dim,
-        convlayer=args.convlayer,
-        dropout=args.dropout,
-        batch_size=args.batch_size,
-        nbins=None,
-        num_neighbors=args.num_neighbors,
-        dist_mult=args.dist_mult
-    )
-    full_model = tf.function(lambda x: model(x, training=False))
+    full_model = tf.function(lambda x: base_model(x, training=False))
     full_model = full_model.get_concrete_function(
         tf.TensorSpec((None, None, 15), tf.float32))
     from tensorflow.python.framework import convert_to_constants
