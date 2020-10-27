@@ -14,7 +14,6 @@ except:
 
 from comet_ml import Experiment
 
-
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
@@ -620,6 +619,72 @@ class PFNet(tf.keras.Model):
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
         return ret
 
+    def set_trainable_classification(self):
+        self.gnn_reg.trainable = False
+        self.layer_momentum.trainable = False
+
+    def set_trainable_regression(self):
+        for layer in self.layers:
+            layer.trainable = False
+        self.gnn_reg.trainable = True
+        self.layer_momentum.trainable = True
+
+#Just a dummy elementwise model
+class PFNetDummy(tf.keras.Model):
+    def __init__(self, **kwargs):
+        super(PFNetDummy, self).__init__()
+        self.enc = InputEncoding(len(elem_labels))
+
+        self.flatten = tf.keras.layers.Flatten()
+        self.layer_hidden0 = tf.keras.layers.Dense(32, activation="elu")
+        self.layer_hidden1 = tf.keras.layers.Dense(64, activation="elu")
+        self.layer_hidden2 = tf.keras.layers.Dense(128, activation="elu")
+        self.layer_hidden3 = tf.keras.layers.Dense(256, activation="elu")
+
+        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
+        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
+
+    def call(self, inputs, training=True):
+        X = tf.cast(inputs, tf.float32)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        enc = self.enc(inputs)
+
+        h = self.layer_hidden0(flat)
+        h = self.layer_hidden1(h)
+        h = self.layer_hidden2(h)
+        h = self.layer_hidden3(h)
+
+        out_id_logits = self.layer_id(h)
+        out_charge = self.layer_charge(h)
+        pred_corr = self.layer_momentum(h)
+
+        #soft-mask elements for which the id prediction was 0  
+        probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(out_id_logits)[:, :, 0]
+
+        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
+        out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
+        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
+
+        out_momentum = tf.stack([
+            out_momentum_eta * probabilistic_mask_good,
+            out_momentum_phi * probabilistic_mask_good,
+            out_momentum_E * probabilistic_mask_good,
+        ], axis=-1)
+
+        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
+        return ret
+
+    def set_trainable_classification(self):
+        self.layer_momentum.trainable = False
+
+    def set_trainable_regression(self):
+        pass
+
+    def create_model(self, num_max_elems, training=True):
+        inputs = tf.keras.Input(shape=(num_max_elems,15,))
+        return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
+
 #@tf.function
 def separate_prediction(y_pred):
     N = len(class_labels)
@@ -973,16 +1038,12 @@ if __name__ == "__main__":
 
         if args.train_cls:
             loss_fn = my_loss_cls
-            model.gnn_reg.trainable = False
-            model.layer_momentum.trainable = False
+            model.set_trainable_classification()
         elif args.train_reg:
             loss_fn = my_loss_reg
-            for layer in model.layers:
-                layer.trainable = False
-            model.gnn_reg.trainable = True
-            model.layer_momentum.trainable = True
+            model.set_trainable_regression()
 
-        #model(np.random.randn(args.batch_size, num_max_elems, 15).astype(np.float32))
+        model(np.random.randn(args.batch_size, num_max_elems, 15).astype(np.float32))
         if not args.eager:
             model = model.create_model(num_max_elems)
             model.summary()
