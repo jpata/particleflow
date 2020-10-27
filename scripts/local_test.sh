@@ -48,7 +48,7 @@ python3 ../mlpf/tensorflow/tf_model.py \
   --datapath data/TTbar_14TeV_TuneCUETP8M1_cfi \
   --target cand --ntrain 2 --ntest 2 --convlayer ghconv \
   --lr 1e-3 --nepochs 5 --batch-size 2 --distance-dim 128 \
-  --nbins 10 --hidden-dim-id 128 \
+  --bin-size 100 --hidden-dim-id 128 \
   --dropout 0.2
 
 #Evaluate TF model
@@ -56,8 +56,8 @@ python3 ../mlpf/tensorflow/pred_tf_model.py \
   --datapath data/TTbar_14TeV_TuneCUETP8M1_cfi \
   --target cand --ntrain 2 --ntest 2 --convlayer ghconv \
   --batch-size 2 --distance-dim 128 \
-  --nbins 10 --hidden-dim-id 128 \
-  --dropout 0.2 --weights experiments/run_01/weights.05-*.hdf5
+  --bin-size 100 --hidden-dim-id 128 \
+  --weights experiments/run_01/weights.05-*.hdf5
 
 #Make plots from TF model
 export OUTFILE=`find experiments/run_01 -name df.pkl.bz2 | head -n1`
