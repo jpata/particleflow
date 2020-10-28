@@ -145,10 +145,15 @@ python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-file
 
 ## Acknowledgements
 
-Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**.
+Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Science Foundation. 
 
+
+## Misc
 
 
 ```
-runTheMatrix.py -l 23434.21 --command="--customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3" --dryRun
+git cms-merge-topic jpata:mlpfproducer
+mkdir -p RecoParticleFlow/PFProducer/data/mlpf
+wget http://jpata.web.cern.ch/jpata/mlpf/mlpf_2020_10_27.pb -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_10_27.pb
+runTheMatrix.py -l 23434.21 --command="--customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3"
 ```
