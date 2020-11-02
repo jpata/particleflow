@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 2
+#SBATCH --gpus 1
 #SBATCH --mem-per-gpu=8G
 
 IMG=/home/software/singularity/base.simg:latest
@@ -11,12 +11,12 @@ singularity exec --nv $IMG python3 mlpf/tensorflow/tf_model.py \
   --datapath ./data/TTbar_14TeV_TuneCUETP8M1_cfi \
   --target cand --ntrain 70000 --ntest 20000 --convlayer ghconv \
   --lr 1e-5 --nepochs 100 --num-neighbors 10 \
-  --num-hidden-id-enc 0 --num-hidden-id-dec 2 \
-  --num-hidden-reg-enc 0 --num-hidden-reg-dec 2 \
+  --num-hidden-id-enc 1 --num-hidden-id-dec 2 \
+  --num-hidden-reg-enc 1 --num-hidden-reg-dec 2 \
   --bin-size 100 --hidden-dim-id 256 --hidden-dim-reg 256 \
   --batch-size 5 --distance-dim 256 \
   --dropout 0.0 \
-  --num-convs-id 3 --num-convs-reg 3 --load experiments/run_04/weights.35-43.275730.hdf5
+  --num-convs-id 3 --num-convs-reg 3 --load experiments/run_09/weights.21-*.hdf5
 
 #Pytorch  training
 #singularity exec -B /home --nv $IMG \

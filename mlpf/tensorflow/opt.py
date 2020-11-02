@@ -1,6 +1,6 @@
 from tensorboard.plugins.hparams import api as hp
 import tensorflow as tf
-from tf_model import load_dataset_ttbar, my_loss_cls, num_max_elems, weight_schemes, PFNet
+from tf_model import load_dataset_ttbar, my_loss_full, num_max_elems, weight_schemes, PFNet
 from tf_model import cls_130, cls_211, cls_22, energy_resolution, eta_resolution, phi_resolution
 from argparse import Namespace
 import kerastuner as kt
@@ -11,25 +11,25 @@ args.ntrain = 10000
 args.ntest = 1000
 args.weights = "inverse"
 args.convlayer = "ghconv"
-args.batch_size = 5
+args.batch_size = 1
 args.nepochs = 20
 args.target = "cand"
 args.lr = 0.0001
 args.outdir = "testout"
-args.num_convs_reg = 1
-args.hidden_dim_reg = 128
-args.num_hidden_reg_enc = 0
-args.num_hidden_reg_dec = 0
 
 def model_builder(hp):
     args.hidden_dim_id = hp.Choice('hidden_dim_id', values = [16, 32, 64, 128, 256])
+    args.hidden_dim_reg = hp.Choice('hidden_dim_reg', values = [16, 32, 64, 128, 256])
     args.num_hidden_id_enc = hp.Choice('hidden_dim_id_enc', values = [0, 1, 2, 3])
     args.num_hidden_id_dec = hp.Choice('hidden_dim_id_dec', values = [0, 1, 2, 3])
+    args.num_hidden_reg_enc = hp.Choice('hidden_dim_reg_enc', values = [0, 1, 2, 3])
+    args.num_hidden_reg_dec = hp.Choice('hidden_dim_reg_dec', values = [0, 1, 2, 3])
     args.num_convs_id = hp.Choice('num_convs_id', values = [1, 2, 3, 4])
+    args.num_convs_reg = hp.Choice('num_convs_reg', values = [1, 2, 3, 4])
     args.distance_dim = hp.Choice('distance_dim', values = [16, 32, 64, 128, 256])
     args.num_neighbors = hp.Choice('num_neighbors', [2, 3, 4, 5, 6, 7, 8, 9, 10])
     args.dropout = hp.Choice('dropout', values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
-    args.nbins = hp.Choice('nbins', values = [10, 20, 50])
+    args.bin_size = hp.Choice('bin_size', values = [100, 200, 500, 1000])
     args.dist_mult = hp.Choice('dist_mult', values = [0.1, 1.0, 10.0])
     args.cosine_dist = hp.Choice('cosine_dist', values = [True, False])
 
@@ -45,15 +45,12 @@ def model_builder(hp):
         distance_dim=args.distance_dim,
         convlayer=args.convlayer,
         dropout=args.dropout,
-        batch_size=args.batch_size,
-        nbins=args.nbins,
+        bin_size=args.bin_size,
         num_neighbors=args.num_neighbors,
         dist_mult=args.dist_mult,
         cosine_dist=args.cosine_dist
     )
-    loss_fn = my_loss_cls
-    model.gnn_reg.trainable = False
-    model.layer_momentum.trainable = False
+    loss_fn = my_loss_full
     opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
     print(args)
 
@@ -78,7 +75,7 @@ if __name__ == "__main__":
         objective = 'val_loss', 
         max_epochs = args.nepochs,
         factor = 3,
-        hyperband_iterations = 1,
+        hyperband_iterations = 3,
         directory = '/scratch/joosep/kerastuner_out',
         project_name = 'mlpf')
     
