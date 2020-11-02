@@ -145,7 +145,7 @@ python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-file
 
 ## Acknowledgements
 
-Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Science Foundation. 
+Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Research Council. 
 
 
 ## Misc
@@ -154,6 +154,11 @@ Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We
 ```
 git cms-merge-topic jpata:mlpfproducer
 mkdir -p RecoParticleFlow/PFProducer/data/mlpf
-wget http://jpata.web.cern.ch/jpata/mlpf/mlpf_2020_10_27.pb -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_10_27.pb
-runTheMatrix.py -l 23434.21 --command="--customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3"
+wget http://jpata.web.cern.ch/jpata/mlpf/mlpf_2020_10_29.pb -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_10_29.pb
+
+#Phase 2: timing extraction
+runTheMatrix.py -l 23434.21 -w upgrade --command="-n 100 --nThreads 8 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_aod"
+
+#Run 3: physics performance checks
+runTheMatrix.py -l 11834.0 -w upgrade --command="-n 100 --nThreads 8 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_reco"
 ```
