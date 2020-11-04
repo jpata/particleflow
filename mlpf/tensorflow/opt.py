@@ -79,13 +79,13 @@ if __name__ == "__main__":
         directory = '/scratch/joosep/kerastuner_out',
         project_name = 'mlpf')
     
-    tuner.search(
-        ds_train_r,
-        validation_data=ds_test_r,
-        steps_per_epoch=args.ntrain/args.batch_size,
-        validation_steps=args.ntest/args.batch_size,
-        #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
-    )
-    #tuner.results_summary()
-    #for trial in tuner.oracle.get_best_trials(num_trials=10):
-    #    print(trial.hyperparameters.values, trial.score)
+    #tuner.search(
+    #    ds_train_r,
+    #    validation_data=ds_test_r,
+    #    steps_per_epoch=args.ntrain/args.batch_size,
+    #    validation_steps=args.ntest/args.batch_size,
+    #    #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
+    #)
+    tuner.results_summary()
+    for trial in tuner.oracle.get_best_trials(num_trials=10):
+        print(trial.hyperparameters.values, trial.score)

@@ -16,7 +16,7 @@ singularity exec --nv $IMG python3 mlpf/tensorflow/tf_model.py \
   --bin-size 100 --hidden-dim-id 256 --hidden-dim-reg 256 \
   --batch-size 5 --distance-dim 256 \
   --dropout 0.0 \
-  --num-convs-id 3 --num-convs-reg 3 --load experiments/run_09/weights.21-*.hdf5
+  --num-convs-id 3 --num-convs-reg 3 --load experiments/run_13/weights.27-*.hdf5
 
 #Pytorch  training
 #singularity exec -B /home --nv $IMG \
