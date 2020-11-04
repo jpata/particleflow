@@ -33,6 +33,7 @@ def parse_args():
     parser.add_argument("--ntrain", type=int, default=80, help="number of training events")
     parser.add_argument("--ntest", type=int, default=20, help="number of testing events")
     parser.add_argument("--gpu", action="store_true", help="use GPU")
+    parser.add_argument("--synthetic-timing", action="store_true", help="run a synthetic timing check, which is time consuming")
     parser.add_argument("--convlayer", type=str, default="sgconv", choices=["sgconv", "ghconv"], help="Type of graph convolutional layer")
     parser.add_argument("--datapath", type=str, help="Input data path", required=True)
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
@@ -113,24 +114,25 @@ if __name__ == "__main__":
     time_per_event = time_per_dsrow/args.batch_size
     print("prediction time per event: {:.2f} ms".format(1000.0*time_per_event))
 
-    synthetic_timing_data = []
-    for iteration in range(3):
-        numev = 500
-        for evsize in [1000, 5000, 10000, 20000]:
-            for batch_size in [1, 2, 4, 10, 20]:
-                t0 = time.time()
-                for i in range(numev//batch_size):
-                    x = np.random.randn(batch_size, evsize, 15)
-                    model(x)
-                t1 = time.time()
-                dt = t1 - t0
-                time_per_event = 1000.0*(dt / numev)
-                synthetic_timing_data.append(
-                        [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
-                print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
+    if args.synthetic_timing:
+        synthetic_timing_data = []
+        for iteration in range(3):
+            numev = 500
+            for evsize in [1000, 5000, 10000, 20000]:
+                for batch_size in [1,2,4,10,20] if args.gpu else [1, ]:
+                    t0 = time.time()
+                    for i in range(numev//batch_size):
+                        x = np.random.randn(batch_size, evsize, 15)
+                        model(x)
+                    t1 = time.time()
+                    dt = t1 - t0
+                    time_per_event = 1000.0*(dt / numev)
+                    synthetic_timing_data.append(
+                            [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
+                    print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
 
-    with open("{}/synthetic_timing.json".format(model_dir), "w") as fi:
-        json.dump(synthetic_timing_data, fi)
+        with open("{}/synthetic_timing_gpu{}.json".format(model_dir, int(args.gpu)), "w") as fi:
+            json.dump(synthetic_timing_data, fi)
 
     #https://leimao.github.io/blog/Save-Load-Inference-From-TF2-Frozen-Graph/
     # Get frozen ConcreteFunction
