@@ -319,7 +319,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
     def build(self, input_shape):
         #(n_batch, n_points, n_features)
 
-        #generate the LSH codebook for random rotations
+        #generate the LSH codebook for random rotations (num_features, num_bins/2)
         self.codebook_random_rotations = self.add_weight(
             shape=(input_shape[-1], self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
         )
@@ -896,6 +896,7 @@ def parse_args():
     parser.add_argument("--lr-decay", type=float, default=0.0, help="learning rate decay")
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
     parser.add_argument("--train-reg", action="store_true", help="Train only the regression part")
+    parser.add_argument("--cosine-dist", action="store_true", help="Use cosine distance")
     parser.add_argument("--eager", action="store_true", help="Run in eager mode for debugging")
     args = parser.parse_args()
     return args
