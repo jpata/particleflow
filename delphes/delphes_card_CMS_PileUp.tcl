@@ -823,15 +823,21 @@ module UniqueObjectFinder UniqueObjectFinder {
 # "add Branch ..." lines.
 
 module TreeWriter TreeWriter {
-# add Branch InputArray BranchName BranchClass
-  add Branch Delphes/allParticles Particle GenParticle
+  #GenParticles including PU
   add Branch PileUpMerger/stableParticles PileUpMix GenParticle
 
+  #PF reco inputs
   add Branch TrackMerger/tracks Track Track
   add Branch Calorimeter/towers Tower Tower
 
-#  add Branch Calorimeter/eflowTracks EFlowTrack Track
-#  add Branch Calorimeter/eflowPhotons EFlowPhoton Tower
+  #EFlow reco outputs, including PU
+  #add Branch EFlowMergerAllTracks/eflow PFParticles Particle
+  
+  #Here the same as above, but split into separate collections
+  add Branch HCal/eflowTracks PFCharged Track
+  add Branch ECal/eflowPhotons PFPhoton Photon
+  add Branch HCal/eflowNeutralHadrons PFNeutralHadron Tower
+
 #  add Branch Calorimeter/eflowNeutralHadrons EFlowNeutralHadron Tower
 
 #  add Branch GenJetFinder/jets GenJet Jet

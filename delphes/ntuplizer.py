@@ -127,15 +127,15 @@ if __name__ == "__main__":
         out.clear()
 
         tree.GetEntry(iev)
-        #particles = list(tree.Particle)
         pileupmix = list(tree.PileUpMix)
-        pfparticles = list(tree.PFO)
         pileupmix_idxdict = {}
         for ip, p in enumerate(pileupmix):
             pileupmix_idxdict[p] = ip
         towers = list(tree.Tower)
         tracks = list(tree.Track)
-        import pdb;pdb.set_trace()
+        pf_charged = list(tree.PFCharged)
+        pf_photon = list(tree.PFPhoton)
+        pf_neutral = list(tree.PFNeutralHadron)
 
         #Create a graph with particles, tracks and towers as nodes and gen-level information as edges
         graph = nx.Graph()
@@ -149,12 +149,30 @@ if __name__ == "__main__":
             for ptcl in towers[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("tower", i), ("particle", ip))
+
         for i in range(len(tracks)):
             graph.add_node(("track", i))
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
-        if iev < 10:
-            nx.readwrite.write_gpickle(graph, "graph_{}.pkl".format(iev))
+
+        for i in range(len(pf_charged)):
+            graph.add_node(("pfcharged", i))
+            ip = pileupmix_idxdict[pf_charged[i].Particle.GetObject()]
+            graph.add_edge(("pfcharged", i), ("particle", ip))
+        
+        for i in range(len(pf_neutral)):
+            graph.add_node(("pfneutral", i))
+            for ptcl in pf_neutral[i].Particles:
+                ip = pileupmix_idxdict[ptcl]
+                graph.add_edge(("pfneutral", i), ("particle", ip))
+        
+        for i in range(len(pf_photon)):
+            graph.add_node(("pfphoton", i))
+            for ptcl in pf_photon[i].Particles:
+                ip = pileupmix_idxdict[ptcl]
+                graph.add_edge(("pfphoton", i), ("particle", ip))
+
+        nx.readwrite.write_gpickle(graph, "graph_{}.pkl".format(iev))
         #Assign a unique ID to each connected subset of tracks, towers and particles
         isg = 0
         truncated_particles = 0
