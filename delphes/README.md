@@ -8,8 +8,8 @@ wget http://atlaswww.hep.anl.gov/hepsim/soft/centos7hepsim.img
 sudo singularity exec -B /home --writable centos7hepsim.img ./install.sh
   
 # Run the simulation step
-singularity exec centos7hepsim.img run_sim.sh
+singularity exec centos7hepsim.img ./run_sim.sh
 
 # Run the ntuplization step
-singularity exec centos7hepsim.img run_ntuple.sh
+singularity exec centos7hepsim.img ./run_ntuple.sh
 ```
