@@ -37,7 +37,7 @@ module PileUpMerger PileUpMerger {
   set PileUpFile /opt/hepsim/delphes/MinBias.pileup
 
   # average expected pile up
-  set MeanPileUp 50
+  set MeanPileUp 200
 
    # maximum spread in the beam direction in m
   set ZVertexSpread 0.25
@@ -853,5 +853,6 @@ module TreeWriter TreeWriter {
 #  add Branch PileUpMerger/vertices Vertex Vertex
 }
 
-set MaxEvents 10
+#not sure if this does anything?
+set MaxEvents 100
 

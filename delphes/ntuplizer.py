@@ -2,129 +2,178 @@ import ROOT
 import numpy as np
 import networkx as nx
 from collections import Counter
-#import numba
+import uproot_methods
+import math
+import pickle
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 
-#Bins for tiling to create graph edges
-bins_eta = np.linspace(-8, 8, 50, dtype=np.float32)
-bins_phi = np.linspace(-4, 4, 50, dtype=np.float32)
+#for debugging
+save_full_graphs = True
 
-class Output:
-    def __init__(self, outfile):
-        self.tfile = ROOT.TFile(outfile, "RECREATE")
-        self.tree = ROOT.TTree("tree", "tree")
-        
-        self.maxparticles = 20000
-        self.maxtowers = 10000
-        self.maxtracks = 10000
-        
-        self.nparticles = np.zeros(1, dtype=np.uint32)
-        self.tree.Branch("nparticles", self.nparticles, "nparticles/i")
-        self.particles_pt = np.zeros(self.maxparticles, dtype=np.float32)
-        self.tree.Branch("particles_pt", self.particles_pt, "particles_pt[nparticles]/F")
-        self.particles_e = np.zeros(self.maxparticles, dtype=np.float32)
-        self.tree.Branch("particles_e", self.particles_e, "particles_e[nparticles]/F")
-        self.particles_eta = np.zeros(self.maxparticles, dtype=np.float32)
-        self.tree.Branch("particles_eta", self.particles_eta, "particles_eta[nparticles]/F")
-        self.particles_phi = np.zeros(self.maxparticles, dtype=np.float32)
-        self.tree.Branch("particles_phi", self.particles_phi, "particles_phi[nparticles]/F")
-        self.particles_mass = np.zeros(self.maxparticles, dtype=np.float32)
-        self.tree.Branch("particles_mass", self.particles_mass, "particles_mass[nparticles]/F")
-        self.particles_pid = np.zeros(self.maxparticles, dtype=np.int32)
-        self.tree.Branch("particles_pid", self.particles_pid, "particles_pid[nparticles]/I")
-        self.particles_nelem_tower = np.zeros(self.maxparticles, dtype=np.int32)
-        self.tree.Branch("particles_nelem_tower", self.particles_nelem_tower, "particles_nelem_tower[nparticles]/I")
-        self.particles_nelem_track = np.zeros(self.maxparticles, dtype=np.int32)
-        self.tree.Branch("particles_nelem_track", self.particles_nelem_track, "particles_nelem_track[nparticles]/I")
-        self.particles_iblock = np.zeros(self.maxparticles, dtype=np.int32)
-        self.tree.Branch("particles_iblock", self.particles_iblock, "particles_iblock[nparticles]/I")
+#check if a genparticle has an associated reco track and return the index (-1 otherwise)
+def particle_track_id(g, particle):
+    for edge in g.edges(particle):
+        if edge[1][0] == "track":
+            return edge[1][1]
+    return -1
 
-        self.ntowers = np.zeros(1, dtype=np.uint32)
-        self.tree.Branch("ntowers", self.ntowers, "ntowers/i")
-        self.towers_e = np.zeros(self.maxtowers, dtype=np.float32)
-        self.tree.Branch("towers_e", self.towers_e, "towers_e[ntowers]/F")
-        self.towers_eta = np.zeros(self.maxtowers, dtype=np.float32)
-        self.tree.Branch("towers_eta", self.towers_eta, "towers_eta[ntowers]/F")
-        self.towers_phi = np.zeros(self.maxtowers, dtype=np.float32)
-        self.tree.Branch("towers_phi", self.towers_phi, "towers_phi[ntowers]/F")
-        self.towers_eem = np.zeros(self.maxtowers, dtype=np.float32)
-        self.tree.Branch("towers_eem", self.towers_eem, "towers_eem[ntowers]/F")
-        self.towers_ehad = np.zeros(self.maxtowers, dtype=np.float32)
-        self.tree.Branch("towers_ehad", self.towers_ehad, "towers_ehad[ntowers]/F")
-        self.towers_iblock = np.zeros(self.maxtowers, dtype=np.int32)
-        self.tree.Branch("towers_iblock", self.towers_iblock, "towers_iblock[ntowers]/I")
-        self.towers_nparticles = np.zeros(self.maxtowers, dtype=np.int32)
-        self.tree.Branch("towers_nparticles", self.towers_nparticles, "towers_nparticles[ntowers]/I")
- 
-        self.ntracks = np.zeros(1, dtype=np.uint32)
-        self.tree.Branch("ntracks", self.ntracks, "ntracks/i")
-        self.tracks_charge = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_charge", self.tracks_charge, "tracks_charge[ntracks]/F")
-        self.tracks_pt = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_pt", self.tracks_pt, "tracks_pt[ntracks]/F")
-        self.tracks_eta = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_eta", self.tracks_eta, "tracks_eta[ntracks]/F")
-        self.tracks_phi = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_phi", self.tracks_phi, "tracks_phi[ntracks]/F")
-        self.tracks_ctgtheta = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_ctgtheta", self.tracks_ctgtheta, "tracks_ctgtheta[ntracks]/F")
-        self.tracks_etaouter = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_etaouter", self.tracks_etaouter, "tracks_etaouter[ntracks]/F")
-        self.tracks_phiouter = np.zeros(self.maxtracks, dtype=np.float32)
-        self.tree.Branch("tracks_phiouter", self.tracks_phiouter, "tracks_phiouter[ntracks]/F")
-        self.tracks_iblock = np.zeros(self.maxtracks, dtype=np.int32)
-        self.tree.Branch("tracks_iblock", self.tracks_iblock, "tracks_iblock[ntracks]/I")
+#check if a genparticle has associated reco objects (tracks or towers)
+def has_reco(g, particle):
+    for edge in g.edges(particle):
+        if edge[1][0] in ["tower", "track"]:
+            return True
+    return False
 
-    def clear(self):
-        self.nparticles[:] = 0        
-        self.particles_pt[:] = 0
-        self.particles_e[:] = 0
-        self.particles_eta[:] = 0
-        self.particles_phi[:] = 0
-        self.particles_mass[:] = 0
-        self.particles_pid[:] = 0
-        self.particles_nelem_tower[:] = 0
-        self.particles_nelem_track[:] = 0
-        self.particles_iblock[:] = 0
+#the gen particle is constructed from the sum of all neutral genparticles in the tower.
+#It will be a photon if any of them are gen photons, otherwise, it will be a neutral hadron.
+def get_tower_genparticle(g, tower_node):
+    particles_without_track = []
+    is_photon = False
+    
+    for edge in g.edges(tower_node):
+        if edge[1][0] == "particle":
+            particle = edge[1]
+            if g.nodes[particle]["pid"] == 22:
+                is_photon = True
+            trk_id = particle_track_id(g, particle)
+            if trk_id == -1:
+                particles_without_track.append(particle)
+    lvs = []
 
-        self.ntowers[:] = 0
-        self.towers_e[:] = 0 
-        self.towers_eta[:] = 0 
-        self.towers_phi[:] = 0 
-        self.towers_eem[:] = 0 
-        self.towers_ehad[:] = 0
-        self.towers_iblock[:] = 0
-        self.towers_nparticles[:] = 0
-        
-        self.ntracks[:] = 0
-        self.tracks_charge[:] = 0 
-        self.tracks_pt[:] = 0 
-        self.tracks_eta[:] = 0 
-        self.tracks_phi[:] = 0 
-        self.tracks_ctgtheta[:] = 0 
-        self.tracks_etaouter[:] = 0 
-        self.tracks_phiouter[:] = 0 
-        self.tracks_iblock[:] = 0 
- 
-    def close(self):
-        self.tfile.Write()
-        self.tfile.Close()
+    for p in particles_without_track:
+        lv = uproot_methods.TLorentzVector.from_ptetaphie(
+            g.nodes[p]["pt"],
+            g.nodes[p]["eta"],
+            g.nodes[p]["phi"],
+            g.nodes[p]["energy"],
+        )
+        lvs.append(lv)
 
-class FakeParticle:
-    pass
+    if len(lvs) > 0:
+        lv = sum(lvs[1:], lvs[0])
+        return {
+            "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy, "pid": 22 if is_photon else 130
+        }
+
+    else:
+        return None
+
+#for a given reco track, get the genparticle and corresponding PF particle.
+#all tracks have an associated charged genparticle by construction.
+#the PFCandidate just copies the track information per Delphes-PF
+def get_track_truth(g, track):
+    particle = None
+    pfcandidate = None
+    for edge in g.edges(track):
+        if edge[1][0] == "particle":
+            particle = edge[1]
+            for edge2 in g.edges(particle):
+                if edge2[1][0] == "pfcharged":
+                    pfcandidate = g.nodes[edge2[1]]
+                    break
+            if pfcandidate:
+                break
+    return (g.nodes[track], g.nodes[particle], pfcandidate)
+
+#for a given tower, get the cleaned genparticle and corresponding PF particle.
+#the genparticle is constructed according to the tower genparticle cleaning algo in get_tower_genparticle
+#the PF particle will be either a neutral hadron or a photon.
+def get_tower_truth(g, tower):
+    particle = None
+    pfcandidate = None
+
+    reco_objs = []
+    for edge in g.edges(tower):        
+        for particle_edge in g.edges(edge[1]):
+            if particle_edge[1][0] in ["pfneutral", "pfphoton"]:
+                reco_objs.append(particle_edge[1])
+
+    #get the first reco-pf object in case there were several (rare, but to be understood)
+    reco_objs = list(set(reco_objs))
+    reco_obj = g.nodes[reco_objs[0]] if len(reco_objs)>0 else None
+    
+    cleaned_genparticle = get_tower_genparticle(g, tower)
+    return (g.nodes[tower], cleaned_genparticle, reco_obj)
+
+def make_tower_array(tower_dict):
+    return np.array([
+        1, #tower is denoted with ID 1
+        tower_dict["et"],
+        tower_dict["eta"],
+        tower_dict["phi"],
+        tower_dict["energy"],
+        tower_dict["eem"],
+        tower_dict["ehad"],
+    ])
+
+def make_track_array(track_dict):
+    return np.array([
+        2, #track is denoted with ID 2
+        track_dict["pt"],
+        track_dict["eta"],
+        track_dict["phi"],
+        track_dict["p"],
+        track_dict["eta_outer"],
+        track_dict["phi_outer"],
+    ])
+
+#0 - nothing associated
+#1 - charged hadron
+#2 - neutral hadron
+#3 - photon
+#4 - muon
+#5 - electron
+gen_pid_encoding = {
+    211: 1,
+    130: 2,
+    22: 3,
+    13: 4,
+    11: 5,
+}
+
+def make_gen_array(gen_dict):
+    if not gen_dict:
+        return np.zeros(6)
+
+    encoded_pid = gen_pid_encoding.get(abs(gen_dict["pid"]), 1)
+    charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1,4,5] else 0
+
+    return np.array([
+        encoded_pid,
+        charge,
+        gen_dict["pt"],
+        gen_dict["eta"],
+        gen_dict["phi"],
+        gen_dict["energy"]
+    ])
+
+def make_cand_array(cand_dict):
+    if not cand_dict:
+        return np.zeros(6)
+
+    encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
+    return np.array([
+        encoded_pid,
+        cand_dict["charge"],
+        cand_dict.get("pt", 0),
+        cand_dict["eta"],
+        cand_dict["phi"],
+        cand_dict.get("energy", 0)
+    ])
 
 if __name__ == "__main__":
     f = ROOT.TFile("out.root")
     tree = f.Get("Delphes")
 
-    out = Output("out_flat.root")    
+
+    X_all = []
+    ygen_all = []
+    ycand_all = []
+
     for iev in range(tree.GetEntries()):
-        #if iev > 100:
-        #    break
-        print(iev)
-        out.clear()
+        print("event {}/{}".format(iev, tree.GetEntries()))
 
         tree.GetEntry(iev)
         pileupmix = list(tree.PileUpMix)
@@ -147,10 +196,7 @@ if __name__ == "__main__":
             graph.nodes[node]["phi"] = pileupmix[i].Phi
             graph.nodes[node]["pt"] = pileupmix[i].PT
             graph.nodes[node]["energy"] = pileupmix[i].E
-            graph.nodes[node]["status"] = pileupmix[i].Status
             graph.nodes[node]["is_pu"] = pileupmix[i].IsPU
-            graph.nodes[node]["m1"] = pileupmix[i].M1
-            graph.nodes[node]["m2"] = pileupmix[i].M2
 
         for i in range(len(towers)):
             node = ("tower", i)
@@ -158,6 +204,9 @@ if __name__ == "__main__":
             graph.nodes[node]["eta"] = towers[i].Eta
             graph.nodes[node]["phi"] = towers[i].Phi
             graph.nodes[node]["energy"] = towers[i].E
+            graph.nodes[node]["et"] = towers[i].ET
+            graph.nodes[node]["eem"] = towers[i].Eem
+            graph.nodes[node]["ehad"] = towers[i].Ehad
             for ptcl in towers[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("tower", i), ("particle", ip))
@@ -165,8 +214,11 @@ if __name__ == "__main__":
         for i in range(len(tracks)):
             node = ("track", i)
             graph.add_node(node)
+            graph.nodes[node]["p"] = tracks[i].P
             graph.nodes[node]["eta"] = tracks[i].Eta
             graph.nodes[node]["phi"] = tracks[i].Phi
+            graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
+            graph.nodes[node]["phi_outer"] = tracks[i].PhiOuter
             graph.nodes[node]["pt"] = tracks[i].PT
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
@@ -174,18 +226,22 @@ if __name__ == "__main__":
         for i in range(len(pf_charged)):
             node = ("pfcharged", i)
             graph.add_node(node)
+            graph.nodes[node]["pid"] = pf_charged[i].PID
             graph.nodes[node]["eta"] = pf_charged[i].Eta
             graph.nodes[node]["phi"] = pf_charged[i].Phi
             graph.nodes[node]["pt"] = pf_charged[i].PT
+            graph.nodes[node]["charge"] = pf_charged[i].Charge
             ip = pileupmix_idxdict[pf_charged[i].Particle.GetObject()]
             graph.add_edge(("pfcharged", i), ("particle", ip))
         
         for i in range(len(pf_neutral)):
             node = ("pfneutral", i)
             graph.add_node(node)
+            graph.nodes[node]["pid"] = 130
             graph.nodes[node]["eta"] = pf_neutral[i].Eta
             graph.nodes[node]["phi"] = pf_neutral[i].Phi
             graph.nodes[node]["energy"] = pf_neutral[i].E
+            graph.nodes[node]["charge"] = 0
             for ptcl in pf_neutral[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfneutral", i), ("particle", ip))
@@ -193,195 +249,52 @@ if __name__ == "__main__":
         for i in range(len(pf_photon)):
             node = ("pfphoton", i)
             graph.add_node(node)
+            graph.nodes[node]["pid"] = 22
             graph.nodes[node]["eta"] = pf_photon[i].Eta
             graph.nodes[node]["phi"] = pf_photon[i].Phi
             graph.nodes[node]["energy"] = pf_photon[i].E
+            graph.nodes[node]["charge"] = 0
             for ptcl in pf_photon[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfphoton", i), ("particle", ip))
 
-        nx.readwrite.write_gpickle(graph, "graph_{}.pkl".format(iev))
-        #Assign a unique ID to each connected subset of tracks, towers and particles
-        isg = 0
-        truncated_particles = 0
-        all_sources_trk = []
-        all_sources_tower = []
-        all_targets_trk = []
-        all_targets_tower = []
-        tower_matched_particles = np.zeros(len(towers))
-        particles_matched_nelem_tower = np.zeros(len(pileupmix))
-        particles_matched_nelem_track = np.zeros(len(pileupmix))
+        #write the full graph, mainly for study purposes
+        if iev<10 and save_full_graphs:
+            nx.readwrite.write_gpickle(graph, "graph_{}.pkl".format(iev))
 
-        #Loop over all connected subgraphs
-        for sg in nx.connected_components(graph):
-            for node in sg:
-                graph.nodes[node]["iblock"] = isg
+        #now clean up the graph, keeping only reconstructable genparticles
+        #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
+        particles = [n for n in graph.nodes if n[0] == "particle"]
+        particles_with_reco = [n for n in particles if has_reco(graph, n)]
 
-            #get all the tracks, towers and particles in this subgraph
-            track_nodes = [n for n in sg if n[0] == "track"]
-            tower_nodes = [n for n in sg if n[0] == "tower"]
-            particle_nodes = [n for n in sg if n[0] == "particle"]
-     
-            targets_trk = []
-            targets_tower = []
+        tracks = [n for n in graph.nodes if n[0] == "track"]
+        towers = [n for n in graph.nodes if n[0] == "tower"]
 
-            if len(track_nodes) + len(tower_nodes) > 0:
-                matched_gp_from_tracks = []
-                matched_gp_from_towers = []
-                
-                #get all the matched genparticles to the tracks
-                for t in track_nodes:
-                    matched_gp = pileupmix_idxdict[tracks[t[1]].Particle.GetObject()]
-                    all_sources_trk += [t]
-                    all_targets_trk += [matched_gp]
-                    particles_matched_nelem_track[matched_gp] += 1
+        X = []
+        ygen = []
+        ycand = []
 
-                for t in tower_nodes:
-                    #find particles matched to tower
-                    matched_gps = [pileupmix_idxdict[p] for p in towers[t[1]].Particles]
+        #create matrices
+        for track in tracks:
+            truth = get_track_truth(graph, track)
+            X.append(make_track_array(truth[0]))
+            ygen.append(make_gen_array(truth[1]))
+            ycand.append(make_cand_array(truth[2]))
 
-                    #remove genparticles that were already matched to tracks
-                    matched_gps = [p for p in matched_gps if not (p in matched_gp_from_tracks)]
+        for tower in towers:
+            truth = get_tower_truth(graph, tower)
+            X.append(make_tower_array(truth[0]))
+            ygen.append(make_gen_array(truth[1]))
+            ycand.append(make_cand_array(truth[2]))
 
-                    #sort according to energy
-                    matched_gps = sorted(matched_gps, key=lambda p, pileupmix=pileupmix: pileupmix[p].E, reverse=True)
+        X = np.stack(X)
+        ygen = np.stack(ygen)
+        ycand = np.stack(ycand)
+        print("X.shape", X.shape)
 
-                    #keep only stable particles
-                    matched_gps = [p for p in matched_gps if pileupmix[p].Status==1]
+        X_all.append(X)
+        ygen_all.append(ygen)
+        ycand_all.append(ycand)
 
-                    #remove particles already matched to another tower
-                    #matched_gps = [p for p in matched_gps if not p in matched_gp_from_towers]
-
-                    #print("tower", isg, towers[t[1]].Eem, towers[t[1]].Ehad)
-                    #for gp in matched_gps:
-                    #    print("p", pileupmix[gp].E, pileupmix[gp].PID)
-                    #import pdb;pdb.set_trace()     
-
-                    #keep track of how many particles were attached to this tower, and how many towers to each particle            
-                    tower_matched_particles[t[1]] += len(matched_gps)
-                    for matched_gp in matched_gps:
-                        particles_matched_nelem_tower[matched_gp] += 1
-                    
-                    matched_gp_from_towers += matched_gps
-                    all_sources_tower += [t]
-                    all_targets_tower += [matched_gps]
-
-            isg += 1
-
-        #convert to flat numpy arrays
-        src_array_trk = np.zeros((len(all_sources_trk), 10))
-        src_array_tower = np.zeros((len(all_sources_tower), 10))
-        tgt_array_trk = np.zeros((len(all_targets_trk), 4))
-        tgt_array_tower = np.zeros((len(all_targets_tower), 4))
-
-        #source conversion
-        for i, s in enumerate(all_sources_tower):
-            tower = towers[s[1]]
-            src_array_tower[i, 0] = 0
-            src_array_tower[i, 1:5] = np.array([
-                tower.Eta, tower.Phi, tower.Eem, tower.Ehad
-            ])
-        for i, s in enumerate(all_sources_trk):
-            track = tracks[s[1]]
-            src_array_trk[i, 0] = 1
-            src_array_trk[i, 1:] = np.array([
-                track.Eta, track.Phi,
-                track.Charge, track.PT,
-                track.EtaOuter, track.PhiOuter, track.CtgTheta,
-                track.D0, track.DZ
-            ])
-
-        #Target array conversion, choose the first genparticle in the tower
-        for i, targets_per_source in enumerate(all_targets_tower):
-            nt = len(targets_per_source)
-            if nt > 0:
-                ptcl = pileupmix[targets_per_source[0]]
-                etot = sum([pileupmix[t].E for t in targets_per_source])
-                pid = ptcl.PID
-                if pid != 22:
-                    pid = 130 
-                tgt_array_tower[i] = np.array([pid, etot, ptcl.Eta, ptcl.Phi])
-  
-        for i, t in enumerate(all_targets_trk):
-            ptcl = pileupmix[t]
-            tgt_array_trk[i] = np.array([ptcl.PID, ptcl.E, ptcl.Eta, ptcl.Phi])  
-       
-        src_array = np.concatenate([src_array_tower, src_array_trk], axis=0)
-  
-        #Create edges between elements in the same tile or neighbouring tiles
-        #n = len(src_array)
-        #adj_matrix = np.zeros((n, n))
-        #fill_adj_matrix(src_array, bins_eta, bins_phi, adj_matrix)
-
-        #np.savez_compressed("raw2/ev_{}.npz".format(iev), X=src_array, y_trk=tgt_array_trk, y_tower=tgt_array_tower, adj=adj_matrix)
-
-        all_particles = pileupmix 
-        itgt = 0
-        for isrc in range(len(all_particles)):
-            if all_particles[isrc].Status==1:
-                out.particles_pt[itgt] = all_particles[isrc].PT 
-                out.particles_e[itgt] = all_particles[isrc].E
-                out.particles_eta[itgt] = all_particles[isrc].Eta
-                out.particles_phi[itgt] = all_particles[isrc].Phi
-                out.particles_mass[itgt] = all_particles[isrc].Mass
-                out.particles_pid[itgt] = all_particles[isrc].PID
-                out.particles_nelem_tower[itgt] = particles_matched_nelem_tower[isrc]
-                out.particles_nelem_track[itgt] = particles_matched_nelem_track[isrc]
-                out.particles_iblock[itgt] = graph.nodes[("particle", isrc)]["iblock"]
-                itgt += 1
-        inds = np.argsort(out.particles_iblock[:itgt])
-        out.particles_pt[:len(inds)] = out.particles_pt[inds][:]
-        out.particles_e[:len(inds)] = out.particles_e[inds][:]
-        out.particles_eta[:len(inds)] = out.particles_eta[inds][:]
-        out.particles_phi[:len(inds)] = out.particles_phi[inds][:]
-        out.particles_mass[:len(inds)] = out.particles_mass[inds][:] 
-        out.particles_pid[:len(inds)] = out.particles_pid[inds][:] 
-        out.particles_nelem_tower[:len(inds)] = out.particles_nelem_tower[inds][:] 
-        out.particles_nelem_track[:len(inds)] = out.particles_nelem_track[inds][:] 
-        out.particles_iblock[:len(inds)] = out.particles_iblock[inds][:] 
-        out.nparticles[0] = itgt
-        
-        itgt = 0
-        for isrc in range(len(towers)):
-            out.towers_e[itgt] = towers[isrc].E
-            out.towers_eta[itgt] = towers[isrc].Eta
-            out.towers_phi[itgt] = towers[isrc].Phi
-            out.towers_eem[itgt] = towers[isrc].Eem
-            out.towers_ehad[itgt] = towers[isrc].Ehad
-            out.towers_nparticles[itgt] = tower_matched_particles[isrc]
-            out.towers_iblock[itgt] = graph.nodes[("tower", isrc)]["iblock"]
-            itgt += 1
-        inds = np.argsort(out.towers_iblock[:itgt])
-        out.towers_e[:len(inds)] = out.towers_e[inds][:] 
-        out.towers_eta[:len(inds)] = out.towers_eta[inds][:] 
-        out.towers_phi[:len(inds)] = out.towers_phi[inds][:] 
-        out.towers_eem[:len(inds)] = out.towers_eem[inds][:] 
-        out.towers_ehad[:len(inds)] = out.towers_ehad[inds][:] 
-        out.towers_iblock[:len(inds)] = out.towers_iblock[inds][:] 
-        out.towers_nparticles[:len(inds)] = out.towers_nparticles[inds][:]
-        out.ntowers[0] = itgt
-        
-        itgt = 0
-        for isrc in range(len(tracks)):
-            out.tracks_charge[itgt] = tracks[isrc].Charge
-            out.tracks_pt[itgt] = tracks[isrc].PT
-            out.tracks_eta[itgt] = tracks[isrc].Eta
-            out.tracks_phi[itgt] = tracks[isrc].Phi
-            out.tracks_ctgtheta[itgt] = tracks[isrc].CtgTheta
-            out.tracks_etaouter[itgt] = tracks[isrc].EtaOuter
-            out.tracks_phiouter[itgt] = tracks[isrc].PhiOuter
-            out.tracks_iblock[itgt] = graph.nodes[("track", isrc)]["iblock"]
-            itgt += 1
-        inds = np.argsort(out.tracks_iblock[:itgt])
-        out.tracks_charge[:len(inds)] = out.tracks_charge[inds][:] 
-        out.tracks_pt[:len(inds)] = out.tracks_pt[inds][:] 
-        out.tracks_eta[:len(inds)] = out.tracks_eta[inds][:] 
-        out.tracks_phi[:len(inds)] = out.tracks_phi[inds][:] 
-        out.tracks_ctgtheta[:len(inds)] = out.tracks_ctgtheta[inds][:] 
-        out.tracks_etaouter[:len(inds)] = out.tracks_etaouter[inds][:] 
-        out.tracks_phiouter[:len(inds)] = out.tracks_phiouter[inds][:] 
-        out.tracks_iblock[:len(inds)] = out.tracks_iblock[inds][:] 
-        out.ntracks[0] = itgt
-
-        out.tree.Fill()
-    out.close()
+    with open("out.pkl", "wb") as fi:
+        pickle.dump({"X": X_all, "ygen": ygen_all, "ycand": ycand_all}, fi)
