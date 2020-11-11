@@ -143,31 +143,59 @@ if __name__ == "__main__":
             node = ("particle", i)
             graph.add_node(node)
             graph.nodes[node]["pid"] = pileupmix[i].PID
+            graph.nodes[node]["eta"] = pileupmix[i].Eta
+            graph.nodes[node]["phi"] = pileupmix[i].Phi
+            graph.nodes[node]["pt"] = pileupmix[i].PT
+            graph.nodes[node]["energy"] = pileupmix[i].E
+            graph.nodes[node]["status"] = pileupmix[i].Status
+            graph.nodes[node]["is_pu"] = pileupmix[i].IsPU
+            graph.nodes[node]["m1"] = pileupmix[i].M1
+            graph.nodes[node]["m2"] = pileupmix[i].M2
 
         for i in range(len(towers)):
-            graph.add_node(("tower", i))
+            node = ("tower", i)
+            graph.add_node(node)
+            graph.nodes[node]["eta"] = towers[i].Eta
+            graph.nodes[node]["phi"] = towers[i].Phi
+            graph.nodes[node]["energy"] = towers[i].E
             for ptcl in towers[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("tower", i), ("particle", ip))
 
         for i in range(len(tracks)):
-            graph.add_node(("track", i))
+            node = ("track", i)
+            graph.add_node(node)
+            graph.nodes[node]["eta"] = tracks[i].Eta
+            graph.nodes[node]["phi"] = tracks[i].Phi
+            graph.nodes[node]["pt"] = tracks[i].PT
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
 
         for i in range(len(pf_charged)):
-            graph.add_node(("pfcharged", i))
+            node = ("pfcharged", i)
+            graph.add_node(node)
+            graph.nodes[node]["eta"] = pf_charged[i].Eta
+            graph.nodes[node]["phi"] = pf_charged[i].Phi
+            graph.nodes[node]["pt"] = pf_charged[i].PT
             ip = pileupmix_idxdict[pf_charged[i].Particle.GetObject()]
             graph.add_edge(("pfcharged", i), ("particle", ip))
         
         for i in range(len(pf_neutral)):
-            graph.add_node(("pfneutral", i))
+            node = ("pfneutral", i)
+            graph.add_node(node)
+            graph.nodes[node]["eta"] = pf_neutral[i].Eta
+            graph.nodes[node]["phi"] = pf_neutral[i].Phi
+            graph.nodes[node]["energy"] = pf_neutral[i].E
             for ptcl in pf_neutral[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfneutral", i), ("particle", ip))
         
         for i in range(len(pf_photon)):
-            graph.add_node(("pfphoton", i))
+            node = ("pfphoton", i)
+            graph.add_node(node)
+            graph.nodes[node]["eta"] = pf_photon[i].Eta
+            graph.nodes[node]["phi"] = pf_photon[i].Phi
+            graph.nodes[node]["energy"] = pf_photon[i].E
             for ptcl in pf_photon[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfphoton", i), ("particle", ip))
