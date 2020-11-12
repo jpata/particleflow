@@ -501,6 +501,9 @@ class AddSparse(tf.keras.layers.Layer):
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     def __init__(self,
+        num_input_classes=len(elem_labels),
+        num_output_classes=len(class_labels),
+        num_momentum_outputs=3,
         activation=tf.nn.selu,
         hidden_dim_id=256,
         hidden_dim_reg=256,
@@ -540,7 +543,7 @@ class PFNet(tf.keras.Model):
         for ihidden in range(num_hidden_reg_dec):
             decoding_reg.append(hidden_dim_reg)
 
-        self.enc = InputEncoding(len(elem_labels))
+        self.enc = InputEncoding(num_input_classes)
         self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
         
         self.embedding_dropout = None
@@ -567,11 +570,11 @@ class PFNet(tf.keras.Model):
                 convs_reg.append(GHConv(35 if len(encoding_reg)==0 else hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
 
         self.gnn_id = EncoderDecoderGNN(encoding_id, decoding_id, dropout, activation, convs_id, name="gnn_id")
-        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_id = tf.keras.layers.Dense(num_output_classes, activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
         
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
-        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
+        self.layer_momentum = tf.keras.layers.Dense(num_momentum_outputs, activation="linear", name="out_momentum")
 
     def create_model(self, num_max_elems, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
@@ -601,22 +604,13 @@ class PFNet(tf.keras.Model):
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm, training)
         to_decode = tf.concat([enc, x_reg], axis=-1)
-        pred_corr = self.layer_momentum(to_decode)
+        pred_momentum = self.layer_momentum(to_decode)
 
         #soft-mask elements for which the id prediction was 0  
-        probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(out_id_logits)[:, :, 0]
+        probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
+        pred_momentum = pred_momentum * probabilistic_mask_good
 
-        out_momentum_eta = X[:, :, 2] + pred_corr[:, :, 0]
-        out_momentum_phi = X[:, :, 3] + pred_corr[:, :, 1] 
-        out_momentum_E = X[:, :, 4] + pred_corr[:, :, 2]
-
-        out_momentum = tf.stack([
-            out_momentum_eta * probabilistic_mask_good,
-            out_momentum_phi * probabilistic_mask_good,
-            out_momentum_E * probabilistic_mask_good,
-        ], axis=-1)
-
-        ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
+        ret = tf.concat([out_id_logits, pred_momentum, out_charge], axis=-1)*msk_input
         return ret
 
     def set_trainable_classification(self):
