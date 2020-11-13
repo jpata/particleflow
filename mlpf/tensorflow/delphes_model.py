@@ -45,14 +45,14 @@ def mse_unreduced(true, pred):
 def separate_prediction(y_pred):
     N = num_output_classes
     pred_id_logits = y_pred[:, :, :N]
-    pred_momentum = y_pred[:, :, N:N+4]
-    pred_charge = y_pred[:, :, N+4:N+5]
+    pred_charge = y_pred[:, :, N:N+1]
+    pred_momentum = y_pred[:, :, N+1:]
     return pred_id_logits, pred_charge, pred_momentum
 
 def separate_truth(y_true):
     true_id = tf.cast(y_true[:, :, :1], tf.int32)
-    true_momentum = y_true[:, :, 1:5]
-    true_charge = y_true[:, :, 5:6]
+    true_charge = y_true[:, :, 1:2]
+    true_momentum = y_true[:, :, 2:]
     return true_id, true_charge, true_momentum
 
 def accuracy(y_true, y_pred):
@@ -118,21 +118,35 @@ def prepare_callbacks(model, outdir):
 
     return callbacks
 
+def get_rundir(base='experiments'):
+    if not os.path.exists(base):
+        os.makedirs(base)
+
+    previous_runs = os.listdir(base)
+    if len(previous_runs) == 0:
+        run_number = 1
+    else:
+        run_number = max([int(s.split('run_')[1]) for s in previous_runs]) + 1
+
+    logdir = 'run_%02d' % run_number
+    return '{}/{}'.format(base, logdir)
+
 if __name__ == "__main__":
     X, y = prepare_data()
 
     model = PFNet(
     	num_input_classes=num_input_classes,
     	num_output_classes=num_output_classes,
-    	num_momentum_outputs=4,
+    	num_momentum_outputs=4, #(pT, eta, phi, E)
     	bin_size=128,
     	num_convs_id=2,
     	num_convs_reg=2,
     	num_hidden_reg_dec=2,
     	num_hidden_id_dec=2,
+        num_neighbors=8,
     )
 
-    outdir = 'experiments/run_05'
+    outdir = get_rundir('experiments')
     if os.path.isdir(outdir):
         print("Output directory exists: {}".format(outdir), file=sys.stderr)
         sys.exit(1)
@@ -141,7 +155,15 @@ if __name__ == "__main__":
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=0)
+    model(X_train[:5])
 
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
     model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution])
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=500, batch_size=5, callbacks=callbacks)
+
+    #model.load_weights("experiments/run_05/weights.500-594286.750000.hdf5")
+    
+    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=50, batch_size=5, callbacks=callbacks)
+
+    y_pred = model.predict(X, batch_size=5)
+
+    np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
