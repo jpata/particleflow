@@ -12,90 +12,42 @@ ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 #for debugging
 save_full_graphs = True
 
-#check if a genparticle has an associated reco track and return the index (-1 otherwise)
-def particle_track_id(g, particle):
-    for edge in g.edges(particle):
-        if edge[1][0] == "track":
-            return edge[1][1]
-    return -1
-
-#check if a genparticle has associated reco objects (tracks or towers)
-def has_reco(g, particle):
-    for edge in g.edges(particle):
-        if edge[1][0] in ["tower", "track"]:
+#check if a genparticle has an associated reco track
+def particle_has_track(g, particle):
+    for e in g.edges(particle):
+        if e[1][0] == "track":
             return True
     return False
 
-#the gen particle is constructed from the sum of all neutral genparticles in the tower.
-#It will be a photon if any of them are gen photons, otherwise, it will be a neutral hadron.
-def get_tower_genparticle(g, tower_node):
-    particles_without_track = []
-    is_photon = False
-    
-    for edge in g.edges(tower_node):
-        if edge[1][0] == "particle":
-            particle = edge[1]
-            if g.nodes[particle]["pid"] == 22:
-                is_photon = True
-            trk_id = particle_track_id(g, particle)
-            if trk_id == -1:
-                particles_without_track.append(particle)
-    lvs = []
-
-    for p in particles_without_track:
-        lv = uproot_methods.TLorentzVector.from_ptetaphie(
-            g.nodes[p]["pt"],
-            g.nodes[p]["eta"],
-            g.nodes[p]["phi"],
-            g.nodes[p]["energy"],
-        )
-        lvs.append(lv)
-
-    if len(lvs) > 0:
-        lv = sum(lvs[1:], lvs[0])
-        return {
-            "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy, "pid": 22 if is_photon else 130
-        }
-
-    else:
-        return None
-
-#for a given reco track, get the genparticle and corresponding PF particle.
-#all tracks have an associated charged genparticle by construction.
-#the PFCandidate just copies the track information per Delphes-PF
-def get_track_truth(g, track):
-    particle = None
-    pfcandidate = None
-    for edge in g.edges(track):
-        if edge[1][0] == "particle":
-            particle = edge[1]
-            for edge2 in g.edges(particle):
-                if edge2[1][0] == "pfcharged":
-                    pfcandidate = g.nodes[edge2[1]]
-                    break
-            if pfcandidate:
-                break
-    return (g.nodes[track], g.nodes[particle], pfcandidate)
-
-#for a given tower, get the cleaned genparticle and corresponding PF particle.
-#the genparticle is constructed according to the tower genparticle cleaning algo in get_tower_genparticle
-#the PF particle will be either a neutral hadron or a photon.
-def get_tower_truth(g, tower):
-    particle = None
-    pfcandidate = None
-
-    reco_objs = []
-    for edge in g.edges(tower):        
-        for particle_edge in g.edges(edge[1]):
-            if particle_edge[1][0] in ["pfneutral", "pfphoton"]:
-                reco_objs.append(particle_edge[1])
-
-    #get the first reco-pf object in case there were several (rare, but to be understood)
-    reco_objs = list(set(reco_objs))
-    reco_obj = g.nodes[reco_objs[0]] if len(reco_objs)>0 else None
-    
-    cleaned_genparticle = get_tower_genparticle(g, tower)
-    return (g.nodes[tower], cleaned_genparticle, reco_obj)
+#go through all the genparticles associated in the tower that do not have a track
+#returns the sum of energies by PID and the list of these genparticles
+def get_tower_gen_fracs(g, tower):
+    e_130 = 0.0
+    e_211 = 0.0
+    e_22 = 0.0
+    e_11 = 0.0
+    ptcls = []
+    for e in g.edges(tower):
+        if e[1][0] == "particle":
+            if not particle_has_track(g, e[1]):
+                ptcls.append(e[1])
+                pid = abs(g.nodes[e[1]]["pid"])
+                ch = abs(g.nodes[e[1]]["charge"])
+                e = g.nodes[e[1]]["energy"]
+                if pid in [211]:
+                    e_211 += e
+                elif pid in [130]:
+                    e_130 += e
+                elif pid==22:
+                    e_22 += e
+                elif pid==11:
+                    e_11 += e
+                else:
+                    if ch==1:
+                        e_211 += e
+                    else:
+                        e_130 += e
+    return ptcls, (e_130, e_211, e_22, e_11)
 
 def make_tower_array(tower_dict):
     return np.array([
@@ -129,8 +81,8 @@ gen_pid_encoding = {
     211: 1,
     130: 2,
     22: 3,
-    13: 4,
-    11: 5,
+    11: 4,
+    13: 5,
 }
 
 def make_gen_array(gen_dict):
@@ -148,6 +100,71 @@ def make_gen_array(gen_dict):
         gen_dict["phi"],
         gen_dict["energy"]
     ])
+
+#make (reco, gen, cand) triplets from tracks and towers
+#also return genparticles that were not associated to any reco object
+def make_triplets(g, tracks, towers, particles):
+    triplets = []
+    remaining_particles = set(particles)
+    for t in tracks:
+        ptcl = None
+        
+        for e in g.edges(t):
+            if e[1][0] == "particle":
+                ptcl = e[1]
+                break
+        
+        pf_ptcl = None
+        for e in g.edges(ptcl):
+            if e[1][0] in ["pfneutral", "pfcharged", "pfelectron", "pfphoton", "pfmuon"]:
+                pf_ptcl = e[1]
+                break
+        remaining_particles.remove(ptcl)
+        triplets.append((t, ptcl, pf_ptcl))
+            
+    for t in towers:
+        num_ptcls = 0
+        ptcls, fracs = get_tower_gen_fracs(g, t)
+        imax = np.argmax(fracs)
+        
+        charge = 0
+        if len(ptcls) > 0:
+            if imax==0:
+                pid = 130
+            elif imax==1:
+                #should be 211, but we don't want to try reconstruct a charged hadron if there was no track
+                pid = 211
+            elif imax==2:
+                pid = 22
+            elif imax==3:
+                pid = 11
+            for ptcl in ptcls:
+                if ptcl in remaining_particles:
+                    remaining_particles.remove(ptcl)
+                    
+        lvs = []
+        for ptcl in ptcls:
+            lv = uproot_methods.TLorentzVector.from_ptetaphie(
+                g.nodes[ptcl]["pt"],
+                g.nodes[ptcl]["eta"],
+                g.nodes[ptcl]["phi"],
+                g.nodes[ptcl]["energy"],
+            )
+            lvs.append(lv)
+        lv = None
+        gen_ptcl = None
+        if len(lvs) > 0:
+            lv = sum(lvs[1:], lvs[0])
+            gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
+
+        pf_ptcl = None   
+        for ptcl in ptcls:
+            for e in g.edges(ptcl):
+                if e[1][0] in ["pfneutral", "pfcharged", "pfelectron", "pfphoton", "pfmuon"]:
+                    pf_ptcl = e[1]
+                    break
+        triplets.append((t, gen_ptcl, pf_ptcl))
+    return triplets, list(remaining_particles)
 
 def make_cand_array(cand_dict):
     if not cand_dict:
@@ -170,21 +187,28 @@ if __name__ == "__main__":
 
     X_all = []
     ygen_all = []
+    ygen_remaining_all = []
     ycand_all = []
 
     for iev in range(tree.GetEntries()):
         print("event {}/{}".format(iev, tree.GetEntries()))
+        if iev>500:
+            break
 
         tree.GetEntry(iev)
         pileupmix = list(tree.PileUpMix)
         pileupmix_idxdict = {}
         for ip, p in enumerate(pileupmix):
             pileupmix_idxdict[p] = ip
+        
         towers = list(tree.Tower)
         tracks = list(tree.Track)
-        pf_charged = list(tree.PFCharged)
-        pf_photon = list(tree.PFPhoton)
+
+        pf_charged = list(tree.PFChargedHadron)
         pf_neutral = list(tree.PFNeutralHadron)
+        pf_photon = list(tree.PFPhoton)
+        pf_el = list(tree.PFElectron)
+        pf_mu = list(tree.PFMuon)
 
         #Create a graph with particles, tracks and towers as nodes and gen-level information as edges
         graph = nx.Graph()
@@ -195,6 +219,7 @@ if __name__ == "__main__":
             graph.nodes[node]["eta"] = pileupmix[i].Eta
             graph.nodes[node]["phi"] = pileupmix[i].Phi
             graph.nodes[node]["pt"] = pileupmix[i].PT
+            graph.nodes[node]["charge"] = pileupmix[i].Charge
             graph.nodes[node]["energy"] = pileupmix[i].E
             graph.nodes[node]["is_pu"] = pileupmix[i].IsPU
 
@@ -233,7 +258,29 @@ if __name__ == "__main__":
             graph.nodes[node]["charge"] = pf_charged[i].Charge
             ip = pileupmix_idxdict[pf_charged[i].Particle.GetObject()]
             graph.add_edge(("pfcharged", i), ("particle", ip))
-        
+
+        for i in range(len(pf_el)):
+            node = ("pfel", i)
+            graph.add_node(node)
+            graph.nodes[node]["pid"] = 11
+            graph.nodes[node]["eta"] = pf_el[i].Eta
+            graph.nodes[node]["phi"] = pf_el[i].Phi
+            graph.nodes[node]["pt"] = pf_el[i].PT
+            graph.nodes[node]["charge"] = pf_el[i].Charge
+            ip = pileupmix_idxdict[pf_el[i].Particle.GetObject()]
+            graph.add_edge(("pfel", i), ("particle", ip))
+
+        for i in range(len(pf_mu)):
+            node = ("pfmu", i)
+            graph.add_node(node)
+            graph.nodes[node]["pid"] = 13
+            graph.nodes[node]["eta"] = pf_mu[i].Eta
+            graph.nodes[node]["phi"] = pf_mu[i].Phi
+            graph.nodes[node]["pt"] = pf_mu[i].PT
+            graph.nodes[node]["charge"] = pf_mu[i].Charge
+            ip = pileupmix_idxdict[pf_mu[i].Particle.GetObject()]
+            graph.add_edge(("pfmu", i), ("particle", ip))
+
         for i in range(len(pf_neutral)):
             node = ("pfneutral", i)
             graph.add_node(node)
@@ -265,36 +312,53 @@ if __name__ == "__main__":
         #now clean up the graph, keeping only reconstructable genparticles
         #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
         particles = [n for n in graph.nodes if n[0] == "particle"]
-        particles_with_reco = [n for n in particles if has_reco(graph, n)]
 
         tracks = [n for n in graph.nodes if n[0] == "track"]
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
+        triplets, remaining_particles = make_triplets(graph, tracks, towers, particles)
+
         X = []
         ygen = []
+        ygen_remaining = []
         ycand = []
+        for triplet in triplets:
+            reco, gen, cand = triplet
+            if reco[0] == "track":
+                X.append(make_track_array(graph.nodes[reco]))
+                ygen.append(make_gen_array(graph.nodes[gen]))
+            else:
+                X.append(make_tower_array(graph.nodes[reco]))
+                ygen.append(make_gen_array(gen))
 
-        #create matrices
-        for track in tracks:
-            truth = get_track_truth(graph, track)
-            X.append(make_track_array(truth[0]))
-            ygen.append(make_gen_array(truth[1]))
-            ycand.append(make_cand_array(truth[2]))
+            ycand.append(make_cand_array(graph.nodes[cand] if cand else None))
 
-        for tower in towers:
-            truth = get_tower_truth(graph, tower)
-            X.append(make_tower_array(truth[0]))
-            ygen.append(make_gen_array(truth[1]))
-            ycand.append(make_cand_array(truth[2]))
+        for prt in remaining_particles:
+            ygen_remaining.append(make_gen_array(graph.nodes[prt]))
+            
+        # #create matrices
+        # for track in tracks:
+        #     truth = get_track_truth(graph, track)
+        #     X.append(make_track_array(truth[0]))
+        #     ygen.append(make_gen_array(truth[1]))
+        #     ycand.append(make_cand_array(truth[2]))
+
+        # for tower in towers:
+        #     truth = get_tower_truth(graph, tower)
+        #     X.append(make_tower_array(truth[0]))
+        #     ygen.append(make_gen_array(truth[1]))
+        #     ycand.append(make_cand_array(truth[2]))
 
         X = np.stack(X)
         ygen = np.stack(ygen)
+        ygen_remaining = np.stack(ygen_remaining)
         ycand = np.stack(ycand)
-        print("X.shape", X.shape)
+        print("X", X.shape, "ygen", ygen.shape, "ygen_remaining", ygen_remaining.shape, "ycand", ycand.shape)
 
         X_all.append(X)
         ygen_all.append(ygen)
+        ygen_remaining_all.append(ygen_remaining)
         ycand_all.append(ycand)
 
     with open("out.pkl", "wb") as fi:
-        pickle.dump({"X": X_all, "ygen": ygen_all, "ycand": ycand_all}, fi)
+        pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)

@@ -25,9 +25,9 @@ def prepare_data():
     Xs = []
     ys = []
     for i in range(len(data["X"])):
-        X = data["X"][i][:padded_num_elem_size]
+        X = np.array(data["X"][i][:padded_num_elem_size], np.float32)
         X = np.pad(X, [(0, padded_num_elem_size - X.shape[0]), (0,0)])
-        y = data["ygen"][i][:padded_num_elem_size]
+        y = np.array(data["ygen"][i][:padded_num_elem_size], np.float32)
         y = np.pad(y, [(0, padded_num_elem_size - y.shape[0]), (0,0)])
 
         X = np.expand_dims(X, 0)
