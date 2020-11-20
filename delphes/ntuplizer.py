@@ -5,6 +5,7 @@ from collections import Counter
 import uproot_methods
 import math
 import pickle
+import sys
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
@@ -181,7 +182,7 @@ def make_cand_array(cand_dict):
     ])
 
 if __name__ == "__main__":
-    f = ROOT.TFile("out.root")
+    f = ROOT.TFile.Open(sys.argv[1])
     tree = f.Get("Delphes")
 
 
@@ -307,7 +308,7 @@ if __name__ == "__main__":
 
         #write the full graph, mainly for study purposes
         if iev<10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, "graph_{}.pkl".format(iev))
+            nx.readwrite.write_gpickle(graph, sys.argv[2].replace(".pkl","_graph_{}.pkl".format(iev)))
 
         #now clean up the graph, keeping only reconstructable genparticles
         #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -360,5 +361,5 @@ if __name__ == "__main__":
         ygen_remaining_all.append(ygen_remaining)
         ycand_all.append(ycand)
 
-    with open("out.pkl", "wb") as fi:
+    with open(sys.argv[2], "wb") as fi:
         pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
