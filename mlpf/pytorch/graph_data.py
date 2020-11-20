@@ -105,7 +105,7 @@ class PFGraphDataset(Dataset):
 
         batch_data = []
         for idata, data in enumerate(all_data):
-            mat = data["dm"].copy()
+            mat = data["dm_elem_cand"].copy()
 
             Xelem = data["Xelem"]
             ygen = data["ygen"]
@@ -139,7 +139,7 @@ class PFGraphDataset(Dataset):
 
             data = Data(
                 x=x,
-                #edge_index=r[0].to(dtype=torch.long),
+                edge_index=r[0].to(dtype=torch.long),
                 #edge_attr=r[1].to(dtype=torch.float),
                 ygen=ygen, ycand=ycand,
             )

@@ -1,21 +1,16 @@
-https://travis-ci.org/jpata/particleflow.svg?branch=master
+[![Build Status](https://travis-ci.org/jpata/particleflow.svg?branch=master)](https://travis-ci.org/jpata/particleflow)
 
 Notes on modernizing CMS particle flow with machine learning. Internal documentation and results can be found at https://twiki.cern.ch/twiki/bin/view/CMS/MLParticleFlow.
 
-Quickstart on Caltech iBanks:
+Quickstart with training:
 
 ```
 #get the code
 git clone https://github.com/jpata/particleflow.git
 cd particleflow
 
-#run a small prepared training
-./test/train.sh
-
-...wait...
-
-#look at the output
-ls data/PFNet*/epoch*/
+#run a small local test including data prep and training
+./scripts/local_test.sh
 ```
 
 # Overview
@@ -26,7 +21,7 @@ ls data/PFNet*/epoch*/
   - [x] end-to-end training of elements to MLPF-candidates using GNN-s
 - [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
   - [x] set up datasets for regression genparticles from elements
-  - [x] Develop a baseline ML-PF model that is able to regress pions and neutral hadrons (currently GravNet-512 with 2D radius-graph)
+  - [x] Develop a baseline ML-PF model that is able to regress pions and neutral hadrons
   - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
   - [ ] Improve ML-PF model physics performance 
   - [ ] Improve ML-PF model computational performance 
@@ -42,6 +37,7 @@ ls data/PFNet*/epoch*/
 
 ## Presentations
 
+- CMS ML Forum, 2020-09-30: https://indico.cern.ch/event/952419/contributions/4041555/attachments/2113070/3554608/2020_09_30.pdf
 - CMS ML Town Hall, 2020-07-03: https://indico.cern.ch/event/922319/contributions/3928284/attachments/2068518/3472668/2020_07_02.pdf
 - FastML meeting, 2020-05-29: https://indico.cern.ch/event/923986/contributions/3883991/attachments/2047940/3431648/2020_05_28.pdf
 - CMS PF group, 2020-05-22: https://indico.cern.ch/event/921949/contributions/3873351/attachments/2042984/3422056/2020_05_22.pdf
@@ -129,7 +125,7 @@ cmsDriver.py step3 --runUnscheduled --conditions auto:phase1_2021_realistic \
 ## Creating the datasets
 
 ```bash
-cd test
+cd mlpf/data
 mkdir TTbar_14TeV_TuneCUETP8M1_cfi
 python prepare_args.py > args.txt
 condor_submit genjob.jdl
@@ -146,18 +142,6 @@ python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntupl
 #produce the pytorch processed dataset, merging 5 pickle files into one pytorch file
 python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-files-merge 5
 ```
-
-## Contents of the numpy ntuple
-
-For more details, see [data.ipynb](notebooks/data.ipynb). 
-
-## Model training
-
-Main training code in [train_end2end.py](test/train_end2end.py). See the example script in [train.sh](test/train.sh) on how to run the training.
-
-## Model validation
-
-Notebook: [test_end2end](notebooks/test_end2end.ipynb)
 
 ## Acknowledgements
 
