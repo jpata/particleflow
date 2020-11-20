@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMG=~jpata/gpuservers/singularity/images/pytorch.simg
+IMG=/home/software/singularity/base.simg:2020-09-04
 
 #which dataset to process
 DATASET=$1
