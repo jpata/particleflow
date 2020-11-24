@@ -40,7 +40,7 @@ module PileUpMerger PileUpMerger {
   set VertexOutputArray vertices
 
   # pre-generated minbias input file
-  set PileUpFile /opt/hepsim/delphes/MinBias.pileup
+  set PileUpFile MinBias_100k.pileup
 
   # average expected pile up
   set MeanPileUp 200

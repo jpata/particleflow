@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
     #model.load_weights("experiments/run_05/weights.500-594286.750000.hdf5")
     
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=50, batch_size=5, callbacks=callbacks)
+    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=50, batch_size=10, callbacks=callbacks)
 
     y_pred = model.predict(X, batch_size=5)
 
