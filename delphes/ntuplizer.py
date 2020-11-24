@@ -117,7 +117,7 @@ def make_triplets(g, tracks, towers, particles):
         
         pf_ptcl = None
         for e in g.edges(ptcl):
-            if e[1][0] in ["pfneutral", "pfcharged", "pfelectron", "pfphoton", "pfmuon"]:
+            if e[1][0] in ["pfneutral", "pfcharged", "pfel", "pfphoton", "pfmu"]:
                 pf_ptcl = e[1]
                 break
         remaining_particles.remove(ptcl)
@@ -161,7 +161,7 @@ def make_triplets(g, tracks, towers, particles):
         pf_ptcl = None   
         for ptcl in ptcls:
             for e in g.edges(ptcl):
-                if e[1][0] in ["pfneutral", "pfcharged", "pfelectron", "pfphoton", "pfmuon"]:
+                if e[1][0] in ["pfneutral", "pfcharged", "pfel", "pfphoton", "pfmu"]:
                     pf_ptcl = e[1]
                     break
         triplets.append((t, gen_ptcl, pf_ptcl))
@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
     for iev in range(tree.GetEntries()):
         print("event {}/{}".format(iev, tree.GetEntries()))
-        if iev>500:
+        if iev>100:
             break
 
         tree.GetEntry(iev)
