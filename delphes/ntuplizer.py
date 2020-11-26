@@ -6,6 +6,7 @@ import uproot_methods
 import math
 import pickle
 import sys
+import multiprocessing
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
@@ -181,20 +182,17 @@ def make_cand_array(cand_dict):
         cand_dict.get("energy", 0)
     ])
 
-if __name__ == "__main__":
-    f = ROOT.TFile.Open(sys.argv[1])
+def process_chunk(infile, ev_start, ev_stop, outfile):
+    f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
-
 
     X_all = []
     ygen_all = []
     ygen_remaining_all = []
     ycand_all = []
 
-    for iev in range(tree.GetEntries()):
-        print("event {}/{}".format(iev, tree.GetEntries()))
-        if iev>100:
-            break
+    for iev in range(ev_start, ev_stop):
+        print("event {}/{} out of {} in the full file".format(iev, ev_stop, tree.GetEntries()))
 
         tree.GetEntry(iev)
         pileupmix = list(tree.PileUpMix)
@@ -307,8 +305,8 @@ if __name__ == "__main__":
                 graph.add_edge(("pfphoton", i), ("particle", ip))
 
         #write the full graph, mainly for study purposes
-        if iev<10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, sys.argv[2].replace(".pkl","_graph_{}.pkl".format(iev)))
+        # if iev<10 and save_full_graphs:
+        #     nx.readwrite.write_gpickle(graph, sys.argv[2].replace(".pkl","_graph_{}.pkl".format(iev)))
 
         #now clean up the graph, keeping only reconstructable genparticles
         #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -361,5 +359,32 @@ if __name__ == "__main__":
         ygen_remaining_all.append(ygen_remaining)
         ycand_all.append(ycand)
 
-    with open(sys.argv[2], "wb") as fi:
+    with open(outfile, "wb") as fi:
         pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
+
+def process_chunk_args(args):
+    process_chunk(*args)
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+if __name__ == "__main__":
+    pool = multiprocessing.Pool(16)
+
+    infile = sys.argv[1]
+    f = ROOT.TFile.Open(infile)
+    tree = f.Get("Delphes")
+    num_evs = tree.GetEntries()
+
+    arg_list = []
+    ichunk = 0
+
+    for chunk in chunks(range(num_evs), 100):
+        outfile = sys.argv[2].replace(".pkl", "_{}.pkl".format(ichunk))
+        #print(chunk[0], chunk[-1]+1)
+        arg_list.append((infile, chunk[0], chunk[-1] + 1, outfile))
+        ichunk += 1
+
+    pool.map(process_chunk_args, arg_list)
