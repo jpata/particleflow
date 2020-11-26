@@ -143,7 +143,7 @@ def compute_weights(y):
     return weights
 
 if __name__ == "__main__":
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:5]
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
 
     Xs = []
     ys = []
