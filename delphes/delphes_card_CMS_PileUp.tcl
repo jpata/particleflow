@@ -20,6 +20,12 @@ set ExecutionPath {
   HCal
   Calorimeter
 
+  ElectronFilter
+  ElectronEfficiency
+  PhotonEfficiency
+  MuonEfficiency
+  EFlowFilter
+
   TreeWriter
 }
 
@@ -34,10 +40,10 @@ module PileUpMerger PileUpMerger {
   set VertexOutputArray vertices
 
   # pre-generated minbias input file
-  set PileUpFile /opt/hepsim/delphes/MinBias.pileup
+  set PileUpFile MinBias_100k.pileup
 
   # average expected pile up
-  set MeanPileUp 50
+  set MeanPileUp 200
 
    # maximum spread in the beam direction in m
   set ZVertexSpread 0.25
@@ -403,7 +409,7 @@ module Merger Calorimeter {
 ######################
 
 module PdgCodeFilter EFlowFilter {
-  set InputArray EFlowMergerAllTracks/eflow
+  set InputArray HCal/eflowTracks
   set OutputArray eflow
   
   add PdgCode {11}
@@ -645,7 +651,7 @@ module Isolation PhotonIsolation {
 #####################
 
 module Efficiency ElectronEfficiency {
-  set InputArray TrackPileUpSubtractor/electrons
+  set InputArray ElectronFilter/electrons
   set OutputArray electrons
 
   # set EfficiencyFormula {efficiency formula as a function of eta and pt}
@@ -680,7 +686,7 @@ module Isolation ElectronIsolation {
 #################
 
 module Efficiency MuonEfficiency {
-  set InputArray TrackPileUpSubtractor/muons
+  set InputArray MuonMomentumSmearing/muons
   set OutputArray muons
 
   # set EfficiencyFormula {efficiency as a function of eta and pt}
@@ -814,38 +820,31 @@ module UniqueObjectFinder UniqueObjectFinder {
   add InputArray JetEnergyScale/jets jets
 }
 
-##################
-# ROOT tree writer
-##################
-
-# tracks, towers and eflow objects are not stored by default in the output.
-# if needed (for jet constituent or other studies), uncomment the relevant
-# "add Branch ..." lines.
-
 module TreeWriter TreeWriter {
-# add Branch InputArray BranchName BranchClass
-  add Branch Delphes/allParticles Particle GenParticle
+  #GenParticles including PU
   add Branch PileUpMerger/stableParticles PileUpMix GenParticle
 
+  #PF reco inputs
   add Branch TrackMerger/tracks Track Track
   add Branch Calorimeter/towers Tower Tower
 
-#  add Branch Calorimeter/eflowTracks EFlowTrack Track
-#  add Branch Calorimeter/eflowPhotons EFlowPhoton Tower
-#  add Branch Calorimeter/eflowNeutralHadrons EFlowNeutralHadron Tower
+  #EFlow reco outputs, including PU
+  #add Branch EFlowMergerAllTracks/eflow PFParticles Particle
+  
+  #Here the same as above, but split into separate collections
+  add Branch EFlowFilter/eflow PFChargedHadron Track
+  add Branch HCal/eflowNeutralHadrons PFNeutralHadron Tower
+  add Branch ElectronFilter/electrons PFElectron Electron
+  add Branch ECal/eflowPhotons PFPhoton Photon
+  add Branch MuonMomentumSmearing/muons PFMuon Muon
 
-#  add Branch GenJetFinder/jets GenJet Jet
-#  add Branch GenMissingET/momentum GenMissingET MissingET
-#
-#  add Branch UniqueObjectFinder/jets Jet Jet
-#  add Branch UniqueObjectFinder/electrons Electron Electron
-#  add Branch UniqueObjectFinder/photons Photon Photon
-#  add Branch UniqueObjectFinder/muons Muon Muon
-#  add Branch MissingET/momentum MissingET MissingET
-#  add Branch ScalarHT/energy ScalarHT ScalarHT
-#  add Branch Rho/rho Rho Rho
-#  add Branch PileUpMerger/vertices Vertex Vertex
+  #optionally enable PF efficiency for muons, electrons and photons
+  #add Branch ElectronEfficiency/electrons PFElectron Electron  
+  #add Branch PhotonEfficiency/photons PFPhoton Photon
+  #add Branch MuonEfficiency/muons PFMuon Muon
+
 }
 
-set MaxEvents 10
+# #not sure if this does anything?
+# set MaxEvents 100
 
