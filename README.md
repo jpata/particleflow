@@ -62,87 +62,53 @@ cd particleflow
 
 In case the above links do not load, the presentations are also mirrored on the following CERNBox link: https://cernbox.cern.ch/index.php/s/GkIRJU1YZuai4ix
 
-## Other relevant issues, repos, PR-s:
-
-- https://github.com/jpata/cmssw/issues/56
-- https://github.com/cms-sw/cmssw/pull/29361
-
-## Setting up the code
-
-CMSSW recipe from [setup.sh](test/setup.sh):
-
-```bash
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-export SCRAM_ARCH=slc7_amd64_gcc820
-
-scramv1 project CMSSW CMSSW_11_1_0_pre5
-cd CMSSW_11_1_0_pre5/src
-eval `scramv1 runtime -sh`
-git cms-init
-
-git remote add -f jpata https://github.com/jpata/cmssw
-git fetch -a jpata
-
-git cms-addpkg RecoParticleFlow/PFProducer
-git cms-addpkg Validation/RecoParticleFlow
-git cms-addpkg SimGeneral/CaloAnalysis/
-git cms-addpkg SimGeneral/MixingModule/
-
-git checkout -b jpata_pfntuplizer --track jpata/jpata_pfntuplizer
-
-#just to get an exact version of the code
-git checkout 0fdcc0e8b6d848473170f0dc904468fa8a953aa8
-
-#download the MLPF weight file
-mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
-wget http://login-1.hep.caltech.edu/~jpata/particleflow/2020-05/models/mlpf_2020_05_19.pb -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_05_19.pb
-
-scram b
-
-#Run a small test of ML-PF
-cmsRun RecoParticleFlow/PFProducer/test/mlpf_producer.py
-edmDumpEventContent test.root | grep -i mlpf
-
-#Run ML-PF within the reco framework up to ak4PFJets / ak4MLPFJets
-cmsDriver.py step3 --runUnscheduled --conditions auto:phase1_2021_realistic \
-  -s RAW2DIGI,L1Reco,RECO,RECOSIM,EI,PAT \
-  --datatier MINIAODSIM --nThreads 1 -n 10 --era Run3 \
-  --eventcontent MINIAODSIM --geometry=DB.Extended \
-  --filein /store/relval/CMSSW_11_0_0_patch1/RelValQCD_FlatPt_15_3000HS_14/GEN-SIM-DIGI-RAW/PU_110X_mcRun3_2021_realistic_v6-v1/20000/087F3A84-A56F-784B-BE13-395D75616CC5.root \
-  --customise RecoParticleFlow/PFProducer/mlpfproducer_customize.customize_step3 \
-  --fileout file:step3_inMINIAODSIM.root
-```
-
-## Datasets
-
-- May 2020
-  - TTbar with PU for PhaseI, privately generated, 20k events 
-    - flat ROOT: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_*.root`
-    - pickled graph data: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl`
-    - processed pytorch: `/storage/user/jpata/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi/processed/*.pt`
-    - processed TFRecord: `/storage/group/gpu/bigdata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/tfr2/cand/*.tfrecords`
-    
-## Creating the datasets
-
-```bash
-cd mlpf/data
-mkdir TTbar_14TeV_TuneCUETP8M1_cfi
-python prepare_args.py > args.txt
-condor_submit genjob.jdl
-```
-
-## Contents of the flat ROOT output ntuple
-
-The ROOT ntuple contains all PFElements, PFCandidates and GenParticles, along with the links. The following code creates the networkx graph data and a normalized data table:
-
-```bash
-#process a single file from ROOT to pickle, saving each event into a separate file
-python test/postprocessing2.py --input data/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root --events-per-file 1 --save-full-graph --save-normalized-table
-
-#produce the pytorch processed dataset, merging 5 pickle files into one pytorch file
-python test/graph_data.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --num-files-merge 5
-```
-
 ## Acknowledgements
 
-Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**.
+This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Research Council. Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. 
+
+
+## CMSSW recipe
+
+Evaluation recipe in CMSSW:
+
+```
+cmsrel CMSSW_11_2_DEVEL_X_2020-11-01-2300
+cd CMSSW_11_2_DEVEL_X_2020-11-01-2300
+cmsenv
+git cms-merge-topic jpata:mlpfproducer
+scram b -j4
+
+mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf
+wget http://jpata.web.cern.ch/jpata/mlpf/mlpf_2020_10_27.pb -O src/RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_10_27.pb
+
+#Phase 2: timing extraction
+runTheMatrix.py -l 23434.21 -w upgrade --command="-n 100 --nThreads 2 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_aod"
+
+#Run 3: physics performance checks
+runTheMatrix.py -l 11834.0 -w upgrade --command="-n 100 --nThreads 2 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_reco"
+```
+
+Retraining recipe:
+
+```
+cmsrel CMSSW_11_2_DEVEL_X_2020-11-01-2300
+cd CMSSW_11_2_DEVEL_X_2020-11-01-2300
+cmsenv
+git cms-merge-topic jpata:mlpfproducer
+scram b -j4
+
+#TF 2.3 is needed for training, run this once only
+cd src/RecoParticleFlow/PFProducer/test/mlpf_training
+python3 -m venv training_env
+source training_env/bin/activate
+pip3 install --upgrade pip
+pip3 install tensorflow==2.3 protobuf==3.13 google-cloud==0.34
+
+#retrain on data provided by the MLPF team
+source training_env/bin/activate
+python3 tf_model.py --datapath /eos/user/j/jpata/www/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/
+deactivate
+
+#generate your own data and run an example training on it
+./run.sh
+```

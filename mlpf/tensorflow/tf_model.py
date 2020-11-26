@@ -12,6 +12,8 @@ except:
     print("Could not import setGPU, please make sure you configure CUDA_VISIBLE_DEVICES manually")
     pass
 
+from comet_ml import Experiment
+
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,31 +41,44 @@ mult_phi_loss = 10.0
 mult_eta_loss = 10.0
 mult_total_loss = 1e3
 
-def my_softmax_split(cmul, nbins):
+def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.split(tf.cast(tf.argsort(bin_idx), tf.int64), nbins, axis=0)
+    bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
     return bins_split
 
-def softargmax(x, beta, xrange):
-    return tf.reduce_sum(tf.nn.softmax(x*beta) * xrange, axis=-1)
+def pairwise_dist(A, B):  
+    na = tf.reduce_sum(tf.square(A), -1)
+    nb = tf.reduce_sum(tf.square(B), -1)
+
+    # na as a row and nb as a column vectors
+    na = tf.expand_dims(na, -1)
+    nb = tf.expand_dims(nb, -2)
+
+    # return pairwise euclidead difference matrix
+    D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
+    return D
 
 """
 sp_a: (nbatch, nelem, nelem) sparse distance matrices
-b: (nbatch, nelem, ncol) dense per-elemenet feature matrices
+b: (nbatch, nelem, ncol) dense per-element feature matrices
 """
 def sparse_dense_matmult_batch(sp_a, b):
 
+    num_batches = tf.shape(b)[0]
     def map_function(x):
         i, dense_slice = x[0], x[1]
+        num_points = tf.shape(b)[1]
+
         sparse_slice = tf.sparse.reshape(tf.sparse.slice(
-            sp_a, [i, 0, 0], [1, sp_a.dense_shape[1], sp_a.dense_shape[2]]),
-            [sp_a.dense_shape[1], sp_a.dense_shape[2]])
+            sp_a, [i, 0, 0], [1, num_points, num_points]),
+            [num_points, num_points])
         mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
         return mult_slice
 
-    elems = (tf.range(0, sp_a.dense_shape[0], delta=1, dtype=tf.int64), b)
+    elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.float32, back_prop=True)
     return ret 
+
 
 def summarize_dataset(dataset):
     yclasses = []
@@ -219,6 +234,38 @@ class GHConv(tf.keras.layers.Layer):
         out = gate*f_hom + (1-gate)*f_het
         return self.activation(out)
 
+class GHConvDense(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        self.activation = kwargs.pop("activation")
+        self.hidden_dim = args[0]
+        super(GHConvDense, self).__init__(*args, **kwargs)
+
+    def build(self, input_shape):
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
+        self.b_t = self.add_weight(shape=(self.hidden_dim, ), name="b_t", initializer="random_normal")
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
+ 
+    #@tf.function
+    def call(self, inputs):
+        x, adj = inputs
+
+        #compute the normalization of the adjacency matrix
+        in_degrees = tf.reduce_sum(adj, axis=-1)
+        in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
+
+        #add epsilon to prevent numerical issues from 1/sqrt(x)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+
+        f_hom = tf.linalg.matmul(x, self.theta)
+        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+
+        f_het = tf.linalg.matmul(x, self.W_h)
+        gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
+
+        out = gate*f_hom + (1-gate)*f_het
+        return self.activation(out)
+
 class SGConv(tf.keras.layers.Dense):
     def __init__(self, k, *args, **kwargs):
         super(SGConv, self).__init__(*args, **kwargs)
@@ -243,102 +290,162 @@ class SGConv(tf.keras.layers.Dense):
 
         return self.activation(out + b)
 
+class DenseDistance(tf.keras.layers.Layer):
+    def __init__(self, dist_mult=0.1, **kwargs):
+        super(DenseDistance, self).__init__(**kwargs)
+        self.dist_mult = dist_mult
+   
+    def call(self, inputs, training=True):
+        dm = pairwise_dist(inputs, inputs)
+        dm = tf.exp(-self.dist_mult*dm)
+        return dm 
 
-class SparseAttentionDistance(tf.keras.layers.Layer):
-    def __init__(self, distance_dim, nbins=10, batch_size=10, num_neighbors=5):
-        super(SparseAttentionDistance, self).__init__()
-        self.nbins = nbins
-        self.batch_size = batch_size
+class SparseHashedNNDistance(tf.keras.layers.Layer):
+    def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, cosine_dist=False, **kwargs):
+        super(SparseHashedNNDistance, self).__init__(**kwargs)
         self.num_neighbors = num_neighbors
+        self.dist_mult = dist_mult
 
-        self.random_rotations = tf.constant(tf.random.normal((distance_dim, nbins//2)))
+        self.cosine_dist = cosine_dist
+
+        #generate the codebook for LSH hashing at model instantiation for up to this many bins
+        #set this to a high-enough value at model generation to take into account the largest possible input 
+        self.max_num_bins = max_num_bins
+
+        #each bin will receive this many input elements, in total we can accept max_num_bins*bin_size input elements
+        #in each bin, we will do a dense top_k evaluation
+        self.bin_size = bin_size
+
+    def build(self, input_shape):
+        #(n_batch, n_points, n_features)
+
+        #generate the LSH codebook for random rotations (num_features, num_bins/2)
+        self.codebook_random_rotations = self.add_weight(
+            shape=(input_shape[-1], self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
+        )
 
     @tf.function
     def call(self, inputs, training=True):
+
+        #(n_batch, n_points, n_features)
         point_embedding = inputs
+
+        n_batches = tf.shape(point_embedding)[0]
+        n_points = tf.shape(point_embedding)[1]
 
         #cannot concat sparse tensors directly as that incorrectly destroys the gradient, see
         #https://github.com/tensorflow/tensorflow/blob/df3a3375941b9e920667acfe72fb4c33a8f45503/tensorflow/python/ops/sparse_grad.py#L33
         #therefore, for training, we implement sparse concatenation by hand 
-        if training:
-            indices_all = []
-            values_all = []
-            for ibatch in range(self.batch_size):
-                dm = self.construct_sparse_dm(point_embedding[ibatch])
-                indices_all.append(
-                    tf.concat([tf.expand_dims(ibatch*tf.ones(tf.shape(dm.indices)[0], dtype=tf.int64), -1), dm.indices], axis=-1)
-                )
-                values_all.append(dm.values)
+        indices_all = []
+        values_all = []
 
-            #now create a new sparsetensor that is a concatenation of the previous ones
-            shp = tf.shape(inputs)
-            dms = tf.SparseTensor(
-                tf.concat(indices_all, axis=0),
-                tf.concat(values_all, axis=0),
-                (shp[0], shp[1], shp[1])
-            )
-        else:
-            dms = []
-            for ibatch in range(self.batch_size):
-                dms.append(tf.sparse.expand_dims(self.construct_sparse_dm(
-                    point_embedding[ibatch]), 0))
-            dms = tf.sparse.concat(0, dms)
+        def func(args):
+            ibatch, points_batch = args[0], args[1]
+            dm = self.construct_sparse_dm_batch(points_batch)
+            inds = tf.concat([tf.expand_dims(tf.cast(ibatch, tf.int64)*tf.ones(tf.shape(dm.indices)[0], dtype=tf.int64), -1), dm.indices], axis=-1)
+            vals = dm.values
+            return inds, vals
+
+        elems = (tf.range(0, n_batches, delta=1, dtype=tf.int64), point_embedding)
+        ret = tf.map_fn(func, elems, fn_output_signature=(tf.int64, tf.float32), parallel_iterations=1)
+
+        shp = tf.shape(ret[0])
+        # #now create a new SparseTensor that is a concatenation of the previous ones
+        dms = tf.SparseTensor(
+            tf.reshape(ret[0], (shp[0]*shp[1], shp[2])),
+            tf.reshape(ret[1], (shp[0]*shp[1],)),
+            (n_batches, n_points, n_points)
+        )
 
         return tf.sparse.reorder(dms)
 
-    @tf.function
-    def valid_sparse_mat(self, n_points, subindices, subpoints):
+    def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
 
-        #find the cosine distance between the given points using dense matrix multiplication
-        normed = tf.nn.l2_normalize(subpoints, axis=-1)
-        dm = tf.linalg.matmul(normed, normed, transpose_b=True)
-        dm = tf.nn.softmax(dm, axis=-1)
+        #find the distance matrix between the given points using dense matrix multiplication
+        if self.cosine_dist:
+            normed = tf.nn.l2_normalize(subpoints, axis=-1)
+            dm = tf.linalg.matmul(subpoints, subpoints, transpose_b=True)
+        else:
+            dm = pairwise_dist(subpoints, subpoints)
+            dm = tf.exp(-self.dist_mult*dm)
 
         dmshape = tf.shape(dm)
         nbins = dmshape[0]
         nelems = dmshape[1]
 
-        #run KNN in the distance matrix, accumulate each index pair into a sparse distance matrix
+        #run KNN in the dense distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
 
         indices_gathered = tf.vectorized_map(
             lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
             tf.range(self.num_neighbors, dtype=tf.int64))
+
         indices_gathered = tf.transpose(indices_gathered, [1,2,0])
 
-        # the same thing in raw python, to verify for debugging
-        # my_subindices = np.zeros((dmshape[0], dmshape[1], self.num_neighbors),dtype=np.int32)
-        # for ibin in range(dmshape[0]):
-        #     for ielem in range(dmshape[1]):
+        #add the neighbors up to a big matrix using dense matrices, then convert to sparse (mainly for testing)
+        # sp_sum = tf.zeros((n_points, n_points))
+        # for i in range(self.num_neighbors):
+        #     dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
+        #     dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
+        #     src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
+        #     src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
+        #     sp_sum += tf.scatter_nd(src_dst_inds, top_k_vals[:, i], (n_points, n_points))
+        # spt_this = tf.sparse.from_dense(sp_sum)
+        # validate that the vectorized ops are doing what we want by hand while debugging
+        # dm = np.eye(n_points)
+        # for ibin in range(nbins):
+        #     for ielem in range(nelems):
+        #         idx0 = subindices[ibin][ielem]
         #         for ineigh in range(self.num_neighbors):
-        #             my_subindices[ibin, ielem, ineigh] = subindices[ibin][top_k.indices[ibin, ielem, ineigh].numpy()].numpy()
-        # assert(np.all(indices_gathered.numpy() == my_subindices))
+        #             idx1 = subindices[ibin][top_k.indices[ibin, ielem, ineigh]]
+        #             val = top_k.values[ibin, ielem, ineigh]
+        #             dm[idx0, idx1] += val
+        # assert(np.all(sp_sum.numpy() == dm))
 
-        sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=np.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
-        
+        #update the output using intermediate sparse matrices, which may result in some inconsistencies from duplicated indices
+        sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=tf.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
         for i in range(self.num_neighbors):
-            dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
-            dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
-            src_ind = tf.tile(tf.range(nelems, dtype=tf.int64), [nbins, ])
-            src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
-            sp_sum = tf.sparse.add(sp_sum, tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
-
+           dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
+           dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
+           src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
+           src_dst_inds = tf.cast(tf.transpose(tf.stack([src_ind, dst_ind])), dtype=tf.int64)
+           sp_sum = tf.sparse.add(
+               sp_sum,
+               tf.sparse.reorder(tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
+           )
         spt_this = tf.sparse.reorder(sp_sum)
 
         return spt_this
 
-    @tf.function
-    def construct_sparse_dm(self, points):
+    def construct_sparse_dm_batch(self, points):
+
+        #points: (n_points, n_features) input elements for graph construction
         n_points = tf.shape(points)[0]
+        n_features = tf.shape(points)[1]
+
+        #compute the number of LSH bins to divide the input points into on the fly
+        #n_points must be divisible by bin_size exactly due to the use of reshape
+        n_bins = tf.math.floordiv(n_points, self.bin_size)
+        #tf.debugging.assert_greater(n_bins, 0)
 
         #put each input item into a bin defined by the softmax output across the LSH embedding
-        mul = tf.linalg.matmul(points, self.random_rotations)
-        cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = my_softmax_split(cmul, self.nbins)
+        mul = tf.linalg.matmul(points, self.codebook_random_rotations[:, :n_bins//2])
+        #tf.debugging.assert_greater(tf.shape(mul)[2], 0)
 
+        cmul = tf.concat([mul, -mul], axis=-1)
+
+        #cmul is now an integer in [0..nbins) for each input point
+        #bins_split: (n_bins, bin_size) of integer bin indices, which put each input point into a bin of size (n_points/n_bins)
+        bins_split = split_indices_to_bins(cmul, n_bins, self.bin_size)
+
+        #parts: (n_bins, bin_size, n_features), the input points divided up into bins
         parts = tf.gather(points, bins_split)
-        sparse_distance_matrix = self.valid_sparse_mat(n_points, bins_split, parts)
+
+        #sparse_distance_matrix: (n_points, n_points) sparse distance matrix
+        #where higher values (closer to 1) are associated with points that are closely related
+        sparse_distance_matrix = self.subpoints_to_sparse_matrix(n_points, bins_split, parts)
+
         return sparse_distance_matrix
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
@@ -346,7 +453,7 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         super(EncoderDecoderGNN, self).__init__(**kwargs)
         name = kwargs.get("name")
 
-        assert(encoders[-1] == decoders[0])
+        #assert(encoders[-1] == decoders[0])
         self.encoders = encoders
         self.decoders = decoders
 
@@ -381,64 +488,95 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
 
         return x
 
+class AddSparse(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(AddSparse, self).__init__(**kwargs)
+
+    def call(self, matrices):
+        ret = matrices[0]
+        for mat in matrices[1:]:
+            ret = tf.sparse.add(ret, mat)
+        return ret
+
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     def __init__(self,
+        num_input_classes=len(elem_labels),
+        num_output_classes=len(class_labels),
+        num_momentum_outputs=3,
         activation=tf.nn.selu,
         hidden_dim_id=256,
         hidden_dim_reg=256,
         distance_dim=256,
         convlayer="ghconv",
         dropout=0.1,
-        nbins=10,
-        batch_size=10,
+        bin_size=10,
         num_convs_id=1,
         num_convs_reg=1,
-        num_hidden_id=1,
-        num_hidden_reg=1,
-        num_neighbors=5):
+        num_hidden_id_enc=1,
+        num_hidden_id_dec=1,
+        num_hidden_reg_enc=1,
+        num_hidden_reg_dec=1,
+        num_neighbors=5,
+        dist_mult=0.1,
+        cosine_dist=False):
 
         super(PFNet, self).__init__()
         self.activation = activation
+        self.num_dists = 1
 
         encoding_id = []
         decoding_id = []
         encoding_reg = []
         decoding_reg = []
+
         #the encoder outputs and decoder inputs have to have the hidden dim (convlayer size)
-        for ihidden in range(num_hidden_id):
+        for ihidden in range(num_hidden_id_enc):
             encoding_id.append(hidden_dim_id)
+
+        for ihidden in range(num_hidden_id_dec):
             decoding_id.append(hidden_dim_id)
 
-        for ihidden in range(num_hidden_reg):
+        for ihidden in range(num_hidden_reg_enc):
             encoding_reg.append(hidden_dim_reg)
+
+        for ihidden in range(num_hidden_reg_dec):
             decoding_reg.append(hidden_dim_reg)
 
-        self.enc = InputEncoding(len(elem_labels))
-        self.layer_embedding = tf.keras.layers.Dense(distance_dim, activation=activation, name="embedding_attention")
-        self.dist = SparseAttentionDistance(26+distance_dim, nbins, batch_size, num_neighbors)
+        self.enc = InputEncoding(num_input_classes)
+        self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
+        
+        self.embedding_dropout = None
+        if dropout > 0.0:
+            self.embedding_dropout = tf.keras.layers.Dropout(dropout)
+
+        self.dists = []
+        for idist in range(self.num_dists):
+            self.dists.append(SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult, cosine_dist=cosine_dist))
+        self.addsparse = AddSparse()
+        #self.dist = DenseDistance(dist_mult=dist_mult)
 
         convs_id = []
         convs_reg = []
         if convlayer == "sgconv":
             for iconv in range(num_convs_id):
-                convs_id.append(SGConv(hidden_dim_id, activation=activation, name="conv_id{}".format(iconv)))
+                convs_id.append(SGConv(26 if len(encoding_id)==0 else hidden_dim_id, activation=activation, name="conv_id{}".format(iconv)))
             for iconv in range(num_convs_reg):
-                convs_reg.append(SGConv(hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
+                convs_reg.append(SGConv(35 if len(encoding_reg)==0 else hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
         elif convlayer == "ghconv":
             for iconv in range(num_convs_id):
-                convs_id.append(GHConv(hidden_dim_id, activation=activation, name="conv_id{}".format(iconv)))
+                convs_id.append(GHConv(26 if len(encoding_id)==0 else hidden_dim_id, activation=activation, name="conv_id{}".format(iconv)))
             for iconv in range(num_convs_reg):
-                convs_reg.append(GHConv(hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
+                convs_reg.append(GHConv(35 if len(encoding_reg)==0 else hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
 
         self.gnn_id = EncoderDecoderGNN(encoding_id, decoding_id, dropout, activation, convs_id, name="gnn_id")
-        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_id = tf.keras.layers.Dense(num_output_classes, activation="linear", name="out_id")
         self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
         
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
-        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
+        self.layer_momentum = tf.keras.layers.Dense(num_momentum_outputs, activation="linear", name="out_momentum")
 
-    def create_model(self, training=True):
+    def create_model(self, num_max_elems, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
         return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
 
@@ -450,18 +588,70 @@ class PFNet(tf.keras.Model):
 
         #embed inputs for graph structure prediction
         embedding_attention = self.layer_embedding(enc)
+        if self.embedding_dropout:
+            embedding_attention = self.embedding_dropout(embedding_attention, training)
 
         #create graph structure by predicting a sparse distance matrix
-        dm = self.dist(tf.concat([enc, embedding_attention], axis=-1), training)
+        dms = [dist(embedding_attention, training) for dist in self.dists]
+        dm = self.addsparse(dms)
 
         #run graph net for multiclass id prediction
-        x_id = self.gnn_id(tf.concat([enc, embedding_attention], axis=-1), dm, training)
-        out_id_logits = self.layer_id(x_id)
-        out_charge = self.layer_charge(x_id)
+        x_id = self.gnn_id(enc, dm, training)
+        to_decode = tf.concat([enc, x_id], axis=-1)
+        out_id_logits = self.layer_id(to_decode)
+        out_charge = self.layer_charge(to_decode)
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
-        x_reg = self.gnn_reg(tf.concat([enc, embedding_attention, out_id_logits, out_charge], axis=-1), dm, training)
-        pred_corr = self.layer_momentum(x_reg)
+        x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm, training)
+        to_decode = tf.concat([enc, x_reg], axis=-1)
+        pred_momentum = self.layer_momentum(to_decode)
+
+        #soft-mask elements for which the id prediction was 0  
+        probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
+        pred_momentum = pred_momentum * probabilistic_mask_good
+
+        ret = tf.concat([out_id_logits, pred_momentum, out_charge], axis=-1)*msk_input
+        return ret
+
+    def set_trainable_classification(self):
+        self.gnn_reg.trainable = False
+        self.layer_momentum.trainable = False
+
+    def set_trainable_regression(self):
+        for layer in self.layers:
+            layer.trainable = False
+        self.gnn_reg.trainable = True
+        self.layer_momentum.trainable = True
+
+#Just a dummy elementwise model
+class PFNetDummy(tf.keras.Model):
+    def __init__(self, **kwargs):
+        super(PFNetDummy, self).__init__()
+        self.enc = InputEncoding(len(elem_labels))
+
+        self.flatten = tf.keras.layers.Flatten()
+        self.layer_hidden0 = tf.keras.layers.Dense(32, activation="elu")
+        self.layer_hidden1 = tf.keras.layers.Dense(64, activation="elu")
+        self.layer_hidden2 = tf.keras.layers.Dense(128, activation="elu")
+        self.layer_hidden3 = tf.keras.layers.Dense(256, activation="elu")
+
+        self.layer_id = tf.keras.layers.Dense(len(class_labels), activation="linear", name="out_id")
+        self.layer_charge = tf.keras.layers.Dense(1, activation="linear", name="out_charge")
+        self.layer_momentum = tf.keras.layers.Dense(3, activation="linear", name="out_momentum")
+
+    def call(self, inputs, training=True):
+        X = tf.cast(inputs, tf.float32)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        enc = self.enc(inputs)
+
+        h = self.layer_hidden0(flat)
+        h = self.layer_hidden1(h)
+        h = self.layer_hidden2(h)
+        h = self.layer_hidden3(h)
+
+        out_id_logits = self.layer_id(h)
+        out_charge = self.layer_charge(h)
+        pred_corr = self.layer_momentum(h)
 
         #soft-mask elements for which the id prediction was 0  
         probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(out_id_logits)[:, :, 0]
@@ -478,6 +668,16 @@ class PFNet(tf.keras.Model):
 
         ret = tf.concat([out_id_logits, out_momentum, out_charge], axis=-1)*msk_input
         return ret
+
+    def set_trainable_classification(self):
+        self.layer_momentum.trainable = False
+
+    def set_trainable_regression(self):
+        pass
+
+    def create_model(self, num_max_elems, training=True):
+        inputs = tf.keras.Input(shape=(num_max_elems,15,))
+        return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
 
 #@tf.function
 def separate_prediction(y_pred):
@@ -671,12 +871,15 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1, help="number of events in training batch")
     parser.add_argument("--num-convs-id", type=int, default=1, help="number of convolution layers")
     parser.add_argument("--num-convs-reg", type=int, default=1, help="number of convolution layers")
-    parser.add_argument("--num-hidden-id", type=int, default=2, help="number of hidden layers")
-    parser.add_argument("--num-hidden-reg", type=int, default=2, help="number of hidden layers")
+    parser.add_argument("--num-hidden-id-enc", type=int, default=2, help="number of encoder layers for multiclass")
+    parser.add_argument("--num-hidden-id-dec", type=int, default=2, help="number of decoder layers for multiclass")
+    parser.add_argument("--num-hidden-reg-enc", type=int, default=2, help="number of encoder layers for regression")
+    parser.add_argument("--num-hidden-reg-dec", type=int, default=2, help="number of decoder layers for regression")
     parser.add_argument("--num-neighbors", type=int, default=5, help="number of knn neighbors")
     parser.add_argument("--distance-dim", type=int, default=256, help="distance dimension")
-    parser.add_argument("--nbins", type=int, default=10, help="number of locality-sensitive hashing (LSH) bins")
+    parser.add_argument("--bin-size", type=int, default=100, help="number of points per LSH bin")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
+    parser.add_argument("--dist-mult", type=float, default=1.0, help="Exponential multiplier")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="gen")
     parser.add_argument("--weights", type=str, choices=["uniform", "inverse", "classbalanced"], help="Sample weighting scheme to use", default="inverse")
     parser.add_argument("--name", type=str, default=None, help="where to store the output")
@@ -687,6 +890,7 @@ def parse_args():
     parser.add_argument("--lr-decay", type=float, default=0.0, help="learning rate decay")
     parser.add_argument("--train-cls", action="store_true", help="Train only the classification part")
     parser.add_argument("--train-reg", action="store_true", help="Train only the regression part")
+    parser.add_argument("--cosine-dist", action="store_true", help="Use cosine distance")
     parser.add_argument("--eager", action="store_true", help="Run in eager mode for debugging")
     args = parser.parse_args()
     return args
@@ -762,6 +966,9 @@ def load_dataset_ttbar(datapath, target):
 
 if __name__ == "__main__":
     args = parse_args()
+    print(args)
+    
+    experiment = Experiment(project_name="particleflow_tf")
 
     #tf.debugging.enable_check_numerics()
     tf.config.run_functions_eagerly(args.eager)
@@ -786,8 +993,8 @@ if __name__ == "__main__":
 
     #create padded input data
     ps = (tf.TensorShape([num_max_elems, 15]), tf.TensorShape([num_max_elems, 5]), tf.TensorShape([num_max_elems, ]))
-    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps).cache().prefetch(tf.data.experimental.AUTOTUNE)
-    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps).cache().prefetch(tf.data.experimental.AUTOTUNE)
+    ds_train = dataset.take(args.ntrain).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(args.ntrain).take(args.ntest).map(weight_schemes[args.weights]).padded_batch(global_batch_size, padded_shapes=ps)
 
     #repeat needed for keras api
     ds_train_r = ds_train.repeat(args.nepochs)
@@ -812,30 +1019,28 @@ if __name__ == "__main__":
             hidden_dim_reg=args.hidden_dim_reg,
             num_convs_id=args.num_convs_id,
             num_convs_reg=args.num_convs_reg,
-            num_hidden_id=args.num_hidden_id,
-            num_hidden_reg=args.num_hidden_reg,
+            num_hidden_id_enc=args.num_hidden_id_enc,
+            num_hidden_id_dec=args.num_hidden_id_dec,
+            num_hidden_reg_enc=args.num_hidden_reg_enc,
+            num_hidden_reg_dec=args.num_hidden_reg_dec,
             distance_dim=args.distance_dim,
             convlayer=args.convlayer,
             dropout=args.dropout,
-            batch_size=args.batch_size,
-            nbins=args.nbins,
-            num_neighbors=args.num_neighbors
+            bin_size=args.bin_size,
+            num_neighbors=args.num_neighbors,
+            dist_mult=args.dist_mult
         )
 
         if args.train_cls:
             loss_fn = my_loss_cls
-            model.gnn_reg.trainable = False
-            model.layer_momentum.trainable = False
+            model.set_trainable_classification()
         elif args.train_reg:
             loss_fn = my_loss_reg
-            for layer in model.layers:
-                layer.trainable = False
-            model.gnn_reg.trainable = True
-            model.layer_momentum.trainable = True
+            model.set_trainable_regression()
 
-        #model(np.random.randn(args.batch_size, num_max_elems, 15).astype(np.float32))
+        model(np.random.randn(args.batch_size, num_max_elems, 15).astype(np.float32))
         if not args.eager:
-            model = model.create_model()
+            model = model.create_model(num_max_elems)
             model.summary()
 
     if not os.path.isdir("experiments"):
