@@ -5,6 +5,7 @@ import numpy as np
 import os
 from sklearn.model_selection import train_test_split
 import sys
+import glob
 
 num_input_classes = 2
 num_output_classes = 6
@@ -18,8 +19,8 @@ mult_total_loss = 1e3
 
 padded_num_elem_size = 128*40
 
-def prepare_data():
-    data = pickle.load(open("out.pkl", "rb"))
+def prepare_data(fname):
+    data = pickle.load(open(fname, "rb"))
 
     #make all inputs and outputs the same size with padding
     Xs = []
@@ -92,7 +93,7 @@ def my_loss_full(y_true, y_pred):
     l3 = mult_charge_loss*mse_unreduced(true_charge, pred_charge)[:, :, 0]
     loss = l1 + l2 + l3
 
-    return tf.reduce_mean(mult_total_loss*loss)
+    return mult_total_loss*loss
 
 def prepare_callbacks(model, outdir):
     callbacks = []
@@ -131,8 +132,30 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
+def compute_weights(y):
+    weights = np.ones((y.shape[0], y.shape[1]), dtype=np.float32)
+    uniqs, counts = np.unique(y[:, :, 0], return_counts=True)
+
+    #weight is inversely proportional to target particle PID frequency
+    for val, c in zip(uniqs, counts):
+        weights[y[:, :, 0] == val] = 1.0 / c
+
+    return weights
+
 if __name__ == "__main__":
-    X, y = prepare_data()
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:5]
+
+    Xs = []
+    ys = []
+    for infile in infiles:
+        X, y = prepare_data(infile)
+        print(infile, X.shape)
+        Xs.append(X)
+        ys.append(y)
+    
+    X = np.concatenate(Xs)
+    y = np.concatenate(ys)
+    w = compute_weights(y)
 
     model = PFNet(
     	num_input_classes=num_input_classes,
@@ -153,17 +176,21 @@ if __name__ == "__main__":
     
     callbacks = prepare_callbacks(model, outdir)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=0)
+    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+        X, y, w, test_size=0.2, random_state=0)
+
+    #call the model once, to make sure it runs
     model(X_train[:5])
 
     opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
-    model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution])
+
+    #we use the "temporal" mode to have per-particle weights
+    model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution], sample_weight_mode='temporal')
 
     #model.load_weights("experiments/run_05/weights.500-594286.750000.hdf5")
     
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=50, batch_size=10, callbacks=callbacks)
+    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=100, batch_size=10, callbacks=callbacks)
 
-    y_pred = model.predict(X, batch_size=5)
+    y_pred = model.predict(X, batch_size=10)
 
     np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
