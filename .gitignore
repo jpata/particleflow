@@ -5,3 +5,5 @@
 *.pdf
 data/*
 *.pth
+test/__pycache__/
+
