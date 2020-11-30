@@ -14,6 +14,20 @@ ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 #for debugging
 save_full_graphs = True
 
+#0 - nothing associated
+#1 - charged hadron
+#2 - neutral hadron
+#3 - photon
+#4 - electron
+#5 - muon
+gen_pid_encoding = {
+    211: 1,
+    130: 2,
+    22: 3,
+    11: 4,
+    13: 5,
+}
+
 #check if a genparticle has an associated reco track
 def particle_has_track(g, particle):
     for e in g.edges(particle):
@@ -56,10 +70,12 @@ def make_tower_array(tower_dict):
         1, #tower is denoted with ID 1
         tower_dict["et"],
         tower_dict["eta"],
-        tower_dict["phi"],
+        np.sin(tower_dict["phi"]),
+        np.cos(tower_dict["phi"]),
         tower_dict["energy"],
         tower_dict["eem"],
         tower_dict["ehad"],
+        0.0 #padding
     ])
 
 def make_track_array(track_dict):
@@ -67,29 +83,17 @@ def make_track_array(track_dict):
         2, #track is denoted with ID 2
         track_dict["pt"],
         track_dict["eta"],
-        track_dict["phi"],
+        np.sin(track_dict["phi"]),
+        np.cos(track_dict["phi"]),
         track_dict["p"],
         track_dict["eta_outer"],
-        track_dict["phi_outer"],
+        np.sin(track_dict["phi_outer"]),
+        np.cos(track_dict["phi_outer"]),
     ])
-
-#0 - nothing associated
-#1 - charged hadron
-#2 - neutral hadron
-#3 - photon
-#4 - muon
-#5 - electron
-gen_pid_encoding = {
-    211: 1,
-    130: 2,
-    22: 3,
-    11: 4,
-    13: 5,
-}
 
 def make_gen_array(gen_dict):
     if not gen_dict:
-        return np.zeros(6)
+        return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(gen_dict["pid"]), 1)
     charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1,4,5] else 0
@@ -99,7 +103,8 @@ def make_gen_array(gen_dict):
         charge,
         gen_dict["pt"],
         gen_dict["eta"],
-        gen_dict["phi"],
+        np.sin(gen_dict["phi"]),
+        np.cos(gen_dict["phi"]),
         gen_dict["energy"]
     ])
 
@@ -134,7 +139,6 @@ def make_triplets(g, tracks, towers, particles):
             if imax==0:
                 pid = 130
             elif imax==1:
-                #should be 211, but we don't want to try reconstruct a charged hadron if there was no track
                 pid = 211
             elif imax==2:
                 pid = 22
@@ -170,7 +174,7 @@ def make_triplets(g, tracks, towers, particles):
 
 def make_cand_array(cand_dict):
     if not cand_dict:
-        return np.zeros(6)
+        return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
     return np.array([
@@ -178,7 +182,8 @@ def make_cand_array(cand_dict):
         cand_dict["charge"],
         cand_dict.get("pt", 0),
         cand_dict["eta"],
-        cand_dict["phi"],
+        np.sin(cand_dict["phi"]),
+        np.cos(cand_dict["phi"]),
         cand_dict.get("energy", 0)
     ])
 
@@ -335,19 +340,6 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for prt in remaining_particles:
             ygen_remaining.append(make_gen_array(graph.nodes[prt]))
             
-        # #create matrices
-        # for track in tracks:
-        #     truth = get_track_truth(graph, track)
-        #     X.append(make_track_array(truth[0]))
-        #     ygen.append(make_gen_array(truth[1]))
-        #     ycand.append(make_cand_array(truth[2]))
-
-        # for tower in towers:
-        #     truth = get_tower_truth(graph, tower)
-        #     X.append(make_tower_array(truth[0]))
-        #     ygen.append(make_gen_array(truth[1]))
-        #     ycand.append(make_cand_array(truth[2]))
-
         X = np.stack(X)
         ygen = np.stack(ygen)
         ygen_remaining = np.stack(ygen_remaining)

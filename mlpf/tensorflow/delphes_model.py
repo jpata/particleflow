@@ -9,13 +9,13 @@ import glob
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 1e3
+mult_classification_loss = 1e2
 mult_charge_loss = 1.0
-mult_energy_loss = 10.0
-mult_phi_loss = 10.0
-mult_eta_loss = 10.0
-mult_pt_loss = 10.0
-mult_total_loss = 1e3
+mult_energy_loss = 1.0
+mult_phi_loss = 1.0
+mult_eta_loss = 1.0
+mult_pt_loss = 1.0
+mult_total_loss = 1e6
 
 padded_num_elem_size = 128*40
 
@@ -73,7 +73,7 @@ def energy_resolution(y_true, y_pred):
     true_id, true_charge, true_momentum = separate_truth(y_true)
 
     msk = true_id[:, :, 0]!=0
-    return tf.reduce_mean(mse_unreduced(true_momentum[msk][:, 3], pred_momentum[msk][:, 3]))
+    return tf.reduce_mean(mse_unreduced(true_momentum[msk][:, -1], pred_momentum[msk][:, -1]))
 
 def my_loss_full(y_true, y_pred):
     pred_id_logits, pred_charge, pred_momentum = separate_prediction(y_pred)
@@ -86,9 +86,20 @@ def my_loss_full(y_true, y_pred):
     l2_0 = mult_pt_loss*mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
     l2_1 = mult_eta_loss*mse_unreduced(true_momentum[:, :, 1], pred_momentum[:, :, 1])
     l2_2 = mult_phi_loss*mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])
-    l2_3 = mult_energy_loss*mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])
+    l2_3 = mult_phi_loss*mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])
+    l2_4 = mult_energy_loss*mse_unreduced(true_momentum[:, :, 4], pred_momentum[:, :, 4])
 
-    l2 = (l2_0 + l2_1 + l2_2 + l2_3)
+    # tf.print()
+    # tf.print("cls", tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)))
+    # tf.print("pt", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])))
+    # tf.print("eta", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 1], pred_momentum[:, :, 1])))
+    # tf.print("sphi", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])))
+    # tf.print("cphi", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])))
+    # tf.print("e", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 4], pred_momentum[:, :, 4])))
+    # tf.print("ch", tf.reduce_mean(mse_unreduced(true_charge, pred_charge)))
+    # tf.print()
+
+    l2 = (l2_0 + l2_1 + l2_2 + l2_3 + l2_3)
 
     l3 = mult_charge_loss*mse_unreduced(true_charge, pred_charge)[:, :, 0]
     loss = l1 + l2 + l3
@@ -138,12 +149,15 @@ def compute_weights(y):
 
     #weight is inversely proportional to target particle PID frequency
     for val, c in zip(uniqs, counts):
+        print("class {} count {}".format(val, c))
         weights[y[:, :, 0] == val] = 1.0 / c
 
     return weights
 
 if __name__ == "__main__":
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
+    #tf.config.run_functions_eagerly(True)
+
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:50]
 
     Xs = []
     ys = []
@@ -155,18 +169,35 @@ if __name__ == "__main__":
     
     X = np.concatenate(Xs)
     y = np.concatenate(ys)
+
+    #take the log of the pT and E features
+    y[:, :, 2] = np.log(y[:, :, 2])
+    y[:, :, 6] = np.log(y[:, :, 6])
+    y[np.isnan(y)] = 0.0
+    y[np.isinf(y)] = 0.0
+
+    #since Delphes-PF identifies muons based on gen info (as tracks have no "muon chamber" info in delphes reco)
+    #we also add a bit in the feature matrix for all gen muons so they can be reconstructed comparably with delphes-PF
+    X = np.concatenate([X, np.zeros((X.shape[0], X.shape[1], 1)).astype(np.float32)], axis=-1)
+    X[y[:, :, 0] == 5, -1] = 1.0
+
     w = compute_weights(y)
 
     model = PFNet(
-    	num_input_classes=num_input_classes,
-    	num_output_classes=num_output_classes,
-    	num_momentum_outputs=4, #(pT, eta, phi, E)
+    	num_input_classes=num_input_classes, #(none, track, tower)
+    	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
+    	num_momentum_outputs=5, #(pT, eta, sin phi, cos phi, E)
     	bin_size=128,
-    	num_convs_id=2,
-    	num_convs_reg=2,
+    	num_convs_id=3,
+    	num_convs_reg=3,
+        num_hidden_reg_enc=0,
+        num_hidden_id_enc=0,
     	num_hidden_reg_dec=2,
     	num_hidden_id_dec=2,
         num_neighbors=8,
+        hidden_dim_id=256,
+        hidden_dim_reg=256,
+        distance_dim=256,
     )
 
     outdir = get_rundir('experiments')
@@ -186,10 +217,8 @@ if __name__ == "__main__":
 
     #we use the "temporal" mode to have per-particle weights
     model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution], sample_weight_mode='temporal')
-
-    #model.load_weights("experiments/run_05/weights.500-594286.750000.hdf5")
-    
-    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=100, batch_size=10, callbacks=callbacks)
+    #model.load_weights("experiments/run_01/weights.50-1.958018.hdf5")
+    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=10, batch_size=10, callbacks=callbacks)
 
     y_pred = model.predict(X, batch_size=10)
 
