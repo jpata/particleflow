@@ -9,12 +9,12 @@ import glob
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 1e2
+mult_classification_loss = 1e4
 mult_charge_loss = 1.0
-mult_energy_loss = 1.0
+mult_energy_loss = 0.01
 mult_phi_loss = 1.0
 mult_eta_loss = 1.0
-mult_pt_loss = 1.0
+mult_pt_loss = 0.01
 mult_total_loss = 1e6
 
 padded_num_elem_size = 128*40
@@ -157,7 +157,7 @@ def compute_weights(y):
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:50]
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
 
     Xs = []
     ys = []
@@ -188,12 +188,12 @@ if __name__ == "__main__":
     	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
     	num_momentum_outputs=5, #(pT, eta, sin phi, cos phi, E)
     	bin_size=128,
-    	num_convs_id=3,
-    	num_convs_reg=3,
+    	num_convs_id=1,
+    	num_convs_reg=1,
         num_hidden_reg_enc=0,
         num_hidden_id_enc=0,
-    	num_hidden_reg_dec=2,
-    	num_hidden_id_dec=2,
+    	num_hidden_reg_dec=3,
+    	num_hidden_id_dec=3,
         num_neighbors=8,
         hidden_dim_id=256,
         hidden_dim_reg=256,
@@ -213,12 +213,12 @@ if __name__ == "__main__":
     #call the model once, to make sure it runs
     model(X_train[:5])
 
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     #we use the "temporal" mode to have per-particle weights
     model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution], sample_weight_mode='temporal')
     #model.load_weights("experiments/run_01/weights.50-1.958018.hdf5")
-    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=10, batch_size=10, callbacks=callbacks)
+    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=50, batch_size=10, callbacks=callbacks)
 
     y_pred = model.predict(X, batch_size=10)
 
