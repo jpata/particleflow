@@ -562,9 +562,9 @@ class PFNet(tf.keras.Model):
         convs_reg = []
         if convlayer == "sgconv":
             for iconv in range(num_convs_id):
-                convs_id.append(SGConv(26 if len(encoding_id)==0 else hidden_dim_id, activation=activation, name="conv_id{}".format(iconv)))
+                convs_id.append(SGConv(activation=activation, name="conv_id{}".format(iconv)))
             for iconv in range(num_convs_reg):
-                convs_reg.append(SGConv(35 if len(encoding_reg)==0 else hidden_dim_reg, activation=activation, name="conv_reg{}".format(iconv)))
+                convs_reg.append(SGConv(activation=activation, name="conv_reg{}".format(iconv)))
         elif convlayer == "ghconv":
             for iconv in range(num_convs_id):
                 convs_id.append(GHConv(activation=activation, name="conv_id{}".format(iconv)))
@@ -599,12 +599,14 @@ class PFNet(tf.keras.Model):
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm, training)
+        
         to_decode = tf.concat([enc, x_id], axis=-1)
         out_id_logits = self.layer_id(to_decode)
         out_charge = self.layer_charge(to_decode)
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm, training)
+
         to_decode = tf.concat([enc, x_reg], axis=-1)
         pred_momentum = self.layer_momentum(to_decode)
 
