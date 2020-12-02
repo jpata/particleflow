@@ -6,6 +6,7 @@ import os
 from sklearn.model_selection import train_test_split
 import sys
 import glob
+import PCGrad_tf
 
 num_input_classes = 2
 num_output_classes = 6
@@ -89,20 +90,20 @@ def my_loss_full(y_true, y_pred):
     l2_3 = mult_phi_loss*mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])
     l2_4 = mult_energy_loss*mse_unreduced(true_momentum[:, :, 4], pred_momentum[:, :, 4])
 
-    # tf.print()
-    # tf.print("cls", tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)))
-    # tf.print("pt", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])))
-    # tf.print("eta", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 1], pred_momentum[:, :, 1])))
-    # tf.print("sphi", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])))
-    # tf.print("cphi", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])))
-    # tf.print("e", tf.reduce_mean(mse_unreduced(true_momentum[:, :, 4], pred_momentum[:, :, 4])))
-    # tf.print("ch", tf.reduce_mean(mse_unreduced(true_charge, pred_charge)))
-    # tf.print()
-
     l2 = (l2_0 + l2_1 + l2_2 + l2_3 + l2_3)
 
     l3 = mult_charge_loss*mse_unreduced(true_charge, pred_charge)[:, :, 0]
     loss = l1 + l2 + l3
+
+    # tf.print()
+    # tf.print("cls", tf.reduce_mean(l1))
+    # tf.print("pt", tf.reduce_mean(l2_0))
+    # tf.print("eta", tf.reduce_mean(l2_1))
+    # tf.print("sphi", tf.reduce_mean(l2_2))
+    # tf.print("cphi", tf.reduce_mean(l2_3))
+    # tf.print("e", tf.reduce_mean(l2_4))
+    # tf.print("ch", tf.reduce_mean(l3))
+    # tf.print()
 
     return mult_total_loss*loss
 
@@ -143,21 +144,30 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
-def compute_weights(y):
+def compute_weights(y, mult=1.0):
     weights = np.ones((y.shape[0], y.shape[1]), dtype=np.float32)
     uniqs, counts = np.unique(y[:, :, 0], return_counts=True)
 
     #weight is inversely proportional to target particle PID frequency
     for val, c in zip(uniqs, counts):
         print("class {} count {}".format(val, c))
-        weights[y[:, :, 0] == val] = 1.0 / c
+        weights[y[:, :, 0] == val] = mult / c
 
     return weights
+
+# class MeanSquaredError(tf.keras.losses.Loss):
+
+#   def call(self, y_true, y_pred):
+#     #import pdb;pdb.set_trace()
+#     y_pred = tf.convert_to_tensor_v2(y_pred)
+#     y_true = tf.cast(y_true, y_pred.dtype)
+#     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
+
 
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:50]
 
     Xs = []
     ys = []
@@ -186,7 +196,7 @@ if __name__ == "__main__":
     model = PFNet(
     	num_input_classes=num_input_classes, #(none, track, tower)
     	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
-    	num_momentum_outputs=5, #(pT, eta, sin phi, cos phi, E)
+    	num_momentum_outputs=5, #(log pT, eta, sin phi, cos phi, log E)
     	bin_size=128,
     	num_convs_id=1,
     	num_convs_reg=1,
@@ -198,6 +208,7 @@ if __name__ == "__main__":
         hidden_dim_id=256,
         hidden_dim_reg=256,
         distance_dim=256,
+        return_combined=True
     )
 
     outdir = get_rundir('experiments')
@@ -216,10 +227,23 @@ if __name__ == "__main__":
     opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     #we use the "temporal" mode to have per-particle weights
-    model.compile(loss=my_loss_full, optimizer=opt, metrics=[accuracy, energy_resolution], sample_weight_mode='temporal')
-    #model.load_weights("experiments/run_01/weights.50-1.958018.hdf5")
-    model.fit(X_train, y_train, sample_weight=w_train, validation_data=(X_test, y_test, w_test), epochs=50, batch_size=10, callbacks=callbacks)
+    model.compile(
+        loss=my_loss_full,
+        optimizer=opt,
+        sample_weight_mode='temporal'
+    )
 
-    y_pred = model.predict(X, batch_size=10)
+    #model.load_weights("experiments/run_02/weights.10-121.166969.hdf5")
+    #w_train = np.expand_dims(w_train, -1)
+    #w_test = np.expand_dims(w_test, -1)
+
+    model.fit(X_train,
+        y_train,
+        sample_weight=w_train,
+        validation_data=(X_test, y_test, w_test),
+        epochs=10, batch_size=5, callbacks=callbacks)
+
+    y_pred = model.predict(X, batch_size=5)
+    #y_pred = np.concatenate(y_pred, axis=-1)
 
     np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
