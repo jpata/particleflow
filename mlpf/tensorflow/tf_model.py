@@ -521,11 +521,13 @@ class PFNet(tf.keras.Model):
         num_hidden_reg_dec=1,
         num_neighbors=5,
         dist_mult=0.1,
-        cosine_dist=False):
+        cosine_dist=False,
+        return_combined=True):
 
         super(PFNet, self).__init__()
         self.activation = activation
         self.num_dists = 1
+        self.return_combined = return_combined
 
         encoding_id = []
         decoding_id = []
@@ -614,8 +616,11 @@ class PFNet(tf.keras.Model):
         probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
         pred_momentum = pred_momentum * probabilistic_mask_good
 
-        ret = tf.concat([out_id_logits, pred_momentum, out_charge], axis=-1)*msk_input
-        return ret
+        if self.return_combined:
+            ret = tf.concat([out_id_logits, pred_momentum, out_charge], axis=-1)*msk_input
+            return ret
+        else:
+            return out_id_logits*msk_input, pred_momentum*msk_input, out_charge*msk_input
 
     def set_trainable_classification(self):
         self.gnn_reg.trainable = False
