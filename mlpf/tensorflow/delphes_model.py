@@ -78,7 +78,7 @@ def energy_resolution(y_true, y_pred):
 
 def my_loss_full(y_true, y_pred):
     pred_id_logits, pred_charge, pred_momentum = separate_prediction(y_pred)
-    pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
+    #pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=num_output_classes)
     
@@ -167,7 +167,7 @@ def compute_weights(y, mult=1.0):
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))[:50]
+    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
 
     Xs = []
     ys = []
@@ -208,7 +208,8 @@ if __name__ == "__main__":
         hidden_dim_id=256,
         hidden_dim_reg=256,
         distance_dim=256,
-        return_combined=True
+        return_combined=True,
+        activation=tf.nn.elu,
     )
 
     outdir = get_rundir('experiments')
@@ -224,7 +225,7 @@ if __name__ == "__main__":
     #call the model once, to make sure it runs
     model(X_train[:5])
 
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
     #we use the "temporal" mode to have per-particle weights
     model.compile(

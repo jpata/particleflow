@@ -617,10 +617,10 @@ class PFNet(tf.keras.Model):
         pred_momentum = pred_momentum * probabilistic_mask_good
 
         if self.return_combined:
-            ret = tf.concat([out_id_logits, pred_momentum, out_charge], axis=-1)*msk_input
+            ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)*msk_input
             return ret
         else:
-            return out_id_logits*msk_input, pred_momentum*msk_input, out_charge*msk_input
+            return out_id_logits*msk_input, out_charge*msk_input, pred_momentum*msk_input
 
     def set_trainable_classification(self):
         self.gnn_reg.trainable = False
