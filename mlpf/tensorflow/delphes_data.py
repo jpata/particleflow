@@ -2,16 +2,38 @@ import numpy as np
 import glob
 import multiprocessing
 import os
+import pickle
 
 import tensorflow as tf
-from tf_model import load_one_file
+
+padded_num_elem_size = 128*40
+
+def prepare_data(fname):
+    data = pickle.load(open(fname, "rb"))
+
+    #make all inputs and outputs the same size with padding
+    Xs = []
+    ys = []
+    for i in range(len(data["X"])):
+        X = np.array(data["X"][i][:padded_num_elem_size], np.float32)
+        X = np.pad(X, [(0, padded_num_elem_size - X.shape[0]), (0,0)])
+        y = np.array(data["ygen"][i][:padded_num_elem_size], np.float32)
+        y = np.pad(y, [(0, padded_num_elem_size - y.shape[0]), (0,0)])
+
+        X = np.expand_dims(X, 0)
+        y = np.expand_dims(y, 0)
+        Xs.append(X)
+        ys.append(y)
+
+    X = [np.concatenate(Xs)]
+    y = [np.concatenate(ys)]
+    return X, y
 
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--datapath", type=str, required=True, help="Input data path")
-    parser.add_argument("--num-files-per-tfr", type=int, default=100, help="Number of pickle files to merge to one TFRecord file")
+    parser.add_argument("--num-files-per-tfr", type=int, default=10, help="Number of pickle files to merge to one TFRecord file")
     args = parser.parse_args()
     return args
 
@@ -43,8 +65,8 @@ def _parse_tfr_element(element):
     arr_w = tf.io.parse_tensor(w, out_type=tf.float32)
     
     #https://github.com/tensorflow/tensorflow/issues/24520#issuecomment-577325475
-    arr_X.set_shape(tf.TensorShape((None, 15)))
-    arr_y.set_shape(tf.TensorShape((None, 5)))
+    arr_X.set_shape(tf.TensorShape((None, 9)))
+    arr_y.set_shape(tf.TensorShape((None, 7)))
     arr_w.set_shape(tf.TensorShape((None, )))
     #inds = tf.stack([arr_dm_row, arr_dm_col], axis=-1)
     #dm_sparse = tf.SparseTensor(values=arr_dm_data, indices=inds, dense_shape=[tf.shape(arr_X)[0], tf.shape(arr_X)[0]])
@@ -61,7 +83,7 @@ def serialize_X_y_w(writer, X, y, w):
     writer.write(sample.SerializeToString())
 
 def serialize_chunk(args):
-    path, files, ichunk, target = args
+    path, files, ichunk = args
     out_filename = os.path.join(path, "chunk_{}.tfrecords".format(ichunk))
     writer = tf.io.TFRecordWriter(out_filename)
     Xs = []
@@ -70,15 +92,13 @@ def serialize_chunk(args):
     dms = []
 
     for fi in files:
-        X, y, ycand = load_one_file(fi)
+        X, y = prepare_data(fi)
 
         Xs += X
-        if target == "cand":
-            ys += ycand
-        elif target == "gen":
-            ys += y
-        else:
-            raise Exception("Unknown target")
+        ys += y
+
+    Xs = np.concatenate(Xs)
+    ys = np.concatenate(ys)
 
     #set weights for each sample to be equal to the number of samples of this type
     #in the training script, this can be used to compute either inverse or class-balanced weights
@@ -100,20 +120,22 @@ if __name__ == "__main__":
 
     datapath = args.datapath
 
-    filelist = sorted(glob.glob("{}/raw/*.pkl".format(datapath)))
+    filelist = sorted(glob.glob("{}/*.pkl".format(datapath)))
     print("found {} files".format(len(filelist)))
     #means, stds = extract_means_stds(filelist)
-    outpath = "{}/tfr/{}".format(datapath, args.target)
+    outpath = "{}/tfr".format(datapath)
 
     if not os.path.isdir(outpath):
         os.makedirs(outpath)
 
     pars = []
     for ichunk, files in enumerate(chunks(filelist, args.num_files_per_tfr)):
-        pars += [(outpath, files, ichunk, args.target)]
+        pars += [(outpath, files, ichunk)]
     #serialize_chunk(pars[0])
     pool = multiprocessing.Pool(20)
     pool.map(serialize_chunk, pars)
+    #list(map(serialize_chunk, pars))
+
 
     #Load and test the dataset 
     tfr_dataset = tf.data.TFRecordDataset(glob.glob(outpath + "/*.tfrecords"))

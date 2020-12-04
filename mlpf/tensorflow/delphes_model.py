@@ -6,40 +6,22 @@ import os
 from sklearn.model_selection import train_test_split
 import sys
 import glob
-import PCGrad_tf
+#import PCGrad_tf
+import io
+
+import matplotlib
+import matplotlib.pyplot as plt
+import sklearn
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 1e4
+mult_classification_loss = 1e1
 mult_charge_loss = 1.0
-mult_energy_loss = 0.01
+mult_energy_loss = 0.1
 mult_phi_loss = 1.0
 mult_eta_loss = 1.0
-mult_pt_loss = 0.01
+mult_pt_loss = 0.1
 mult_total_loss = 1e6
-
-padded_num_elem_size = 128*40
-
-def prepare_data(fname):
-    data = pickle.load(open(fname, "rb"))
-
-    #make all inputs and outputs the same size with padding
-    Xs = []
-    ys = []
-    for i in range(len(data["X"])):
-        X = np.array(data["X"][i][:padded_num_elem_size], np.float32)
-        X = np.pad(X, [(0, padded_num_elem_size - X.shape[0]), (0,0)])
-        y = np.array(data["ygen"][i][:padded_num_elem_size], np.float32)
-        y = np.pad(y, [(0, padded_num_elem_size - y.shape[0]), (0,0)])
-
-        X = np.expand_dims(X, 0)
-        y = np.expand_dims(y, 0)
-        Xs.append(X)
-        ys.append(y)
-
-    X = np.concatenate(Xs)
-    y = np.concatenate(ys)
-    return X, y
 
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
@@ -107,6 +89,144 @@ def my_loss_full(y_true, y_pred):
 
     return mult_total_loss*loss
 
+def plot_confusion_matrix(cm):
+    fig = plt.figure(figsize=(5,5))
+    plt.imshow(cm, cmap="Blues")
+    plt.title("Reconstructed PID (normed to gen)")
+    plt.xlabel("Delphes PF PID")
+    plt.ylabel("Gen PID")
+    plt.xticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
+    plt.yticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
+    plt.colorbar()
+    return fig
+
+def plot_regression(val_x, val_y, var_name, rng):
+    fig = plt.figure(figsize=(5,5))
+    plt.hist2d(
+        val_x,
+        val_y,
+        bins=(rng, rng),
+        cmap="Blues",
+        norm=matplotlib.colors.LogNorm()
+    );
+    plt.xlabel("Gen {}".format(var_name))
+    plt.ylabel("MLPF {}".format(var_name))
+    return fig
+
+def plot_to_image(figure):
+    """
+    Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call.
+    """
+    
+    buf = io.BytesIO()
+    
+    # Use plt.savefig to save the plot to a PNG in memory.
+    plt.savefig(buf, format='png')
+    plt.close(figure)
+    buf.seek(0)
+    
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    image = tf.expand_dims(image, 0)
+    
+    return image
+
+def plot_distributions(val_x, val_y, var_name, rng):
+    fig = plt.figure(figsize=(5,5))
+    plt.hist(val_x, bins=rng, density=True, histtype="step", lw=2, label="gen");
+    plt.hist(val_y, bins=rng, density=True, histtype="step", lw=2, label="MLPF");
+    plt.xlabel(var_name)
+    plt.legend(loc="best", frameon=False)
+    plt.ylim(0,1.5)
+    return fig
+
+
+def log_confusion_matrix(epoch, logs):
+    
+    test_pred, dm = model.predict(X_test, batch_size=5)
+    test_pred_id = np.argmax(test_pred[:, :, :num_output_classes], axis=-1)
+
+    cm = sklearn.metrics.confusion_matrix(
+        y_test[:, :, 0].astype(np.int64).flatten(),
+        test_pred_id.flatten(), labels=list(range(num_output_classes)))
+    cm_normed = sklearn.metrics.confusion_matrix(
+        y_test[:, :, 0].astype(np.int64).flatten(),
+        test_pred_id.flatten(), labels=list(range(num_output_classes)), normalize="true")
+
+    figure = plot_confusion_matrix(cm)
+    cm_image = plot_to_image(figure)
+
+    figure = plot_confusion_matrix(cm_normed)
+    cm_image_normed = plot_to_image(figure)
+
+    msk = (test_pred_id!=0) & (y_test[:, :, 0]!=0)
+    ch_true = y_test[msk, 1].flatten()
+    ch_pred = test_pred[msk, 1].flatten()
+
+    pt_true = y_test[msk, 2].flatten()
+    pt_pred = test_pred[msk, 2].flatten()
+
+    e_true = y_test[msk, 6].flatten()
+    e_pred = test_pred[msk, 6].flatten()
+
+    eta_true = y_test[msk, 3].flatten()
+    eta_pred = test_pred[msk, 3].flatten()
+
+    sphi_true = y_test[msk, 4].flatten()
+    sphi_pred = test_pred[msk, 4].flatten()
+
+    cphi_true = y_test[msk, 5].flatten()
+    cphi_pred = test_pred[msk, 5].flatten()
+
+    figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
+    ch_image = plot_to_image(figure)
+
+    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 100, 100))
+    pt_image = plot_to_image(figure)
+
+    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 100, 100))
+    pt_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(e_true, e_pred, "E", np.linspace(0, 100, 100))
+    e_image = plot_to_image(figure)
+
+    figure = plot_distributions(e_true, e_pred, "E", np.linspace(0, 100, 100))
+    e_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
+    eta_image = plot_to_image(figure)
+
+    figure = plot_distributions(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
+    eta_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100))
+    sphi_image = plot_to_image(figure)
+
+    figure = plot_distributions(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100))
+    sphi_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100))
+    cphi_image = plot_to_image(figure)
+
+    figure = plot_distributions(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100))
+    cphi_distr_image = plot_to_image(figure)
+
+    with file_writer_cm.as_default():
+        tf.summary.image("Confusion Matrix", cm_image, step=epoch)
+        tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
+        tf.summary.image("charge regression", ch_image, step=epoch)
+        tf.summary.image("pT regression", pt_image, step=epoch)
+        tf.summary.image("pT distibution", pt_distr_image, step=epoch)
+        tf.summary.image("E regression", e_image, step=epoch)
+        tf.summary.image("E distribution", e_distr_image, step=epoch)
+        tf.summary.image("eta regression", eta_image, step=epoch)
+        tf.summary.image("eta distribution", eta_distr_image, step=epoch)
+        tf.summary.image("sin phi regression", sphi_image, step=epoch)
+        tf.summary.image("sin phi distribution", sphi_distr_image, step=epoch)
+        tf.summary.image("cos phi regression", cphi_image, step=epoch)
+        tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
+        tf.summary.histogram("dm_values", dm.values, step=epoch)
+
 def prepare_callbacks(model, outdir):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
@@ -128,6 +248,9 @@ def prepare_callbacks(model, outdir):
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
+
+    cm_callback = tf.keras.callbacks.LambdaCallback(on_epoch_end=log_confusion_matrix)
+    callbacks += [cm_callback]
 
     return callbacks
 
@@ -163,53 +286,59 @@ def compute_weights(y, mult=1.0):
 #     y_true = tf.cast(y_true, y_pred.dtype)
 #     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
 
+def compute_weights_inverse(X, y, w):
+    wn = 1.0/tf.sqrt(w)
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
 
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
-    infiles = list(sorted(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_000_*.pkl")))
+    from delphes_data import _parse_tfr_element, padded_num_elem_size
+    path = "out/pythia8_ttbar/tfr/*.tfrecords"
+    tfr_files = glob.glob(path)
+    if len(tfr_files) == 0:
+        raise Exception("Could not find any files in {}".format(path))
+        
+    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    num_events = 0
+    for i in dataset:
+        num_events += 1
 
-    Xs = []
-    ys = []
-    for infile in infiles:
-        X, y = prepare_data(infile)
-        print(infile, X.shape)
-        Xs.append(X)
-        ys.append(y)
-    
-    X = np.concatenate(Xs)
-    y = np.concatenate(ys)
+    global_batch_size = 5
+    n_train = int(0.5*num_events)
+    n_test = int(0.5*num_events)
+    n_epochs = 20
 
-    #take the log of the pT and E features
-    y[:, :, 2] = np.log(y[:, :, 2])
-    y[:, :, 6] = np.log(y[:, :, 6])
-    y[np.isnan(y)] = 0.0
-    y[np.isinf(y)] = 0.0
+    ps = (tf.TensorShape([padded_num_elem_size, 9]), tf.TensorShape([padded_num_elem_size, 7]), tf.TensorShape([padded_num_elem_size, ]))
+    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
 
-    #since Delphes-PF identifies muons based on gen info (as tracks have no "muon chamber" info in delphes reco)
-    #we also add a bit in the feature matrix for all gen muons so they can be reconstructed comparably with delphes-PF
-    X = np.concatenate([X, np.zeros((X.shape[0], X.shape[1], 1)).astype(np.float32)], axis=-1)
-    X[y[:, :, 0] == 5, -1] = 1.0
+    X_test = ds_test.take(100).map(lambda x,y,z: x)
+    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,z: y).as_numpy_iterator()))
 
-    w = compute_weights(y)
+    ds_train_r = ds_train.cache().repeat(n_epochs)
+    ds_test_r = ds_test.cache().repeat(n_epochs)
 
     model = PFNet(
     	num_input_classes=num_input_classes, #(none, track, tower)
     	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
     	num_momentum_outputs=5, #(log pT, eta, sin phi, cos phi, log E)
-    	bin_size=128,
-    	num_convs_id=1,
-    	num_convs_reg=1,
-        num_hidden_reg_enc=0,
+    	bin_size=256,
+    	num_convs_id=2,
+    	num_convs_reg=3,
+        num_hidden_reg_enc=3,
         num_hidden_id_enc=0,
     	num_hidden_reg_dec=3,
     	num_hidden_id_dec=3,
-        num_neighbors=8,
-        hidden_dim_id=256,
-        hidden_dim_reg=256,
-        distance_dim=256,
+        num_neighbors=16,
+        hidden_dim_id=128,
+        hidden_dim_reg=512,
+        distance_dim=32,
+        cosine_dist=False,
+        dist_mult=1.0,
         return_combined=True,
-        activation=tf.nn.elu,
+        activation=tf.nn.selu,
     )
 
     outdir = get_rundir('experiments')
@@ -217,19 +346,17 @@ if __name__ == "__main__":
         print("Output directory exists: {}".format(outdir), file=sys.stderr)
         sys.exit(1)
     
+    file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
     callbacks = prepare_callbacks(model, outdir)
 
-    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
-        X, y, w, test_size=0.2, random_state=0)
-
     #call the model once, to make sure it runs
-    model(X_train[:5])
+    #model(X_train[:5])
 
     opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
     #we use the "temporal" mode to have per-particle weights
     model.compile(
-        loss=my_loss_full,
+        loss=[my_loss_full, None],
         optimizer=opt,
         sample_weight_mode='temporal'
     )
@@ -238,13 +365,11 @@ if __name__ == "__main__":
     #w_train = np.expand_dims(w_train, -1)
     #w_test = np.expand_dims(w_test, -1)
 
-    model.fit(X_train,
-        y_train,
-        sample_weight=w_train,
-        validation_data=(X_test, y_test, w_test),
-        epochs=10, batch_size=5, callbacks=callbacks)
+    model.fit(
+        ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
+        steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+    )
 
-    y_pred = model.predict(X, batch_size=5)
+    #y_pred, dm = model.predict(X, batch_size=5)
     #y_pred = np.concatenate(y_pred, axis=-1)
-
-    np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
+    #np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
