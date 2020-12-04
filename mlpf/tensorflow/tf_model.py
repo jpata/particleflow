@@ -366,7 +366,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #find the distance matrix between the given points using dense matrix multiplication
         if self.cosine_dist:
             normed = tf.nn.l2_normalize(subpoints, axis=-1)
-            dm = tf.linalg.matmul(subpoints, subpoints, transpose_b=True)
+            dm = tf.linalg.matmul(normed, normed, transpose_b=True)
         else:
             dm = pairwise_dist(subpoints, subpoints)
             dm = tf.exp(-self.dist_mult*dm)
@@ -548,7 +548,7 @@ class PFNet(tf.keras.Model):
             decoding_reg.append(hidden_dim_reg)
 
         self.enc = InputEncoding(num_input_classes)
-        self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention")
+        self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention", activation=self.activation)
         
         self.embedding_dropout = None
         if dropout > 0.0:
@@ -609,16 +609,16 @@ class PFNet(tf.keras.Model):
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm, training)
 
-        to_decode = tf.concat([enc, x_reg], axis=-1)
-        pred_momentum = self.layer_momentum(to_decode)
+        #to_decode = tf.concat([enc, x_reg], axis=-1)
+        pred_momentum = self.layer_momentum(x_reg)
 
         #soft-mask elements for which the id prediction was 0  
-        probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
-        pred_momentum = pred_momentum * probabilistic_mask_good
+        #probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
+        #pred_momentum = pred_momentum * probabilistic_mask_good
 
         if self.return_combined:
             ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)*msk_input
-            return ret
+            return ret, dm
         else:
             return out_id_logits*msk_input, out_charge*msk_input, pred_momentum*msk_input
 
