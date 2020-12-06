@@ -16,12 +16,12 @@ import sklearn
 num_input_classes = 2
 num_output_classes = 6
 mult_classification_loss = 1.0
-mult_charge_loss = 1.0
-mult_energy_loss = 1.0
+mult_charge_loss = 0.0
+mult_energy_loss = 0.0
 mult_phi_loss = 1.0
-mult_eta_loss = 1.0
-mult_pt_loss = 1.0
-mult_total_loss = 1e6
+mult_eta_loss = 0.0
+mult_pt_loss = 0.0
+mult_total_loss = 1e3
 
 #hard-coded normalization coefficients to make numerics more stable
 #(ID, charge, pt, eta, sin phi, cos phi, E)
@@ -145,8 +145,8 @@ def plot_distributions(val_x, val_y, var_name, rng):
 
 def log_confusion_matrix(epoch, logs):
    
-    if epoch==0 or epoch%20!=0:
-        return
+    # if epoch==0 or epoch%20!=0:
+    #     return
 
     test_pred = model.predict(X_test, batch_size=5)
 
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     #num_events = 500
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 500
+    n_epochs = 100
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
@@ -383,6 +383,8 @@ if __name__ == "__main__":
     #we use the "temporal" mode to have per-particle weights
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+        #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+
         model = PFNetPerformer(num_input_classes=num_input_classes, num_output_classes=num_output_classes, num_momentum_outputs=5, activation=tf.nn.leaky_relu)
         model.compile(
             loss=my_loss_full,

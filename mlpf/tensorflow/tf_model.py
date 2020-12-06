@@ -671,14 +671,21 @@ class PFNetPerformer(tf.keras.Model):
         super(PFNetPerformer, self).__init__()
 
         self.activation = activation
+        self.num_momentum_outputs = num_momentum_outputs
 
-        key_dim = 128
+        # key_dim = 32
+        # supports = 128
+        # embed_dim = 1024
+        # hidden_dim = 128
+        # num_heads = 8
+        key_dim = 32
         supports = 128
         embed_dim = 1024
         hidden_dim = 128
-        num_heads = 8
+        num_heads = 1
 
         self.enc = InputEncoding(num_input_classes)
+        self.norm0 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.att1 = Performer(num_heads=num_heads, key_dim=key_dim, attention_method="linear", supports=supports, attention_axes=[2])
         self.norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -714,21 +721,25 @@ class PFNetPerformer(tf.keras.Model):
         )
 
     def call(self, inputs):
-        X = tf.cast(inputs, tf.float32)
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        #X = tf.cast(inputs, tf.float32)
+        #msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
-        enc = self.enc(X)
+        enc = self.enc(inputs)
+        enc = self.norm0(enc)
         #embedding = self.layer_embedding(enc)
 
         attn1 = self.att1([enc, enc])
-        attn1 = self.norm1(enc + attn1)
+        attn1 = enc + 10.0*attn1
 
         attn2 = self.att2([enc, enc])
-        attn2 = self.norm2(enc + attn2)
+        attn2 = enc + 10.0*attn2
 
         to_decode1 = self.ffn1(attn1)
+        to_decode1 = self.norm1(to_decode1)
         to_decode1 = tf.concat([enc, to_decode1], axis=-1)
-        to_decode2 = self.ffn2(tf.concat([attn1, attn2], axis=-1))
+
+        to_decode2 = self.ffn2(attn2)
+        to_decode2 = self.norm1(to_decode2)
         to_decode2 = tf.concat([enc, to_decode2], axis=-1)
 
         out_id_logits = self.ffn_id(to_decode1)
