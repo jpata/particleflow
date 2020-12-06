@@ -7,6 +7,8 @@ import pickle
 import tensorflow as tf
 
 padded_num_elem_size = 128*40
+num_inputs = 10
+num_outputs = 7
 
 def prepare_data(fname):
     data = pickle.load(open(fname, "rb"))
@@ -65,8 +67,8 @@ def _parse_tfr_element(element):
     arr_w = tf.io.parse_tensor(w, out_type=tf.float32)
     
     #https://github.com/tensorflow/tensorflow/issues/24520#issuecomment-577325475
-    arr_X.set_shape(tf.TensorShape((None, 9)))
-    arr_y.set_shape(tf.TensorShape((None, 7)))
+    arr_X.set_shape(tf.TensorShape((None, num_inputs)))
+    arr_y.set_shape(tf.TensorShape((None, num_outputs)))
     arr_w.set_shape(tf.TensorShape((None, )))
     #inds = tf.stack([arr_dm_row, arr_dm_col], axis=-1)
     #dm_sparse = tf.SparseTensor(values=arr_dm_data, indices=inds, dense_shape=[tf.shape(arr_X)[0], tf.shape(arr_X)[0]])
@@ -99,6 +101,10 @@ def serialize_chunk(args):
 
     Xs = np.concatenate(Xs)
     ys = np.concatenate(ys)
+    assert(Xs.shape[2] == num_inputs)
+    assert(Xs.shape[1] == padded_num_elem_size)
+    assert(ys.shape[2] == num_outputs)
+    assert(ys.shape[1] == padded_num_elem_size)
 
     #set weights for each sample to be equal to the number of samples of this type
     #in the training script, this can be used to compute either inverse or class-balanced weights
@@ -132,9 +138,9 @@ if __name__ == "__main__":
     for ichunk, files in enumerate(chunks(filelist, args.num_files_per_tfr)):
         pars += [(outpath, files, ichunk)]
     #serialize_chunk(pars[0])
-    pool = multiprocessing.Pool(20)
-    pool.map(serialize_chunk, pars)
-    #list(map(serialize_chunk, pars))
+    #pool = multiprocessing.Pool(20)
+    #pool.map(serialize_chunk, pars)
+    list(map(serialize_chunk, pars))
 
 
     #Load and test the dataset 

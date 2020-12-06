@@ -24,6 +24,13 @@ import itertools
 import io
 import tensorflow as tf
 
+import sys
+sys.path += ["/home/joosep/performer"]
+
+import performer
+import performer.networks
+from performer.networks.linear_attention import Performer
+
 #physical_devices = tf.config.list_physical_devices('GPU')
 #tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -219,7 +226,7 @@ class GHConv(tf.keras.layers.Layer):
         x, adj = inputs
 
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
+        in_degrees = tf.sparse.reduce_sum(tf.abs(adj), axis=-1)
         in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
 
         #add epsilon to prevent numerical issues from 1/sqrt(x)
@@ -267,30 +274,33 @@ class GHConvDense(tf.keras.layers.Layer):
         return self.activation(out)
 
 class SGConv(tf.keras.layers.Layer):
-    def __init__(self, k, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.activation = kwargs.pop("activation")
+        self.k = kwargs.pop("k")
         super(SGConv, self).__init__(*args, **kwargs)
     
     def build(self, input_shape):
         hidden_dim = input_shape[0][-1]
-        self.W_t = self.add_weight(shape=(hidden_dim, hidden_dim), name="w_t", initializer="random_normal")
-        self.b_t = self.add_weight(shape=(hidden_dim,), name="b_t", initializer="random_normal")
+        self.W = self.add_weight(shape=(hidden_dim, hidden_dim), name="w", initializer="random_normal")
+        self.b = self.add_weight(shape=(hidden_dim,), name="b", initializer="random_normal")
 
     #@tf.function
-    def call(self, inputs, adj):
+    def call(self, inputs):
+        x, adj = inputs
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.sparse.reduce_sum(adj, axis=-1)
+        in_degrees = tf.sparse.reduce_sum(tf.abs(adj), axis=-1)
+
         #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
         norm_k = tf.pow(norm, self.k)
 
-        support = tf.linalg.matmul(inputs, self.W_t)
+        support = tf.linalg.matmul(x, self.W)
      
         #k-th power of the normalized adjacency matrix is nearly equivalent to k consecutive GCN layers
         #adj_k = tf.pow(adj, self.k)
         out = sparse_dense_matmult_batch(adj, support*norm)*norm
 
-        return self.activation(out + self.W_b)
+        return self.activation(out + self.b)
 
 class DenseDistance(tf.keras.layers.Layer):
     def __init__(self, dist_mult=0.1, **kwargs):
@@ -522,12 +532,15 @@ class PFNet(tf.keras.Model):
         num_neighbors=5,
         dist_mult=0.1,
         cosine_dist=False,
-        return_combined=True):
+        return_combined=True,
+        regression_as_correction=False):
 
         super(PFNet, self).__init__()
         self.activation = activation
         self.num_dists = 1
         self.return_combined = return_combined
+        self.regression_as_correction = regression_as_correction
+        self.num_momentum_outputs = num_momentum_outputs
 
         encoding_id = []
         decoding_id = []
@@ -560,13 +573,16 @@ class PFNet(tf.keras.Model):
         self.addsparse = AddSparse()
         #self.dist = DenseDistance(dist_mult=dist_mult)
 
+        self.layer_edge0 = tf.keras.layers.Dense(32, activation=self.activation, name="edge0")
+        self.layer_edge1 = tf.keras.layers.Dense(1, activation="linear", name="edge1")
+
         convs_id = []
         convs_reg = []
         if convlayer == "sgconv":
             for iconv in range(num_convs_id):
-                convs_id.append(SGConv(activation=activation, name="conv_id{}".format(iconv)))
+                convs_id.append(SGConv(k=1, activation=activation, name="conv_id{}".format(iconv)))
             for iconv in range(num_convs_reg):
-                convs_reg.append(SGConv(activation=activation, name="conv_reg{}".format(iconv)))
+                convs_reg.append(SGConv(k=1, activation=activation, name="conv_reg{}".format(iconv)))
         elif convlayer == "ghconv":
             for iconv in range(num_convs_id):
                 convs_id.append(GHConv(activation=activation, name="conv_id{}".format(iconv)))
@@ -599,18 +615,32 @@ class PFNet(tf.keras.Model):
         dms = [dist(embedding_attention, training) for dist in self.dists]
         dm = self.addsparse(dms)
 
+        i1 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 1]]))
+        i2 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 2]]))
+        x1 = tf.gather_nd(enc, i1)
+        x2 = tf.gather_nd(enc, i2)
+        edge0 = self.layer_edge0(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
+        edge_vals = self.layer_edge1(edge0)
+        dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
+        #import pdb;pdb.set_trace()
+
         #run graph net for multiclass id prediction
-        x_id = self.gnn_id(enc, dm, training)
+        x_id = self.gnn_id(enc, dm2, training)
         
         to_decode = tf.concat([enc, x_id], axis=-1)
         out_id_logits = self.layer_id(to_decode)
         out_charge = self.layer_charge(to_decode)
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
-        x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm, training)
+        x_reg = self.gnn_reg(tf.concat([enc, out_id_logits, out_charge], axis=-1), dm2, training)
 
         #to_decode = tf.concat([enc, x_reg], axis=-1)
         pred_momentum = self.layer_momentum(x_reg)
+
+        #we predict the momentum regression as a correction to the input vector. We assume that the input momentum components
+        #are in the same order as the outputs, with a fixed offset 1 (the input ID) 
+        if self.regression_as_correction:
+            pred_momentum = inputs[:, :, 1:1+self.num_momentum_outputs] + pred_momentum
 
         #soft-mask elements for which the id prediction was 0  
         #probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
@@ -618,7 +648,7 @@ class PFNet(tf.keras.Model):
 
         if self.return_combined:
             ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)*msk_input
-            return ret, dm
+            return ret, dm2
         else:
             return out_id_logits*msk_input, out_charge*msk_input, pred_momentum*msk_input
 
@@ -631,6 +661,72 @@ class PFNet(tf.keras.Model):
             layer.trainable = False
         self.gnn_reg.trainable = True
         self.layer_momentum.trainable = True
+
+class PFNetPerformer(tf.keras.Model):
+    def __init__(self,
+        num_input_classes=len(elem_labels),
+        num_output_classes=len(class_labels),
+        num_momentum_outputs=3,
+        activation=tf.nn.selu):
+        super(PFNetPerformer, self).__init__()
+
+        self.activation = activation
+
+        key_dim = 32
+        supports = 128
+        embed_dim = 1024
+        hidden_dim = 128
+        num_heads = 4
+
+        self.enc = InputEncoding(num_input_classes)
+
+        self.att1 = Performer(num_heads=num_heads, key_dim=key_dim, attention_method="linear", supports=supports, attention_axes=[2])
+        self.norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.att2 = Performer(num_heads=num_heads, key_dim=key_dim, attention_method="linear", supports=supports, attention_axes=[2])
+        self.norm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.ffn1 = tf.keras.Sequential(
+            [tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(embed_dim, activation=self.activation),]
+        )
+        self.ffn2 = tf.keras.Sequential(
+            [tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(embed_dim, activation=self.activation),]
+        )
+
+        self.ffn_id = tf.keras.Sequential(
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(num_output_classes, activation="linear")]
+        )
+        self.ffn_charge = tf.keras.Sequential(
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(1, activation="linear")]
+        )
+        self.ffn_momentum = tf.keras.Sequential(
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(num_momentum_outputs, activation="linear")]
+        )
+
+    def call(self, inputs):
+        X = tf.cast(inputs, tf.float32)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+
+        enc = self.enc(X)
+        #embedding = self.layer_embedding(enc)
+
+        attn1 = self.att1([enc, enc])
+        attn1 = self.norm1(enc + attn1)
+
+        attn2 = self.att2([enc, enc])
+        attn2 = self.norm2(enc + attn2)
+
+        to_decode1 = self.ffn1(attn1)
+        to_decode1 = tf.concat([enc, to_decode1], axis=-1)
+        to_decode2 = self.ffn2(tf.concat([attn1, attn2], axis=-1))
+        to_decode2 = tf.concat([enc, to_decode2], axis=-1)
+
+        out_id_logits = self.ffn_id(to_decode1)
+        out_charge = self.ffn_charge(to_decode1)
+        pred_momentum = self.ffn_momentum(to_decode2)
+
+        ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+        return ret
 
 #@tf.function
 def separate_prediction(y_pred):

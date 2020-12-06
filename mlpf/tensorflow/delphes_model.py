@@ -1,4 +1,4 @@
-from tf_model import PFNet
+from tf_model import PFNet, PFNetPerformer
 import tensorflow as tf
 import pickle
 import numpy as np
@@ -15,12 +15,12 @@ import sklearn
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 1e1
-mult_charge_loss = 1.0
-mult_energy_loss = 0.1
+mult_classification_loss = 0.1
+mult_charge_loss = 0.01
+mult_energy_loss = 0.0001
 mult_phi_loss = 1.0
 mult_eta_loss = 1.0
-mult_pt_loss = 0.1
+mult_pt_loss = 0.001
 mult_total_loss = 1e6
 
 def mse_unreduced(true, pred):
@@ -58,12 +58,13 @@ def energy_resolution(y_true, y_pred):
     msk = true_id[:, :, 0]!=0
     return tf.reduce_mean(mse_unreduced(true_momentum[msk][:, -1], pred_momentum[msk][:, -1]))
 
-def my_loss_full(y_true, y_pred):
+def loss_components(y_true, y_pred):
     pred_id_logits, pred_charge, pred_momentum = separate_prediction(y_pred)
     #pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=num_output_classes)
-    
+    #import pdb;pdb.set_trace()
+
     l1 = mult_classification_loss*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)
   
     l2_0 = mult_pt_loss*mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
@@ -75,17 +76,13 @@ def my_loss_full(y_true, y_pred):
     l2 = (l2_0 + l2_1 + l2_2 + l2_3 + l2_3)
 
     l3 = mult_charge_loss*mse_unreduced(true_charge, pred_charge)[:, :, 0]
-    loss = l1 + l2 + l3
 
-    # tf.print()
-    # tf.print("cls", tf.reduce_mean(l1))
-    # tf.print("pt", tf.reduce_mean(l2_0))
-    # tf.print("eta", tf.reduce_mean(l2_1))
-    # tf.print("sphi", tf.reduce_mean(l2_2))
-    # tf.print("cphi", tf.reduce_mean(l2_3))
-    # tf.print("e", tf.reduce_mean(l2_4))
-    # tf.print("ch", tf.reduce_mean(l3))
-    # tf.print()
+    return l1, l2, l3, (l2_0, l2_1, l2_2, l2_3, l2_4)
+
+def my_loss_full(y_true, y_pred):
+
+    l1, l2, l3, _ = loss_components(y_true, y_pred)
+    loss = l1 + l2 + l3
 
     return mult_total_loss*loss
 
@@ -143,7 +140,10 @@ def plot_distributions(val_x, val_y, var_name, rng):
 
 def log_confusion_matrix(epoch, logs):
     
-    test_pred, dm = model.predict(X_test, batch_size=5)
+    test_pred = model.predict(X_test, batch_size=5)
+
+    l1, l2, l3, (l2_0, l2_1, l2_2, l2_3, l2_4) = loss_components(y_test, test_pred)
+
     test_pred_id = np.argmax(test_pred[:, :, :num_output_classes], axis=-1)
 
     cm = sklearn.metrics.confusion_matrix(
@@ -225,7 +225,21 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.image("sin phi distribution", sphi_distr_image, step=epoch)
         tf.summary.image("cos phi regression", cphi_image, step=epoch)
         tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
-        tf.summary.histogram("dm_values", dm.values, step=epoch)
+        #tf.summary.histogram("dm_values", dm.values, step=epoch)
+        tf.summary.scalar("l1", tf.reduce_mean(l1), step=epoch)
+        tf.summary.scalar("l2_0", tf.reduce_mean(l2_0), step=epoch)
+        tf.summary.scalar("l2_1", tf.reduce_mean(l2_1), step=epoch)
+        tf.summary.scalar("l2_2", tf.reduce_mean(l2_2), step=epoch)
+        tf.summary.scalar("l2_3", tf.reduce_mean(l2_3), step=epoch)
+        tf.summary.scalar("l2_4", tf.reduce_mean(l2_4), step=epoch)
+        tf.summary.scalar("l3", tf.reduce_mean(l3), step=epoch)
+
+        tf.summary.scalar("ch_pred", tf.reduce_mean(ch_pred), step=epoch)
+        tf.summary.scalar("pt_pred", tf.reduce_mean(pt_pred), step=epoch)
+        tf.summary.scalar("e_pred", tf.reduce_mean(e_pred), step=epoch)
+        tf.summary.scalar("eta_pred", tf.reduce_mean(eta_pred), step=epoch)
+        tf.summary.scalar("sphi_pred", tf.reduce_mean(sphi_pred), step=epoch)
+        tf.summary.scalar("cphi_pred", tf.reduce_mean(cphi_pred), step=epoch)
 
 def prepare_callbacks(model, outdir):
     callbacks = []
@@ -287,14 +301,14 @@ def compute_weights(y, mult=1.0):
 #     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
 
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/tf.sqrt(w)
-    wn /= tf.reduce_sum(wn)
-    return X, y, wn
+    #wn = 1.0/tf.sqrt(w)
+    #wn /= tf.reduce_sum(wn)
+    return X, y, tf.ones_like(w)
 
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
-    from delphes_data import _parse_tfr_element, padded_num_elem_size
+    from delphes_data import _parse_tfr_element, padded_num_elem_size, num_inputs, num_outputs
     path = "out/pythia8_ttbar/tfr/*.tfrecords"
     tfr_files = glob.glob(path)
     if len(tfr_files) == 0:
@@ -306,40 +320,47 @@ if __name__ == "__main__":
         num_events += 1
 
     global_batch_size = 5
+    #num_events = 500
     n_train = int(0.5*num_events)
     n_test = int(0.5*num_events)
-    n_epochs = 20
+    n_epochs = 100
 
-    ps = (tf.TensorShape([padded_num_elem_size, 9]), tf.TensorShape([padded_num_elem_size, 7]), tf.TensorShape([padded_num_elem_size, ]))
+    ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
     ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
 
-    X_test = ds_test.take(100).map(lambda x,y,z: x)
-    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,z: y).as_numpy_iterator()))
+    #dataset2 = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    #ds_test2 = dataset2.skip(n_train).padded_batch(global_batch_size, padded_shapes=ps)
+    X_test = ds_test.take(100).map(lambda x,y,w: x)
+    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: y).as_numpy_iterator()))
 
-    ds_train_r = ds_train.cache().repeat(n_epochs)
-    ds_test_r = ds_test.cache().repeat(n_epochs)
+    ds_train_r = ds_train.repeat(n_epochs)
+    ds_test_r = ds_test.repeat(n_epochs)
 
-    model = PFNet(
-    	num_input_classes=num_input_classes, #(none, track, tower)
-    	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
-    	num_momentum_outputs=5, #(log pT, eta, sin phi, cos phi, log E)
-    	bin_size=256,
-    	num_convs_id=2,
-    	num_convs_reg=3,
-        num_hidden_reg_enc=3,
-        num_hidden_id_enc=0,
-    	num_hidden_reg_dec=3,
-    	num_hidden_id_dec=3,
-        num_neighbors=16,
-        hidden_dim_id=128,
-        hidden_dim_reg=512,
-        distance_dim=32,
-        cosine_dist=False,
-        dist_mult=1.0,
-        return_combined=True,
-        activation=tf.nn.selu,
-    )
+    # model = PFNet(
+    # 	num_input_classes=num_input_classes, #(none, track, tower)
+    # 	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
+    # 	num_momentum_outputs=5, #(pT, eta, sin phi, cos phi, E)
+    # 	bin_size=256,
+    # 	num_convs_id=2,
+    # 	num_convs_reg=2,
+    #     num_hidden_reg_enc=2,
+    #     num_hidden_id_enc=2,
+    # 	num_hidden_reg_dec=3,
+    # 	num_hidden_id_dec=3,
+    #     num_neighbors=16,
+    #     hidden_dim_id=256,
+    #     hidden_dim_reg=1024,
+    #     distance_dim=128,
+    #     cosine_dist=False,
+    #     dist_mult=1.0,
+    #     return_combined=True,
+    #     dropout=0.2,
+    #     regression_as_correction=True,
+    #     activation=tf.nn.selu,
+    #     convlayer="ghconv"
+    # )
+    model = PFNetPerformer(num_input_classes=num_input_classes, num_output_classes=num_output_classes, num_momentum_outputs=5, activation=tf.nn.leaky_relu)
 
     outdir = get_rundir('experiments')
     if os.path.isdir(outdir):
@@ -352,11 +373,11 @@ if __name__ == "__main__":
     #call the model once, to make sure it runs
     #model(X_train[:5])
 
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
     #we use the "temporal" mode to have per-particle weights
     model.compile(
-        loss=[my_loss_full, None],
+        loss=my_loss_full,
         optimizer=opt,
         sample_weight_mode='temporal'
     )

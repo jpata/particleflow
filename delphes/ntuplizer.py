@@ -75,7 +75,9 @@ def make_tower_array(tower_dict):
         tower_dict["energy"],
         tower_dict["eem"],
         tower_dict["ehad"],
-        0.0 #padding
+        #padding
+        0.0,
+        0.0,
     ])
 
 def make_track_array(track_dict):
@@ -89,6 +91,7 @@ def make_track_array(track_dict):
         track_dict["eta_outer"],
         np.sin(track_dict["phi_outer"]),
         np.cos(track_dict["phi_outer"]),
+        track_dict["charge"]
     ])
 
 def make_gen_array(gen_dict):
@@ -243,12 +246,13 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for i in range(len(tracks)):
             node = ("track", i)
             graph.add_node(node)
-            graph.nodes[node]["p"] = tracks[i].P
+            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(tracks[i].Eta) #tracks[i].P
             graph.nodes[node]["eta"] = tracks[i].Eta
             graph.nodes[node]["phi"] = tracks[i].Phi
             graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
             graph.nodes[node]["phi_outer"] = tracks[i].PhiOuter
             graph.nodes[node]["pt"] = tracks[i].PT
+            graph.nodes[node]["charge"] = tracks[i].Charge
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
 
@@ -380,3 +384,5 @@ if __name__ == "__main__":
         ichunk += 1
 
     pool.map(process_chunk_args, arg_list)
+    #for arg in arg_list:
+    #    process_chunk_args(arg)
