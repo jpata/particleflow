@@ -15,13 +15,18 @@ import sklearn
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 0.1
-mult_charge_loss = 0.01
-mult_energy_loss = 0.0001
+mult_classification_loss = 1.0
+mult_charge_loss = 1.0
+mult_energy_loss = 1.0
 mult_phi_loss = 1.0
 mult_eta_loss = 1.0
-mult_pt_loss = 0.001
+mult_pt_loss = 1.0
 mult_total_loss = 1e6
+
+#hard-coded normalization coefficients to make numerics more stable
+#(ID, charge, pt, eta, sin phi, cos phi, E)
+out_m = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0])
+out_s = np.array([1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 60.0])
 
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
@@ -139,13 +144,21 @@ def plot_distributions(val_x, val_y, var_name, rng):
 
 
 def log_confusion_matrix(epoch, logs):
-    
+   
+    if epoch==0 or epoch%20!=0:
+        return
+
     test_pred = model.predict(X_test, batch_size=5)
 
     l1, l2, l3, (l2_0, l2_1, l2_2, l2_3, l2_4) = loss_components(y_test, test_pred)
 
     test_pred_id = np.argmax(test_pred[:, :, :num_output_classes], axis=-1)
 
+    #test_pred *= out_s
+    #test_pred += out_m
+    #_y_test = y_test*out_s
+    #_y_test += out_m
+    
     cm = sklearn.metrics.confusion_matrix(
         y_test[:, :, 0].astype(np.int64).flatten(),
         test_pred_id.flatten(), labels=list(range(num_output_classes)))
@@ -181,16 +194,16 @@ def log_confusion_matrix(epoch, logs):
     figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
     ch_image = plot_to_image(figure)
 
-    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 100, 100))
+    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(-10, 10, 100))
     pt_image = plot_to_image(figure)
 
-    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 100, 100))
+    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(-10, 10, 100))
     pt_distr_image = plot_to_image(figure)
 
-    figure = plot_regression(e_true, e_pred, "E", np.linspace(0, 100, 100))
+    figure = plot_regression(e_true, e_pred, "E", np.linspace(-10, 10, 100))
     e_image = plot_to_image(figure)
 
-    figure = plot_distributions(e_true, e_pred, "E", np.linspace(0, 100, 100))
+    figure = plot_distributions(e_true, e_pred, "E", np.linspace(-10, 10, 100))
     e_distr_image = plot_to_image(figure)
 
     figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
@@ -225,6 +238,7 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.image("sin phi distribution", sphi_distr_image, step=epoch)
         tf.summary.image("cos phi regression", cphi_image, step=epoch)
         tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
+
         #tf.summary.histogram("dm_values", dm.values, step=epoch)
         tf.summary.scalar("l1", tf.reduce_mean(l1), step=epoch)
         tf.summary.scalar("l2_0", tf.reduce_mean(l2_0), step=epoch)
@@ -234,17 +248,24 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.scalar("l2_4", tf.reduce_mean(l2_4), step=epoch)
         tf.summary.scalar("l3", tf.reduce_mean(l3), step=epoch)
 
-        tf.summary.scalar("ch_pred", tf.reduce_mean(ch_pred), step=epoch)
-        tf.summary.scalar("pt_pred", tf.reduce_mean(pt_pred), step=epoch)
-        tf.summary.scalar("e_pred", tf.reduce_mean(e_pred), step=epoch)
-        tf.summary.scalar("eta_pred", tf.reduce_mean(eta_pred), step=epoch)
-        tf.summary.scalar("sphi_pred", tf.reduce_mean(sphi_pred), step=epoch)
-        tf.summary.scalar("cphi_pred", tf.reduce_mean(cphi_pred), step=epoch)
+        tf.summary.scalar("ch_pred_mean", tf.reduce_mean(ch_pred), step=epoch)
+        tf.summary.scalar("pt_pred_mean", tf.reduce_mean(pt_pred), step=epoch)
+        tf.summary.scalar("e_pred_mean", tf.reduce_mean(e_pred), step=epoch)
+        tf.summary.scalar("eta_pred_mean", tf.reduce_mean(eta_pred), step=epoch)
+        tf.summary.scalar("sphi_pred_mean", tf.reduce_mean(sphi_pred), step=epoch)
+        tf.summary.scalar("cphi_pred_mean", tf.reduce_mean(cphi_pred), step=epoch)
+
+        tf.summary.scalar("ch_pred_std", tf.math.reduce_std(ch_pred), step=epoch)
+        tf.summary.scalar("pt_pred_std", tf.math.reduce_std(pt_pred), step=epoch)
+        tf.summary.scalar("e_pred_std", tf.math.reduce_std(e_pred), step=epoch)
+        tf.summary.scalar("eta_pred_std", tf.math.reduce_std(eta_pred), step=epoch)
+        tf.summary.scalar("sphi_pred_std", tf.math.reduce_std(sphi_pred), step=epoch)
+        tf.summary.scalar("cphi_pred_std", tf.math.reduce_std(cphi_pred), step=epoch)
 
 def prepare_callbacks(model, outdir):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
+        log_dir=outdir, histogram_freq=0, write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,40),
         profile_batch=0,
@@ -305,6 +326,11 @@ def compute_weights_inverse(X, y, w):
     #wn /= tf.reduce_sum(wn)
     return X, y, tf.ones_like(w)
 
+def scale_outputs(X,y,w):
+    ynew = y-out_m
+    ynew = ynew/out_s
+    return X, ynew, w
+
 if __name__ == "__main__":
     #tf.config.run_functions_eagerly(True)
 
@@ -319,48 +345,21 @@ if __name__ == "__main__":
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 5
+    global_batch_size = 10
     #num_events = 500
-    n_train = int(0.5*num_events)
-    n_test = int(0.5*num_events)
-    n_epochs = 100
+    n_train = int(0.8*num_events)
+    n_test = num_events - n_train
+    n_epochs = 500
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
-    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
 
-    #dataset2 = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    #ds_test2 = dataset2.skip(n_train).padded_batch(global_batch_size, padded_shapes=ps)
     X_test = ds_test.take(100).map(lambda x,y,w: x)
     y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: y).as_numpy_iterator()))
 
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
-
-    # model = PFNet(
-    # 	num_input_classes=num_input_classes, #(none, track, tower)
-    # 	num_output_classes=num_output_classes, #(none, ch.had, n.had, gamma, el, mu)
-    # 	num_momentum_outputs=5, #(pT, eta, sin phi, cos phi, E)
-    # 	bin_size=256,
-    # 	num_convs_id=2,
-    # 	num_convs_reg=2,
-    #     num_hidden_reg_enc=2,
-    #     num_hidden_id_enc=2,
-    # 	num_hidden_reg_dec=3,
-    # 	num_hidden_id_dec=3,
-    #     num_neighbors=16,
-    #     hidden_dim_id=256,
-    #     hidden_dim_reg=1024,
-    #     distance_dim=128,
-    #     cosine_dist=False,
-    #     dist_mult=1.0,
-    #     return_combined=True,
-    #     dropout=0.2,
-    #     regression_as_correction=True,
-    #     activation=tf.nn.selu,
-    #     convlayer="ghconv"
-    # )
-    model = PFNetPerformer(num_input_classes=num_input_classes, num_output_classes=num_output_classes, num_momentum_outputs=5, activation=tf.nn.leaky_relu)
 
     outdir = get_rundir('experiments')
     if os.path.isdir(outdir):
@@ -368,28 +367,39 @@ if __name__ == "__main__":
         sys.exit(1)
     
     file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-    callbacks = prepare_callbacks(model, outdir)
-
-    #call the model once, to make sure it runs
-    #model(X_train[:5])
-
-    opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    
+    try:
+        num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+        print("num_gpus=", num_gpus)
+        if num_gpus > 1:
+            strategy = tf.distribute.MirroredStrategy()
+            global_batch_size = num_gpus * global_batch_size
+        else:
+            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    except Exception as e:
+        print("fallback to CPU")
+        strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     #we use the "temporal" mode to have per-particle weights
-    model.compile(
-        loss=my_loss_full,
-        optimizer=opt,
-        sample_weight_mode='temporal'
-    )
+    with strategy.scope():
+        opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+        model = PFNetPerformer(num_input_classes=num_input_classes, num_output_classes=num_output_classes, num_momentum_outputs=5, activation=tf.nn.leaky_relu)
+        model.compile(
+            loss=my_loss_full,
+            optimizer=opt,
+            sample_weight_mode='temporal'
+        )
+        
+        callbacks = prepare_callbacks(model, outdir)
 
-    #model.load_weights("experiments/run_02/weights.10-121.166969.hdf5")
-    #w_train = np.expand_dims(w_train, -1)
-    #w_test = np.expand_dims(w_test, -1)
+        #model.load_weights("experiments/run_02/weights.10-121.166969.hdf5")
+        #w_train = np.expand_dims(w_train, -1)
+        #w_test = np.expand_dims(w_test, -1)
 
-    model.fit(
-        ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-        steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
-    )
+        model.fit(
+            ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
+            steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+        )
 
     #y_pred, dm = model.predict(X, batch_size=5)
     #y_pred = np.concatenate(y_pred, axis=-1)
