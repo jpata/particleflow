@@ -672,11 +672,11 @@ class PFNetPerformer(tf.keras.Model):
 
         self.activation = activation
 
-        key_dim = 32
+        key_dim = 128
         supports = 128
         embed_dim = 1024
         hidden_dim = 128
-        num_heads = 4
+        num_heads = 8
 
         self.enc = InputEncoding(num_input_classes)
 
@@ -687,20 +687,30 @@ class PFNetPerformer(tf.keras.Model):
         self.norm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.ffn1 = tf.keras.Sequential(
-            [tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(embed_dim, activation=self.activation),]
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(embed_dim, activation=self.activation),]
         )
         self.ffn2 = tf.keras.Sequential(
-            [tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(key_dim, activation=self.activation), tf.keras.layers.Dense(embed_dim, activation=self.activation),]
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(embed_dim, activation=self.activation),]
         )
 
         self.ffn_id = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(num_output_classes, activation="linear")]
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(num_output_classes, activation="linear")]
         )
         self.ffn_charge = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(1, activation="linear")]
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(1, activation="linear")]
         )
         self.ffn_momentum = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(hidden_dim, activation=self.activation), tf.keras.layers.Dense(num_momentum_outputs, activation="linear")]
+            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
+            tf.keras.layers.Dense(num_momentum_outputs, activation="linear")]
         )
 
     def call(self, inputs):
