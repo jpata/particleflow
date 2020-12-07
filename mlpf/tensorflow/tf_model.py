@@ -670,7 +670,7 @@ def point_wise_feed_forward_network(d_model, dff):
     ])
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, support=128):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=32):
         super(EncoderLayer, self).__init__()
 
         self.mha = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
@@ -695,7 +695,7 @@ class EncoderLayer(tf.keras.layers.Layer):
         return out2
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, support=128):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=32):
         super(DecoderLayer, self).__init__()
 
         self.mha1 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
@@ -776,6 +776,8 @@ class Transformer(tf.keras.Model):
                 num_momentum_outputs=3):
         super(Transformer, self).__init__()
 
+        self.num_momentum_outputs = num_momentum_outputs
+
         self.enc = InputEncoding(num_input_classes)
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
@@ -783,9 +785,9 @@ class Transformer(tf.keras.Model):
         self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate)
         self.decoder = Decoder(num_layers, d_model, num_heads, dff, rate)
 
-        self.ffn_id = tf.keras.layers.Dense(num_output_classes)
-        self.ffn_charge = tf.keras.layers.Dense(1)
-        self.ffn_momentum = tf.keras.layers.Dense(num_momentum_outputs)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff)
 
     def call(self, inp, training):
 
@@ -794,8 +796,12 @@ class Transformer(tf.keras.Model):
 
         enc_output = self.encoder(enc, training)
         dec_output = self.decoder(enc, enc_output, training)
+
+        dec_output = tf.concat([enc, dec_output], axis=-1)
+
         out_id_logits = self.ffn_id(dec_output)
         out_charge = self.ffn_charge(dec_output)
+        #pred_momentum = inp[:, :, 1:1 + self.num_momentum_outputs] + self.ffn_momentum(dec_output)
         pred_momentum = self.ffn_momentum(dec_output)
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)

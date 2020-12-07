@@ -16,11 +16,11 @@ import sklearn
 num_input_classes = 2
 num_output_classes = 6
 mult_classification_loss = 1.0
-mult_charge_loss = 0.0
-mult_energy_loss = 0.0
-mult_phi_loss = 1.0
-mult_eta_loss = 0.0
-mult_pt_loss = 0.0
+mult_charge_loss = 1.0
+mult_energy_loss = 1.0
+mult_phi_loss = 10.0
+mult_eta_loss = 1.0
+mult_pt_loss = 1.0
 mult_total_loss = 1e3
 
 #hard-coded normalization coefficients to make numerics more stable
@@ -145,21 +145,23 @@ def plot_distributions(val_x, val_y, var_name, rng):
 
 def log_confusion_matrix(epoch, logs):
    
-    if epoch==0 or epoch%5!=0:
-        return
+    # if epoch==0 or epoch%5!=0:
+    #     return
 
     test_pred = model.predict(X_test, batch_size=5)
+    test_pred_p_charge = test_pred[:, :, num_output_classes:] 
 
     l1, l2, l3, (l2_0, l2_1, l2_2, l2_3, l2_4) = loss_components(y_test, test_pred)
 
     test_pred_id = np.argmax(test_pred[:, :, :num_output_classes], axis=-1)
+    test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, num_output_classes:]], axis=-1)
 
     cm = sklearn.metrics.confusion_matrix(
         y_test[:, :, 0].astype(np.int64).flatten(),
-        test_pred_id.flatten(), labels=list(range(num_output_classes)))
+        test_pred[:, :, 0].flatten(), labels=list(range(num_output_classes)))
     cm_normed = sklearn.metrics.confusion_matrix(
         y_test[:, :, 0].astype(np.int64).flatten(),
-        test_pred_id.flatten(), labels=list(range(num_output_classes)), normalize="true")
+        test_pred[:, :, 0].flatten(), labels=list(range(num_output_classes)), normalize="true")
 
     figure = plot_confusion_matrix(cm)
     cm_image = plot_to_image(figure)
@@ -167,7 +169,10 @@ def log_confusion_matrix(epoch, logs):
     figure = plot_confusion_matrix(cm_normed)
     cm_image_normed = plot_to_image(figure)
 
-    msk = (test_pred_id!=0) & (y_test[:, :, 0]!=0)
+    msk = (test_pred[:, :, 0]!=0) & (y_test[:, :, 0]!=0)
+
+    #import pdb;pdb.set_trace()
+
     ch_true = y_test[msk, 1].flatten()
     ch_pred = test_pred[msk, 1].flatten()
 
@@ -235,13 +240,13 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
 
         #tf.summary.histogram("dm_values", dm.values, step=epoch)
-        tf.summary.scalar("l1", tf.reduce_mean(l1), step=epoch)
-        tf.summary.scalar("l2_0", tf.reduce_mean(l2_0), step=epoch)
-        tf.summary.scalar("l2_1", tf.reduce_mean(l2_1), step=epoch)
-        tf.summary.scalar("l2_2", tf.reduce_mean(l2_2), step=epoch)
-        tf.summary.scalar("l2_3", tf.reduce_mean(l2_3), step=epoch)
-        tf.summary.scalar("l2_4", tf.reduce_mean(l2_4), step=epoch)
-        tf.summary.scalar("l3", tf.reduce_mean(l3), step=epoch)
+        tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
+        tf.summary.scalar("loss_reg_pt", tf.reduce_mean(l2_0), step=epoch)
+        tf.summary.scalar("loss_reg_eta", tf.reduce_mean(l2_1), step=epoch)
+        tf.summary.scalar("loss_reg_sphi", tf.reduce_mean(l2_2), step=epoch)
+        tf.summary.scalar("loss_reg_cphi", tf.reduce_mean(l2_3), step=epoch)
+        tf.summary.scalar("loss_reg_e", tf.reduce_mean(l2_4), step=epoch)
+        tf.summary.scalar("loss_reg_charge", tf.reduce_mean(l3), step=epoch)
 
         tf.summary.scalar("ch_pred_mean", tf.reduce_mean(ch_pred), step=epoch)
         tf.summary.scalar("pt_pred_mean", tf.reduce_mean(pt_pred), step=epoch)
@@ -340,11 +345,11 @@ if __name__ == "__main__":
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 10 
-    #num_events = 500
+    global_batch_size = 4
+    num_events = 500
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 500
+    n_epochs = 20
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
@@ -381,7 +386,7 @@ if __name__ == "__main__":
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
         model = Transformer(
-            num_layers=2, d_model=1024, num_heads=4, dff=256,
+            num_layers=2, d_model=128, num_heads=4, dff=128,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
             num_momentum_outputs=5
@@ -403,6 +408,8 @@ if __name__ == "__main__":
             ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
             steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
         )
+
+        model.save(outdir + "/model_full.h5")
 
     #y_pred, dm = model.predict(X, batch_size=5)
     #y_pred = np.concatenate(y_pred, axis=-1)
