@@ -662,91 +662,144 @@ class PFNet(tf.keras.Model):
         self.gnn_reg.trainable = True
         self.layer_momentum.trainable = True
 
-class PFNetPerformer(tf.keras.Model):
+#Transformer code from the TF example
+def point_wise_feed_forward_network(d_model, dff):
+    return tf.keras.Sequential([
+            tf.keras.layers.Dense(dff, activation='relu'),    # (batch_size, seq_len, dff)
+            tf.keras.layers.Dense(d_model)    # (batch_size, seq_len, d_model)
+    ])
+
+class EncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=128):
+        super(EncoderLayer, self).__init__()
+
+        self.mha = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, training):
+
+        attn_output = self.mha([x, x, x], training=training)    # (batch_size, input_seq_len, d_model)
+        attn_output = self.dropout1(attn_output, training=training)
+        out1 = self.layernorm1(x + attn_output)    # (batch_size, input_seq_len, d_model)
+
+        ffn_output = self.ffn(out1)    # (batch_size, input_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        out2 = self.layernorm2(out1 + ffn_output)    # (batch_size, input_seq_len, d_model)
+
+        return out2
+
+class DecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=128):
+        super(DecoderLayer, self).__init__()
+
+        self.mha1 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
+        self.mha2 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
+
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = tf.keras.layers.Dropout(rate)
+        self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.dropout3 = tf.keras.layers.Dropout(rate)
+
+
+    def call(self, x, enc_output, training):
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+
+        attn1 = self.mha1([x, x, x], training=training)    # (batch_size, target_seq_len, d_model)
+        attn1 = self.dropout1(attn1, training=training)
+        out1 = self.layernorm1(attn1 + x)
+
+        attn2 = self.mha2([enc_output, enc_output, out1], training=training)    # (batch_size, target_seq_len, d_model)
+        attn2 = self.dropout2(attn2, training=training)
+        out2 = self.layernorm2(attn2 + out1)    # (batch_size, target_seq_len, d_model)
+
+        ffn_output = self.ffn(out2)    # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout3(ffn_output, training=training)
+        out3 = self.layernorm3(ffn_output + out2)    # (batch_size, target_seq_len, d_model)
+
+        return out3
+
+class Encoder(tf.keras.layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1):
+        super(Encoder, self).__init__()
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate) 
+                                             for _ in range(num_layers)]
+
+        self.dropout = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, training):
+
+        for i in range(self.num_layers):
+            x = self.enc_layers[i](x, training)
+
+        return x    # (batch_size, input_seq_len, d_model)
+
+class Decoder(tf.keras.layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1):
+        super(Decoder, self).__init__()
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate) 
+                                             for _ in range(num_layers)]
+        self.dropout = tf.keras.layers.Dropout(rate)
+
+    def call(self, x, enc_output, training):
+
+        for i in range(self.num_layers):
+            x = self.dec_layers[i](x, enc_output, training)
+
+        # x.shape == (batch_size, target_seq_len, d_model)
+        return x
+
+class Transformer(tf.keras.Model):
     def __init__(self,
-        num_input_classes=len(elem_labels),
-        num_output_classes=len(class_labels),
-        num_momentum_outputs=3,
-        activation=tf.nn.selu):
-        super(PFNetPerformer, self).__init__()
-
-        self.activation = activation
-        self.num_momentum_outputs = num_momentum_outputs
-
-        # key_dim = 32
-        # supports = 128
-        # embed_dim = 1024
-        # hidden_dim = 128
-        # num_heads = 8
-        key_dim = 32
-        supports = 128
-        embed_dim = 1024
-        hidden_dim = 128
-        num_heads = 1
+                num_layers, d_model, num_heads, dff,
+                rate=0.1,
+                num_input_classes=len(elem_labels),
+                num_output_classes=len(class_labels),
+                num_momentum_outputs=3):
+        super(Transformer, self).__init__()
 
         self.enc = InputEncoding(num_input_classes)
-        self.norm0 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-        self.att1 = Performer(num_heads=num_heads, key_dim=key_dim, attention_method="linear", supports=supports, attention_axes=[2])
-        self.norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate)
+        self.decoder = Decoder(num_layers, d_model, num_heads, dff, rate)
 
-        self.att2 = Performer(num_heads=num_heads, key_dim=key_dim, attention_method="linear", supports=supports, attention_axes=[2])
-        self.norm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.ffn_id = tf.keras.layers.Dense(num_output_classes)
+        self.ffn_charge = tf.keras.layers.Dense(1)
+        self.ffn_momentum = tf.keras.layers.Dense(num_momentum_outputs)
 
-        self.ffn1 = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(embed_dim, activation=self.activation),]
-        )
-        self.ffn2 = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(embed_dim, activation=self.activation),]
-        )
+    def call(self, inp, training):
 
-        self.ffn_id = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(num_output_classes, activation="linear")]
-        )
-        self.ffn_charge = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(1, activation="linear")]
-        )
-        self.ffn_momentum = tf.keras.Sequential(
-            [tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(hidden_dim, activation=self.activation),
-            tf.keras.layers.Dense(num_momentum_outputs, activation="linear")]
-        )
+        enc = self.enc(inp)
+        enc = self.ffn(self.layernorm(enc))
 
-    def call(self, inputs):
-        #X = tf.cast(inputs, tf.float32)
-        #msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
-
-        enc = self.enc(inputs)
-        enc = self.norm0(enc)
-        #embedding = self.layer_embedding(enc)
-
-        attn1 = self.att1([enc, enc])
-        attn1 = enc + 10.0*attn1
-
-        attn2 = self.att2([enc, enc])
-        attn2 = enc + 10.0*attn2
-
-        to_decode1 = self.ffn1(attn1)
-        to_decode1 = self.norm1(to_decode1)
-        to_decode1 = tf.concat([enc, to_decode1], axis=-1)
-
-        to_decode2 = self.ffn2(attn2)
-        to_decode2 = self.norm1(to_decode2)
-        to_decode2 = tf.concat([enc, to_decode2], axis=-1)
-
-        out_id_logits = self.ffn_id(to_decode1)
-        out_charge = self.ffn_charge(to_decode1)
-        pred_momentum = self.ffn_momentum(to_decode2)
+        enc_output = self.encoder(enc, training)
+        dec_output = self.decoder(enc, enc_output, training)
+        out_id_logits = self.ffn_id(dec_output)
+        out_charge = self.ffn_charge(dec_output)
+        pred_momentum = self.ffn_momentum(dec_output)
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+
         return ret
 
 #@tf.function
@@ -1128,7 +1181,7 @@ if __name__ == "__main__":
     print(outdir)
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=0, write_graph=False, write_images=False,
+        log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,40),
         profile_batch=0,

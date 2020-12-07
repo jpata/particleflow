@@ -1,4 +1,4 @@
-from tf_model import PFNet, PFNetPerformer
+from tf_model import PFNet, Transformer
 import tensorflow as tf
 import pickle
 import numpy as np
@@ -145,8 +145,8 @@ def plot_distributions(val_x, val_y, var_name, rng):
 
 def log_confusion_matrix(epoch, logs):
    
-    # if epoch==0 or epoch%20!=0:
-    #     return
+    if epoch==0 or epoch%5!=0:
+        return
 
     test_pred = model.predict(X_test, batch_size=5)
 
@@ -154,11 +154,6 @@ def log_confusion_matrix(epoch, logs):
 
     test_pred_id = np.argmax(test_pred[:, :, :num_output_classes], axis=-1)
 
-    #test_pred *= out_s
-    #test_pred += out_m
-    #_y_test = y_test*out_s
-    #_y_test += out_m
-    
     cm = sklearn.metrics.confusion_matrix(
         y_test[:, :, 0].astype(np.int64).flatten(),
         test_pred_id.flatten(), labels=list(range(num_output_classes)))
@@ -265,7 +260,7 @@ def log_confusion_matrix(epoch, logs):
 def prepare_callbacks(model, outdir):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=0, write_graph=False, write_images=False,
+        log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,40),
         profile_batch=0,
@@ -345,11 +340,11 @@ if __name__ == "__main__":
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 10
+    global_batch_size = 10 
     #num_events = 500
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 100
+    n_epochs = 500
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
@@ -385,7 +380,13 @@ if __name__ == "__main__":
         opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
-        model = PFNetPerformer(num_input_classes=num_input_classes, num_output_classes=num_output_classes, num_momentum_outputs=5, activation=tf.nn.leaky_relu)
+        model = Transformer(
+            num_layers=2, d_model=1024, num_heads=4, dff=256,
+            num_input_classes=num_input_classes,
+            num_output_classes=num_output_classes,
+            num_momentum_outputs=5
+        )
+
         model.compile(
             loss=my_loss_full,
             optimizer=opt,
