@@ -386,7 +386,7 @@ if __name__ == "__main__":
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
         model = Transformer(
-            num_layers=2, d_model=128, num_heads=4, dff=128,
+            num_layers=2, d_model=128, num_heads=4, dff=256,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
             num_momentum_outputs=5
@@ -409,7 +409,7 @@ if __name__ == "__main__":
             steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
         )
 
-        model.save(outdir + "/model_full.h5")
+        model.save(outdir + "/model_full", save_format="tf")
 
     #y_pred, dm = model.predict(X, batch_size=5)
     #y_pred = np.concatenate(y_pred, axis=-1)
