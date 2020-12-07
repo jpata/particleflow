@@ -801,8 +801,8 @@ class Transformer(tf.keras.Model):
 
         out_id_logits = self.ffn_id(dec_output)
         out_charge = self.ffn_charge(dec_output)
-        #pred_momentum = inp[:, :, 1:1 + self.num_momentum_outputs] + self.ffn_momentum(dec_output)
-        pred_momentum = self.ffn_momentum(dec_output)
+        pred_momentum = inp[:, :, 1:1+self.num_momentum_outputs] + self.ffn_momentum(dec_output)
+        #pred_momentum = self.ffn_momentum(dec_output)
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
