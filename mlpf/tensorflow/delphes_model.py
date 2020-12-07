@@ -194,16 +194,16 @@ def log_confusion_matrix(epoch, logs):
     figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
     ch_image = plot_to_image(figure)
 
-    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(-10, 10, 100))
+    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 5, 100))
     pt_image = plot_to_image(figure)
 
-    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(-10, 10, 100))
+    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 5, 100))
     pt_distr_image = plot_to_image(figure)
 
-    figure = plot_regression(e_true, e_pred, "E", np.linspace(-10, 10, 100))
+    figure = plot_regression(e_true, e_pred, "E", np.linspace(-1, 5, 100))
     e_image = plot_to_image(figure)
 
-    figure = plot_distributions(e_true, e_pred, "E", np.linspace(-10, 10, 100))
+    figure = plot_distributions(e_true, e_pred, "E", np.linspace(-1, 5, 100))
     e_distr_image = plot_to_image(figure)
 
     figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
@@ -345,11 +345,11 @@ if __name__ == "__main__":
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 4
-    num_events = 500
+    global_batch_size = 5
+    #num_events = 500
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 20
+    n_epochs = 50
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
