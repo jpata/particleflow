@@ -404,17 +404,18 @@ if __name__ == "__main__":
             bin_size=128,
             num_convs_id=1,
             num_convs_reg=1,
-            num_hidden_id_enc=0,
+            num_hidden_id_enc=1,
             num_hidden_id_dec=2,
             num_hidden_reg_enc=0,
             num_hidden_reg_dec=2,
             num_neighbors=16,
-            hidden_dim_id=128,
-            hidden_dim_reg=128,
+            hidden_dim_id=256,
+            hidden_dim_reg=256,
             dist_mult=10.0,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
             num_momentum_outputs=5,
+            activation=tf.nn.elu,
         )
 
         #we use the "temporal" mode to have per-particle weights
