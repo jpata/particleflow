@@ -313,12 +313,10 @@ class DenseDistance(tf.keras.layers.Layer):
         return dm 
 
 class SparseHashedNNDistance(tf.keras.layers.Layer):
-    def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, cosine_dist=False, **kwargs):
+    def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, **kwargs):
         super(SparseHashedNNDistance, self).__init__(**kwargs)
         self.num_neighbors = num_neighbors
         self.dist_mult = dist_mult
-
-        self.cosine_dist = cosine_dist
 
         #generate the codebook for LSH hashing at model instantiation for up to this many bins
         #set this to a high-enough value at model generation to take into account the largest possible input 
@@ -374,12 +372,8 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
     def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
 
         #find the distance matrix between the given points using dense matrix multiplication
-        if self.cosine_dist:
-            normed = tf.nn.l2_normalize(subpoints, axis=-1)
-            dm = tf.linalg.matmul(normed, normed, transpose_b=True)
-        else:
-            dm = pairwise_dist(subpoints, subpoints)
-            dm = tf.exp(-self.dist_mult*dm)
+        dm = pairwise_dist(subpoints, subpoints)
+        dm = tf.exp(-self.dist_mult*dm)
 
         dmshape = tf.shape(dm)
         nbins = dmshape[0]
@@ -530,16 +524,11 @@ class PFNet(tf.keras.Model):
         num_hidden_reg_enc=1,
         num_hidden_reg_dec=1,
         num_neighbors=5,
-        dist_mult=0.1,
-        cosine_dist=False,
-        return_combined=True,
-        regression_as_correction=False):
+        dist_mult=0.1):
 
         super(PFNet, self).__init__()
         self.activation = activation
         self.num_dists = 1
-        self.return_combined = return_combined
-        self.regression_as_correction = regression_as_correction
         self.num_momentum_outputs = num_momentum_outputs
 
         encoding_id = []
@@ -569,7 +558,7 @@ class PFNet(tf.keras.Model):
 
         self.dists = []
         for idist in range(self.num_dists):
-            self.dists.append(SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult, cosine_dist=cosine_dist))
+            self.dists.append(SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult))
         self.addsparse = AddSparse()
         #self.dist = DenseDistance(dist_mult=dist_mult)
 
@@ -601,7 +590,7 @@ class PFNet(tf.keras.Model):
         return tf.keras.Model(inputs=[inputs], outputs=self.call(inputs, training), name="MLPFNet")
 
     def call(self, inputs, training=True):
-        X = tf.cast(inputs, tf.float32)
+        X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
         enc = self.enc(inputs)
@@ -637,20 +626,7 @@ class PFNet(tf.keras.Model):
         #to_decode = tf.concat([enc, x_reg], axis=-1)
         pred_momentum = self.layer_momentum(x_reg)
 
-        #we predict the momentum regression as a correction to the input vector. We assume that the input momentum components
-        #are in the same order as the outputs, with a fixed offset 1 (the input ID) 
-        if self.regression_as_correction:
-            pred_momentum = inputs[:, :, 1:1+self.num_momentum_outputs] + pred_momentum
-
-        #soft-mask elements for which the id prediction was 0  
-        #probabilistic_mask_good = 1.0 - tf.keras.activations.softmax(100.0*out_id_logits)[:, :, 0:1]
-        #pred_momentum = pred_momentum * probabilistic_mask_good
-
-        if self.return_combined:
-            ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)*msk_input
-            return ret, dm2
-        else:
-            return out_id_logits*msk_input, out_charge*msk_input, pred_momentum*msk_input
+        return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)*msk_input
 
     def set_trainable_classification(self):
         self.gnn_reg.trainable = False
@@ -789,9 +765,11 @@ class Transformer(tf.keras.Model):
         self.ffn_charge = point_wise_feed_forward_network(1, dff)
         self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff)
 
-    def call(self, inp, training):
+    def call(self, inputs, training):
+        X = inputs
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
-        enc = self.enc(inp)
+        enc = self.enc(X)
         enc = self.ffn(self.layernorm(enc))
 
         enc_output = self.encoder(enc, training)
@@ -802,7 +780,7 @@ class Transformer(tf.keras.Model):
         out_id_logits = self.ffn_id(dec_output)
         out_charge = self.ffn_charge(dec_output)
         #pred_momentum = inp[:, :, 1:1+self.num_momentum_outputs] + self.ffn_momentum(dec_output)
-        pred_momentum = self.ffn_momentum(dec_output)
+        pred_momentum = self.ffn_momentum(dec_output)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 

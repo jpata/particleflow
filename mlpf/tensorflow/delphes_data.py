@@ -15,21 +15,30 @@ def prepare_data(fname):
 
     #make all inputs and outputs the same size with padding
     Xs = []
-    ys = []
+    ygens = []
+    ycands = []
     for i in range(len(data["X"])):
         X = np.array(data["X"][i][:padded_num_elem_size], np.float32)
         X = np.pad(X, [(0, padded_num_elem_size - X.shape[0]), (0,0)])
-        y = np.array(data["ygen"][i][:padded_num_elem_size], np.float32)
-        y = np.pad(y, [(0, padded_num_elem_size - y.shape[0]), (0,0)])
+
+        ygen = np.array(data["ygen"][i][:padded_num_elem_size], np.float32)
+        ygen = np.pad(ygen, [(0, padded_num_elem_size - ygen.shape[0]), (0,0)])
+
+        ycand = np.array(data["ycand"][i][:padded_num_elem_size], np.float32)
+        ycand = np.pad(ycand, [(0, padded_num_elem_size - ycand.shape[0]), (0,0)])
 
         X = np.expand_dims(X, 0)
-        y = np.expand_dims(y, 0)
+        ygen = np.expand_dims(ygen, 0)
+        ycand = np.expand_dims(ycand, 0)
+        
         Xs.append(X)
-        ys.append(y)
+        ygens.append(ygen)
+        ycands.append(ycand)
 
     X = [np.concatenate(Xs)]
-    y = [np.concatenate(ys)]
-    return X, y
+    ygen = [np.concatenate(ygens)]
+    ycand = [np.concatenate(ycands)]
+    return X, ygen, ycand
 
 def parse_args():
     import argparse
@@ -94,7 +103,7 @@ def serialize_chunk(args):
     dms = []
 
     for fi in files:
-        X, y = prepare_data(fi)
+        X, y, _ = prepare_data(fi)
 
         Xs += X
         ys += y
