@@ -353,11 +353,11 @@ if __name__ == "__main__":
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 2
-    num_events = 1000
+    global_batch_size = 5
+    #num_events = 1000
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 50
+    n_epochs = 100
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
