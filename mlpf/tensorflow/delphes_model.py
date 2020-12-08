@@ -109,7 +109,7 @@ def plot_regression(val_x, val_y, var_name, rng):
         val_y,
         bins=(rng, rng),
         cmap="Blues",
-        norm=matplotlib.colors.LogNorm()
+        #norm=matplotlib.colors.LogNorm()
     );
     plt.xlabel("Gen {}".format(var_name))
     plt.ylabel("MLPF {}".format(var_name))
@@ -322,9 +322,9 @@ def compute_weights(y, mult=1.0):
 #     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
 
 def compute_weights_inverse(X, y, w):
-    #wn = 1.0/tf.sqrt(w)
-    #wn /= tf.reduce_sum(wn)
-    return X, y, tf.ones_like(w)
+    wn = 1.0/tf.sqrt(w)
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
 
 def scale_outputs(X,y,w):
     ynew = y-out_m
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     #num_events = 500
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 50
+    n_epochs = 500
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
@@ -386,7 +386,7 @@ if __name__ == "__main__":
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
         model = Transformer(
-            num_layers=2, d_model=128, num_heads=4, dff=256,
+            num_layers=2, d_model=256, num_heads=4, dff=256,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
             num_momentum_outputs=5
