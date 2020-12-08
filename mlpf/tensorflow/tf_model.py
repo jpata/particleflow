@@ -665,8 +665,8 @@ class PFNet(tf.keras.Model):
 #Transformer code from the TF example
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
-            tf.keras.layers.Dense(dff, activation='relu'),    # (batch_size, seq_len, dff)
-            tf.keras.layers.Dense(d_model)    # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='elu'),    # (batch_size, seq_len, dff)
+        tf.keras.layers.Dense(d_model)    # (batch_size, seq_len, d_model)
     ])
 
 class EncoderLayer(tf.keras.layers.Layer):
@@ -801,8 +801,8 @@ class Transformer(tf.keras.Model):
 
         out_id_logits = self.ffn_id(dec_output)
         out_charge = self.ffn_charge(dec_output)
-        pred_momentum = inp[:, :, 1:1+self.num_momentum_outputs] + self.ffn_momentum(dec_output)
-        #pred_momentum = self.ffn_momentum(dec_output)
+        #pred_momentum = inp[:, :, 1:1+self.num_momentum_outputs] + self.ffn_momentum(dec_output)
+        pred_momentum = self.ffn_momentum(dec_output)
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
