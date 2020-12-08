@@ -8,6 +8,7 @@ import sys
 import glob
 #import PCGrad_tf
 import io
+import os
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,7 +18,7 @@ num_input_classes = 2
 num_output_classes = 6
 mult_classification_loss = 1.0
 mult_charge_loss = 1.0
-mult_energy_loss = 1.0
+mult_energy_loss = 1e-3
 mult_phi_loss = 10.0
 mult_eta_loss = 1.0
 mult_pt_loss = 1.0
@@ -25,8 +26,8 @@ mult_total_loss = 1e3
 
 #hard-coded normalization coefficients to make numerics more stable
 #(ID, charge, pt, eta, sin phi, cos phi, E)
-out_m = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0])
-out_s = np.array([1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 60.0])
+#out_m = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0])
+#out_s = np.array([1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 60.0])
 
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
@@ -322,7 +323,7 @@ def compute_weights(y, mult=1.0):
 #     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
 
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/tf.sqrt(w)
+    wn = 1.0/w
     wn /= tf.reduce_sum(wn)
     return X, y, wn
 
@@ -331,8 +332,12 @@ def scale_outputs(X,y,w):
     ynew = ynew/out_s
     return X, ynew, w
 
+train = True
+#weights = sys.argv[1]
+weights = None
+
 if __name__ == "__main__":
-    #tf.config.run_functions_eagerly(True)
+    tf.config.run_functions_eagerly(False)
 
     from delphes_data import _parse_tfr_element, padded_num_elem_size, num_inputs, num_outputs
     path = "out/pythia8_ttbar/tfr/*.tfrecords"
@@ -341,19 +346,22 @@ if __name__ == "__main__":
         raise Exception("Could not find any files in {}".format(path))
         
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    # for X,y,w in dataset:
+    #     import pdb;pdb.set_trace()
+
     num_events = 0
     for i in dataset:
         num_events += 1
 
-    global_batch_size = 5
-    #num_events = 500
+    global_batch_size = 2
+    num_events = 1000
     n_train = int(0.8*num_events)
     n_test = num_events - n_train
-    n_epochs = 500
+    n_epochs = 50
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
-    ds_train = dataset.take(n_train).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).map(scale_outputs).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
 
     X_test = ds_test.take(100).map(lambda x,y,w: x)
     y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: y).as_numpy_iterator()))
@@ -361,13 +369,15 @@ if __name__ == "__main__":
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
 
-    outdir = get_rundir('experiments')
-    if os.path.isdir(outdir):
-        print("Output directory exists: {}".format(outdir), file=sys.stderr)
-        sys.exit(1)
-    
-    file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-    
+    if train:
+        outdir = get_rundir('experiments')
+        if os.path.isdir(outdir):
+            print("Output directory exists: {}".format(outdir), file=sys.stderr)
+            sys.exit(1)
+        file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
+    else:
+        outdir = os.path.dirname(weights)
+
     try:
         num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
         print("num_gpus=", num_gpus)
@@ -380,37 +390,65 @@ if __name__ == "__main__":
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
-    #we use the "temporal" mode to have per-particle weights
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=1e-4)
+        opt = tf.keras.optimizers.Adam(learning_rate=1e-5)
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
-        model = Transformer(
-            num_layers=2, d_model=256, num_heads=4, dff=256,
+        # model = Transformer(
+        #     num_layers=2, d_model=128, num_heads=1, dff=128,
+        #     num_input_classes=num_input_classes,
+        #     num_output_classes=num_output_classes,
+        #     num_momentum_outputs=5
+        # )
+        model = PFNet(
+            bin_size=128,
+            num_convs_id=1,
+            num_convs_reg=1,
+            num_hidden_id_enc=0,
+            num_hidden_id_dec=2,
+            num_hidden_reg_enc=0,
+            num_hidden_reg_dec=2,
+            num_neighbors=16,
+            hidden_dim_id=128,
+            hidden_dim_reg=128,
+            dist_mult=10.0,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
-            num_momentum_outputs=5
+            num_momentum_outputs=5,
         )
 
+        #we use the "temporal" mode to have per-particle weights
         model.compile(
             loss=my_loss_full,
             optimizer=opt,
             sample_weight_mode='temporal'
         )
+        for X,y,w in ds_test:
+            model(X)
+            break
+
+        if weights:
+            model.load_weights(weights)
+
+        if train:
+            callbacks = prepare_callbacks(model, outdir)
+
+            model.fit(
+                ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
+                steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+            )
+
+            model.save(outdir + "/model_full", save_format="tf")
         
-        callbacks = prepare_callbacks(model, outdir)
+        from delphes_data import prepare_data
+        X, ygen, ycand = prepare_data("out/pythia8_ttbar/tev14_pythia8_ttbar_000_0.pkl")
 
-        #model.load_weights("experiments/run_02/weights.10-121.166969.hdf5")
-        #w_train = np.expand_dims(w_train, -1)
-        #w_test = np.expand_dims(w_test, -1)
+        X = np.concatenate(X)
+        ygen = np.concatenate(ygen)
+        ycand = np.concatenate(ycand)
 
-        model.fit(
-            ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-            steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
-        )
+        y_pred = model.predict(X, batch_size=5)
+        y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
+        y_pred = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
 
-        model.save(outdir + "/model_full", save_format="tf")
-
-    #y_pred, dm = model.predict(X, batch_size=5)
-    #y_pred = np.concatenate(y_pred, axis=-1)
-    #np.savez("{}/pred.npz".format(outdir), y_pred=y_pred)
+        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred)
