@@ -394,29 +394,29 @@ if __name__ == "__main__":
         opt = tf.keras.optimizers.Adam(learning_rate=1e-5)
         #opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
-        # model = Transformer(
-        #     num_layers=2, d_model=128, num_heads=1, dff=128,
-        #     num_input_classes=num_input_classes,
-        #     num_output_classes=num_output_classes,
-        #     num_momentum_outputs=5
-        # )
-        model = PFNet(
-            bin_size=128,
-            num_convs_id=1,
-            num_convs_reg=1,
-            num_hidden_id_enc=1,
-            num_hidden_id_dec=2,
-            num_hidden_reg_enc=0,
-            num_hidden_reg_dec=2,
-            num_neighbors=16,
-            hidden_dim_id=256,
-            hidden_dim_reg=256,
-            dist_mult=10.0,
+        model = Transformer(
+            num_layers=2, d_model=128, num_heads=2, dff=128,
             num_input_classes=num_input_classes,
             num_output_classes=num_output_classes,
-            num_momentum_outputs=5,
-            activation=tf.nn.elu,
+            num_momentum_outputs=5
         )
+        #model = PFNet(
+        #    bin_size=128,
+        #    num_convs_id=1,
+        #    num_convs_reg=1,
+        #    num_hidden_id_enc=1,
+        #    num_hidden_id_dec=2,
+        #    num_hidden_reg_enc=0,
+        #    num_hidden_reg_dec=2,
+        #    num_neighbors=16,
+        #    hidden_dim_id=256,
+        #    hidden_dim_reg=256,
+        #    dist_mult=10.0,
+        #    num_input_classes=num_input_classes,
+        #    num_output_classes=num_output_classes,
+        #    num_momentum_outputs=5,
+        #    activation=tf.nn.elu,
+        #)
 
         #we use the "temporal" mode to have per-particle weights
         model.compile(
