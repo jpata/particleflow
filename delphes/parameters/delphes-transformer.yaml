@@ -1,0 +1,19 @@
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  lr: 1e-5
+  batch_size: 2
+  num_events_train: 1000
+  num_events_test: 1000
+  num_epochs: 20
+
+parameters:
+  model: transformer
+  num_layers: 2
+  d_model: 256
+  num_heads: 2
+  dff: 256
+  support: 16
