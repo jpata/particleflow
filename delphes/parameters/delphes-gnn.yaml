@@ -1,0 +1,26 @@
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  lr: 1e-5
+  batch_size: 2
+  num_events_train: 1000
+  num_events_test: 1000
+  num_epochs: 20
+
+parameters:
+  model: gnn
+  bin_size: 128
+  num_convs_id: 2
+  num_convs_reg: 2
+  num_hidden_id_enc: 1
+  num_hidden_id_dec: 2
+  num_hidden_reg_enc: 1
+  num_hidden_reg_dec: 2
+  num_neighbors: 16
+  hidden_dim_id: 256
+  hidden_dim_reg: 256
+  dist_mult: 10.0
+  activation: elu
