@@ -15,9 +15,9 @@ parameters:
   bin_size: 128
   num_convs_id: 2
   num_convs_reg: 2
-  num_hidden_id_enc: 1
+  num_hidden_id_enc: 0
   num_hidden_id_dec: 2
-  num_hidden_reg_enc: 1
+  num_hidden_reg_enc: 0
   num_hidden_reg_dec: 2
   num_neighbors: 16
   hidden_dim_id: 256

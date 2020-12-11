@@ -140,6 +140,24 @@ def plot_distributions(val_x, val_y, var_name, rng):
     plt.ylim(0,1.5)
     return fig
 
+def plot_particles(y_pred, y_true, pid=1):
+    #Ground truth vs model prediction particles
+    fig = plt.figure(figsize=(10,10))
+
+    ev = y_true[0, :]
+    msk = ev[:, 0] == pid
+    plt.scatter(ev[msk, 3], np.arctan2(ev[msk, 4], ev[msk, 5]), s=2*ev[msk, 2], marker="o", alpha=0.5)
+
+    ev = y_pred[0, :]
+    msk = ev[:, 0] == pid
+    plt.scatter(ev[msk, 3], np.arctan2(ev[msk, 4], ev[msk, 5]), s=2*ev[msk, 2], marker="s", alpha=0.5)
+
+    plt.xlabel("eta")
+    plt.ylabel("phi")
+    plt.xlim(-5,5)
+    plt.ylim(-4,4)
+
+    return fig
 
 def log_confusion_matrix(epoch, logs):
    
@@ -220,6 +238,12 @@ def log_confusion_matrix(epoch, logs):
     figure = plot_distributions(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100))
     cphi_distr_image = plot_to_image(figure)
 
+    figure = plot_particles(test_pred, y_test, 1)
+    pid_image_1 = plot_to_image(figure)
+
+    figure = plot_particles(test_pred, y_test, 2)
+    pid_image_2 = plot_to_image(figure)
+
     with file_writer_cm.as_default():
         tf.summary.image("Confusion Matrix", cm_image, step=epoch)
         tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
@@ -234,6 +258,9 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.image("sin phi distribution", sphi_distr_image, step=epoch)
         tf.summary.image("cos phi regression", cphi_image, step=epoch)
         tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
+
+        tf.summary.image("charged hadron particles", pid_image_1, step=epoch)
+        tf.summary.image("neutral hadron particles", pid_image_2, step=epoch)
 
         #tf.summary.histogram("dm_values", dm.values, step=epoch)
         tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
@@ -298,19 +325,8 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
-def compute_weights(y, mult=1.0):
-    weights = np.ones((y.shape[0], y.shape[1]), dtype=np.float32)
-    uniqs, counts = np.unique(y[:, :, 0], return_counts=True)
-
-    #weight is inversely proportional to target particle PID frequency
-    for val, c in zip(uniqs, counts):
-        print("class {} count {}".format(val, c))
-        weights[y[:, :, 0] == val] = mult / c
-
-    return weights
-
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/w
+    wn = w/w
     wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
@@ -490,4 +506,4 @@ if __name__ == "__main__":
         y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
         y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
 
-        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=)
+        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])

@@ -3,7 +3,7 @@ tensorflow:
 
 setup:
   train: yes
-  weights: experiments/delphes-transformer-0e666fc2/weights.20-0.545903.hdf5
+  weights:
   lr: 1e-5
   batch_size: 2
   num_events_train: 200000
