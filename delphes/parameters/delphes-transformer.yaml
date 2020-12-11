@@ -8,7 +8,7 @@ setup:
   batch_size: 2
   num_events_train: 200000
   num_events_test: 50000
-  num_epochs: 20
+  num_epochs: 10
 
 parameters:
   model: transformer

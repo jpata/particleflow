@@ -4,11 +4,11 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 2e-5
   batch_size: 5
-  num_events_train: 1000
-  num_events_test: 1000
-  num_epochs: 50
+  num_events_train: 200000
+  num_events_test: 50000
+  num_epochs: 10
 
 parameters:
   model: gnn
@@ -20,7 +20,7 @@ parameters:
   num_hidden_reg_enc: 0
   num_hidden_reg_dec: 2
   num_neighbors: 16
-  hidden_dim_id: 256
-  hidden_dim_reg: 256
+  hidden_dim_id: 512
+  hidden_dim_reg: 512
   dist_mult: 10.0
   activation: elu
