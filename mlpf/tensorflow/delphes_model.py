@@ -67,7 +67,6 @@ def loss_components(y_true, y_pred):
     #pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=num_output_classes)
-    #import pdb;pdb.set_trace()
 
     l1 = mult_classification_loss*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)
   
@@ -169,8 +168,6 @@ def log_confusion_matrix(epoch, logs):
     cm_image_normed = plot_to_image(figure)
 
     msk = (test_pred[:, :, 0]!=0) & (y_test[:, :, 0]!=0)
-
-    #import pdb;pdb.set_trace()
 
     ch_true = y_test[msk, 1].flatten()
     ch_pred = test_pred[msk, 1].flatten()
@@ -312,14 +309,6 @@ def compute_weights(y, mult=1.0):
 
     return weights
 
-# class MeanSquaredError(tf.keras.losses.Loss):
-
-#   def call(self, y_true, y_pred):
-#     #import pdb;pdb.set_trace()
-#     y_pred = tf.convert_to_tensor_v2(y_pred)
-#     y_true = tf.cast(y_true, y_pred.dtype)
-#     return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
-
 def compute_weights_inverse(X, y, w):
     wn = 1.0/tf.sqrt(w)
     wn *= tf.cast(X[:, 0]!=0, tf.float32)
@@ -398,6 +387,7 @@ if __name__ == "__main__":
 
     yaml_path = sys.argv[1]
     model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
+    print("model_name=", model_name)
 
     config = load_config(yaml_path)
     do_training = config['setup']['train']
@@ -411,6 +401,7 @@ if __name__ == "__main__":
         raise Exception("Could not find any files in {}".format(datapath))
         
     dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    print("dataset loaded")
 
     num_events = 0
     for i in dataset:
@@ -425,9 +416,6 @@ if __name__ == "__main__":
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
     ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
-
-    # for X,y,w in ds_train:
-    #     import pdb;pdb.set_trace()
 
     #small test dataset used in the callback for making monitoring plots
     X_test = ds_test.take(100).map(lambda x,y,w: x)
@@ -458,12 +446,13 @@ if __name__ == "__main__":
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=float(config['setup']['lr']))
+        opt = tf.keras.optimizers.Adam(learning_rate=num_gpus*float(config['setup']['lr']))
         # opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(
         #     opt, loss_scale='dynamic'
         # )
 
         model = make_model(config)
+        print("model created")
 
         #we use the "temporal" mode to have per-particle weights
         model.compile(
