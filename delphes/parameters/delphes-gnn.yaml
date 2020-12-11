@@ -5,9 +5,9 @@ setup:
   train: yes
   weights:
   lr: 1e-5
-  batch_size: 2
-  num_events_train: 200000
-  num_events_test: 50000
+  batch_size: 5
+  num_events_train: 1000
+  num_events_test: 1000
   num_epochs: 50
 
 parameters:

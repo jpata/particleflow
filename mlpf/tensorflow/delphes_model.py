@@ -76,7 +76,7 @@ def loss_components(y_true, y_pred):
     l2_3 = mult_phi_loss*mse_unreduced(true_momentum[:, :, 3], pred_momentum[:, :, 3])
     l2_4 = mult_energy_loss*mse_unreduced(true_momentum[:, :, 4], pred_momentum[:, :, 4])
 
-    l2 = (l2_0 + l2_1 + l2_2 + l2_3 + l2_3)
+    l2 = (l2_0 + l2_1 + l2_2 + l2_3 + l2_4)
 
     l3 = mult_charge_loss*mse_unreduced(true_charge, pred_charge)[:, :, 0]
 
@@ -310,7 +310,7 @@ def compute_weights(y, mult=1.0):
     return weights
 
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/tf.sqrt(w)
+    wn = 1.0/w
     wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
@@ -460,6 +460,7 @@ if __name__ == "__main__":
             optimizer=opt,
             sample_weight_mode='temporal'
         )
+
         for X,y,w in ds_test:
             model(X)
             break
@@ -487,6 +488,6 @@ if __name__ == "__main__":
 
         y_pred = model.predict(X, batch_size=5)
         y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
-        y_pred = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
+        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
 
-        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred)
+        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=)
