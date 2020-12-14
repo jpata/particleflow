@@ -4,16 +4,11 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-4
-  batch_size: 1 
+  lr: 5e-5
+  batch_size: 10
   num_events_train: 4000
   num_events_test: 1000
   num_epochs: 10
 
 parameters:
-  model: transformer
-  num_layers: 2
-  d_model: 256
-  num_heads: 4
-  dff: 512
-  support: 32
+  model: dense

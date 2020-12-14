@@ -315,12 +315,12 @@ class DenseDistance(tf.keras.layers.Layer):
 class SparseHashedNNDistance(tf.keras.layers.Layer):
     def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, **kwargs):
         super(SparseHashedNNDistance, self).__init__(**kwargs)
-        self.num_neighbors = num_neighbors
+        self.num_neighbors = tf.constant(num_neighbors)
         self.dist_mult = dist_mult
 
         #generate the codebook for LSH hashing at model instantiation for up to this many bins
         #set this to a high-enough value at model generation to take into account the largest possible input 
-        self.max_num_bins = max_num_bins
+        self.max_num_bins = tf.constant(max_num_bins)
 
         #each bin will receive this many input elements, in total we can accept max_num_bins*bin_size input elements
         #in each bin, we will do a dense top_k evaluation
@@ -329,7 +329,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
     def build(self, input_shape):
         #(n_batch, n_points, n_features)
 
-        #generate the LSH codebook for random rotations (num_features, num_bins/2)
+        #generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = self.add_weight(
             shape=(input_shape[-1], self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
         )
@@ -342,25 +342,21 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         n_batches = tf.shape(point_embedding)[0]
         n_points = tf.shape(point_embedding)[1]
+        #points_neighbors = n_points * self.num_neighbors
 
         #cannot concat sparse tensors directly as that incorrectly destroys the gradient, see
         #https://github.com/tensorflow/tensorflow/blob/df3a3375941b9e920667acfe72fb4c33a8f45503/tensorflow/python/ops/sparse_grad.py#L33
-        #therefore, for training, we implement sparse concatenation by hand 
-        indices_all = []
-        values_all = []
-
         def func(args):
             ibatch, points_batch = args[0], args[1]
-            dm = self.construct_sparse_dm_batch(points_batch)
-            inds = tf.concat([tf.expand_dims(tf.cast(ibatch, tf.int64)*tf.ones(tf.shape(dm.indices)[0], dtype=tf.int64), -1), dm.indices], axis=-1)
-            vals = dm.values
+            inds, vals = self.construct_sparse_dm_batch(points_batch)
+            inds = tf.concat([tf.expand_dims(tf.cast(ibatch, tf.int64)*tf.ones(tf.shape(inds)[0], dtype=tf.int64), -1), inds], axis=-1)
             return inds, vals
 
         elems = (tf.range(0, n_batches, delta=1, dtype=tf.int64), point_embedding)
-        ret = tf.map_fn(func, elems, fn_output_signature=(tf.int64, tf.float32), parallel_iterations=1)
+        ret = tf.map_fn(func, elems, fn_output_signature=(tf.TensorSpec((None, 3), tf.int64), tf.TensorSpec((None, ), tf.float32)), parallel_iterations=2, back_prop=True)
 
+        # #now create a new SparseTensor that is a concatenation of the per-batch tensor indices and values
         shp = tf.shape(ret[0])
-        # #now create a new SparseTensor that is a concatenation of the previous ones
         dms = tf.SparseTensor(
             tf.reshape(ret[0], (shp[0]*shp[1], shp[2])),
             tf.reshape(ret[1], (shp[0]*shp[1],)),
@@ -369,6 +365,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         return tf.sparse.reorder(dms)
 
+    @tf.function
     def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
 
         #find the distance matrix between the given points using dense matrix multiplication
@@ -383,46 +380,25 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
 
-        indices_gathered = tf.vectorized_map(
+        indices_gathered = tf.map_fn(
             lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
-            tf.range(self.num_neighbors, dtype=tf.int64))
-
+            tf.range(self.num_neighbors, dtype=tf.int32)
+        )
         indices_gathered = tf.transpose(indices_gathered, [1,2,0])
 
-        #add the neighbors up to a big matrix using dense matrices, then convert to sparse (mainly for testing)
-        # sp_sum = tf.zeros((n_points, n_points))
-        # for i in range(self.num_neighbors):
-        #     dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
-        #     dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
-        #     src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
-        #     src_dst_inds = tf.transpose(tf.stack([src_ind, dst_ind]))
-        #     sp_sum += tf.scatter_nd(src_dst_inds, top_k_vals[:, i], (n_points, n_points))
-        # spt_this = tf.sparse.from_dense(sp_sum)
-        # validate that the vectorized ops are doing what we want by hand while debugging
-        # dm = np.eye(n_points)
-        # for ibin in range(nbins):
-        #     for ielem in range(nelems):
-        #         idx0 = subindices[ibin][ielem]
-        #         for ineigh in range(self.num_neighbors):
-        #             idx1 = subindices[ibin][top_k.indices[ibin, ielem, ineigh]]
-        #             val = top_k.values[ibin, ielem, ineigh]
-        #             dm[idx0, idx1] += val
-        # assert(np.all(sp_sum.numpy() == dm))
-
-        #update the output using intermediate sparse matrices, which may result in some inconsistencies from duplicated indices
-        sp_sum = tf.sparse.SparseTensor(indices=tf.zeros((0,2), dtype=tf.int64), values=tf.zeros(0, tf.float32), dense_shape=(n_points, n_points))
-        for i in range(self.num_neighbors):
+        def func(i):
            dst_ind = indices_gathered[:, :, i] #(nbins, nelems)
            dst_ind = tf.reshape(dst_ind, (nbins*nelems, ))
            src_ind = tf.reshape(tf.stack(subindices), (nbins*nelems, ))
            src_dst_inds = tf.cast(tf.transpose(tf.stack([src_ind, dst_ind])), dtype=tf.int64)
-           sp_sum = tf.sparse.add(
-               sp_sum,
-               tf.sparse.reorder(tf.sparse.SparseTensor(src_dst_inds, top_k_vals[:, i], (n_points, n_points)))
-           )
-        spt_this = tf.sparse.reorder(sp_sum)
+           return src_dst_inds, top_k_vals[:, i]
 
-        return spt_this
+        ret = tf.map_fn(func, tf.range(0, self.num_neighbors, delta=1, dtype=tf.int32), fn_output_signature=(tf.int64, tf.float32))
+        
+        shp = tf.shape(ret[0])
+        inds = tf.reshape(ret[0], (shp[0]*shp[1], 2))
+        vals = tf.reshape(ret[1], (shp[0]*shp[1],))
+        return inds, vals
 
     def construct_sparse_dm_batch(self, points):
 
@@ -437,7 +413,6 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         #put each input item into a bin defined by the softmax output across the LSH embedding
         mul = tf.linalg.matmul(points, self.codebook_random_rotations[:, :n_bins//2])
-        #tf.debugging.assert_greater(tf.shape(mul)[2], 0)
 
         cmul = tf.concat([mul, -mul], axis=-1)
 
@@ -568,8 +543,7 @@ class PFNet(tf.keras.Model):
         self.addsparse = AddSparse()
         #self.dist = DenseDistance(dist_mult=dist_mult)
 
-        self.layer_edge0 = tf.keras.layers.Dense(32, activation=self.activation, name="edge0")
-        self.layer_edge1 = tf.keras.layers.Dense(1, activation="linear", name="edge1")
+        self.layer_edge = point_wise_feed_forward_network(1, 128, "linear")
 
         convs_id = []
         convs_reg = []
@@ -610,14 +584,14 @@ class PFNet(tf.keras.Model):
         dms = [dist(embedding_attention, training) for dist in self.dists]
         dm = self.addsparse(dms)
 
+        #gather node vals for src,dst
         i1 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 1]]))
         i2 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 2]]))
         x1 = tf.gather_nd(enc, i1)
         x2 = tf.gather_nd(enc, i2)
 
-        #run a simple edge net
-        edge0 = self.layer_edge0(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
-        edge_vals = self.layer_edge1(edge0)
+        #run an edge net on (src node, dst node, edge)
+        edge_vals = self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
         dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
 
         #run graph net for multiclass id prediction
@@ -631,7 +605,7 @@ class PFNet(tf.keras.Model):
         x_reg = self.gnn_reg(tf.concat([enc, out_id_logits], axis=-1), dm2, training)
 
         #to_decode = tf.concat([enc, x_reg], axis=-1)
-        pred_momentum = self.layer_momentum(tf.concat([enc, x_reg], axis=-1))*msk_input
+        pred_momentum = self.layer_momentum(tf.concat([enc, out_id_logits, x_reg], axis=-1))*msk_input
 
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
@@ -772,7 +746,7 @@ class Transformer(tf.keras.Model):
 
     def call(self, inputs, training):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, X.dtype), -1)
 
         enc = self.enc(X)
         enc_transformed = self.ffn(self.layernorm(enc))
@@ -788,6 +762,36 @@ class Transformer(tf.keras.Model):
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
         dec_output_reg = tf.concat([enc, out_id_logits, dec_output_reg], axis=-1)
+        pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+
+        ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+        return ret
+
+class DummyNet(tf.keras.Model):
+    def __init__(self,
+                num_input_classes=len(elem_labels),
+                num_output_classes=len(class_labels),
+                num_momentum_outputs=3):
+        super(DummyNet, self).__init__()
+
+        self.num_momentum_outputs = num_momentum_outputs
+
+        self.enc = InputEncoding(num_input_classes)
+
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, 256)
+        self.ffn_charge = point_wise_feed_forward_network(1, 256)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, 256)
+
+    def call(self, inputs, training):
+        X = inputs
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+
+        enc = self.enc(X)
+
+        out_id_logits = self.ffn_id(enc)
+        out_charge = self.ffn_charge(enc)*msk_input
+
+        dec_output_reg = tf.concat([enc, out_id_logits], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)

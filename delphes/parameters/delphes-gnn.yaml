@@ -4,10 +4,10 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 2e-5
-  batch_size: 5
-  num_events_train: 200000
-  num_events_test: 50000
+  lr: 1e-4
+  batch_size: 10
+  num_events_train: 4000
+  num_events_test: 1000
   num_epochs: 10
 
 parameters:
@@ -15,12 +15,14 @@ parameters:
   bin_size: 128
   num_convs_id: 2
   num_convs_reg: 2
-  num_hidden_id_enc: 0
-  num_hidden_id_dec: 2
-  num_hidden_reg_enc: 0
-  num_hidden_reg_dec: 2
-  num_neighbors: 16
-  hidden_dim_id: 512
-  hidden_dim_reg: 512
-  dist_mult: 10.0
+  num_hidden_id_enc: 1
+  num_hidden_id_dec: 1
+  num_hidden_reg_enc: 1
+  num_hidden_reg_dec: 1
+  num_neighbors: 16 
+  hidden_dim_id: 128
+  hidden_dim_reg: 128
+  distance_dim: 128
+  dropout: 0.1
+  dist_mult: 1.0
   activation: elu
