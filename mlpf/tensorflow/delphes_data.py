@@ -123,6 +123,7 @@ def serialize_chunk(args):
         for uv, uc in zip(uniq_vals, uniq_counts):
             w[ys[i][:, 0]==uv] = uc
         ws += [w]
+    import pdb;pdb.set_trace()
 
     for X, y, w in zip(Xs, ys, ws):
         serialize_X_y_w(writer, X, y, w)

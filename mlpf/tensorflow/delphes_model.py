@@ -1,4 +1,4 @@
-from tf_model import PFNet, Transformer
+from tf_model import PFNet, Transformer, DummyNet
 import tensorflow as tf
 import pickle
 import numpy as np
@@ -6,7 +6,7 @@ import os
 from sklearn.model_selection import train_test_split
 import sys
 import glob
-#import PCGrad_tf
+import PCGrad_tf
 import io
 import os
 import yaml
@@ -14,12 +14,14 @@ import uuid
 import matplotlib
 import matplotlib.pyplot as plt
 import sklearn
+import kerastuner as kt
+from argparse import Namespace
 
 num_input_classes = 2
 num_output_classes = 6
-mult_classification_loss = 1.0
+mult_classification_loss = 100.0
 mult_charge_loss = 1.0
-mult_energy_loss = 1e-3
+mult_energy_loss = 1e-4
 mult_phi_loss = 10.0
 mult_eta_loss = 1.0
 mult_pt_loss = 1.0
@@ -64,12 +66,13 @@ def energy_resolution(y_true, y_pred):
 
 def loss_components(y_true, y_pred):
     pred_id_logits, pred_charge, pred_momentum = separate_prediction(y_pred)
-    #pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
+    pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
     true_id, true_charge, true_momentum = separate_truth(y_true)
     true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=num_output_classes)
 
     l1 = mult_classification_loss*tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)
   
+    #msk_good = tf.cast(true_id[:, :, 0] == pred_id, tf.float32)
     l2_0 = mult_pt_loss*mse_unreduced(true_momentum[:, :, 0], pred_momentum[:, :, 0])
     l2_1 = mult_eta_loss*mse_unreduced(true_momentum[:, :, 1], pred_momentum[:, :, 1])
     l2_2 = mult_phi_loss*mse_unreduced(true_momentum[:, :, 2], pred_momentum[:, :, 2])
@@ -93,11 +96,12 @@ def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
     plt.imshow(cm, cmap="Blues")
     plt.title("Reconstructed PID (normed to gen)")
-    plt.xlabel("Delphes PF PID")
+    plt.xlabel("MLPF PID")
     plt.ylabel("Gen PID")
     plt.xticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
     plt.yticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
     plt.colorbar()
+    plt.tight_layout()
     return fig
 
 def plot_regression(val_x, val_y, var_name, rng):
@@ -326,8 +330,8 @@ def get_rundir(base='experiments'):
     return '{}/{}'.format(base, logdir)
 
 def compute_weights_inverse(X, y, w):
-    wn = w/w
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
+    wn = 1.0/tf.sqrt(w)
+    #wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
 
@@ -347,6 +351,8 @@ def make_model(config):
         return make_gnn(config)
     elif model == 'transformer':
         return make_transformer(config)
+    elif model == 'dense':
+        return make_dense(config)
     raise KeyError("Unknown model type {}".format(model))
 
 # DelphesPF does muon identification based on generator information
@@ -372,6 +378,8 @@ def make_gnn(config):
         'hidden_dim_id',
         'hidden_dim_reg',
         'dist_mult',
+        'distance_dim',
+        'dropout'
     ]
     kwargs = {par: config['parameters'][par] for par in parameters}
 
@@ -398,6 +406,69 @@ def make_transformer(config):
         **kwargs
     )
     return model
+
+def make_dense(config):
+    model = DummyNet(
+        num_input_classes=num_input_classes,
+        num_output_classes=num_output_classes,
+        num_momentum_outputs=5,
+    )
+    return model
+
+
+def model_builder_gnn(hp):
+    args = Namespace()
+    args.hidden_dim_id = hp.Choice('hidden_dim_id', values = [16, 32, 64, 128, 256])
+    args.hidden_dim_reg = hp.Choice('hidden_dim_reg', values = [16, 32, 64, 128, 256])
+    args.num_hidden_id_enc = hp.Choice('hidden_dim_id_enc', values = [0, 1, 2, 3])
+    args.num_hidden_id_dec = hp.Choice('hidden_dim_id_dec', values = [0, 1, 2, 3])
+    args.num_hidden_reg_enc = hp.Choice('hidden_dim_reg_enc', values = [0, 1, 2, 3])
+    args.num_hidden_reg_dec = hp.Choice('hidden_dim_reg_dec', values = [0, 1, 2, 3])
+    args.num_convs_id = hp.Choice('num_convs_id', values = [1, 2, 3, 4])
+    args.num_convs_reg = hp.Choice('num_convs_reg', values = [1, 2, 3, 4])
+    args.distance_dim = hp.Choice('distance_dim', values = [16, 32, 64, 128, 256])
+    args.num_neighbors = hp.Choice('num_neighbors', [2, 4, 8, 16, 32])
+    args.dropout = hp.Choice('dropout', values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    args.bin_size = hp.Choice('bin_size', values = [32, 64, 128, 256])
+    args.dist_mult = hp.Choice('dist_mult', values = [0.1, 1.0, 10.0])
+    args.lr = hp.Choice('lr', values = [1e-5, 1e-4, 1e-3])
+
+    model = PFNet(
+        num_hidden_id_enc=args.num_hidden_id_enc,
+        num_hidden_id_dec=args.num_hidden_id_dec,
+        hidden_dim_id=args.hidden_dim_id,
+        num_hidden_reg_enc=args.num_hidden_reg_enc,
+        num_hidden_reg_dec=args.num_hidden_reg_dec,
+        hidden_dim_reg=args.hidden_dim_reg,
+        num_convs_id=args.num_convs_id,
+        num_convs_reg=args.num_convs_reg,
+        distance_dim=args.distance_dim,
+        #convlayer=convlayer,
+        dropout=args.dropout,
+        bin_size=args.bin_size,
+        num_neighbors=args.num_neighbors,
+        dist_mult=args.dist_mult,
+        num_input_classes=num_input_classes,
+        num_output_classes=num_output_classes,
+        num_momentum_outputs=5,
+        activation=tf.nn.elu,
+    )
+
+    print(args)
+
+    loss_fn = my_loss_full
+    opt = tf.keras.optimizers.Adam(learning_rate=args.lr)
+
+    model.compile(optimizer=opt, loss=loss_fn, sample_weight_mode="temporal")
+
+    from delphes_data import _parse_tfr_element, padded_num_elem_size, num_inputs, num_outputs
+    model(np.random.randn(1, padded_num_elem_size, num_inputs + 1).astype(np.float32))
+
+    model.summary()
+    return model
+
+def split_y(X,y,w):
+    return X, (y[:, :, 0:1] , y[:, :, 1:2], y[:, :, 2:3], y[:, :, 3:4], y[:, :, 4:5], y[:, :, 5:6], y[:, :, 6:7]), w
 
 if __name__ == "__main__":
 
@@ -429,13 +500,15 @@ if __name__ == "__main__":
     n_epochs = config['setup']['num_epochs']
     assert(n_train + n_test <= num_events)
 
+
+
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
     ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
     ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
 
     #small test dataset used in the callback for making monitoring plots
     X_test = ds_test.take(100).map(lambda x,y,w: x)
-    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: y).as_numpy_iterator()))
+    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
 
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
@@ -460,13 +533,35 @@ if __name__ == "__main__":
     except Exception as e:
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
+        num_gpus = 0
+
+
+    # tuner = kt.Hyperband(
+    #     model_builder_gnn,
+    #     objective = 'val_loss', 
+    #     max_epochs = 10,
+    #     factor = 3,
+    #     hyperband_iterations = 3,
+    #     directory = './kerastuner_out',
+    #     project_name = 'mlpf',
+    #     max_model_size = 5000000
+    # )
+
+    # tuner.search(
+    #    ds_train_r,
+    #    validation_data=ds_test_r,
+    #    steps_per_epoch=n_train/global_batch_size,
+    #    validation_steps=n_test/global_batch_size,
+    # )
+    # tuner.results_summary()
+    # for trial in tuner.oracle.get_best_trials(num_trials=10):
+    #     print(trial.hyperparameters.values, trial.score)
 
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=num_gpus*float(config['setup']['lr']))
+        opt = tf.keras.optimizers.Adam(learning_rate=min(1,num_gpus)*float(config['setup']['lr']))
         # opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(
         #     opt, loss_scale='dynamic'
         # )
-
         model = make_model(config)
         print("model created")
 
@@ -480,13 +575,14 @@ if __name__ == "__main__":
         for X,y,w in ds_test:
             model(X)
             break
+        model.summary()
 
         if weights:
             model.load_weights(weights)
 
         if do_training:
             callbacks = prepare_callbacks(model, outdir)
-
+            #callbacks = []
             model.fit(
                 ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
                 steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
