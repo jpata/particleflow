@@ -71,20 +71,22 @@ b: (nbatch, nelem, ncol) dense per-element feature matrices
 """
 def sparse_dense_matmult_batch(sp_a, b):
 
+    dtype = b.dtype
+    b = tf.cast(b, tf.float32)
     num_batches = tf.shape(b)[0]
     def map_function(x):
         i, dense_slice = x[0], x[1]
         num_points = tf.shape(b)[1]
 
         sparse_slice = tf.sparse.reshape(tf.sparse.slice(
-            sp_a, [i, 0, 0], [1, num_points, num_points]),
+            tf.cast(sp_a, tf.float32), [i, 0, 0], [1, num_points, num_points]),
             [num_points, num_points])
         mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
         return mult_slice
 
     elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
-    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.float32, back_prop=True)
-    return ret 
+    ret = tf.map_fn(map_function, elems, fn_output_signature=b.dtype, back_prop=True)
+    return tf.cast(ret, dtype) 
 
 
 def summarize_dataset(dataset):
@@ -200,7 +202,7 @@ class InputEncoding(tf.keras.layers.Layer):
     def call(self, X):
 
         #X[:, :, 0] - categorical index of the element type
-        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=tf.float32)
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
 
         #X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
@@ -353,7 +355,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
             return inds, vals
 
         elems = (tf.range(0, n_batches, delta=1, dtype=tf.int64), point_embedding)
-        ret = tf.map_fn(func, elems, fn_output_signature=(tf.TensorSpec((None, 3), tf.int64), tf.TensorSpec((None, ), tf.float32)), parallel_iterations=2, back_prop=True)
+        ret = tf.map_fn(func, elems, fn_output_signature=(tf.TensorSpec((None, 3), tf.int64), tf.TensorSpec((None, ), inputs.dtype)), parallel_iterations=2, back_prop=True)
 
         # #now create a new SparseTensor that is a concatenation of the per-batch tensor indices and values
         shp = tf.shape(ret[0])
@@ -393,7 +395,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
            src_dst_inds = tf.cast(tf.transpose(tf.stack([src_ind, dst_ind])), dtype=tf.int64)
            return src_dst_inds, top_k_vals[:, i]
 
-        ret = tf.map_fn(func, tf.range(0, self.num_neighbors, delta=1, dtype=tf.int32), fn_output_signature=(tf.int64, tf.float32))
+        ret = tf.map_fn(func, tf.range(0, self.num_neighbors, delta=1, dtype=tf.int32), fn_output_signature=(tf.int64, subpoints.dtype))
         
         shp = tf.shape(ret[0])
         inds = tf.reshape(ret[0], (shp[0]*shp[1], 2))
@@ -479,10 +481,10 @@ class AddSparse(tf.keras.layers.Layer):
             ret = tf.sparse.add(ret, mat)
         return ret
 
-def point_wise_feed_forward_network(d_model, dff, activation='elu'):
+def point_wise_feed_forward_network(d_model, dff, activation='elu', dtype=tf.dtypes.float32):
     return tf.keras.Sequential([
         tf.keras.layers.Dense(dff, activation=activation),    # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model)    # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(d_model, dtype=dtype)    # (batch_size, seq_len, d_model)
     ])
 
 #Simple message passing based on a matrix multiplication
@@ -571,7 +573,7 @@ class PFNet(tf.keras.Model):
 
     def call(self, inputs, training=True):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
         enc = self.enc(inputs)
 
@@ -602,10 +604,10 @@ class PFNet(tf.keras.Model):
         out_charge = self.layer_charge(to_decode)*msk_input
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
-        x_reg = self.gnn_reg(tf.concat([enc, out_id_logits], axis=-1), dm2, training)
+        x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
 
-        #to_decode = tf.concat([enc, x_reg], axis=-1)
-        pred_momentum = self.layer_momentum(tf.concat([enc, out_id_logits, x_reg], axis=-1))*msk_input
+        to_decode = tf.concat([enc, tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
+        pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
@@ -621,10 +623,10 @@ class PFNet(tf.keras.Model):
 
 #Transformer code from the TF example
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, support=8):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=8, dtype=tf.dtypes.float32):
         super(EncoderLayer, self).__init__()
 
-        self.mha = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
+        self.mha = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -646,11 +648,11 @@ class EncoderLayer(tf.keras.layers.Layer):
         return out2
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, support=8):
+    def __init__(self, d_model, num_heads, dff, rate=0.1, support=8, dtype=tf.dtypes.float32):
         super(DecoderLayer, self).__init__()
 
-        self.mha1 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
-        self.mha2 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate)
+        self.mha1 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
+        self.mha2 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -681,13 +683,13 @@ class DecoderLayer(tf.keras.layers.Layer):
         return out3
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, support=32, rate=0.1):
+    def __init__(self, num_layers, d_model, num_heads, dff, support=32, rate=0.1, dtype=tf.dtypes.float32):
         super(Encoder, self).__init__()
 
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate, support=support) 
+        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate, support=support, dtype=dtype) 
                                              for _ in range(num_layers)]
 
         self.dropout = tf.keras.layers.Dropout(rate)
@@ -700,13 +702,13 @@ class Encoder(tf.keras.layers.Layer):
         return x    # (batch_size, input_seq_len, d_model)
 
 class Decoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, support=32, rate=0.1):
+    def __init__(self, num_layers, d_model, num_heads, dff, support=32, rate=0.1, dtype=tf.dtypes.float32):
         super(Decoder, self).__init__()
 
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate, support=support) 
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate, support=support, dtype=dtype) 
                                              for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)
 
@@ -725,7 +727,8 @@ class Transformer(tf.keras.Model):
                 support=32,
                 num_input_classes=len(elem_labels),
                 num_output_classes=len(class_labels),
-                num_momentum_outputs=3):
+                num_momentum_outputs=3,
+                dtype=tf.dtypes.float32):
         super(Transformer, self).__init__()
 
         self.num_momentum_outputs = num_momentum_outputs
@@ -734,26 +737,26 @@ class Transformer(tf.keras.Model):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-        self.encoder_id = Encoder(num_layers, d_model, num_heads, dff, support, rate)
-        self.decoder_id = Decoder(num_layers, d_model, num_heads, dff, support, rate)
+        self.encoder_id = Encoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
+        self.decoder_id = Decoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
 
-        self.encoder_reg = Encoder(num_layers, d_model, num_heads, dff, support, rate)
-        self.decoder_reg = Decoder(num_layers, d_model, num_heads, dff, support, rate)
+        self.encoder_reg = Encoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
+        self.decoder_reg = Decoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff)
-        self.ffn_charge = point_wise_feed_forward_network(1, dff)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, dtype=tf.dtypes.float32)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, dtype=tf.dtypes.float32)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, dtype=tf.dtypes.float32)
 
     def call(self, inputs, training):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, X.dtype), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
         enc = self.enc(X)
         enc_transformed = self.ffn(self.layernorm(enc))
 
         enc_output_id = self.encoder_id(enc_transformed, training)
         dec_output_id = self.decoder_id(enc_transformed, enc_output_id, training)
-        dec_output_id = tf.concat([enc, dec_output_id], axis=-1)
+        #dec_output_id = tf.concat([enc, dec_output_id], axis=-1)
 
         enc_output_reg = self.encoder_reg(enc_transformed, training)
         dec_output_reg = self.decoder_reg(enc_transformed, enc_output_reg, training)
@@ -761,7 +764,7 @@ class Transformer(tf.keras.Model):
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, out_id_logits, dec_output_reg], axis=-1)
+        dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
