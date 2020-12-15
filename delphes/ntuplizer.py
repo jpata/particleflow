@@ -78,6 +78,7 @@ def make_tower_array(tower_dict):
         #padding
         0.0,
         0.0,
+        0.0
     ])
 
 def make_track_array(track_dict):
@@ -91,7 +92,8 @@ def make_track_array(track_dict):
         track_dict["eta_outer"],
         np.sin(track_dict["phi_outer"]),
         np.cos(track_dict["phi_outer"]),
-        track_dict["charge"]
+        track_dict["charge"],
+        track_dict["is_muon"] #muon bit set from generator to mimic PFDelphes
     ])
 
 def make_gen_array(gen_dict):
@@ -160,11 +162,21 @@ def make_triplets(g, tracks, towers, particles):
                 g.nodes[ptcl]["energy"],
             )
             lvs.append(lv)
+
         lv = None
         gen_ptcl = None
+
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
             gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
+
+            #charged gen particles outside the tracker acceptance should be reconstructed as neutrals
+            if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
+                gen_ptcl["pid"] = 130
+            
+            #we don't want to reconstruct neutral genparticles that have too low energy
+            if gen_ptcl["pid"] == 130 and gen_ptcl["energy"] < 9.0:
+                gen_ptcl = None
 
         pf_ptcl = None   
         for ptcl in ptcls:
@@ -333,8 +345,17 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for triplet in triplets:
             reco, gen, cand = triplet
             if reco[0] == "track":
-                X.append(make_track_array(graph.nodes[reco]))
-                ygen.append(make_gen_array(graph.nodes[gen]))
+                track_dict = graph.nodes[reco]
+                gen_dict = graph.nodes[gen]
+
+                #delphes PF reconstructs muons based on generator info, so if a track was associated with a gen-muon, we embed this bit
+                if abs(gen_dict["pid"]) == 13:
+                    track_dict["is_muon"] = 1.0
+                else:
+                    track_dict["is_muon"] = 0.0
+
+                X.append(make_track_array(track_dict))
+                ygen.append(make_gen_array(gen_dict))
             else:
                 X.append(make_tower_array(graph.nodes[reco]))
                 ygen.append(make_gen_array(gen))
@@ -384,5 +405,5 @@ if __name__ == "__main__":
         ichunk += 1
 
     pool.map(process_chunk_args, arg_list)
-    #for arg in arg_list:
-    #    process_chunk_args(arg)
+    # for arg in arg_list:
+    #     process_chunk_args(arg)

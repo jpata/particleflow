@@ -5,15 +5,16 @@ setup:
   train: yes
   weights:
   lr: 1e-4
-  batch_size: 1 
+  batch_size: 2
   num_events_train: 4000
   num_events_test: 1000
   num_epochs: 10
+  dtype: float16
 
 parameters:
   model: transformer
   num_layers: 2
   d_model: 256
-  num_heads: 4
+  num_heads: 2
   dff: 512
   support: 32

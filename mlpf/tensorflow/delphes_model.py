@@ -294,7 +294,7 @@ def prepare_callbacks(model, outdir):
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
         update_freq='epoch',
-        #profile_batch=(10,40),
+        #profile_batch=(10,90),
         profile_batch=0,
     )
     tb.set_model(model)
@@ -345,14 +345,14 @@ def load_config(yaml_path):
         config = yaml.load(f)
     return config
 
-def make_model(config):
+def make_model(config, dtype):
     model = config['parameters']['model']
     if model == 'gnn':
-        return make_gnn(config)
+        return make_gnn(config, dtype)
     elif model == 'transformer':
-        return make_transformer(config)
+        return make_transformer(config, dtype)
     elif model == 'dense':
-        return make_dense(config)
+        return make_dense(config, dtype)
     raise KeyError("Unknown model type {}".format(model))
 
 # DelphesPF does muon identification based on generator information
@@ -363,7 +363,7 @@ def encode_track_muon(X,y,w):
     X = tf.concat([X, msk_mu], axis=-1)
     return X,y,w
 
-def make_gnn(config):
+def make_gnn(config, dtype):
     activation = getattr(tf.nn, config['parameters']['activation'])
 
     parameters = [
@@ -393,7 +393,7 @@ def make_gnn(config):
 
     return model
 
-def make_transformer(config):
+def make_transformer(config, dtype):
     parameters = [
         'num_layers', 'd_model', 'num_heads', 'dff', 'support'
     ]
@@ -403,11 +403,12 @@ def make_transformer(config):
         num_input_classes=num_input_classes,
         num_output_classes=num_output_classes,
         num_momentum_outputs=5,
+        dtype=dtype,
         **kwargs
     )
     return model
 
-def make_dense(config):
+def make_dense(config, dtype):
     model = DummyNet(
         num_input_classes=num_input_classes,
         num_output_classes=num_output_classes,
@@ -467,9 +468,6 @@ def model_builder_gnn(hp):
     model.summary()
     return model
 
-def split_y(X,y,w):
-    return X, (y[:, :, 0:1] , y[:, :, 1:2], y[:, :, 2:3], y[:, :, 3:4], y[:, :, 4:5], y[:, :, 5:6], y[:, :, 6:7]), w
-
 if __name__ == "__main__":
 
     yaml_path = sys.argv[1]
@@ -500,11 +498,9 @@ if __name__ == "__main__":
     n_epochs = config['setup']['num_epochs']
     assert(n_train + n_test <= num_events)
 
-
-
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
-    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
-    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps).map(encode_track_muon)
+    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
 
     #small test dataset used in the callback for making monitoring plots
     X_test = ds_test.take(100).map(lambda x,y,w: x)
@@ -534,6 +530,7 @@ if __name__ == "__main__":
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
+    actual_lr = global_batch_size*min(1,num_gpus)*float(config['setup']['lr'])
 
 
     # tuner = kt.Hyperband(
@@ -558,11 +555,21 @@ if __name__ == "__main__":
     #     print(trial.hyperparameters.values, trial.score)
 
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=min(1,num_gpus)*float(config['setup']['lr']))
-        # opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(
-        #     opt, loss_scale='dynamic'
-        # )
-        model = make_model(config)
+        if config['setup']['dtype'] == 'float16':
+            model_dtype = tf.dtypes.float16
+            from tensorflow.keras.mixed_precision import experimental as mixed_precision
+            policy = mixed_precision.Policy('mixed_float16')
+            mixed_precision.set_policy(policy)
+
+            opt = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=actual_lr),
+                loss_scale="dynamic"
+            )
+        else:
+            model_dtype = tf.dtypes.float32
+            opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
+
+        model = make_model(config, model_dtype)
         print("model created")
 
         #we use the "temporal" mode to have per-particle weights
@@ -596,9 +603,8 @@ if __name__ == "__main__":
         X = np.concatenate(X)
         ygen = np.concatenate(ygen)
         ycand = np.concatenate(ycand)
-        X, _, _ = encode_track_muon(X, ygen, None)
 
-        y_pred = model.predict(X, batch_size=5)
+        y_pred = model.predict(X, batch_size=global_batch_size)
         y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
         y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
 

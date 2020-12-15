@@ -7,7 +7,7 @@ import pickle
 import tensorflow as tf
 
 padded_num_elem_size = 128*40
-num_inputs = 10
+num_inputs = 11
 num_outputs = 7
 
 def prepare_data(fname):
@@ -123,7 +123,6 @@ def serialize_chunk(args):
         for uv, uc in zip(uniq_vals, uniq_counts):
             w[ys[i][:, 0]==uv] = uc
         ws += [w]
-    import pdb;pdb.set_trace()
 
     for X, y, w in zip(Xs, ys, ws):
         serialize_X_y_w(writer, X, y, w)
