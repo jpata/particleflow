@@ -756,7 +756,7 @@ class Transformer(tf.keras.Model):
 
         enc_output_id = self.encoder_id(enc_transformed, training)
         dec_output_id = self.decoder_id(enc_transformed, enc_output_id, training)
-        #dec_output_id = tf.concat([enc, dec_output_id], axis=-1)
+        dec_output_id = tf.concat([enc, dec_output_id], axis=-1)
 
         enc_output_reg = self.encoder_reg(enc_transformed, training)
         dec_output_reg = self.decoder_reg(enc_transformed, enc_output_reg, training)
@@ -764,7 +764,7 @@ class Transformer(tf.keras.Model):
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
