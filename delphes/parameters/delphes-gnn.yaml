@@ -5,10 +5,10 @@ setup:
   train: yes
   weights:
   lr: 1e-4
-  batch_size: 10
+  batch_size: 20
   num_events_train: 4000
   num_events_test: 1000
-  num_epochs: 10
+  num_epochs: 100
   dtype: float32
 
 parameters:
@@ -21,9 +21,9 @@ parameters:
   num_hidden_reg_enc: 1
   num_hidden_reg_dec: 1
   num_neighbors: 16 
-  hidden_dim_id: 256
-  hidden_dim_reg: 256
-  distance_dim: 256
+  hidden_dim_id: 128
+  hidden_dim_reg: 128
+  distance_dim: 128
   dropout: 0.1
   dist_mult: 1.0
   activation: elu
