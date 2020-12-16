@@ -6,7 +6,7 @@ import os
 from sklearn.model_selection import train_test_split
 import sys
 import glob
-import PCGrad_tf
+#import PCGrad_tf
 import io
 import os
 import yaml
@@ -530,8 +530,8 @@ if __name__ == "__main__":
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
-    actual_lr = global_batch_size*min(1,num_gpus)*float(config['setup']['lr'])
 
+    actual_lr = global_batch_size*float(config['setup']['lr'])
 
     # tuner = kt.Hyperband(
     #     model_builder_gnn,

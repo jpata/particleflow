@@ -5,11 +5,11 @@ setup:
   train: yes
   weights:
   lr: 1e-4
-  batch_size: 2
+  batch_size: 1
   num_events_train: 4000
   num_events_test: 1000
   num_epochs: 10
-  dtype: float16
+  dtype: float32
 
 parameters:
   model: transformer
