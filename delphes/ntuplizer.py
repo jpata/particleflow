@@ -406,8 +406,8 @@ if __name__ == "__main__":
     infile = sys.argv[1]
     f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
-    #num_evs = tree.GetEntries()
-    num_evs = 5000
+    num_evs = tree.GetEntries()
+    #num_evs = 5000
 
     arg_list = []
     ichunk = 0
