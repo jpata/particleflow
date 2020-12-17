@@ -24,12 +24,13 @@ import itertools
 import io
 import tensorflow as tf
 
-import sys
-sys.path += ["/home/joosep/performer"]
+from fast_attention import Attention, SelfAttention
 
-import performer
-import performer.networks
-from performer.networks.linear_attention import Performer
+import sys
+#sys.path += ["/home/joosep/performer"]
+#import performer
+#import performer.networks
+#from performer.networks.linear_attention import Performer
 
 #physical_devices = tf.config.list_physical_devices('GPU')
 #tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -626,7 +627,7 @@ class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, support=8, dtype=tf.dtypes.float32):
         super(EncoderLayer, self).__init__()
 
-        self.mha = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
+        self.mha = SelfAttention(d_model, num_heads, rate, projection_matrix_type=True, nb_random_features=support)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -637,7 +638,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, training):
 
-        attn_output = self.mha([x, x, x], training=training)    # (batch_size, input_seq_len, d_model)
+        attn_output = self.mha(x, None, training=training)    # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output, training=training)
         out1 = self.layernorm1(x + attn_output)    # (batch_size, input_seq_len, d_model)
 
@@ -651,9 +652,8 @@ class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, support=8, dtype=tf.dtypes.float32):
         super(DecoderLayer, self).__init__()
 
-        self.mha1 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
-        self.mha2 = Performer(key_dim=d_model, num_heads=num_heads, attention_method="linear", supports=support, dropout=rate, dtype=dtype)
-
+        self.mha1 = SelfAttention(d_model, num_heads, rate, projection_matrix_type=True, nb_random_features=support)
+        self.mha2 = Attention(d_model, num_heads, rate, projection_matrix_type=True, nb_random_features=support)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -668,11 +668,11 @@ class DecoderLayer(tf.keras.layers.Layer):
     def call(self, x, enc_output, training):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
-        attn1 = self.mha1([x, x, x], training=training)    # (batch_size, target_seq_len, d_model)
+        attn1 = self.mha1(x, None, training=training)    # (batch_size, target_seq_len, d_model)
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm1(attn1 + x)
 
-        attn2 = self.mha2([enc_output, enc_output, out1], training=training)    # (batch_size, target_seq_len, d_model)
+        attn2 = self.mha2(enc_output, out1, None, training=training)    # (batch_size, target_seq_len, d_model)
         attn2 = self.dropout2(attn2, training=training)
         out2 = self.layernorm2(attn2 + out1)    # (batch_size, target_seq_len, d_model)
 

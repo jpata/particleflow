@@ -65,6 +65,7 @@ def get_tower_gen_fracs(g, tower):
                         e_130 += e
     return ptcls, (e_130, e_211, e_22, e_11)
 
+#creates the feature vector for calorimeter towers
 def make_tower_array(tower_dict):
     return np.array([
         1, #tower is denoted with ID 1
@@ -78,9 +79,11 @@ def make_tower_array(tower_dict):
         #padding
         0.0,
         0.0,
+        0.0,
         0.0
     ])
 
+#creates the feature vector for tracks
 def make_track_array(track_dict):
     return np.array([
         2, #track is denoted with ID 2
@@ -93,9 +96,11 @@ def make_track_array(track_dict):
         np.sin(track_dict["phi_outer"]),
         np.cos(track_dict["phi_outer"]),
         track_dict["charge"],
-        track_dict["is_muon"] #muon bit set from generator to mimic PFDelphes
+        track_dict["is_gen_muon"], #muon bit set from generator to mimic PFDelphes
+        track_dict["is_gen_electron"], #electron bit set from generator to mimic PFDelphes
     ])
 
+#creates the target vector for gen-level particles
 def make_gen_array(gen_dict):
     if not gen_dict:
         return np.zeros(7)
@@ -112,6 +117,23 @@ def make_gen_array(gen_dict):
         np.cos(gen_dict["phi"]),
         gen_dict["energy"]
     ])
+
+#creates the output vector for delphes PFCandidates
+def make_cand_array(cand_dict):
+    if not cand_dict:
+        return np.zeros(7)
+
+    encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
+    return np.array([
+        encoded_pid,
+        cand_dict["charge"],
+        cand_dict.get("pt", 0),
+        cand_dict["eta"],
+        np.sin(cand_dict["phi"]),
+        np.cos(cand_dict["phi"]),
+        cand_dict.get("energy", 0)
+    ])
+
 
 #make (reco, gen, cand) triplets from tracks and towers
 #also return genparticles that were not associated to any reco object
@@ -174,7 +196,7 @@ def make_triplets(g, tracks, towers, particles):
             if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
                 gen_ptcl["pid"] = 130
             
-            #we don't want to reconstruct neutral genparticles that have too low energy
+            #we don't want to reconstruct neutral genparticles that have too low energy. the threshold is set according to the delphes PFCandidate energy distribution
             if gen_ptcl["pid"] == 130 and gen_ptcl["energy"] < 9.0:
                 gen_ptcl = None
 
@@ -186,21 +208,6 @@ def make_triplets(g, tracks, towers, particles):
                     break
         triplets.append((t, gen_ptcl, pf_ptcl))
     return triplets, list(remaining_particles)
-
-def make_cand_array(cand_dict):
-    if not cand_dict:
-        return np.zeros(7)
-
-    encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
-    return np.array([
-        encoded_pid,
-        cand_dict["charge"],
-        cand_dict.get("pt", 0),
-        cand_dict["eta"],
-        np.sin(cand_dict["phi"]),
-        np.cos(cand_dict["phi"]),
-        cand_dict.get("energy", 0)
-    ])
 
 def process_chunk(infile, ev_start, ev_stop, outfile):
     f = ROOT.TFile.Open(infile)
@@ -348,11 +355,17 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
                 track_dict = graph.nodes[reco]
                 gen_dict = graph.nodes[gen]
 
-                #delphes PF reconstructs muons based on generator info, so if a track was associated with a gen-muon, we embed this bit
+                #delphes PF reconstructs electrons and muons based on generator info, so if a track was associated with a gen-level electron or muon,
+                #we embed this information so that MLPF would have access to the same low-level info
                 if abs(gen_dict["pid"]) == 13:
-                    track_dict["is_muon"] = 1.0
+                    track_dict["is_gen_muon"] = 1.0
                 else:
-                    track_dict["is_muon"] = 0.0
+                    track_dict["is_gen_muon"] = 0.0
+
+                if abs(gen_dict["pid"]) == 11:
+                    track_dict["is_gen_electron"] = 1.0
+                else:
+                    track_dict["is_gen_electron"] = 0.0
 
                 X.append(make_track_array(track_dict))
                 ygen.append(make_gen_array(gen_dict))
@@ -393,7 +406,8 @@ if __name__ == "__main__":
     infile = sys.argv[1]
     f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
-    num_evs = tree.GetEntries()
+    #num_evs = tree.GetEntries()
+    num_evs = 5000
 
     arg_list = []
     ichunk = 0
