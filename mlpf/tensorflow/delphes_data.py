@@ -6,8 +6,13 @@ import pickle
 
 import tensorflow as tf
 
+#based on the dataset size distribution, divisible by 8
 padded_num_elem_size = 128*40
-num_inputs = 11
+
+#based on ntuplizer.py make_tower_array and make_track_array
+num_inputs = 12
+
+#based on ntuplizer.py make_gen_array
 num_outputs = 7
 
 def prepare_data(fname):

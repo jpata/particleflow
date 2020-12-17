@@ -17,8 +17,8 @@ import sklearn
 import kerastuner as kt
 from argparse import Namespace
 
-num_input_classes = 2
-num_output_classes = 6
+num_input_classes = 3 #(none, tower, track)
+num_output_classes = 6 #(none, ch.had, n.had, gamma, el, mu)
 mult_classification_loss = 100.0
 mult_charge_loss = 1.0
 mult_energy_loss = 1e-4
@@ -330,7 +330,7 @@ def get_rundir(base='experiments'):
     return '{}/{}'.format(base, logdir)
 
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/tf.sqrt(w)
+    wn = 1.0/w
     #wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
@@ -354,14 +354,6 @@ def make_model(config, dtype):
     elif model == 'dense':
         return make_dense(config, dtype)
     raise KeyError("Unknown model type {}".format(model))
-
-# DelphesPF does muon identification based on generator information
-# we need to encode gen-level muon information to the inputs
-# to not disadvantage the MLPF algo unfairly
-def encode_track_muon(X,y,w):
-    msk_mu = tf.expand_dims(tf.cast(y[:, :, 0] == 5, tf.float32), axis=-1)
-    X = tf.concat([X, msk_mu], axis=-1)
-    return X,y,w
 
 def make_gnn(config, dtype):
     activation = getattr(tf.nn, config['parameters']['activation'])
