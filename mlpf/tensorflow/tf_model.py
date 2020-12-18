@@ -70,15 +70,16 @@ def pairwise_dist(A, B):
 sp_a: (nbatch, nelem, nelem) sparse distance matrices
 b: (nbatch, nelem, ncol) dense per-element feature matrices
 """
-def sparse_dense_matmult_batch(sp_a, b):
+def sparse_dense_matmult_batch(sp_a, b, nelem, ncol):
 
     dtype = b.dtype
     b = tf.cast(b, tf.float32)
+
     num_batches = tf.shape(b)[0]
+
     def map_function(x):
         i, dense_slice = x[0], x[1]
         num_points = tf.shape(b)[1]
-
         sparse_slice = tf.sparse.reshape(tf.sparse.slice(
             tf.cast(sp_a, tf.float32), [i, 0, 0], [1, num_points, num_points]),
             [num_points, num_points])
@@ -86,7 +87,7 @@ def sparse_dense_matmult_batch(sp_a, b):
         return mult_slice
 
     elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
-    ret = tf.map_fn(map_function, elems, fn_output_signature=b.dtype, back_prop=True)
+    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((nelem, ncol), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
 
 
@@ -218,11 +219,12 @@ class GHConv(tf.keras.layers.Layer):
         super(GHConv, self).__init__(*args, **kwargs)
 
     def build(self, input_shape):
-        hidden_dim = input_shape[0][-1]
-        self.W_t = self.add_weight(shape=(hidden_dim, hidden_dim), name="w_t", initializer="random_normal")
-        self.b_t = self.add_weight(shape=(hidden_dim,), name="b_t", initializer="random_normal")
-        self.W_h = self.add_weight(shape=(hidden_dim, hidden_dim), name="w_h", initializer="random_normal")
-        self.theta = self.add_weight(shape=(hidden_dim, hidden_dim), name="theta", initializer="random_normal")
+        self.hidden_dim = input_shape[0][-1]
+        self.nelem = input_shape[0][-2]
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
+        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal")
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
  
     #@tf.function
     def call(self, inputs):
@@ -236,7 +238,7 @@ class GHConv(tf.keras.layers.Layer):
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
 
         f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm)*norm
+        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm, self.nelem, self.hidden_dim)*norm
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
@@ -699,6 +701,7 @@ class Encoder(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             x = self.enc_layers[i](x, training)
 
+        x = self.dropout(x, training=training)
         return x    # (batch_size, input_seq_len, d_model)
 
 class Decoder(tf.keras.layers.Layer):
@@ -717,6 +720,8 @@ class Decoder(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             x = self.dec_layers[i](x, enc_output, training)
 
+        x = self.dropout(x, training=training)
+
         # x.shape == (batch_size, target_seq_len, d_model)
         return x
 
@@ -734,8 +739,8 @@ class Transformer(tf.keras.Model):
         self.num_momentum_outputs = num_momentum_outputs
 
         self.enc = InputEncoding(num_input_classes)
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.ffn_embed_id = point_wise_feed_forward_network(d_model, dff)
+        self.ffn_embed_reg = point_wise_feed_forward_network(d_model, dff)
 
         self.encoder_id = Encoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
         self.decoder_id = Decoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
@@ -752,19 +757,22 @@ class Transformer(tf.keras.Model):
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
         enc = self.enc(X)
-        enc_transformed = self.ffn(self.layernorm(enc))
 
-        enc_output_id = self.encoder_id(enc_transformed, training)
-        dec_output_id = self.decoder_id(enc_transformed, enc_output_id, training)
-        dec_output_id = tf.concat([enc, dec_output_id], axis=-1)
+        enc_id = self.ffn_embed_id(enc)
+        enc_reg = self.ffn_embed_reg(enc)
 
-        enc_output_reg = self.encoder_reg(enc_transformed, training)
-        dec_output_reg = self.decoder_reg(enc_transformed, enc_output_reg, training)
+        enc_output_id = self.encoder_id(enc_id, training)
+        dec_output_id = self.decoder_id(enc_id, enc_output_id, training)
+        #dec_output_id = tf.concat([enc_id, dec_output_id], axis=-1)
+
+        enc_output_reg = self.encoder_reg(enc_reg, training)
+        dec_output_reg = self.decoder_reg(enc_reg, enc_output_reg, training)
+        #dec_output_reg = tf.concat([enc_reg, dec_output_reg], axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
+        dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
