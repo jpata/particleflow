@@ -275,19 +275,19 @@ def log_confusion_matrix(epoch, logs):
         tf.summary.scalar("loss_reg_e", tf.reduce_mean(l2_4), step=epoch)
         tf.summary.scalar("loss_reg_charge", tf.reduce_mean(l3), step=epoch)
 
-        tf.summary.scalar("ch_pred_mean", tf.reduce_mean(ch_pred), step=epoch)
-        tf.summary.scalar("pt_pred_mean", tf.reduce_mean(pt_pred), step=epoch)
-        tf.summary.scalar("e_pred_mean", tf.reduce_mean(e_pred), step=epoch)
-        tf.summary.scalar("eta_pred_mean", tf.reduce_mean(eta_pred), step=epoch)
-        tf.summary.scalar("sphi_pred_mean", tf.reduce_mean(sphi_pred), step=epoch)
-        tf.summary.scalar("cphi_pred_mean", tf.reduce_mean(cphi_pred), step=epoch)
+        # tf.summary.scalar("ch_pred_mean", tf.reduce_mean(ch_pred), step=epoch)
+        # tf.summary.scalar("pt_pred_mean", tf.reduce_mean(pt_pred), step=epoch)
+        # tf.summary.scalar("e_pred_mean", tf.reduce_mean(e_pred), step=epoch)
+        # tf.summary.scalar("eta_pred_mean", tf.reduce_mean(eta_pred), step=epoch)
+        # tf.summary.scalar("sphi_pred_mean", tf.reduce_mean(sphi_pred), step=epoch)
+        # tf.summary.scalar("cphi_pred_mean", tf.reduce_mean(cphi_pred), step=epoch)
 
-        tf.summary.scalar("ch_pred_std", tf.math.reduce_std(ch_pred), step=epoch)
-        tf.summary.scalar("pt_pred_std", tf.math.reduce_std(pt_pred), step=epoch)
-        tf.summary.scalar("e_pred_std", tf.math.reduce_std(e_pred), step=epoch)
-        tf.summary.scalar("eta_pred_std", tf.math.reduce_std(eta_pred), step=epoch)
-        tf.summary.scalar("sphi_pred_std", tf.math.reduce_std(sphi_pred), step=epoch)
-        tf.summary.scalar("cphi_pred_std", tf.math.reduce_std(cphi_pred), step=epoch)
+        # tf.summary.scalar("ch_pred_std", tf.math.reduce_std(ch_pred), step=epoch)
+        # tf.summary.scalar("pt_pred_std", tf.math.reduce_std(pt_pred), step=epoch)
+        # tf.summary.scalar("e_pred_std", tf.math.reduce_std(e_pred), step=epoch)
+        # tf.summary.scalar("eta_pred_std", tf.math.reduce_std(eta_pred), step=epoch)
+        # tf.summary.scalar("sphi_pred_std", tf.math.reduce_std(sphi_pred), step=epoch)
+        # tf.summary.scalar("cphi_pred_std", tf.math.reduce_std(cphi_pred), step=epoch)
 
 def prepare_callbacks(model, outdir):
     callbacks = []
@@ -330,7 +330,7 @@ def get_rundir(base='experiments'):
     return '{}/{}'.format(base, logdir)
 
 def compute_weights_inverse(X, y, w):
-    wn = 1.0/w
+    wn = 1.0/tf.sqrt(w)
     #wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
