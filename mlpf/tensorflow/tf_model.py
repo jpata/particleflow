@@ -602,14 +602,14 @@ class PFNet(tf.keras.Model):
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm2, training)
         
-        to_decode = tf.concat([enc, x_id], axis=-1)
+        to_decode = tf.concat([x_id], axis=-1)
         out_id_logits = self.layer_id(to_decode)
         out_charge = self.layer_charge(to_decode)*msk_input
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
 
-        to_decode = tf.concat([enc, tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
+        to_decode = tf.concat([tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
         pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
