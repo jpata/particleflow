@@ -6,9 +6,9 @@ setup:
   weights:
   lr: 5e-5
   batch_size: 10
-  num_events_train: 4000
-  num_events_test: 1000
-  num_epochs: 20
+  num_events_train: 20000
+  num_events_test: 5000
+  num_epochs: 500
   dtype: float32
 
 parameters:
