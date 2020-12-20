@@ -19,7 +19,7 @@ from argparse import Namespace
 
 num_input_classes = 3 #(none, tower, track)
 num_output_classes = 6 #(none, ch.had, n.had, gamma, el, mu)
-mult_classification_loss = 100.0
+mult_classification_loss = 1.0
 mult_charge_loss = 1.0
 mult_energy_loss = 1e-3
 mult_phi_loss = 10.0
@@ -371,7 +371,8 @@ def make_gnn(config, dtype):
         'hidden_dim_reg',
         'dist_mult',
         'distance_dim',
-        'dropout'
+        'dropout',
+        'skip_connection'
     ]
     kwargs = {par: config['parameters'][par] for par in parameters}
 

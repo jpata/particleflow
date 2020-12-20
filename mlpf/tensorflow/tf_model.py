@@ -510,12 +510,14 @@ class PFNet(tf.keras.Model):
         num_hidden_reg_enc=1,
         num_hidden_reg_dec=1,
         num_neighbors=5,
-        dist_mult=0.1):
+        dist_mult=0.1,
+        skip_connection=False):
 
         super(PFNet, self).__init__()
         self.activation = activation
         self.num_dists = 1
         self.num_momentum_outputs = num_momentum_outputs
+        self.skip_connection = skip_connection
 
         encoding_id = []
         decoding_id = []
@@ -542,11 +544,7 @@ class PFNet(tf.keras.Model):
         if dropout > 0.0:
             self.embedding_dropout = tf.keras.layers.Dropout(dropout)
 
-        self.dists = []
-        for idist in range(self.num_dists):
-            self.dists.append(SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult))
-        self.addsparse = AddSparse()
-        #self.dist = DenseDistance(dist_mult=dist_mult)
+        self.dist = SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
 
         self.layer_edge = point_wise_feed_forward_network(1, 128, "linear")
 
@@ -586,8 +584,7 @@ class PFNet(tf.keras.Model):
             embedding_attention = self.embedding_dropout(embedding_attention, training)
 
         #create graph structure by predicting a sparse distance matrix
-        dms = [dist(embedding_attention, training) for dist in self.dists]
-        dm = self.addsparse(dms)
+        dm = self.dist(embedding_attention, training)
 
         #gather node vals for src,dst
         i1 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 1]]))
@@ -602,14 +599,22 @@ class PFNet(tf.keras.Model):
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm2, training)
         
-        to_decode = tf.concat([x_id], axis=-1)
+        if self.skip_connection:
+            to_decode = tf.concat([enc, x_id], axis=-1)
+        else:
+            to_decode = tf.concat([x_id], axis=-1)
+
         out_id_logits = self.layer_id(to_decode)
         out_charge = self.layer_charge(to_decode)*msk_input
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
 
-        to_decode = tf.concat([tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
+        if self.skip_connection:
+            to_decode = tf.concat([enc, tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
+        else:
+            to_decode = tf.concat([tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
+
         pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
@@ -733,9 +738,11 @@ class Transformer(tf.keras.Model):
                 num_input_classes=len(elem_labels),
                 num_output_classes=len(class_labels),
                 num_momentum_outputs=3,
-                dtype=tf.dtypes.float32):
+                dtype=tf.dtypes.float32,
+                skip_connection=False):
         super(Transformer, self).__init__()
 
+        self.skip_connection = skip_connection
         self.num_momentum_outputs = num_momentum_outputs
 
         self.enc = InputEncoding(num_input_classes)
@@ -763,7 +770,8 @@ class Transformer(tf.keras.Model):
 
         enc_output_id = self.encoder_id(enc_id, training)
         dec_output_id = self.decoder_id(enc_id, enc_output_id, training)
-        #dec_output_id = tf.concat([enc_id, dec_output_id], axis=-1)
+        if self.skip_connection:
+            dec_output_id = tf.concat([enc_id, dec_output_id], axis=-1)
 
         enc_output_reg = self.encoder_reg(enc_reg, training)
         dec_output_reg = self.decoder_reg(enc_reg, enc_output_reg, training)
@@ -772,7 +780,10 @@ class Transformer(tf.keras.Model):
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
+        if self.skip_connection:
+            dec_output_reg = tf.concat([enc_reg, tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
+        else:
+            dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)

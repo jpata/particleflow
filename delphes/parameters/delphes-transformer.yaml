@@ -4,10 +4,10 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-6
+  lr: 1e-5
   batch_size: 5
-  num_events_train: 20000
-  num_events_test: 5000
+  num_events_train: 200000
+  num_events_test: 50000
   num_epochs: 100
   dtype: float32
 
@@ -18,3 +18,4 @@ parameters:
   num_heads: 4
   dff: 256
   support: 32
+  skip_connection: False
