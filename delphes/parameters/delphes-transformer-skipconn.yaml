@@ -12,4 +12,10 @@ setup:
   dtype: float32
 
 parameters:
-  model: dense
+  model: transformer
+  num_layers: 4
+  d_model: 256
+  num_heads: 4
+  dff: 256
+  support: 32
+  skip_connection: yes
