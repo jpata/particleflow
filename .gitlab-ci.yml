@@ -1,4 +1,9 @@
+---
+global:
+  # Type of container technology to use: Singularity or Docker
+  mode: "singularity"
+
 my_first_job:
-    image: gitlab-registry.cern.ch/ci-tools/ci-worker:cc7
-    script:
-        - singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif echo "bla" 
+  image: http://jpata.web.cern.ch/jpata/centos7hepsim.sif
+  script:
+    - echo bla 
