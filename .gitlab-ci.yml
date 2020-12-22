@@ -1,0 +1,4 @@
+my_first_job:
+    image: gitlab-registry.cern.ch/ci-tools/ci-worker:cc7
+    script:
+        - singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif echo "bla" 
