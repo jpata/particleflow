@@ -7,4 +7,4 @@ before_script:
 
 my_first_job:
   script:
-    - echo bla
+    - cd delphes && python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml
