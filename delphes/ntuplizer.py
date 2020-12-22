@@ -12,7 +12,7 @@ ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 
 #for debugging
-save_full_graphs = True
+save_full_graphs = False
 
 #0 - nothing associated
 #1 - charged hadron
