@@ -329,8 +329,14 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
-def compute_weights_inverse(X, y, w):
+def compute_weights_invsqrt(X, y, w):
     wn = 1.0/tf.sqrt(w)
+    #wn *= tf.cast(X[:, 0]!=0, tf.float32)
+    wn /= tf.reduce_sum(wn)
+    return X, y, wn
+
+def compute_weights_none(X, y, w):
+    wn = w/w
     #wn *= tf.cast(X[:, 0]!=0, tf.float32)
     wn /= tf.reduce_sum(wn)
     return X, y, wn
@@ -461,6 +467,11 @@ def model_builder_gnn(hp):
     model.summary()
     return model
 
+weight_functions = {
+    "inverse_sqrt": compute_weights_invsqrt,
+    "none": compute_weights_none,
+}
+
 if __name__ == "__main__":
 
     yaml_path = sys.argv[1]
@@ -489,11 +500,13 @@ if __name__ == "__main__":
     n_train = config['setup']['num_events_train']
     n_test = config['setup']['num_events_test']
     n_epochs = config['setup']['num_epochs']
+    weight_func = weight_functions[config['setup']['sample_weights']]
+
     assert(n_train + n_test <= num_events)
 
     ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
-    ds_train = dataset.take(n_train).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(compute_weights_inverse).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
     #small test dataset used in the callback for making monitoring plots
     X_test = ds_test.take(100).map(lambda x,y,w: x)
