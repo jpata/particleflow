@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 import sklearn
 import kerastuner as kt
 from argparse import Namespace
+import time
+import json
 
 num_input_classes = 3 #(none, tower, track)
 num_output_classes = 6 #(none, ch.had, n.had, gamma, el, mu)
@@ -27,7 +29,16 @@ mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_000_0.pkl"
+pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_004_*"
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-spec", type=str, default="parameters/delphes-gnn-skipconn.yaml", help="the model specification")
+    parser.add_argument("--action", type=str, choices=["train", "validate", "timing"], help="Run training, validation or timing", default="train")
+    parser.add_argument("--weights", type=str, help="weight file to load", default=None)
+    args = parser.parse_args()
+    return args
 
 def mse_unreduced(true, pred):
     return tf.math.pow(true-pred,2)
@@ -474,54 +485,57 @@ weight_functions = {
 
 if __name__ == "__main__":
 
-    yaml_path = sys.argv[1]
+    args = parse_args()
+    yaml_path = args.model_spec
+
     model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
     print("model_name=", model_name)
 
     config = load_config(yaml_path)
-    do_training = config['setup']['train']
     weights = config['setup']['weights']
+    if args.weights:
+        weights = args.weights
 
     tf.config.run_functions_eagerly(config['tensorflow']['eager'])
 
-    from delphes_data import _parse_tfr_element, padded_num_elem_size, num_inputs, num_outputs
-    tfr_files = glob.glob(datapath)
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(datapath))
-        
-    dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    print("dataset loaded")
-
-    num_events = 0
-    for i in dataset:
-        num_events += 1
-
     global_batch_size = config['setup']['batch_size']
-    n_train = config['setup']['num_events_train']
-    n_test = config['setup']['num_events_test']
-    n_epochs = config['setup']['num_epochs']
-    weight_func = weight_functions[config['setup']['sample_weights']]
 
-    assert(n_train + n_test <= num_events)
+    if args.action == "train":
+        from delphes_data import _parse_tfr_element, padded_num_elem_size, num_inputs, num_outputs
+        tfr_files = glob.glob(datapath)
+        if len(tfr_files) == 0:
+            raise Exception("Could not find any files in {}".format(datapath))
+            
+        dataset = tf.data.TFRecordDataset(tfr_files).map(_parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        print("dataset loaded")
 
-    ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+        num_events = 0
+        for i in dataset:
+            num_events += 1
 
-    #small test dataset used in the callback for making monitoring plots
-    X_test = ds_test.take(100).map(lambda x,y,w: x)
-    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
+        n_train = config['setup']['num_events_train']
+        n_test = config['setup']['num_events_test']
+        n_epochs = config['setup']['num_epochs']
+        weight_func = weight_functions[config['setup']['sample_weights']]
+        assert(n_train + n_test <= num_events)
 
-    ds_train_r = ds_train.repeat(n_epochs)
-    ds_test_r = ds_test.repeat(n_epochs)
+        ps = (tf.TensorShape([padded_num_elem_size, num_inputs]), tf.TensorShape([padded_num_elem_size, num_outputs]), tf.TensorShape([padded_num_elem_size, ]))
+        ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+        ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
-    if do_training:
+        #small test dataset used in the callback for making monitoring plots
+        X_test = ds_test.take(100).map(lambda x,y,w: x)
+        y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
+
+        ds_train_r = ds_train.repeat(n_epochs)
+        ds_test_r = ds_test.repeat(n_epochs)
+
         outdir = 'experiments/{}'.format(model_name)
         if os.path.isdir(outdir):
             print("Output directory exists: {}".format(outdir), file=sys.stderr)
             sys.exit(1)
         file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-    else:
+    elif weights!=None:
         outdir = os.path.dirname(weights)
 
     try:
@@ -538,6 +552,22 @@ if __name__ == "__main__":
         num_gpus = 0
 
     actual_lr = global_batch_size*float(config['setup']['lr'])
+    
+    from delphes_data import prepare_data
+
+    Xs = []
+    ygens = []
+    ycands = []
+    for fi in glob.glob(pkl_path):
+        X, ygen, ycand = prepare_data(fi)
+
+        Xs.append(np.concatenate(X))
+        ygens.append(np.concatenate(ygen))
+        ycands.append(np.concatenate(ycand))
+
+    X = np.concatenate(Xs)
+    ygen = np.concatenate(ygens)
+    ycand = np.concatenate(ycands)
 
     # tuner = kt.Hyperband(
     #     model_builder_gnn,
@@ -576,7 +606,6 @@ if __name__ == "__main__":
             opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
 
         model = make_model(config, model_dtype)
-        print("model created")
 
         #we use the "temporal" mode to have per-particle weights
         model.compile(
@@ -585,15 +614,14 @@ if __name__ == "__main__":
             sample_weight_mode='temporal'
         )
 
-        for X,y,w in ds_test:
-            model(X)
-            break
+        #Evaluate model once to build the layers
+        model(X[:1])
         model.summary()
 
         if weights:
             model.load_weights(weights)
 
-        if do_training:
+        if args.action=="train":
             callbacks = prepare_callbacks(model, outdir)
             #callbacks = []
             model.fit(
@@ -603,15 +631,40 @@ if __name__ == "__main__":
 
             model.save(outdir + "/model_full", save_format="tf")
         
-        from delphes_data import prepare_data
-        X, ygen, ycand = prepare_data(pkl_path)
+        if args.action=="validate":
+            y_pred = model.predict(X, batch_size=global_batch_size)
+            y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
+            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
+            np_outfile = "{}/pred.npz".format(outdir)
+            print("saving output to {}".format(np_outfile))
+            np.savez(np_outfile, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
 
-        X = np.concatenate(X)
-        ygen = np.concatenate(ygen)
-        ycand = np.concatenate(ycand)
 
-        y_pred = model.predict(X, batch_size=global_batch_size)
-        y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
-        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
+        if args.action=="timing":
+            from delphes_data import num_inputs
 
-        np.savez("{}/pred.npz".format(outdir), ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
+            synthetic_timing_data = []
+            for iteration in range(3):
+                numev = 100
+                for evsize in [128*10, 128*20, 128*40, 128*80, 128*160]:
+                    for batch_size in [1,2,4]:
+                        x = np.random.randn(batch_size, evsize, num_inputs).astype(np.float32)
+
+                        model = make_model(config, model_dtype)
+                        model(x)
+
+                        if weights:
+                            model.load_weights(weights)
+
+                        t0 = time.time()
+                        for i in range(numev//batch_size):
+                            model(x)
+                        t1 = time.time()
+                        dt = t1 - t0
+
+                        time_per_event = 1000.0*(dt / numev)
+                        synthetic_timing_data.append(
+                                [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
+                        print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
+            with open("{}/synthetic_timing.json".format(outdir), "w") as fi:
+                json.dump(synthetic_timing_data, fi)
