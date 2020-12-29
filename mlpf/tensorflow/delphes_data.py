@@ -3,6 +3,7 @@ import glob
 import multiprocessing
 import os
 import pickle
+import bz2
 
 import tensorflow as tf
 
@@ -16,7 +17,13 @@ num_inputs = 12
 num_outputs = 7
 
 def prepare_data(fname):
-    data = pickle.load(open(fname, "rb"))
+
+    if fname.endswith(".pkl"):
+        data = pickle.load(open(fname, "rb"))
+    elif fname.endswith(".pkl.bz2"):
+        data = pickle.load(bz2.BZ2File(fname, "rb"))
+    else:
+        raise Exception("Unknown file: {}".format(fname))
 
     #make all inputs and outputs the same size with padding
     Xs = []
