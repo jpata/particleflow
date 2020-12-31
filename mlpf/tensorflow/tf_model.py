@@ -620,8 +620,10 @@ class PFNet(tf.keras.Model):
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
-        self.gnn_reg.trainable = False
-        self.layer_momentum.trainable = False
+        for layer in self.layers:
+            layer.trainable = False
+        self.gnn_id.trainable = True
+        self.layer_id.trainable = True
 
     def set_trainable_regression(self):
         for layer in self.layers:
