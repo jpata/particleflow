@@ -36,6 +36,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-spec", type=str, default="parameters/delphes-gnn-skipconn.yaml", help="the model specification")
     parser.add_argument("--action", type=str, choices=["train", "validate", "timing"], help="Run training, validation or timing", default="train")
+    parser.add_argument("--trainable", type=str, choices=["all", "cls", "reg"], help="Which layers to make trainable", default="all")
     parser.add_argument("--weights", type=str, help="weight file to load", default=None)
     args = parser.parse_args()
     return args
@@ -100,6 +101,13 @@ def my_loss_full(y_true, y_pred):
 
     l1, l2, l3, _ = loss_components(y_true, y_pred)
     loss = l1 + l2 + l3
+
+    return mult_total_loss*loss
+
+def my_loss_cls(y_true, y_pred):
+
+    l1, l2, l3, _ = loss_components(y_true, y_pred)
+    loss = l1
 
     return mult_total_loss*loss
 
@@ -347,9 +355,7 @@ def compute_weights_invsqrt(X, y, w):
     return X, y, wn
 
 def compute_weights_none(X, y, w):
-    wn = w/w
-    #wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    wn /= tf.reduce_sum(wn)
+    wn = tf.ones_like(w)
     return X, y, wn
 
 def scale_outputs(X,y,w):
@@ -607,9 +613,15 @@ if __name__ == "__main__":
 
         model = make_model(config, model_dtype)
 
+
+        loss_fn = my_loss_full
+        if args.trainable == "cls":
+            model.set_trainable_classification()
+            loss_fn = my_loss_cls
+
         #we use the "temporal" mode to have per-particle weights
         model.compile(
-            loss=my_loss_full,
+            loss=loss_fn,
             optimizer=opt,
             sample_weight_mode='temporal'
         )
@@ -623,6 +635,7 @@ if __name__ == "__main__":
 
         if args.action=="train":
             callbacks = prepare_callbacks(model, outdir)
+
             #callbacks = []
             model.fit(
                 ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
