@@ -111,6 +111,13 @@ def my_loss_cls(y_true, y_pred):
 
     return mult_total_loss*loss
 
+def my_loss_reg(y_true, y_pred):
+
+    l1, l2, l3, _ = loss_components(y_true, y_pred)
+    loss = l3
+
+    return mult_total_loss*loss
+
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
     plt.imshow(cm, cmap="Blues")
@@ -618,6 +625,9 @@ if __name__ == "__main__":
         if args.trainable == "cls":
             model.set_trainable_classification()
             loss_fn = my_loss_cls
+        elif args.trainable == "reg":
+            model.set_trainable_regression()
+            loss_fn = my_loss_reg
 
         #we use the "temporal" mode to have per-particle weights
         model.compile(
