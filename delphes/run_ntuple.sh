@@ -8,7 +8,7 @@ XDIR="out/pythia8_ttbar"
 mkdir -p $XDIR
 rm -f $XDIR/*.pkl
 
-NSYST=1
+NSYST=4
 echo "Run  $NSYST jobs and collect files in $XDIR/"
 
 n=0
@@ -16,7 +16,8 @@ n=0
 while  [ $n -lt $NSYST ]
 do
   echo "------------ Do run = $n"
-  NUM=`printf "%03d" $n`
+  #NUM=`printf "%03d" $n`
+  NUM=$n
   INROOT="tev14_pythia8_ttbar_$NUM.root"
   OUTPKL="tev14_pythia8_ttbar_$NUM.pkl"
   python ntuplizer.py $XDIR/$INROOT $XDIR/$OUTPKL
