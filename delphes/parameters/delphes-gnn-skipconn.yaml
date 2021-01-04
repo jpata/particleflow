@@ -3,11 +3,11 @@ tensorflow:
 
 setup:
   weights:
-  lr: 1e-4
+  lr: 1e-7
   batch_size: 5
-  num_events_train: 200000
-  num_events_test: 50000
-  num_epochs: 50
+  num_events_train: 20000
+  num_events_test: 5000
+  num_epochs: 500
   dtype: float32
   sample_weights: none
  
@@ -21,9 +21,9 @@ parameters:
   num_hidden_reg_enc: 2
   num_hidden_reg_dec: 2
   num_neighbors: 16 
-  hidden_dim_id: 256
-  hidden_dim_reg: 256
-  distance_dim: 256
+  hidden_dim_id: 512
+  hidden_dim_reg: 512
+  distance_dim: 512
   dropout: 0.2
   dist_mult: 1.0
   activation: elu

@@ -24,12 +24,12 @@ num_output_classes = 6 #(none, ch.had, n.had, gamma, el, mu)
 mult_classification_loss = 1.0
 mult_charge_loss = 1.0
 mult_energy_loss = 1e-3
-mult_phi_loss = 10.0
+mult_phi_loss = 1.0
 mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_004_*"
+pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_4_*.pkl"
 
 def parse_args():
     import argparse
