@@ -3,11 +3,11 @@ tensorflow:
 
 setup:
   train: yes
-  weights: experiments/delphes-transformer-skipconn-a4f27e29/weights.89-0.170756.hdf5
+  weights:
   lr: 1e-7
   batch_size: 5
-  num_events_train: 200000
-  num_events_test: 50000
+  num_events_train: 20000
+  num_events_test: 5000
   num_epochs: 100
   dtype: float32
   sample_weights: none
