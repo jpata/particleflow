@@ -10,7 +10,7 @@ mkdir -p $XDIR
 
 ./run_pileup.sh
 
-for i in `seq 0 4`; do
+for i in `seq 0 9`; do
   nohup ./run_sim_seed.sh $i &
 done
 
