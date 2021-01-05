@@ -7,6 +7,7 @@ import math
 import pickle
 import sys
 import multiprocessing
+import bz2
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
@@ -389,7 +390,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ygen_remaining_all.append(ygen_remaining)
         ycand_all.append(ycand)
 
-    with open(outfile, "wb") as fi:
+    with bz2.BZ2File(outfile, "wb") as fi:
         pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
 
 def process_chunk_args(args):
@@ -413,7 +414,7 @@ if __name__ == "__main__":
     ichunk = 0
 
     for chunk in chunks(range(num_evs), 100):
-        outfile = sys.argv[2].replace(".pkl", "_{}.pkl".format(ichunk))
+        outfile = sys.argv[2].replace(".pkl.bz2", "_{}.pkl.bz2".format(ichunk))
         #print(chunk[0], chunk[-1]+1)
         arg_list.append((infile, chunk[0], chunk[-1] + 1, outfile))
         ichunk += 1

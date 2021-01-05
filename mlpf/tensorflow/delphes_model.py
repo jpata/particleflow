@@ -29,7 +29,7 @@ mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_4_*.pkl"
+pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_4_0.pkl.bz2"
 
 def parse_args():
     import argparse
@@ -660,7 +660,7 @@ if __name__ == "__main__":
             y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
             np_outfile = "{}/pred.npz".format(outdir)
             print("saving output to {}".format(np_outfile))
-            np.savez(np_outfile, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
+            np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
 
 
         if args.action=="timing":
