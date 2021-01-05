@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     datapath = args.datapath
 
-    filelist = sorted(glob.glob("{}/*.pkl".format(datapath)))
+    filelist = sorted(glob.glob("{}/*.pkl.bz2".format(datapath)))
     print("found {} files".format(len(filelist)))
     #means, stds = extract_means_stds(filelist)
     outpath = "{}/tfr".format(datapath)

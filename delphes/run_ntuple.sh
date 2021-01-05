@@ -10,6 +10,6 @@ mkdir -p $XDIR
 
 for NUM in `seq 0 9`; do
   INROOT="tev14_pythia8_ttbar_$NUM.root"
-  OUTPKL="tev14_pythia8_ttbar_$NUM.pkl"
+  OUTPKL="tev14_pythia8_ttbar_$NUM.pkl.bz2"
   python ntuplizer.py $XDIR/$INROOT $XDIR/$OUTPKL
 done
