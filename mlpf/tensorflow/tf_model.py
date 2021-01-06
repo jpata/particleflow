@@ -562,11 +562,11 @@ class PFNet(tf.keras.Model):
                 convs_reg.append(GHConv(activation=activation, name="conv_reg{}".format(iconv)))
 
         self.gnn_id = EncoderDecoderGNN(encoding_id, decoding_id, dropout, activation, convs_id, name="gnn_id")
-        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, activation)
-        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, activation)
+        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, "linear")
+        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, "linear")
         
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
-        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, activation)
+        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, "linear")
 
     def create_model(self, num_max_elems, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))
@@ -605,7 +605,7 @@ class PFNet(tf.keras.Model):
             to_decode = tf.concat([x_id], axis=-1)
 
         out_id_logits = self.layer_id(to_decode)
-        out_charge = self.layer_charge(to_decode)*msk_input
+        out_charge = self.layer_charge(to_decode)
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
@@ -615,7 +615,7 @@ class PFNet(tf.keras.Model):
         else:
             to_decode = tf.concat([tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
 
-        pred_momentum = self.layer_momentum(to_decode)*msk_input
+        pred_momentum = self.layer_momentum(to_decode)
 
         return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
