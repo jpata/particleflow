@@ -6,10 +6,10 @@ export ROOT_INCLUDE_PATH=/opt/hepsim/delphes:/opt/hepsim/delphes/external
 
 XDIR="out/pythia8_ttbar"
 mkdir -p $XDIR
-rm -f $XDIR/*.pkl
+#rm -f $XDIR/*.pkl
 
-for NUM in `seq 0 4`; do
+for NUM in `seq 0 9`; do
   INROOT="tev14_pythia8_ttbar_$NUM.root"
-  OUTPKL="tev14_pythia8_ttbar_$NUM.pkl"
+  OUTPKL="tev14_pythia8_ttbar_$NUM.pkl.bz2"
   python ntuplizer.py $XDIR/$INROOT $XDIR/$OUTPKL
 done
