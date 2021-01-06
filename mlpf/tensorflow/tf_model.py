@@ -484,11 +484,11 @@ class AddSparse(tf.keras.layers.Layer):
             ret = tf.sparse.add(ret, mat)
         return ret
 
-def point_wise_feed_forward_network(d_model, dff, activation='elu', dtype=tf.dtypes.float32):
-    return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation=activation),    # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model, dtype=dtype)    # (batch_size, seq_len, d_model)
-    ])
+def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
+    return tf.keras.Sequential(
+        [tf.keras.layers.Dense(dff, activation=activation) for i in range(num_layers)] +
+        [tf.keras.layers.Dense(d_model, dtype=dtype)]
+    )
 
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
@@ -546,7 +546,7 @@ class PFNet(tf.keras.Model):
 
         self.dist = SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
 
-        self.layer_edge = point_wise_feed_forward_network(1, 128, "linear")
+        self.layer_edge = point_wise_feed_forward_network(1, 128, num_layers=2, activation=activation)
 
         convs_id = []
         convs_reg = []
@@ -562,11 +562,11 @@ class PFNet(tf.keras.Model):
                 convs_reg.append(GHConv(activation=activation, name="conv_reg{}".format(iconv)))
 
         self.gnn_id = EncoderDecoderGNN(encoding_id, decoding_id, dropout, activation, convs_id, name="gnn_id")
-        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, "linear")
-        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, "linear")
+        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, num_layers=2, activation=activation)
+        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, num_layers=1, activation=activation)
         
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
-        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, "linear")
+        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, num_layers=2, activation=activation)
 
     def create_model(self, num_max_elems, training=True):
         inputs = tf.keras.Input(shape=(num_max_elems,15,))

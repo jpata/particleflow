@@ -29,7 +29,7 @@ mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_4_0.pkl.bz2"
+pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_9_0.pkl.bz2"
 
 def parse_args():
     import argparse
