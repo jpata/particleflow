@@ -190,7 +190,10 @@ def plot_particles(y_pred, y_true, pid=1):
     return fig
 
 def log_confusion_matrix(epoch, logs):
-   
+  
+    with open("{}/logs_{}.json".format(outdir, epoch), "w") as fi:
+        json.dump(logs, fi)
+
     # if epoch==0 or epoch%5!=0:
     #     return
 
