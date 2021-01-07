@@ -29,7 +29,7 @@ mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/tev14_pythia8_ttbar_9_0.pkl.bz2"
+pkl_path = "out/pythia8_ttbar/*.pkl.bz2"
 
 def parse_args():
     import argparse
@@ -658,8 +658,23 @@ if __name__ == "__main__":
             model.save(outdir + "/model_full", save_format="tf")
         
         if args.action=="validate":
+            import scipy
             y_pred = model.predict(X, batch_size=global_batch_size)
-            y_pred_id = np.argmax(y_pred[:, :, :num_output_classes], axis=-1)
+            y_pred_raw_ids = y_pred[:, :, :num_output_classes]
+            
+            #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
+            y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
+            y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
+
+            msk = np.ones(y_pred_id_sm.shape, dtype=np.bool)
+
+            #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
+            msk[y_pred_id_sm[:, :, 1] < 0.5, 1] = 0
+            msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
+            y_pred_id_sm = y_pred_id_sm*msk
+
+            y_pred_id = np.argmax(y_pred_id_sm, axis=-1)
+
             y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
             np_outfile = "{}/pred.npz".format(outdir)
             print("saving output to {}".format(np_outfile))
