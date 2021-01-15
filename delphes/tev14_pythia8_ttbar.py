@@ -6,7 +6,7 @@
 ApplyParticleSlim=off
 #
 # Collision settings
-EventsNumber=100
+EventsNumber=5000
 Random:setSeed = on
 Random:seed = 0
 Beams:idA = 2212
