@@ -20,6 +20,8 @@ singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/t
 
 ```bash
 wget http://atlaswww.hep.anl.gov/hepsim/soft/centos7hepsim.img
-sudo singularity exec -B /home --writable centos7hepsim.img ./install.sh
-sudo singularity build centos7hepsim.sif centos7hepsim.img
+sudo singularity build --sandbox centos7hepsim.sandbox centos7hepsim.img
+sudo singularity exec -B /home --writable centos7hepsim.sandbox ./install.sh
+sudo singularity build centos7hepsim.sif centos7hepsim.sandbox
+sudo rm -Rf centos7hepsim.sandbox
 ```
