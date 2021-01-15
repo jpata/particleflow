@@ -281,6 +281,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
             graph.add_node(node)
             graph.nodes[node]["pid"] = pf_charged[i].PID
             graph.nodes[node]["eta"] = pf_charged[i].Eta
+            #print(pf_charged[i].Eta, pf_charged[i].CtgTheta)
             graph.nodes[node]["phi"] = pf_charged[i].Phi
             graph.nodes[node]["pt"] = pf_charged[i].PT
             graph.nodes[node]["charge"] = pf_charged[i].Charge
@@ -420,5 +421,5 @@ if __name__ == "__main__":
         ichunk += 1
 
     pool.map(process_chunk_args, arg_list)
-    # for arg in arg_list:
-    #     process_chunk_args(arg)
+    #for arg in arg_list:
+    #    process_chunk_args(arg)
