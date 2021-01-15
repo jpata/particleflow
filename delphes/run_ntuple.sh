@@ -8,7 +8,7 @@ XDIR="out/pythia8_ttbar"
 mkdir -p $XDIR
 #rm -f $XDIR/*.pkl
 
-for NUM in `seq 0 0`; do
+for NUM in `seq 0 9`; do
   INROOT="tev14_pythia8_ttbar_$NUM.root"
   OUTPKL="tev14_pythia8_ttbar_$NUM.pkl.bz2"
   python ntuplizer.py $XDIR/$INROOT $XDIR/$OUTPKL

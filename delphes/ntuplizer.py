@@ -403,7 +403,7 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 if __name__ == "__main__":
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(24)
 
     infile = sys.argv[1]
     f = ROOT.TFile.Open(infile)
