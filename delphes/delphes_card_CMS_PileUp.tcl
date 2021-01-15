@@ -16,7 +16,7 @@ set ExecutionPath {
   MuonMomentumSmearing
 
   TrackMerger
-  TrackSmearing
+  AngularSmearing
   ECal
   HCal
   Calorimeter
@@ -222,8 +222,8 @@ module AngularSmearing AngularSmearing {
   set InputArray TrackMerger/tracks
 
   set OutputArray tracks
-  set EtaResolutionFormula { 0.001 }
-  set PhiResolutionFormula { 0.001 }
+  set EtaResolutionFormula { 0.01 }
+  set PhiResolutionFormula { 0.01 }
 }
 
 module ImpactParameterSmearing ImpactParameterSmearing {
@@ -242,7 +242,7 @@ module ImpactParameterSmearing ImpactParameterSmearing {
 
 module SimpleCalorimeter ECal {
   set ParticleInputArray ParticlePropagator/stableParticles
-  set TrackInputArray TrackSmearing/tracks
+  set TrackInputArray AngularSmearing/tracks
 
   set TowerOutputArray ecalTowers
   set EFlowTrackOutputArray eflowTracks
@@ -859,7 +859,7 @@ module TreeWriter TreeWriter {
   add Branch PileUpMerger/stableParticles PileUpMix GenParticle
 
   #PF reco inputs
-  add Branch TrackSmearing/tracks Track Track
+  add Branch AngularSmearing/tracks Track Track
   add Branch Calorimeter/towers Tower Tower
 
   #EFlow reco outputs, including PU
