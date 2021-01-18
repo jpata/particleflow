@@ -8,7 +8,7 @@ import bz2
 import tensorflow as tf
 
 #based on the dataset size distribution, divisible by 8
-padded_num_elem_size = 128*40
+padded_num_elem_size = 128*50
 
 #based on ntuplizer.py make_tower_array and make_track_array
 num_inputs = 12
@@ -24,6 +24,7 @@ def prepare_data(fname):
         data = pickle.load(bz2.BZ2File(fname, "rb"))
     else:
         raise Exception("Unknown file: {}".format(fname))
+    print(len(data["X"]))
 
     #make all inputs and outputs the same size with padding
     Xs = []
@@ -138,7 +139,8 @@ def serialize_chunk(args):
 
     for X, y, w in zip(Xs, ys, ws):
         serialize_X_y_w(writer, X, y, w)
-
+    
+    print(out_filename)
     writer.close()
 
 if __name__ == "__main__":
@@ -159,9 +161,10 @@ if __name__ == "__main__":
     for ichunk, files in enumerate(chunks(filelist, args.num_files_per_tfr)):
         pars += [(outpath, files, ichunk)]
     #serialize_chunk(pars[0])
-    pool = multiprocessing.Pool(20)
+    pool = multiprocessing.Pool(8)
     pool.map(serialize_chunk, pars)
-    #list(map(serialize_chunk, pars))
+    #for chunk in pars:
+    #    serialize_chunk(chunk)
 
 
     #Load and test the dataset 
