@@ -24,7 +24,6 @@ def prepare_data(fname):
         data = pickle.load(bz2.BZ2File(fname, "rb"))
     else:
         raise Exception("Unknown file: {}".format(fname))
-    print(len(data["X"]))
 
     #make all inputs and outputs the same size with padding
     Xs = []
