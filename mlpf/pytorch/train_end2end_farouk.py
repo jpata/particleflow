@@ -279,40 +279,6 @@ model_classes = {
     "PFNet7": PFNet7,
 }
 
-def parse_args():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--n_train", type=int, default=80, help="number of training events")
-    parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
-    parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
-    parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
-    parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
-    parser.add_argument("--encoding_dim", type=int, default=256, help="encoded element dimension")
-    parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
-    parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
-    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
-    parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
-    parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
-    parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu", "relu"], help="activation function")
-    parser.add_argument("--optimizer", type=str, default='adam', choices=["adam", "adamw"], help="optimizer to use")
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
-    parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
-    parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering")
-    parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
-    parser.add_argument("--radius", type=float, default=0.1, help="Radius-graph radius")
-    parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
-    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv", "none"], help="Convolutional layer", default="none")
-    parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
-    parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
-    parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
-    parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
-    parser.add_argument("--input-encoding", type=int, help="use an input encoding layer", default=0)
-    parser.add_argument("--load", type=str, help="Load the weight file", required=False, default=None)
-    parser.add_argument("--scheduler", type=str, help="LR scheduler", required=False, default="none", choices=["none", "onecycle"])
-    args = parser.parse_args()
-    return args
-
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2)
 
@@ -547,16 +513,49 @@ def train_loop():
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd, optimizer.param_groups[0]['lr']))
 
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--n_train", type=int, default=80, help="number of training events")
+    parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
+    parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
+    parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
+    parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
+    parser.add_argument("--encoding_dim", type=int, default=256, help="encoded element dimension")
+    parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
+    parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
+    parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
+    parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
+    parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu", "relu"], help="activation function")
+    parser.add_argument("--optimizer", type=str, default='adam', choices=["adam", "adamw"], help="optimizer to use")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
+    parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
+    parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering")
+    parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
+    parser.add_argument("--radius", type=float, default=0.1, help="Radius-graph radius")
+    parser.add_argument("--convlayer", type=str, choices=["gravnet-knn", "gravnet-radius", "sgconv", "gatconv"], help="Convolutional layer", default="gravnet")
+    parser.add_argument("--convlayer2", type=str, choices=["sgconv", "graphunet", "gatconv", "none"], help="Convolutional layer", default="none")
+    parser.add_argument("--space_dim", type=int, default=2, help="Spatial dimension for clustering in gravnet layer")
+    parser.add_argument("--nearest", type=int, default=3, help="k nearest neighbors in gravnet layer")
+    parser.add_argument("--overwrite", action='store_true', help="overwrite if model output exists")
+    parser.add_argument("--disable-comet", action='store_true', help="disable comet-ml")
+    parser.add_argument("--input-encoding", type=int, help="use an input encoding layer", default=0)
+    parser.add_argument("--load", type=str, help="Load the weight file", required=False, default=None)
+    parser.add_argument("--scheduler", type=str, help="LR scheduler", required=False, default="none", choices=["none", "onecycle"])
+    args = parser.parse_args()
+    return args
+
 if __name__ == "__main__":
+
     #args = parse_args()
 
     class objectview(object):
         def __init__(self, d):
             self.__dict__ = d
 
-    args = objectview({'n_train': 80, 'n_val': 20, 'n_epochs': 100, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256, 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp/data/TTbar_14TeV_TuneCUETP8M1_cfi', 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5, 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': 'store_true', 'disable_comet':'store_true', 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
-
-
+    args = objectview({'n_train': 80, 'n_val': 20, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256, 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp/data/TTbar_14TeV_TuneCUETP8M1_cfi', 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5, 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': 'store_true', 'disable_comet':'store_true', 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
     full_dataset = PFGraphDataset(args.dataset)
 
