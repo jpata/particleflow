@@ -1,0 +1,16 @@
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  lr: 1e-6
+  batch_size: 5
+  num_events_train: 20000
+  num_events_test: 5000
+  num_epochs: 500
+  dtype: float32
+  sample_weights: none
+
+parameters:
+  model: dense

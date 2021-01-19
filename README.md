@@ -1,8 +1,6 @@
-[![Build Status](https://travis-ci.org/jpata/particleflow.svg?branch=master)](https://travis-ci.org/jpata/particleflow)
-
 Notes on modernizing CMS particle flow with machine learning. Internal documentation and results can be found at https://twiki.cern.ch/twiki/bin/view/CMS/MLParticleFlow.
 
-Quickstart with training:
+Quickstart with training the CMS model:
 
 ```
 #get the code
@@ -12,28 +10,6 @@ cd particleflow
 #run a small local test including data prep and training
 ./scripts/local_test.sh
 ```
-
-# Overview
-
-- [x] set up datasets and ntuples for detailed PF analysis
-  - [x] advanced CMSSW version with generator truth in [Validation/RecoParticleFlow/PFAnalysis.cc](https://github.com/jpata/cmssw/blob/jpata_pfntuplizer/Validation/RecoParticleFlow/plugins/PFAnalysis.cc)
-- [x] reproduce existing PFCandidates with machine learning
-  - [x] end-to-end training of elements to MLPF-candidates using GNN-s
-- [ ] reconstruct genparticles directly from detector elements a la HGCAL, neutrino experiments etc
-  - [x] set up datasets for regression genparticles from elements
-  - [x] Develop a baseline ML-PF model that is able to regress pions and neutral hadrons
-  - [ ] develop improved loss function for event-to-event comparison: EMD, GAN
-  - [ ] Improve ML-PF model physics performance 
-  - [ ] Improve ML-PF model computational performance 
-  - [x] Create CMSSW EDProducer for ML-PF particles
-  - [x] GPU-evaluation of MLPFProducer in CMSSW
-  - [x] Implement a simple tensorflow based ML-PF training for evalutation in CMSSW
-- [ ] GPU code for existing PF algorithms
-  - [x] test CLUE for element to block clustering
-  - [ ] port CLUE to PFBlockAlgo in CMSSW
-  - [ ] parallelize PFAlgo calls on blocks
-  - [ ] GPU-implementation of PFAlgo
-  - [ ] GPU-implementation of PFBlockAlgo distances
 
 ## Presentations
 

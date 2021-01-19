@@ -198,7 +198,7 @@ def plot_confusion_matrix(cm,
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
     cm[np.isnan(cm)] = 0.0
 
-    fig = plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(5, 4))
     ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)

@@ -7,12 +7,27 @@ import math
 import pickle
 import sys
 import multiprocessing
+import bz2
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 
 #for debugging
-save_full_graphs = True
+save_full_graphs = False
+
+#0 - nothing associated
+#1 - charged hadron
+#2 - neutral hadron
+#3 - photon
+#4 - electron
+#5 - muon
+gen_pid_encoding = {
+    211: 1,
+    130: 2,
+    22: 3,
+    11: 4,
+    13: 5,
+}
 
 #check if a genparticle has an associated reco track
 def particle_has_track(g, particle):
@@ -51,45 +66,45 @@ def get_tower_gen_fracs(g, tower):
                         e_130 += e
     return ptcls, (e_130, e_211, e_22, e_11)
 
+#creates the feature vector for calorimeter towers
 def make_tower_array(tower_dict):
     return np.array([
         1, #tower is denoted with ID 1
         tower_dict["et"],
         tower_dict["eta"],
-        tower_dict["phi"],
+        np.sin(tower_dict["phi"]),
+        np.cos(tower_dict["phi"]),
         tower_dict["energy"],
         tower_dict["eem"],
         tower_dict["ehad"],
+        #padding
+        0.0,
+        0.0,
+        0.0,
+        0.0
     ])
 
+#creates the feature vector for tracks
 def make_track_array(track_dict):
     return np.array([
         2, #track is denoted with ID 2
         track_dict["pt"],
         track_dict["eta"],
-        track_dict["phi"],
+        np.sin(track_dict["phi"]),
+        np.cos(track_dict["phi"]),
         track_dict["p"],
         track_dict["eta_outer"],
-        track_dict["phi_outer"],
+        np.sin(track_dict["phi_outer"]),
+        np.cos(track_dict["phi_outer"]),
+        track_dict["charge"],
+        track_dict["is_gen_muon"], #muon bit set from generator to mimic PFDelphes
+        track_dict["is_gen_electron"], #electron bit set from generator to mimic PFDelphes
     ])
 
-#0 - nothing associated
-#1 - charged hadron
-#2 - neutral hadron
-#3 - photon
-#4 - muon
-#5 - electron
-gen_pid_encoding = {
-    211: 1,
-    130: 2,
-    22: 3,
-    11: 4,
-    13: 5,
-}
-
+#creates the target vector for gen-level particles
 def make_gen_array(gen_dict):
     if not gen_dict:
-        return np.zeros(6)
+        return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(gen_dict["pid"]), 1)
     charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1,4,5] else 0
@@ -99,9 +114,27 @@ def make_gen_array(gen_dict):
         charge,
         gen_dict["pt"],
         gen_dict["eta"],
-        gen_dict["phi"],
+        np.sin(gen_dict["phi"]),
+        np.cos(gen_dict["phi"]),
         gen_dict["energy"]
     ])
+
+#creates the output vector for delphes PFCandidates
+def make_cand_array(cand_dict):
+    if not cand_dict:
+        return np.zeros(7)
+
+    encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
+    return np.array([
+        encoded_pid,
+        cand_dict["charge"],
+        cand_dict.get("pt", 0),
+        cand_dict["eta"],
+        np.sin(cand_dict["phi"]),
+        np.cos(cand_dict["phi"]),
+        cand_dict.get("energy", 0)
+    ])
+
 
 #make (reco, gen, cand) triplets from tracks and towers
 #also return genparticles that were not associated to any reco object
@@ -134,7 +167,6 @@ def make_triplets(g, tracks, towers, particles):
             if imax==0:
                 pid = 130
             elif imax==1:
-                #should be 211, but we don't want to try reconstruct a charged hadron if there was no track
                 pid = 211
             elif imax==2:
                 pid = 22
@@ -153,11 +185,21 @@ def make_triplets(g, tracks, towers, particles):
                 g.nodes[ptcl]["energy"],
             )
             lvs.append(lv)
+
         lv = None
         gen_ptcl = None
+
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
             gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
+
+            #charged gen particles outside the tracker acceptance should be reconstructed as neutrals
+            if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
+                gen_ptcl["pid"] = 130
+            
+            #we don't want to reconstruct neutral genparticles that have too low energy. the threshold is set according to the delphes PFCandidate energy distribution
+            if gen_ptcl["pid"] == 130 and gen_ptcl["energy"] < 9.0:
+                gen_ptcl = None
 
         pf_ptcl = None   
         for ptcl in ptcls:
@@ -167,20 +209,6 @@ def make_triplets(g, tracks, towers, particles):
                     break
         triplets.append((t, gen_ptcl, pf_ptcl))
     return triplets, list(remaining_particles)
-
-def make_cand_array(cand_dict):
-    if not cand_dict:
-        return np.zeros(6)
-
-    encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
-    return np.array([
-        encoded_pid,
-        cand_dict["charge"],
-        cand_dict.get("pt", 0),
-        cand_dict["eta"],
-        cand_dict["phi"],
-        cand_dict.get("energy", 0)
-    ])
 
 def process_chunk(infile, ev_start, ev_stop, outfile):
     f = ROOT.TFile.Open(infile)
@@ -238,12 +266,13 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for i in range(len(tracks)):
             node = ("track", i)
             graph.add_node(node)
-            graph.nodes[node]["p"] = tracks[i].P
+            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(tracks[i].Eta) #tracks[i].P
             graph.nodes[node]["eta"] = tracks[i].Eta
             graph.nodes[node]["phi"] = tracks[i].Phi
             graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
             graph.nodes[node]["phi_outer"] = tracks[i].PhiOuter
             graph.nodes[node]["pt"] = tracks[i].PT
+            graph.nodes[node]["charge"] = tracks[i].Charge
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
 
@@ -252,6 +281,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
             graph.add_node(node)
             graph.nodes[node]["pid"] = pf_charged[i].PID
             graph.nodes[node]["eta"] = pf_charged[i].Eta
+            #print(pf_charged[i].Eta, pf_charged[i].CtgTheta)
             graph.nodes[node]["phi"] = pf_charged[i].Phi
             graph.nodes[node]["pt"] = pf_charged[i].PT
             graph.nodes[node]["charge"] = pf_charged[i].Charge
@@ -324,8 +354,23 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for triplet in triplets:
             reco, gen, cand = triplet
             if reco[0] == "track":
-                X.append(make_track_array(graph.nodes[reco]))
-                ygen.append(make_gen_array(graph.nodes[gen]))
+                track_dict = graph.nodes[reco]
+                gen_dict = graph.nodes[gen]
+
+                #delphes PF reconstructs electrons and muons based on generator info, so if a track was associated with a gen-level electron or muon,
+                #we embed this information so that MLPF would have access to the same low-level info
+                if abs(gen_dict["pid"]) == 13:
+                    track_dict["is_gen_muon"] = 1.0
+                else:
+                    track_dict["is_gen_muon"] = 0.0
+
+                if abs(gen_dict["pid"]) == 11:
+                    track_dict["is_gen_electron"] = 1.0
+                else:
+                    track_dict["is_gen_electron"] = 0.0
+
+                X.append(make_track_array(track_dict))
+                ygen.append(make_gen_array(gen_dict))
             else:
                 X.append(make_tower_array(graph.nodes[reco]))
                 ygen.append(make_gen_array(gen))
@@ -335,19 +380,6 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for prt in remaining_particles:
             ygen_remaining.append(make_gen_array(graph.nodes[prt]))
             
-        # #create matrices
-        # for track in tracks:
-        #     truth = get_track_truth(graph, track)
-        #     X.append(make_track_array(truth[0]))
-        #     ygen.append(make_gen_array(truth[1]))
-        #     ycand.append(make_cand_array(truth[2]))
-
-        # for tower in towers:
-        #     truth = get_tower_truth(graph, tower)
-        #     X.append(make_tower_array(truth[0]))
-        #     ygen.append(make_gen_array(truth[1]))
-        #     ycand.append(make_cand_array(truth[2]))
-
         X = np.stack(X)
         ygen = np.stack(ygen)
         ygen_remaining = np.stack(ygen_remaining)
@@ -359,7 +391,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ygen_remaining_all.append(ygen_remaining)
         ycand_all.append(ycand)
 
-    with open(outfile, "wb") as fi:
+    with bz2.BZ2File(outfile, "wb") as fi:
         pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
 
 def process_chunk_args(args):
@@ -371,20 +403,23 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 if __name__ == "__main__":
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(24)
 
     infile = sys.argv[1]
     f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
     num_evs = tree.GetEntries()
+    #num_evs = 5000
 
     arg_list = []
     ichunk = 0
 
     for chunk in chunks(range(num_evs), 100):
-        outfile = sys.argv[2].replace(".pkl", "_{}.pkl".format(ichunk))
+        outfile = sys.argv[2].replace(".pkl.bz2", "_{}.pkl.bz2".format(ichunk))
         #print(chunk[0], chunk[-1]+1)
         arg_list.append((infile, chunk[0], chunk[-1] + 1, outfile))
         ichunk += 1
 
     pool.map(process_chunk_args, arg_list)
+    #for arg in arg_list:
+    #    process_chunk_args(arg)
