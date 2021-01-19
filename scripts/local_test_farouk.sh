@@ -24,7 +24,7 @@
 #   --processed_dir data/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
 
 #run the pytorch training
-COMET_API_KEY="MpRzrVcduw8RODK5gbZxTWBgN" python3 ../mlpf/pytorch/train_end2end_farouk.py \
+COMET_API_KEY="bla" python3 ../mlpf/pytorch/train_end2end_farouk.py \
   --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi --space_dim 2 --n_train 3 \
   --n_val 2 --model PFNet7 --convlayer gravnet-radius --convlayer2 sgconv \
   --lr 0.0001 --hidden_dim 32 --n_epochs 2 --l1 1.0 --l2 0.001 --target cand \
