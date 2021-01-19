@@ -570,20 +570,21 @@ if __name__ == "__main__":
     actual_lr = global_batch_size*float(config['setup']['lr'])
     
     from delphes_data import prepare_data
+    
+    if args.action=="train" or args.action=="validate":
+        Xs = []
+        ygens = []
+        ycands = []
+        for fi in glob.glob(pkl_path):
+            X, ygen, ycand = prepare_data(fi)
 
-    Xs = []
-    ygens = []
-    ycands = []
-    for fi in glob.glob(pkl_path):
-        X, ygen, ycand = prepare_data(fi)
+            Xs.append(np.concatenate(X))
+            ygens.append(np.concatenate(ygen))
+            ycands.append(np.concatenate(ycand))
 
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-
-    X = np.concatenate(Xs)
-    ygen = np.concatenate(ygens)
-    ycand = np.concatenate(ycands)
+        X = np.concatenate(Xs)
+        ygen = np.concatenate(ygens)
+        ycand = np.concatenate(ycands)
 
     # tuner = kt.Hyperband(
     #     model_builder_gnn,
@@ -621,74 +622,73 @@ if __name__ == "__main__":
             model_dtype = tf.dtypes.float32
             opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
 
-        model = make_model(config, model_dtype)
+        if args.action=="train" or args.action=="validate":
+            model = make_model(config, model_dtype)
 
+            loss_fn = my_loss_full
+            if args.trainable == "cls":
+                model.set_trainable_classification()
+                loss_fn = my_loss_cls
+            elif args.trainable == "reg":
+                model.set_trainable_regression()
+                loss_fn = my_loss_reg
 
-        loss_fn = my_loss_full
-        if args.trainable == "cls":
-            model.set_trainable_classification()
-            loss_fn = my_loss_cls
-        elif args.trainable == "reg":
-            model.set_trainable_regression()
-            loss_fn = my_loss_reg
-
-        #we use the "temporal" mode to have per-particle weights
-        model.compile(
-            loss=loss_fn,
-            optimizer=opt,
-            sample_weight_mode='temporal'
-        )
-
-        #Evaluate model once to build the layers
-        model(X[:1])
-        model.summary()
-
-        if weights:
-            model.load_weights(weights)
-
-        if args.action=="train":
-            callbacks = prepare_callbacks(model, outdir)
-
-            #callbacks = []
-            model.fit(
-                ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-                steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+            #we use the "temporal" mode to have per-particle weights
+            model.compile(
+                loss=loss_fn,
+                optimizer=opt,
+                sample_weight_mode='temporal'
             )
 
-            model.save(outdir + "/model_full", save_format="tf")
-        
-        if args.action=="validate":
-            import scipy
-            y_pred = model.predict(X, batch_size=global_batch_size)
-            y_pred_raw_ids = y_pred[:, :, :num_output_classes]
+            #Evaluate model once to build the layers
+            model(X[:1])
+            model.summary()
+
+            if weights:
+                model.load_weights(weights)
+
+            if args.action=="train":
+                callbacks = prepare_callbacks(model, outdir)
+
+                #callbacks = []
+                model.fit(
+                    ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
+                    steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+                )
+
+                model.save(outdir + "/model_full", save_format="tf")
             
-            #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-            y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-            y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
+            if args.action=="validate":
+                import scipy
+                y_pred = model.predict(X, batch_size=global_batch_size)
+                y_pred_raw_ids = y_pred[:, :, :num_output_classes]
+                
+                #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
+                y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
+                y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
 
-            msk = np.ones(y_pred_id_sm.shape, dtype=np.bool)
+                msk = np.ones(y_pred_id_sm.shape, dtype=np.bool)
 
-            #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-            msk[y_pred_id_sm[:, :, 1] < 0.5, 1] = 0
-            msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-            y_pred_id_sm = y_pred_id_sm*msk
+                #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
+                msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
+                msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
+                y_pred_id_sm = y_pred_id_sm*msk
 
-            y_pred_id = np.argmax(y_pred_id_sm, axis=-1)
+                y_pred_id = np.argmax(y_pred_id_sm, axis=-1)
 
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
-            np_outfile = "{}/pred.npz".format(outdir)
-            print("saving output to {}".format(np_outfile))
-            np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
+                y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, num_output_classes:]], axis=-1)
+                np_outfile = "{}/pred.npz".format(outdir)
+                print("saving output to {}".format(np_outfile))
+                np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :num_output_classes])
 
 
         if args.action=="timing":
             from delphes_data import num_inputs
-
             synthetic_timing_data = []
             for iteration in range(3):
                 numev = 100
-                for evsize in [128*10, 128*20, 128*40, 128*80, 128*160]:
-                    for batch_size in [1,2,4]:
+                for evsize in [128*10, 128*20, 128*30, 128*40, 128*50, 128*60, 128*70, 128*80, 128*90, 128*100]:
+                    for batch_size in [1,2,3,4]:
                         x = np.random.randn(batch_size, evsize, num_inputs).astype(np.float32)
 
                         model = make_model(config, model_dtype)
