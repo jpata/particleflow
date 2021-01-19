@@ -16,6 +16,7 @@ set ExecutionPath {
   MuonMomentumSmearing
 
   TrackMerger
+  AngularSmearing
   ECal
   HCal
   Calorimeter
@@ -40,7 +41,7 @@ module PileUpMerger PileUpMerger {
   set VertexOutputArray vertices
 
   # pre-generated minbias input file
-  set PileUpFile MinBias_100k.pileup
+  set PileUpFile MinBias.pileup
 
   # average expected pile up
   set MeanPileUp 200
@@ -202,13 +203,46 @@ module Merger TrackMerger {
   set OutputArray tracks
 }
 
+module TrackSmearing TrackSmearing {
+  set InputArray TrackMerger/tracks
+  set BeamSpotInputArray BeamSpotFilter/beamSpotParticle
+  set OutputArray tracks
+  set ApplyToPileUp true
+
+  set Bz 3.8
+ 
+  set D0ResolutionFormula { 0.0 } 
+  set DZResolutionFormula { 0.0 } 
+  set PResolutionFormula { 0.0 } 
+  set CtgThetaResolutionFormula { 0.0 }
+  set PhiResolutionFormula { 0.001 }
+}
+ 
+module AngularSmearing AngularSmearing {
+  set InputArray TrackMerger/tracks
+
+  set OutputArray tracks
+  set EtaResolutionFormula { 0.01 }
+  set PhiResolutionFormula { 0.01 }
+}
+
+module ImpactParameterSmearing ImpactParameterSmearing {
+  set InputArray AngularSmearing/tracks
+  set OutputArray tracks
+
+  # absolute impact parameter smearing formula (in mm) as a function of pt and eta
+  set ResolutionFormula {(pt > 0.1  && pt <= 5.0)   * (0.010) +
+                         (pt > 5.0)                 * (0.005)}
+
+}
+
 #############
 #   ECAL
 #############
 
 module SimpleCalorimeter ECal {
   set ParticleInputArray ParticlePropagator/stableParticles
-  set TrackInputArray TrackMerger/tracks
+  set TrackInputArray AngularSmearing/tracks
 
   set TowerOutputArray ecalTowers
   set EFlowTrackOutputArray eflowTracks
@@ -825,7 +859,7 @@ module TreeWriter TreeWriter {
   add Branch PileUpMerger/stableParticles PileUpMix GenParticle
 
   #PF reco inputs
-  add Branch TrackMerger/tracks Track Track
+  add Branch AngularSmearing/tracks Track Track
   add Branch Calorimeter/towers Tower Tower
 
   #EFlow reco outputs, including PU
