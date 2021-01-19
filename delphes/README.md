@@ -14,7 +14,12 @@ singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/t
 
 # Run the training of the base GNN model
 singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action train
+
+#Run the validation to produce the predictions file
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action validate --weights ./experiments/delphes-gnn-skipconn-*/weights.100-*.hdf5
 ```
+
+The plots can be generated using the notebook [resolution_checks.ipynb](resolution_checks.ipynb).
 
 ## Recipe to prepare singularity image from scratch
 
