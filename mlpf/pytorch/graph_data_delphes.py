@@ -101,21 +101,14 @@ class PFGraphDataset(Dataset):
 
     def process_single_file(self, raw_file_name):
         with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-            all_data = pickle.load(fi, encoding='iso-8859-1')
+            data = pickle.load(fi, encoding='iso-8859-1')
 
         batch_data = []
 
-        # all_data is a list of only one element.. this element is a dictionary with keys: ["Xelem", "ycan", "ygen", 'dm', 'dm_elem_cand', 'dm_elem_gen']
-        data = all_data[0]
-        mat = data["dm_elem_cand"].copy()
 
-        # Xelem contains all elements in 1 event
-        # Xelem[i] contains the element #i in the event
-        Xelem = data["Xelem"]
+        Xelem = data["X"]
         ygen = data["ygen"]
         ycand = data["ycand"]
-
-        # attach to every Xelem[i] (which is one element in the event) an extra elem_label
         Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
         ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
         ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
@@ -137,7 +130,6 @@ class PFGraphDataset(Dataset):
             'eta', 'phi', 'e', 'charge',
             ]], axis=-1
         )
-        r = torch_geometric.utils.from_scipy_sparse_matrix(mat)
 
         x = torch.tensor(Xelem_flat, dtype=torch.float)
         ygen = torch.tensor(ygen_flat, dtype=torch.float)

@@ -11,5 +11,5 @@ mlpf/pytorch/__pycache__/*
 mlpf/plotting/__pycache__/*
 mlpf/pytorch/data
 test_tmp/
-
+test_tmp_delphes/
 .DS_Store
