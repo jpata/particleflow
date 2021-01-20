@@ -16,7 +16,8 @@ Short instructions with a single test file
 ./scripts/local_test.sh
 ```
 
-Long instructions for reproducing the full training from scratch in [delphes/README.md](delphes/README.md)
+Long instructions for reproducing the full training from scratch in [delphes/README.md](delphes/README.md).
+
 The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
 
 ### Delphes dataset
@@ -26,5 +27,4 @@ Dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283
 The software setup for the ML training is available in the singularity spec file [scripts/base.singularity](scripts/base.singularity).
 
 ## Acknowledgements
-
 This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Research Council. Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. 
