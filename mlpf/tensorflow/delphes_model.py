@@ -29,7 +29,9 @@ mult_eta_loss = 1.0
 mult_pt_loss = 0.1
 mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
-pkl_path = "out/pythia8_ttbar/*.pkl.bz2"
+
+#testing files not used for training
+test_pkl_files = list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_8_*.pkl.bz2")) + list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_9_*.pkl.bz2"))[:2]
 
 def parse_args():
     import argparse
@@ -575,7 +577,7 @@ if __name__ == "__main__":
         Xs = []
         ygens = []
         ycands = []
-        for fi in glob.glob(pkl_path):
+        for fi in test_pkl_files:
             X, ygen, ycand = prepare_data(fi)
 
             Xs.append(np.concatenate(X))

@@ -246,38 +246,6 @@ class GHConv(tf.keras.layers.Layer):
         out = gate*f_hom + (1-gate)*f_het
         return self.activation(out)
 
-class GHConvDense(tf.keras.layers.Layer):
-    def __init__(self, *args, **kwargs):
-        self.activation = kwargs.pop("activation")
-        super(GHConvDense, self).__init__(*args, **kwargs)
-
-    def build(self, input_shape):
-        hidden_dim = input_shape[0][-1]
-        self.W_t = self.add_weight(shape=(hidden_dim, hidden_dim), name="w_t", initializer="random_normal")
-        self.b_t = self.add_weight(shape=(hidden_dim,), name="b_t", initializer="random_normal")
-        self.W_h = self.add_weight(shape=(hidden_dim, hidden_dim), name="w_h", initializer="random_normal")
-        self.theta = self.add_weight(shape=(hidden_dim, hidden_dim), name="theta", initializer="random_normal")
- 
-    #@tf.function
-    def call(self, inputs):
-        x, adj = inputs
-
-        #compute the normalization of the adjacency matrix
-        in_degrees = tf.reduce_sum(adj, axis=-1)
-        in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
-
-        #add epsilon to prevent numerical issues from 1/sqrt(x)
-        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
-
-        f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
-
-        f_het = tf.linalg.matmul(x, self.W_h)
-        gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
-
-        out = gate*f_hom + (1-gate)*f_het
-        return self.activation(out)
-
 class SGConv(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
         self.activation = kwargs.pop("activation")
@@ -306,16 +274,6 @@ class SGConv(tf.keras.layers.Layer):
         out = sparse_dense_matmult_batch(adj, support*norm)*norm
 
         return self.activation(out + self.b)
-
-class DenseDistance(tf.keras.layers.Layer):
-    def __init__(self, dist_mult=0.1, **kwargs):
-        super(DenseDistance, self).__init__(**kwargs)
-        self.dist_mult = dist_mult
-   
-    def call(self, inputs, training=True):
-        dm = pairwise_dist(inputs, inputs)
-        dm = tf.exp(-self.dist_mult*dm)
-        return dm 
 
 class SparseHashedNNDistance(tf.keras.layers.Layer):
     def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, **kwargs):
