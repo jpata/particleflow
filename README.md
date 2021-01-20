@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4452283.svg)](https://doi.org/10.5281/zenodo.4452283)
+
 <p float="left">
   <img src="delphes/plots/event.png" alt="Simulated event" width="600"/>
 </p>
@@ -9,46 +11,19 @@
 
 ## MLPF with Delphes
 
-Short instructions with a partial dataset
+Short instructions with a single test file
 ```bash
-scripts/local_test.sh
+./scripts/local_test.sh
 ```
 
-Long instructions for reproducing from scratch
-```bash
-cd delphes
-
-# Run the simulation step
-# Generate events with pythia, mix them with PU and run a detector simulation using Delphes
-singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_sim.sh
-
-# Run the ntuplization step
-# generate X,y input matrices for NN training in out/pythia8_ttbar/*.pkl
-singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_ntuple.sh
-
-# Generate the TFRecord datasets needed for larger-than-RAM training
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_data.py --datapath out/pythia8_ttbar
-
-# Run the training of the base GNN model
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action train
-
-#Run the validation to produce the predictions file
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action validate --weights ./experiments/delphes-gnn-skipconn-*/weights.100-*.hdf5
-```
-
+Long instructions for reproducing the full training from scratch in [delphes/README.md](delphes/README.md)
 The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
 
 ### Delphes dataset
+Dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283
 
-### Recipe to prepare Delphes singularity image
-
-```bash
-wget http://atlaswww.hep.anl.gov/hepsim/soft/centos7hepsim.img
-sudo singularity build --sandbox centos7hepsim.sandbox centos7hepsim.img
-sudo singularity exec -B /home --writable centos7hepsim.sandbox ./install.sh
-sudo singularity build centos7hepsim.sif centos7hepsim.sandbox
-sudo rm -Rf centos7hepsim.sandbox
-```
+### Software setup
+The software setup for the ML training is available in the singularity spec file [scripts/base.singularity](scripts/base.singularity).
 
 ## Acknowledgements
 
