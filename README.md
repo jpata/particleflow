@@ -1,5 +1,5 @@
 <p float="left">
-  <img src="delphes/plots/event.png" alt="Simulated event" width="500"/>
+  <img src="delphes/plots/event.png" alt="Simulated event" width="600"/>
 </p>
 
 <p float="left">
@@ -9,6 +9,12 @@
 
 ## MLPF with Delphes
 
+Short instructions with a partial dataset
+```bash
+scripts/local_test.sh
+```
+
+Long instructions for reproducing from scratch
 ```bash
 cd delphes
 
