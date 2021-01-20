@@ -13,8 +13,15 @@ cd ../..
 mkdir -p experiments
 rm -Rf experiments/test-*
 
+#Generate larger-than-RAM TFRecord dataset
 python3 ../mlpf/tensorflow/delphes_data.py --datapath out/pythia8_ttbar
+
+#Run a simple training on a few events
 python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action train
+
+#Generate the pred.npz file of predictions
 python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action validate --weights ./experiments/test-*/weights.10-*.hdf5
+
+#Generate the timing file
 python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action timing --weights ./experiments/test-*/weights.10-*.hdf5
 
