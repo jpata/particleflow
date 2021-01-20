@@ -12,3 +12,4 @@ cd ../..
 python3 ../mlpf/tensorflow/delphes_data.py --datapath out/pythia8_ttbar
 python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action train
 python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action validate --weights ./experiments/test-*/weights.100-*.hdf5
+python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/test.yaml --action timing --weights ./experiments/test-*/weights.100-*.hdf5
