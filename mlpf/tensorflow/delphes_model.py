@@ -648,7 +648,7 @@ if __name__ == "__main__":
             )
 
             #Evaluate model once to build the layers
-            model(X[:1])
+            model(tf.cast(X[:1], model_dtype))
             model.summary()
 
             if weights:

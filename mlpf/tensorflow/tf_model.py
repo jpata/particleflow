@@ -605,6 +605,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, training):
 
+        print("x", x.dtype)
         attn_output = self.mha(x, None, training=training)    # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output, training=training)
         out1 = self.layernorm1(x + attn_output)    # (batch_size, input_seq_len, d_model)
@@ -721,7 +722,7 @@ class Transformer(tf.keras.Model):
 
     def call(self, inputs, training):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, X.dtype), -1)
 
         enc = self.enc(X)
 

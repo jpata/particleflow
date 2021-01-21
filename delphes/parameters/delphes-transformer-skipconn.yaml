@@ -1,5 +1,5 @@
 tensorflow:
-  eager: no
+  eager: yes
 
 setup:
   train: yes
@@ -9,7 +9,7 @@ setup:
   num_events_train: 40000
   num_events_test: 10000
   num_epochs: 300
-  dtype: float32
+  dtype: float16
   sample_weights: none
 
 parameters:
