@@ -8,7 +8,7 @@ setup:
   batch_size: 5
   num_events_train: 40000
   num_events_test: 10000
-  num_epochs: 400
+  num_epochs: 300
   dtype: float32
   sample_weights: none
 
@@ -20,3 +20,4 @@ parameters:
   dff: 256
   support: 32
   skip_connection: yes
+  dropout: 0.2

@@ -31,7 +31,7 @@ mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
 
 #testing files not used for training
-test_pkl_files = list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_8_*.pkl.bz2")) + list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_9_*.pkl.bz2"))[:2]
+test_pkl_files = list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_8_*.pkl.bz2")) + list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_9_*.pkl.bz2"))
 
 def parse_args():
     import argparse
@@ -423,7 +423,7 @@ def make_gnn(config, dtype):
 
 def make_transformer(config, dtype):
     parameters = [
-        'num_layers', 'd_model', 'num_heads', 'dff', 'support'
+        'num_layers', 'd_model', 'num_heads', 'dff', 'support', 'dropout'
     ]
     kwargs = {par: config['parameters'][par] for par in parameters}
 
@@ -577,6 +577,11 @@ if __name__ == "__main__":
         Xs = []
         ygens = []
         ycands = []
+
+        #for faster loading        
+        if args.action == "train":
+            test_pkl_files = test_pkl_files[:1]
+  
         for fi in test_pkl_files:
             X, ygen, ycand = prepare_data(fi)
 

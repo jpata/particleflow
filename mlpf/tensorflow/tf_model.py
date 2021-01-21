@@ -693,7 +693,7 @@ class Decoder(tf.keras.layers.Layer):
 class Transformer(tf.keras.Model):
     def __init__(self,
                 num_layers, d_model, num_heads, dff,
-                rate=0.1,
+                dropout=0.1,
                 support=32,
                 num_input_classes=len(elem_labels),
                 num_output_classes=len(class_labels),
@@ -709,11 +709,11 @@ class Transformer(tf.keras.Model):
         self.ffn_embed_id = point_wise_feed_forward_network(d_model, dff)
         self.ffn_embed_reg = point_wise_feed_forward_network(d_model, dff)
 
-        self.encoder_id = Encoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
-        self.decoder_id = Decoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
+        self.encoder_id = Encoder(num_layers, d_model, num_heads, dff, support, dropout, dtype)
+        self.decoder_id = Decoder(num_layers, d_model, num_heads, dff, support, dropout, dtype)
 
-        self.encoder_reg = Encoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
-        self.decoder_reg = Decoder(num_layers, d_model, num_heads, dff, support, rate, dtype)
+        self.encoder_reg = Encoder(num_layers, d_model, num_heads, dff, support, dropout, dtype)
+        self.decoder_reg = Decoder(num_layers, d_model, num_heads, dff, support, dropout, dtype)
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, dtype=tf.dtypes.float32)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, dtype=tf.dtypes.float32)

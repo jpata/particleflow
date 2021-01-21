@@ -20,3 +20,4 @@ parameters:
   dff: 256
   support: 32
   skip_connection: False
+  dropout: 0.2
