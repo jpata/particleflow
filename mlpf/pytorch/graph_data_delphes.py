@@ -16,21 +16,22 @@ import scipy.sparse
 import math
 import multiprocessing
 
-elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
+# assuming pkl files exist in /test_tmp_delphes/data/delphes_cfi/raw
+# they are processed and saved as pt files in /test_tmp_delphes/data/delphes_cfi/processed
+# PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
 
-#map these to ids 0...Nclass
-class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
+def one_hot_embedding(labels, num_classes):
+    """
+    Embedding labels to one-hot form.
+    Args:
+      labels: (LongTensor) class labels, sized [N,].
+      num_classes: (int) number of classes.
+    Returns:
+      (tensor) encoded labels, sized [N, #classes].
+    """
+    y = torch.eye(num_classes)
+    return y[labels]
 
-# map these to ids 0...Nclass
-elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
-
-# Data normalization constants for faster convergence.
-# These are just estimated with a printout and rounding, don't need to be super accurate
-# x_means = torch.tensor([ 0.0, 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).to(device)
-# x_stds = torch.tensor([ 1.0, 22.0,  2.6,  1.8,  1.3,  1.9,  1.3,  1.0]).to(device)
-# y_candidates_means = torch.tensor([0.0, 0.0, 0.0]).to(device)
-# y_candidates_stds = torch.tensor([1.8, 2.0, 1.5]).to(device)
 def process_func(args):
     self, fns, idx_file = args
     return self.process_multiple_files(fns, idx_file)
@@ -40,33 +41,12 @@ def chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
-#Do any in-memory transformations to data
-def data_prep(data, device=torch.device('cpu')):
-    #Create a one-hot encoded vector of the class labels
-    data.y_candidates_id = data.ycand[:, 0].to(dtype=torch.long)
-    data.y_gen_id = data.ygen[:, 0].to(dtype=torch.long)
-
-    #one-hot encode the input categorical of the input
-    elem_id_onehot = torch.nn.functional.one_hot(data.x[:, 0].to(dtype=torch.long), num_classes=len(elem_to_id))
-    data.x = torch.cat([elem_id_onehot.to(dtype=torch.float), data.x[:, 1:]], axis=-1)
-
-    data.y_candidates_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
-    data.y_gen_weights = torch.ones(len(class_to_id)).to(device=device, dtype=torch.float)
-
-    data.ycand = data.ycand[:, 1:]
-    data.ygen = data.ygen[:, 1:]
-
-    data.x[torch.isnan(data.x)] = 0.0
-    data.ycand[torch.isnan(data.ycand)] = 0.0
-    data.ygen[torch.isnan(data.ygen)] = 0.0
-    data.ygen[data.ygen.abs()>1e4] = 0
-    #print("x=", data.x)
-    #print("y_candidates_id=", data.y_candidates_id)
-    #print("y_gen_id=", data.y_gen_id)
-    #print("ycand=", data.ycand)
-    #print("ygen=", data.ygen)
-
 class PFGraphDataset(Dataset):
+    """
+    Initialize parameters of graph dataset
+    Args:
+        root (str): path
+    """
     def __init__(self, root, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
@@ -102,48 +82,37 @@ class PFGraphDataset(Dataset):
     def process_single_file(self, raw_file_name):
         with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
             data = pickle.load(fi, encoding='iso-8859-1')
-
+        x=[]
+        ygen=[]
+        ycand=[]
+        d=[]
         batch_data = []
+        ygen_id=[]
+        ycand_id=[]
 
+        for i in range(len(data['X'])):
+            x.append(torch.tensor(data['X'][i], dtype=torch.float))
+            ygen.append(torch.tensor(data['ygen'][i], dtype=torch.float))
+            ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
 
-        Xelem = data["X"]
-        ygen = data["ygen"]
-        ycand = data["ycand"]
-        Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
-        ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
-        ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
+            # one-hot encoding the first element in ygen & ycand (which is the PID) and store it in ygen_id & ycand_id
+            ygen_id.append(ygen[i][:,0])
+            ycand_id.append(ycand[i][:,0])
 
-        Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
-            'typ_idx',
-            'pt', 'eta', 'phi', 'e',
-            'layer', 'depth', 'charge', 'trajpoint',
-            'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
-            'muon_dt_hits', 'muon_csc_hits']], axis=-1
-        )
-        ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
-            'typ_idx',
-            'eta', 'phi', 'e', 'charge',
-            ]], axis=-1
-        )
-        ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
-            'typ_idx',
-            'eta', 'phi', 'e', 'charge',
-            ]], axis=-1
-        )
+            ygen_id[i] = torch.tensor(ygen_id[i], dtype=torch.long)
+            ycand_id[i] = torch.tensor(ycand_id[i], dtype=torch.long)
 
-        x = torch.tensor(Xelem_flat, dtype=torch.float)
-        ygen = torch.tensor(ygen_flat, dtype=torch.float)
-        ycand = torch.tensor(ycand_flat, dtype=torch.float)
+            ygen_id[i] = one_hot_embedding(ygen_id[i], 6)
+            ycand_id[i] = one_hot_embedding(ycand_id[i], 6)
 
-        data = Data(
-            x=x,
-            edge_index=r[0].to(dtype=torch.long),
-            #edge_attr=r[1].to(dtype=torch.float),
-            ygen=ygen, ycand=ycand,
-        )
-        data_prep(data)
-        batch_data += [data]
+            # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
+            d = Data(
+                x=x[i],
+                ygen=ygen[i][:,1:], ygen_id=ygen_id[i],
+                ycand=ycand[i][:,1:], ycand_id=ycand_id[i]
+            )
 
+            batch_data.append(d)
         return batch_data
 
     def process_multiple_files(self, filenames, idx_file):
@@ -192,3 +161,41 @@ if __name__ == "__main__":
 
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
+
+
+
+
+
+
+
+# import pickle
+# import os
+# import torch
+#
+# from torch_geometric.data import Data
+#
+# directory = '../../test_tmp_delphes/data/delphes_cfi/raw/'
+# datas = []
+# for filename in os.listdir(directory):
+#     if filename.endswith(".pkl"):
+#         with open(os.path.join(directory, filename), "rb") as fi:
+#             data = pickle.load(fi, encoding='iso-8859-1')
+#         x=[]
+#         ygen=[]
+#         ycand=[]
+#         batch_data = []
+#         for i in range(len(data['X'])):
+#             x.append(torch.tensor(data['X'][i], dtype=torch.float))
+#             ygen.append(torch.tensor(data['ygen'][i], dtype=torch.float))
+#             ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
+#             d = Data(
+#                 x=x[i],
+#                 #edge_index=r[0].to(dtype=torch.long),
+#                 #edge_attr=r[1].to(dtype=torch.float),
+#                 ygen=ygen[i], ycand=ycand[i],
+#             )
+#
+#             data_prep(d)
+#             batch_data += [d]
+#             datas.append(batch_data)
+#         print("done with:", filename)
