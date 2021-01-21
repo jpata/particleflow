@@ -33,6 +33,8 @@ from torch_scatter import scatter_mean
 from torch_geometric.nn.inits import reset
 from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 from gravnet import GravNetConv
+from torch_geometric.data import Data, DataListLoader, Batch
+from torch.utils.data import random_split
 
 import torch_cluster
 
@@ -58,6 +60,10 @@ from sklearn.metrics import accuracy_score
 import graph_data
 from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from sklearn.metrics import confusion_matrix
+
+
+import model
+from model import PFNet7
 
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
@@ -85,140 +91,6 @@ def get_model_fname(dataset, model, n_train, lr, target_type):
         n_train,
         lr, int(time.time()))
     return model_fname
-
-#Model with gravnet clustering
-class PFNet7(nn.Module):
-    def __init__(self,
-        input_dim=3, hidden_dim=32, encoding_dim=256,
-        output_dim_id=len(class_to_id),
-        output_dim_p4=4,
-        convlayer="gravnet-radius",
-        convlayer2="none",
-        space_dim=2, nearest=3, dropout_rate=0.0, activation="leaky_relu", return_edges=False, radius=0.1, input_encoding=0):
-
-        super(PFNet7, self).__init__()
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.return_edges = return_edges
-        self.convlayer = convlayer
-        self.input_encoding = input_encoding
-
-        if activation == "leaky_relu":
-            self.act = nn.LeakyReLU
-            self.act_f = torch.nn.functional.leaky_relu
-        elif activation == "selu":
-            self.act = nn.SELU
-            self.act_f = torch.nn.functional.selu
-        elif activation == "relu":
-            self.act = nn.ReLU
-            self.act_f = torch.nn.functional.relu
-
-        # if you want to add an initial encoding of the input
-        conv_in_dim = input_dim
-        if self.input_encoding>0:
-            self.nn1 = nn.Sequential(
-                nn.Linear(input_dim, hidden_dim),
-                self.act(),
-                nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-                nn.Linear(hidden_dim, hidden_dim),
-                self.act(),
-                nn.Linear(hidden_dim, encoding_dim),
-            )
-            conv_in_dim = encoding_dim
-
-        # (1) GNN layer
-        if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn")
-        elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
-        else:
-            raise Exception("Unknown convolution layer: {}".format(convlayer))
-
-        #decoding layer receives the raw inputs and the gravnet output
-        num_decode_in = input_dim + encoding_dim
-
-        # (2) another GNN layer if you want
-        self.convlayer2 = convlayer2
-        if convlayer2 == "none":
-            self.conv2_1 = None
-            self.conv2_2 = None
-        elif convlayer2 == "sgconv":
-            self.conv2_1 = SGConv(num_decode_in, hidden_dim, K=1)
-            self.conv2_2 = SGConv(num_decode_in, hidden_dim, K=1)
-            num_decode_in += hidden_dim
-        elif convlayer2 == "graphunet":
-            self.conv2_1 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
-            self.conv2_2 = GraphUNet(num_decode_in, hidden_dim, hidden_dim, 2, pool_ratios=0.1)
-            num_decode_in += hidden_dim
-        elif convlayer2 == "gatconv":
-            self.conv2_1 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
-            self.conv2_2 = GATConv(num_decode_in, hidden_dim, 4, concat=False, dropout=dropout_rate)
-            num_decode_in += hidden_dim
-        else:
-            raise Exception("Unknown convolution layer: {}".format(convlayer2))
-
-        # (3) dropout layer if you want
-        self.dropout1 = nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity()
-
-        # (4) DNN layer: classifying PID
-        self.nn2 = nn.Sequential(
-            nn.Linear(num_decode_in, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Linear(hidden_dim, output_dim_id),
-        )
-
-        # (5) DNN layer: regressing p4
-        self.nn3 = nn.Sequential(
-            nn.Linear(num_decode_in + output_dim_id, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
-            nn.Linear(hidden_dim, hidden_dim),
-            self.act(),
-            nn.Linear(hidden_dim, output_dim_p4),
-        )
-
-
-    def forward(self, data):
-
-        #encode the inputs
-        x = data.x
-
-        if self.input_encoding:
-            x = self.nn1(x)
-
-        #Run a clustering of the inputs that returns the new_edge_index
-        new_edge_index, x = self.conv1(x)
-        x1 = self.act_f(x)
-
-        #run a second convolution
-        if self.convlayer2 != "none":
-            conv2_input = torch.cat([data.x, x1], axis=-1)
-            x2_1 = self.act_f(self.conv2_1(conv2_input, new_edge_index))
-            x2_2 = self.act_f(self.conv2_2(conv2_input, new_edge_index))
-            nn2_input = torch.cat([data.x, x1, x2_1], axis=-1)
-        else:
-            nn2_input = torch.cat([data.x, x1], axis=-1)
-
-        #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(self.dropout1(nn2_input))
-
-        if self.convlayer2 != "none":
-            nn3_input = torch.cat([data.x, x1, x2_2, cand_ids], axis=-1)
-        else:
-            nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
-
-        cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(self.dropout1(nn3_input))
-        return cand_ids, cand_p4, new_edge_index
 
 model_classes = {
     "PFNet7": PFNet7,
@@ -276,12 +148,11 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
         if is_train:
             optimizer.zero_grad()
 
+        # forward pass
         cand_id_onehot, cand_momentum, new_edge_index = model(data)
 
         nelem = data.x.shape[0]
         assert(len(new_edge_index[0])>0)
-        mat1 = torch_geometric.utils.to_dense_adj(data.edge_index, max_num_nodes=nelem).flatten()
-        mat2 = torch_geometric.utils.to_dense_adj(new_edge_index, max_num_nodes=nelem).flatten()
 
         _dev = cand_id_onehot.device
         _, indices = torch.max(cand_id_onehot, -1)
@@ -318,12 +189,10 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
         else:
             l2 = torch.tensor(0.0).to(device=_dev)
 
-        l3 = l3m*torch.nn.functional.binary_cross_entropy(mat2, mat1)
 
         batch_loss = l1 + l2
         losses[i, 0] = l1.item()
         losses[i, 1] = l2.item()
-        losses[i, 2] = l3.item()
 
         if is_train:
             batch_loss.backward()
@@ -379,8 +248,11 @@ def train_loop():
 
         with experiment.train():
             model.train()
+
+            print('will use train()')
             num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
                                                                    args.l1, args.l2, args.l3, args.target, scheduler)
+            print('finished with train()')
             experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=j)
             l = sum(losses)
             losses_train[j] = losses
@@ -477,35 +349,36 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    # the next part defines args (to run the script not from terminal)
-    class objectview(object):
-        def __init__(self, d):
-            self.__dict__ = d
-
-    args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256,
-    'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../data_delphes/data/delphes_cfi',
-    'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
-    'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
-    'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
+    # #the next part defines args (to run the script not from terminal)
+    # class objectview(object):
+    #     def __init__(self, d):
+    #         self.__dict__ = d
+    #
+    # args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256,
+    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
+    # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
+    # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
+    # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
 
     #one-hot encoded element ID + element parameters
-    input_dim = 26
+    input_dim = 12
 
     #one-hot particle ID and momentum
-    output_dim_id = len(class_to_id)
-    output_dim_p4 = 4
+    output_dim_id = 6
+    output_dim_p4 = 6
 
     edge_dim = 1
 
     patience = args.patience
 
-    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    val_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
-    print("train_dataset", len(train_dataset))
-    print("val_dataset", len(val_dataset))
+    # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+    full_dataset_batched=[]
+    for i in range(len(full_dataset)):
+        for j in range(len(full_dataset[0])):
+            full_dataset_batched.append([full_dataset[i][j]])
 
     #hack for multi-gpu training
     if not multi_gpu:
@@ -517,10 +390,22 @@ if __name__ == "__main__":
             l = sum(items, [])
             return l
 
-    train_loader = DataListLoader(train_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
+    torch.manual_seed(0)
+    valid_frac = 0.20
+    full_length = len(full_dataset_batched)
+    valid_num = int(valid_frac*full_length)
+    batch_size = 1
+
+    train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
+
+    train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
     train_loader.collate_fn = collate
-    val_loader = DataListLoader(val_dataset, batch_size=args.batch_size, pin_memory=False, shuffle=False)
-    val_loader.collate_fn = collate
+    valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+    valid_loader.collate_fn = collate
+
+    train_samples = len(train_dataset)
+    valid_samples = len(valid_dataset)
+
 
     model_class = model_classes[args.model]
     model_kwargs = {'input_dim': input_dim,
@@ -601,14 +486,9 @@ if __name__ == "__main__":
 
     model.train()
 
+    print('entering train_loop')
     train_loop()
     # with torch.autograd.profiler.profile(use_cuda=True) as prof:
     #     train_loop()
 
     # print(prof.key_averages().table(sort_by="cuda_time_total"))
-
-
-
-
-for i, data in enumerate(train_loader):
-    print(i)
