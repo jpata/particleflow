@@ -605,7 +605,6 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, training):
 
-        print("x", x.dtype)
         attn_output = self.mha(x, None, training=training)    # (batch_size, input_seq_len, d_model)
         attn_output = self.dropout1(attn_output, training=training)
         out1 = self.layernorm1(x + attn_output)    # (batch_size, input_seq_len, d_model)
@@ -707,6 +706,10 @@ class Transformer(tf.keras.Model):
         self.num_momentum_outputs = num_momentum_outputs
 
         self.enc = InputEncoding(num_input_classes)
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
         self.ffn_embed_id = point_wise_feed_forward_network(d_model, dff)
         self.ffn_embed_reg = point_wise_feed_forward_network(d_model, dff)
 
@@ -722,21 +725,24 @@ class Transformer(tf.keras.Model):
 
     def call(self, inputs, training):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, X.dtype), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
         enc = self.enc(X)
+        enc = self.layernorm1(enc)
 
         enc_id = self.ffn_embed_id(enc)
         enc_reg = self.ffn_embed_reg(enc)
 
         enc_output_id = self.encoder_id(enc_id, training)
+        enc_output_id = self.layernorm2(enc_output_id)
         dec_output_id = self.decoder_id(enc_id, enc_output_id, training)
+
         if self.skip_connection:
             dec_output_id = tf.concat([enc_id, dec_output_id], axis=-1)
 
         enc_output_reg = self.encoder_reg(enc_reg, training)
+        enc_output_reg = self.layernorm3(enc_output_reg)
         dec_output_reg = self.decoder_reg(enc_reg, enc_output_reg, training)
-        #dec_output_reg = tf.concat([enc_reg, dec_output_reg], axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
