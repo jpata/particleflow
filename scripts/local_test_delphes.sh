@@ -28,7 +28,7 @@ python3 ../mlpf/pytorch/graph_data_delphes.py --dataset data/delphes_cfi \
 #run the pytorch training
 COMET_API_KEY="bla" python3 ../mlpf/pytorch/train_end2end_delphes.py \
   --dataset data/delphes_cfi --space_dim 2 --n_train 2 \
-  --n_val 1 --model PFNet7 --convlayer gravnet-radius --convlayer2 sgconv \
+  --n_val 1 --model PFNet7 --convlayer gravnet-radius --convlayer2 "none" \
   --lr 0.0001 --hidden_dim 32 --n_epochs 2 --l1 1.0 --l2 0.001 --target cand \
   --batch_size 1 --dropout 0.2 --disable_comet
 #

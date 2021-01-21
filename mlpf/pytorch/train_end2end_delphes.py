@@ -61,8 +61,6 @@ import graph_data
 from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from sklearn.metrics import confusion_matrix
 
-
-import model
 from model import PFNet7
 
 #Ignore divide by 0 errors
@@ -161,10 +159,10 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
         num_samples += len(cand_id_onehot)
 
         if args.target == "gen":
-            target_ids = torch.cat([d.y_gen_id for d in data]).to(_dev)
+            target_ids = torch.cat([d.ygen_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ygen[:, :4] for d in data]).to(_dev)
         elif args.target == "cand":
-            target_ids = torch.cat([d.y_candidates_id for d in data]).to(_dev)
+            target_ids = torch.cat([d.ycand_id for d in data]).to(_dev)
             target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
 
         #Predictions where both the predicted and true class label was nonzero
