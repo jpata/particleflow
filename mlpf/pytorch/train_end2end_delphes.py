@@ -137,6 +137,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
 
     #keep track of how many data points were processed
     num_samples = 0
+
     for i, data in enumerate(loader):
         t0 = time.time()
 
@@ -149,21 +150,22 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
         # forward pass
         cand_id_onehot, cand_momentum, new_edge_index = model(data)
 
-        nelem = data.x.shape[0]
-        assert(len(new_edge_index[0])>0)
-
-        _dev = cand_id_onehot.device
-        _, indices = torch.max(cand_id_onehot, -1)
+        _dev = cand_id_onehot.device                   # store the device in dev
+        _, indices = torch.max(cand_id_onehot, -1)     # picks the maximum PID location and stores the index
         if not multi_gpu:
             data = [data]
         num_samples += len(cand_id_onehot)
 
+        # concatenate ygen/ycand over the batch to compare with the truth label
+        # now: ygen/ycand is of shape [~5000*batch_size, 6] corresponding to the output of the forward pass
         if args.target == "gen":
             target_ids = torch.cat([d.ygen_id for d in data]).to(_dev)
-            target_p4 = torch.cat([d.ygen[:, :4] for d in data]).to(_dev)
+            target_p4 = torch.cat([d.ygen for d in data]).to(_dev)
+            #target_p4 = torch.cat([d.ygen[:, 1:] for d in data]).to(_dev)                # if we wanted to predict p4 (without charge for ex)
         elif args.target == "cand":
             target_ids = torch.cat([d.ycand_id for d in data]).to(_dev)
-            target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)
+            target_p4 = torch.cat([d.ycand for d in data]).to(_dev)
+            #target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)               # if we wanted to predict p4 (without charge for ex)
 
         #Predictions where both the predicted and true class label was nonzero
         #In these cases, the true candidate existed and a candidate was predicted
@@ -373,6 +375,7 @@ if __name__ == "__main__":
     patience = args.patience
 
     # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+    # TODO: find a better way kiddo
     full_dataset_batched=[]
     for i in range(len(full_dataset)):
         for j in range(len(full_dataset[0])):
