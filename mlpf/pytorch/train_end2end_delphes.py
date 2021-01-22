@@ -316,7 +316,7 @@ def parse_args():
     parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
-    parser.add_argument("--hidden_dim", type=int, default=64, help="hidden dimension")
+    parser.add_argument("--hidden_dim", type=int, default=32, help="hidden dimension")
     parser.add_argument("--encoding_dim", type=int, default=256, help="encoded element dimension")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
@@ -345,18 +345,18 @@ def parse_args():
 
 if __name__ == "__main__":
 
-    args = parse_args()
+    #args = parse_args()
 
-    # #the next part defines args (to run the script not from terminal)
-    # class objectview(object):
-    #     def __init__(self, d):
-    #         self.__dict__ = d
-    #
-    # args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256,
-    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
-    # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
-    # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
-    # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
+    #the next part defines args (to run the script not from terminal)
+    class objectview(object):
+        def __init__(self, d):
+            self.__dict__ = d
+
+    args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
+    'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
+    'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
+    'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
+    'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
