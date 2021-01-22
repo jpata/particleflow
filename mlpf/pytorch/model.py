@@ -4,23 +4,7 @@ import math
 
 from comet_ml import Experiment
 
-#Check if the GPU configuration has been provided
-try:
-    if not ("CUDA_VISIBLE_DEVICES" in os.environ):
-        import setGPU
-except Exception as e:
-    print("Could not import setGPU, running CPU-only")
-
 import torch
-use_gpu = torch.cuda.device_count()>0
-multi_gpu = torch.cuda.device_count()>1
-
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 import torch_geometric
 
 import torch.nn as nn
@@ -148,68 +132,49 @@ class PFNet7(nn.Module):
 
 
 # #------------------------------------------------------------------------------------
-# test a forward pass
-full_dataset = PFGraphDataset('../../test_tmp_delphes/data/delphes_cfi')
-
-# unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
-full_dataset_batched=[]
-for i in range(len(full_dataset)):
-    for j in range(len(full_dataset[0])):
-        full_dataset_batched.append([full_dataset[i][j]])
-
-torch.manual_seed(0)
-valid_frac = 0.20
-full_length = len(full_dataset_batched)
-valid_num = int(valid_frac*full_length)
-batch_size = 2
-
-train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
-len(train_dataset)
-len(valid_dataset)
-
-def collate(items):
-    l = sum(items, [])
-    return Batch.from_data_list(l)
-
-train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
-train_loader.collate_fn = collate
-valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
-valid_loader.collate_fn = collate
-
-next(iter(train_loader))
-
-
-
-model = PFNet7()
-
-for batch in train_loader:
-    cand_id_onehot, cand_momentum, new_edge_index = model(batch)
-    break
-
-
-len(cand_id_onehot)
-cand_id_onehot.shape
-len(cand_momentum)
-cand_momentum.shape
-len(new_edge_index)
-new_edge_index
-
-len(new_edge_index[0])
-len(new_edge_index[0])
-
-
-cand_id_onehot
-_, indices = torch.max(cand_id_onehot, -1)
-
-indices
-
-
-target_ids = torch.cat([batch.ygen_id for batch in train_loader]).to(_dev)
-
-
-target_ids.shape
-
-target_p4 = torch.cat([batch.ygen[:, :4] for batch in train_loader]).to(_dev)
-
-
-target_p4.shape
+# # test a forward pass
+# full_dataset = PFGraphDataset('../../test_tmp_delphes/data/delphes_cfi')
+#
+# # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+# full_dataset_batched=[]
+# for i in range(len(full_dataset)):
+#     for j in range(len(full_dataset[0])):
+#         full_dataset_batched.append([full_dataset[i][j]])
+#
+# torch.manual_seed(0)
+# valid_frac = 0.20
+# full_length = len(full_dataset_batched)
+# valid_num = int(valid_frac*full_length)
+# batch_size = 2
+#
+# train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
+# len(train_dataset)
+# len(valid_dataset)
+#
+# def collate(items):
+#     l = sum(items, [])
+#     return Batch.from_data_list(l)
+#
+# train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+# train_loader.collate_fn = collate
+# valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+# valid_loader.collate_fn = collate
+#
+# next(iter(train_loader))
+#
+#
+#
+# model = PFNet7()
+#
+# for batch in train_loader:
+#     cand_id_onehot, cand_momentum, new_edge_index = model(batch)
+#     break
+#
+#
+# len(cand_id_onehot)
+# cand_id_onehot.shape
+# len(cand_momentum)
+# cand_momentum.shape
+# len(new_edge_index)
+# new_edge_index
+#
