@@ -23,6 +23,7 @@ else:
 
 import torch_geometric
 
+
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
@@ -42,7 +43,6 @@ from glob import glob
 import numpy as np
 import os.path as osp
 import pickle
-
 import math
 import time
 import numba
@@ -54,22 +54,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mplhep
-
 from sklearn.metrics import accuracy_score
-
 import graph_data
 from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from sklearn.metrics import confusion_matrix
 
 from model import PFNet7
+from graph_data_delphes import one_hot_embedding
 
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
-
-def onehot(a):
-    b = np.zeros((a.size, len(class_labels)))
-    b[np.arange(a.size),a] = 1
-    return b
 
 #Get a unique directory name for the model
 def get_model_fname(dataset, model, n_train, lr, target_type):
@@ -152,43 +146,26 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
 
         _dev = cand_id_onehot.device                   # store the device in dev
         _, indices = torch.max(cand_id_onehot, -1)     # picks the maximum PID location and stores the index
-        if not multi_gpu:
-            data = [data]
+
         num_samples += len(cand_id_onehot)
 
         # concatenate ygen/ycand over the batch to compare with the truth label
         # now: ygen/ycand is of shape [~5000*batch_size, 6] corresponding to the output of the forward pass
         if args.target == "gen":
-            target_ids = torch.cat([d.ygen_id for d in data]).to(_dev)
-            target_p4 = torch.cat([d.ygen for d in data]).to(_dev)
-            #target_p4 = torch.cat([d.ygen[:, 1:] for d in data]).to(_dev)                # if we wanted to predict p4 (without charge for ex)
+            target_ids = data.ygen_id
+            target_p4 = data.ygen
         elif args.target == "cand":
-            target_ids = torch.cat([d.ycand_id for d in data]).to(_dev)
-            target_p4 = torch.cat([d.ycand for d in data]).to(_dev)
-            #target_p4 = torch.cat([d.ycand[:, :4] for d in data]).to(_dev)               # if we wanted to predict p4 (without charge for ex)
+            target_ids = data.ycand_id
+            target_p4 = data.ycand
 
-        #Predictions where both the predicted and true class label was nonzero
-        #In these cases, the true candidate existed and a candidate was predicted
-        msk = ((indices != 0) & (target_ids != 0)).detach().cpu()
-        msk2 = ((indices != 0) & (indices == target_ids))
-
-        accuracies_batch[i] = accuracy_score(target_ids[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
-
-        weights = compute_weights(target_ids, _dev)
+        # a manual rescaling weight given to each class
+        weights = compute_weights(torch.max(target_ids, -1)[1], _dev)
 
         #Loss for output candidate id (multiclass)
-        if l1m > 0.0:
-            l1 = l1m * torch.nn.functional.cross_entropy(cand_id_onehot, target_ids, weight=weights)
-        else:
-            l1 = torch.tensor(0.0).to(device=_dev)
+        l1 = torch.nn.functional.cross_entropy(target_ids, indices)
 
         #Loss for candidate p4 properties (regression)
-        l2 = torch.tensor(0.0).to(device=_dev)
-        if l2m > 0.0:
-            l2 = l2m*torch.nn.functional.mse_loss(cand_momentum[msk2], target_p4[msk2])
-        else:
-            l2 = torch.tensor(0.0).to(device=_dev)
-
+        l2 = torch.nn.functional.mse_loss(target_p4, cand_momentum)
 
         batch_loss = l1 + l2
         losses[i, 0] = l1.item()
@@ -206,6 +183,14 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
             if not scheduler is None:
                 scheduler.step()
 
+        #Predictions where both the predicted and true class label was nonzero
+        #In these cases, the true candidate existed and a candidate was predicted
+        # msk is a list of booleans of shape [~5000*batch_size] where each boolean correspond to whether a candidate was predicted
+        _, target_ids = torch.max(target_ids, -1)
+        msk = ((indices != 0) & (target_ids != 0)).detach().cpu()
+
+        accuracies_batch[i] = accuracy_score(target_ids[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
+
         #Compute correlation of predicted and true pt values for monitoring
         corr_pt = 0.0
         if msk.sum()>0:
@@ -218,7 +203,7 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
         conf_matrix += confusion_matrix(target_ids.detach().cpu().numpy(),
                                         np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1), labels=range(8))
 
-        i += 1
+        #i += 1
 
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
@@ -249,10 +234,9 @@ def train_loop():
         with experiment.train():
             model.train()
 
-            print('will use train()')
             num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
                                                                    args.l1, args.l2, args.l3, args.target, scheduler)
-            print('finished with train()')
+
             experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=j)
             l = sum(losses)
             losses_train[j] = losses
@@ -272,7 +256,7 @@ def train_loop():
 
         with experiment.validate():
             model.eval()
-            num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, val_loader, j,
+            num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, valid_loader, j,
                                                                         args.l1, args.l2, args.l3, args.target)
             l_v = sum(losses_v)
             losses_val[j] = losses_v
@@ -347,18 +331,18 @@ def parse_args():
 
 if __name__ == "__main__":
 
-    #args = parse_args()
+    args = parse_args()
 
-    #the next part defines args (to run the script not from terminal)
-    class objectview(object):
-        def __init__(self, d):
-            self.__dict__ = d
-
-    args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
-    'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
-    'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
-    'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
-    'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
+    # #the next part defines args (to run the script not from terminal)
+    # class objectview(object):
+    #     def __init__(self, d):
+    #         self.__dict__ = d
+    #
+    # args = objectview({'n_train': 30, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
+    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
+    # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
+    # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
+    # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
@@ -487,7 +471,6 @@ if __name__ == "__main__":
 
     model.train()
 
-    print('entering train_loop')
     train_loop()
     # with torch.autograd.profiler.profile(use_cuda=True) as prof:
     #     train_loop()
