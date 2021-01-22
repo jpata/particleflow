@@ -31,7 +31,7 @@ mult_total_loss = 1e3
 datapath = "out/pythia8_ttbar/tfr/*.tfrecords"
 
 #testing files not used for training
-test_pkl_files = list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_8_*.pkl.bz2")) + list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_9_*.pkl.bz2"))[:2]
+test_pkl_files = list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_8_*.pkl.bz2")) + list(glob.glob("out/pythia8_ttbar/tev14_pythia8_ttbar_9_*.pkl.bz2"))
 
 def parse_args():
     import argparse
@@ -663,6 +663,7 @@ if __name__ == "__main__":
             if args.action=="validate":
                 import scipy
                 y_pred = model.predict(X, batch_size=global_batch_size)
+                model.save(outdir + "/model_full", save_format="tf")
                 y_pred_raw_ids = y_pred[:, :, :num_output_classes]
                 
                 #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
