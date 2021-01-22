@@ -64,19 +64,13 @@ class PFNet7(nn.Module):
         self.act = nn.LeakyReLU
         self.act_f = torch.nn.functional.leaky_relu
 
-        # if you want to add an initial encoding of the input
-        conv_in_dim = input_dim
-
         # (1) GNN layer
         if convlayer == "gravnet-knn":
-            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn")
+            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="knn")
         elif convlayer == "gravnet-radius":
-            self.conv1 = GravNetConv(conv_in_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
+            self.conv1 = GravNetConv(input_dim, encoding_dim, space_dim, hidden_dim, nearest, neighbor_algo="radius", radius=radius)
         else:
             raise Exception("Unknown convolution layer: {}".format(convlayer))
-
-        #decoding layer receives the raw inputs and the gravnet output
-        num_decode_in = input_dim + encoding_dim
 
         # (2) another GNN layer if you want
         self.convlayer2 = convlayer2
@@ -89,7 +83,7 @@ class PFNet7(nn.Module):
 
         # (4) DNN layer: classifying PID
         self.nn2 = nn.Sequential(
-            nn.Linear(num_decode_in, hidden_dim),
+            nn.Linear(encoding_dim, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -102,7 +96,7 @@ class PFNet7(nn.Module):
 
         # (5) DNN layer: regressing p4
         self.nn3 = nn.Sequential(
-            nn.Linear(num_decode_in + output_dim_id, hidden_dim),
+            nn.Linear(encoding_dim + output_dim_id, hidden_dim),
             self.act(),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -115,78 +109,71 @@ class PFNet7(nn.Module):
 
     def forward(self, data):
 
-        #encode the inputs
+        #encode the inputs (x is of shape [~5000, input_dim])
         x = data.x
 
-        if self.input_encoding:
-            x = self.nn1(x)
-
         #Run a clustering of the inputs that returns the new_edge_index.. this is the KNN step..
+        # new_edge_index is of shape [2, big#]
+        # x & x1 are of shape [~5000, encoding_dim]
         new_edge_index, x = self.conv1(x)
-        x1 = self.act_f(x)
+        x1 = self.act_f(x)                 # act by nonlinearity
 
-        #run a second convolution
-        if self.convlayer2 != "none":
-            conv2_input = torch.cat([data.x, x1], axis=-1)
-            x2_1 = self.act_f(self.conv2_1(conv2_input, new_edge_index))
-            x2_2 = self.act_f(self.conv2_2(conv2_input, new_edge_index))
-            nn2_input = torch.cat([data.x, x1, x2_1], axis=-1)
-        else:
-            nn2_input = torch.cat([data.x, x1], axis=-1)
+        #Decode convolved graph nodes to PID (after a dropout)
+        # cand_ids is of shape [~5000, 6]
+        cand_ids = self.nn2(self.dropout1(x1))
 
-        #Decode convolved graph nodes to pdgid and p4
-        cand_ids = self.nn2(self.dropout1(nn2_input))
+        #Decode convolved graph nodes to p4
+        # (1) add the predicted PID along as it may help (why we concatenate)
+        nn3_input = torch.cat([x1, cand_ids], axis=-1)
+        # (2) pass them both to the NN
+        cand_p4 = self.nn3(self.dropout1(nn3_input))
 
-        if self.convlayer2 != "none":
-            nn3_input = torch.cat([data.x, x1, x2_2, cand_ids], axis=-1)
-        else:
-            nn3_input = torch.cat([data.x, x1, cand_ids], axis=-1)
-
-        #cand_p4 = data.x[:, len(elem_to_id):len(elem_to_id)+4] + self.nn3(self.dropout1(nn3_input))
-        cand_p4 = None
         return cand_ids, cand_p4, new_edge_index
 
 
 # #------------------------------------------------------------------------------------
-# # test a forward pass
-# full_dataset = PFGraphDataset('../../test_tmp_delphes/data/delphes_cfi')
-#
-# # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
-# full_dataset_batched=[]
-# for i in range(len(full_dataset)):
-#     for j in range(len(full_dataset[0])):
-#         full_dataset_batched.append([full_dataset[i][j]])
-#
-# torch.manual_seed(0)
-# valid_frac = 0.20
-# full_length = len(full_dataset_batched)
-# valid_num = int(valid_frac*full_length)
-# batch_size = 1
-#
-# train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
-#
-# def collate(items):
-#     l = sum(items, [])
-#     return Batch.from_data_list(l)
-#
-# train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
-# train_loader.collate_fn = collate
-# valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
-# valid_loader.collate_fn = collate
-#
-# train_samples = len(train_dataset)
-# valid_samples = len(valid_dataset)
-#
-# next(iter(train_loader))
-#
-#
-#
-# model = PFNet7()
-#
-# for batch in train_loader:
-#     cand_id_onehot, cand_momentum, new_edge_index = model(batch)
-#     break
-#
-#
-#
-# len(cand_id_onehot)
+# test a forward pass
+full_dataset = PFGraphDataset('../../test_tmp_delphes/data/delphes_cfi')
+
+# unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+full_dataset_batched=[]
+for i in range(len(full_dataset)):
+    for j in range(len(full_dataset[0])):
+        full_dataset_batched.append([full_dataset[i][j]])
+
+torch.manual_seed(0)
+valid_frac = 0.20
+full_length = len(full_dataset_batched)
+valid_num = int(valid_frac*full_length)
+batch_size = 1
+
+train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
+len(train_dataset)
+len(valid_dataset)
+
+def collate(items):
+    l = sum(items, [])
+    return Batch.from_data_list(l)
+
+train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+train_loader.collate_fn = collate
+valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+valid_loader.collate_fn = collate
+
+next(iter(train_loader))
+
+
+
+model = PFNet7()
+
+for batch in train_loader:
+    cand_id_onehot, cand_momentum, new_edge_index = model(batch)
+    break
+
+
+len(cand_id_onehot)
+cand_id_onehot.shape
+len(cand_momentum)
+cand_momentum.shape
+len(new_edge_index)
+new_edge_index
