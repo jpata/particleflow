@@ -4,7 +4,23 @@ import math
 
 from comet_ml import Experiment
 
+#Check if the GPU configuration has been provided
+try:
+    if not ("CUDA_VISIBLE_DEVICES" in os.environ):
+        import setGPU
+except Exception as e:
+    print("Could not import setGPU, running CPU-only")
+
 import torch
+use_gpu = torch.cuda.device_count()>0
+multi_gpu = torch.cuda.device_count()>1
+
+#define the global base device
+if use_gpu:
+    device = torch.device('cuda:0')
+else:
+    device = torch.device('cpu')
+
 import torch_geometric
 
 import torch.nn as nn
@@ -109,17 +125,17 @@ class PFNet7(nn.Module):
 
     def forward(self, data):
 
-        #encode the inputs (x is of shape [~5000, input_dim])
+        #encode the inputs (x is of shape [~5000*batch_size, input_dim])
         x = data.x
 
         #Run a clustering of the inputs that returns the new_edge_index.. this is the KNN step..
         # new_edge_index is of shape [2, big#]
-        # x & x1 are of shape [~5000, encoding_dim]
+        # x & x1 are of shape [~5000*batch_size, encoding_dim]
         new_edge_index, x = self.conv1(x)
         x1 = self.act_f(x)                 # act by nonlinearity
 
         #Decode convolved graph nodes to PID (after a dropout)
-        # cand_ids is of shape [~5000, 6]
+        # cand_ids is of shape [~5000*batch_size, 6]
         cand_ids = self.nn2(self.dropout1(x1))
 
         #Decode convolved graph nodes to p4
@@ -145,7 +161,7 @@ torch.manual_seed(0)
 valid_frac = 0.20
 full_length = len(full_dataset_batched)
 valid_num = int(valid_frac*full_length)
-batch_size = 1
+batch_size = 2
 
 train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
 len(train_dataset)
@@ -177,3 +193,23 @@ len(cand_momentum)
 cand_momentum.shape
 len(new_edge_index)
 new_edge_index
+
+len(new_edge_index[0])
+len(new_edge_index[0])
+
+
+cand_id_onehot
+_, indices = torch.max(cand_id_onehot, -1)
+
+indices
+
+
+target_ids = torch.cat([batch.ygen_id for batch in train_loader]).to(_dev)
+
+
+target_ids.shape
+
+target_p4 = torch.cat([batch.ygen[:, :4] for batch in train_loader]).to(_dev)
+
+
+target_p4.shape
