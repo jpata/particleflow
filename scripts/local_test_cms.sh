@@ -29,11 +29,11 @@ COMET_API_KEY="bla" python3 ../mlpf/pytorch/train_end2end_cms.py \
   --n_val 2 --model PFNet7 --convlayer gravnet-radius --convlayer2 sgconv \
   --lr 0.0001 --hidden_dim 32 --n_epochs 2 --l1 1.0 --l2 0.001 --target cand \
   --batch_size 1 --dropout 0.2 --disable_comet
-#
+
 # #generate dataframe with predictions from the pytorch model
-# python3 ../mlpf/pytorch/eval_end2end.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi \
-#   --path data/PFNet* --model PFNet7 --start 3 --stop 5 --epoch 1
-#
-# export OUTFILE=`find data -name df.pkl.bz2 | head -n1`
-# du $OUTFILE
-# python3 ../mlpf/plotting/plots.py --pkl $OUTFILE --target cand
+python3 ../mlpf/pytorch/eval_end2end_cms.py --dataset data/TTbar_14TeV_TuneCUETP8M1_cfi \
+  --path data/PFNet* --model PFNet7 --start 3 --stop 5 --epoch 1
+
+export OUTFILE=`find data -name df.pkl.bz2 | head -n1`
+du $OUTFILE
+python3 ../mlpf/plotting/plots.py --pkl $OUTFILE --target cand
