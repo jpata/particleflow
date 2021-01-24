@@ -287,10 +287,11 @@ def train_loop():
         torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, epoch))
 
         print("epoch={}/{} dt={:.2f}s loss_train={:.5f} loss_valid={:.5f} c={:.2f}/{:.2f} a={:.6f}/{:.6f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
-            epoch, args.n_epochs,
+            epoch+1, args.n_epochs,
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd, optimizer.param_groups[0]['lr']))
 
+    print('Done with training.')
 
 def parse_args():
     import argparse
