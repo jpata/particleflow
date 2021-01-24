@@ -40,6 +40,7 @@ cd test_tmp_delphes
 # python3 ../mlpf/pytorch/eval_end2end_delphes.py --dataset data/delphes_cfi \
 #   --path data/PFNet* --model PFNet7 --start 1 --stop 2 --epoch 1
 #
+# #plotting predcitions
 export OUTFILE=`find data -name df.pkl.bz2 | head -n1`
 du $OUTFILE
-python3 ../mlpf/plotting/plots.py --pkl $OUTFILE --target cand
+python3 ../mlpf/plotting/plots_delphes.py --pkl $OUTFILE --target cand

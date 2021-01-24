@@ -124,10 +124,8 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
-
     print(args.dataset)
     full_dataset = PFGraphDataset(root=args.dataset)
-
 
     print("full_dataset", len(full_dataset))
     test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.start, stop=args.stop))

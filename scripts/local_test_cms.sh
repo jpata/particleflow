@@ -36,4 +36,4 @@ python3 ../mlpf/pytorch/eval_end2end_cms.py --dataset data/TTbar_14TeV_TuneCUETP
 
 export OUTFILE=`find data -name df.pkl.bz2 | head -n1`
 du $OUTFILE
-python3 ../mlpf/plotting/plots.py --pkl $OUTFILE --target cand
+python3 ../mlpf/plotting/plots_cms.py --pkl $OUTFILE --target cand
