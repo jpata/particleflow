@@ -1,6 +1,5 @@
 import sys
 import os
-import math
 
 from comet_ml import Experiment
 
@@ -22,7 +21,6 @@ else:
     device = torch.device('cpu')
 
 import torch_geometric
-
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -55,12 +53,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mplhep
 from sklearn.metrics import accuracy_score
-import graph_data
-from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from sklearn.metrics import confusion_matrix
 
 from model import PFNet7
-from graph_data_delphes import one_hot_embedding
+from graph_data_delphes import PFGraphDataset, one_hot_embedding
+from data_preprocessing import from_data_to_loader
 
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
@@ -94,18 +91,18 @@ def mse_loss(input, target):
 def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
-@torch.no_grad()
-def test(model, loader, epoch, target_type):
-    with torch.no_grad():
-        ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type, None)
-    return ret
-
 def compute_weights(target_ids, device):
     vs, cs = torch.unique(target_ids, return_counts=True)
-    weights = torch.zeros(len(class_to_id)).to(device=device)
+    weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
         weights[k] = 1.0/math.sqrt(float(v))
     return weights
+
+@torch.no_grad()
+def test(model, loader, epoch, l1m, l2m, l3m, target_type):
+    with torch.no_grad():
+        ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type, None)
+    return ret
 
 
 def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler):
@@ -127,45 +124,55 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
     corrs_batch = np.zeros(len(loader))
 
     #epoch confusion matrix
-    conf_matrix = np.zeros((len(class_labels), len(class_labels)))
+    conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
     #keep track of how many data points were processed
     num_samples = 0
 
-    for i, data in enumerate(loader):
+    for i, batch in enumerate(loader):
         t0 = time.time()
 
         if not multi_gpu:
-            data = data.to(device)
+            batch = batch.to(device)
 
         if is_train:
             optimizer.zero_grad()
 
         # forward pass
-        cand_id_onehot, cand_momentum, new_edge_index = model(data)
+        cand_id_onehot, cand_momentum, new_edge_index = model(batch)
 
         _dev = cand_id_onehot.device                   # store the device in dev
-        _, indices = torch.max(cand_id_onehot, -1)     # picks the maximum PID location and stores the index
+        _, indices = torch.max(cand_id_onehot, -1)     # picks the maximum PID location and stores the index (opposite of one_hot_embedding)
 
         num_samples += len(cand_id_onehot)
 
         # concatenate ygen/ycand over the batch to compare with the truth label
         # now: ygen/ycand is of shape [~5000*batch_size, 6] corresponding to the output of the forward pass
         if args.target == "gen":
-            target_ids = data.ygen_id
-            target_p4 = data.ygen
+            target_ids = batch.ygen_id
+            target_p4 = batch.ygen
         elif args.target == "cand":
-            target_ids = data.ycand_id
-            target_p4 = data.ycand
+            target_ids = batch.ycand_id
+            target_p4 = batch.ycand
+
+        #Predictions where both the predicted and true class label was nonzero
+        #In these cases, the true candidate existed and a candidate was predicted
+        # target_ids_msk reverts the one_hot_embedding
+        # msk is a list of booleans of shape [~5000*batch_size] where each boolean correspond to whether a candidate was predicted
+        _, target_ids_msk = torch.max(target_ids, -1)
+        msk = ((indices != 0) & (target_ids_msk != 0)).detach().cpu()
+        msk2 = ((indices != 0) & (indices == target_ids_msk))
+
+        accuracies_batch[i] = accuracy_score(target_ids_msk[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
 
         # a manual rescaling weight given to each class
-        weights = compute_weights(torch.max(target_ids, -1)[1], _dev)
+        weights = compute_weights(torch.max(target_ids,-1)[1], _dev)
 
         #Loss for output candidate id (multiclass)
-        l1 = torch.nn.functional.cross_entropy(target_ids, indices)
+        l1 = l1m * torch.nn.functional.cross_entropy(target_ids, indices, weight=weights)
 
         #Loss for candidate p4 properties (regression)
-        l2 = torch.nn.functional.mse_loss(target_p4, cand_momentum)
+        l2 = l2m * torch.nn.functional.mse_loss(target_p4[msk2], cand_momentum[msk2])
 
         batch_loss = l1 + l2
         losses[i, 0] = l1.item()
@@ -183,14 +190,6 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
             if not scheduler is None:
                 scheduler.step()
 
-        #Predictions where both the predicted and true class label was nonzero
-        #In these cases, the true candidate existed and a candidate was predicted
-        # msk is a list of booleans of shape [~5000*batch_size] where each boolean correspond to whether a candidate was predicted
-        _, target_ids = torch.max(target_ids, -1)
-        msk = ((indices != 0) & (target_ids != 0)).detach().cpu()
-
-        accuracies_batch[i] = accuracy_score(target_ids[msk].detach().cpu().numpy(), indices[msk].detach().cpu().numpy())
-
         #Compute correlation of predicted and true pt values for monitoring
         corr_pt = 0.0
         if msk.sum()>0:
@@ -200,10 +199,8 @@ def train(model, loader, epoch, optimizer, l1m, l2m, l3m, target_type, scheduler
 
         corrs_batch[i] = corr_pt
 
-        conf_matrix += confusion_matrix(target_ids.detach().cpu().numpy(),
-                                        np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1), labels=range(8))
-
-        #i += 1
+        conf_matrix += confusion_matrix(target_ids_msk.detach().cpu().numpy(),
+                                        np.argmax(cand_id_onehot.detach().cpu().numpy(),axis=1), labels=range(6))
 
     corr = np.mean(corrs_batch)
     acc = np.mean(accuracies_batch)
@@ -224,7 +221,7 @@ def train_loop():
     stale_epochs = 0
 
     print("Training over {} epochs".format(args.n_epochs))
-    for j in range(args.n_epochs):
+    for epoch in range(args.n_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
@@ -234,44 +231,43 @@ def train_loop():
         with experiment.train():
             model.train()
 
-            num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, j, optimizer,
+            num_samples_train, losses, c, acc, conf_matrix = train(model, train_loader, epoch, optimizer,
                                                                    args.l1, args.l2, args.l3, args.target, scheduler)
 
-            experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=j)
+            experiment.log_metric('lr', optimizer.param_groups[0]['lr'], step=epoch)
             l = sum(losses)
-            losses_train[j] = losses
+            losses_train[epoch] = losses
             corrs += [c]
             accuracies += [acc]
-            experiment.log_metric('loss',l, step=j)
-            experiment.log_metric('loss1',losses[0], step=j)
-            experiment.log_metric('loss2',losses[1], step=j)
-            experiment.log_metric('loss3',losses[2], step=j)
-            experiment.log_metric('corrs',c, step=j)
-            experiment.log_metric('accuracy',acc, step=j)
-            experiment.log_confusion_matrix(matrix=conf_matrix, step=j,
+            experiment.log_metric('loss',l, step=epoch)
+            experiment.log_metric('loss1',losses[0], step=epoch)
+            experiment.log_metric('loss2',losses[1], step=epoch)
+            experiment.log_metric('loss3',losses[2], step=epoch)
+            experiment.log_metric('corrs',c, step=epoch)
+            experiment.log_metric('accuracy',acc, step=epoch)
+            experiment.log_confusion_matrix(matrix=conf_matrix, step=epoch,
                                             title='Confusion Matrix Full',
-                                            file_name='confusion-matrix-full-train-%03d.json' % j,
-                                            labels = [str(c) for c in class_labels])
-
+                                            file_name='confusion-matrix-full-train-%03d.json' % epoch,
+                                            labels = [str(c) for c in range(output_dim_id)])
 
         with experiment.validate():
             model.eval()
-            num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, valid_loader, j,
+            num_samples_val, losses_v, c_v, acc_v, conf_matrix_v = test(model, valid_loader, epoch,
                                                                         args.l1, args.l2, args.l3, args.target)
             l_v = sum(losses_v)
-            losses_val[j] = losses_v
+            losses_val[epoch] = losses_v
             corrs_v += [c_v]
             accuracies_v += [acc_v]
-            experiment.log_metric('loss',l_v, step=j)
-            experiment.log_metric('loss1',losses_v[0], step=j)
-            experiment.log_metric('loss2',losses_v[1], step=j)
-            experiment.log_metric('loss3',losses_v[2], step=j)
-            experiment.log_metric('corrs',c_v, step=j)
-            experiment.log_metric('accuracy',acc_v, step=j)
-            experiment.log_confusion_matrix(matrix=conf_matrix_v, step=j,
+            experiment.log_metric('loss',l_v, step=epoch)
+            experiment.log_metric('loss1',losses_v[0], step=epoch)
+            experiment.log_metric('loss2',losses_v[1], step=epoch)
+            experiment.log_metric('loss3',losses_v[2], step=epoch)
+            experiment.log_metric('corrs',c_v, step=epoch)
+            experiment.log_metric('accuracy',acc_v, step=epoch)
+            experiment.log_confusion_matrix(matrix=conf_matrix_v, step=epoch,
                                             title='Confusion Matrix Full',
-                                            file_name='confusion-matrix-full-val-%03d.json' % j,
-                                            labels = [str(c) for c in class_labels])
+                                            file_name='confusion-matrix-full-val-%03d.json' % epoch,
+                                            labels = [str(c) for c in range(output_dim_id)])
 
         if l_v < best_val_loss:
             best_val_loss = l_v
@@ -280,26 +276,27 @@ def train_loop():
             stale_epochs += 1
 
         t1 = time.time()
-        epochs_remaining = args.n_epochs - j
-        time_per_epoch = (t1 - t0_initial)/(j + 1)
-        experiment.log_metric('time_per_epoch', time_per_epoch, step=j)
+        epochs_remaining = args.n_epochs - epoch
+        time_per_epoch = (t1 - t0_initial)/(epoch + 1)
+        experiment.log_metric('time_per_epoch', time_per_epoch, step=epoch)
         eta = epochs_remaining*time_per_epoch/60
 
         spd = (num_samples_val+num_samples_train)/time_per_epoch
         losses_str = "[" + ",".join(["{:.4f}".format(x) for x in losses_v]) + "]"
 
-        torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, j))
+        torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, epoch))
 
-        print("epoch={}/{} dt={:.2f}s l={:.5f}/{:.5f} c={:.2f}/{:.2f} a={:.6f}/{:.6f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
-            j, args.n_epochs,
+        print("epoch={}/{} dt={:.2f}s loss_train={:.5f} loss_valid={:.5f} c={:.2f}/{:.2f} a={:.6f}/{:.6f} partial_losses={} stale={} eta={:.1f}m spd={:.2f} samples/s lr={}".format(
+            epoch, args.n_epochs,
             t1 - t0, l, l_v, c, c_v, acc, acc_v,
             losses_str, stale_epochs, eta, spd, optimizer.param_groups[0]['lr']))
+
 
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_train", type=int, default=80, help="number of training events")
-    parser.add_argument("--n_val", type=int, default=20, help="number of validation events")
+    parser.add_argument("--n_train", type=int, default=2, help="number of data files to use for training.. each file contains 100 events")
+    parser.add_argument("--n_val", type=int, default=1, help="number of data files to use for validation.. each file contains 100 events")
     parser.add_argument("--n_epochs", type=int, default=100, help="number of training epochs")
     parser.add_argument("--patience", type=int, default=100, help="patience before early stopping")
     parser.add_argument("--hidden_dim", type=int, default=32, help="hidden dimension")
@@ -338,51 +335,19 @@ if __name__ == "__main__":
     #     def __init__(self, d):
     #         self.__dict__ = d
     #
-    # args = objectview({'n_train': 2, 'n_val': 1, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
+    # args = objectview({'n_train': 2, 'n_val': 1, 'n_epochs': 3, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
     # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
     # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
     # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
     # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
-
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
 
-    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
-    valid_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
+    # constructs a loader from the data to iterate over batches
+    train_loader, valid_loader = from_data_to_loader(full_dataset, args.n_train, args.n_val, batch_size=args.batch_size)
 
-    # preprocessing the data in a good format for passing batches to the GNN
-    train_dataset_batched=[]
-    for i in range(len(train_dataset)):
-        train_dataset_batched += train_dataset[i]
-
-    train_dataset_batched = [[i] for i in train_dataset_batched]
-
-    valid_dataset_batched=[]
-    for i in range(len(valid_dataset_batched)):
-        valid_dataset_batched += valid_dataset[i]
-
-    valid_dataset_batched = [[i] for i in valid_dataset_batched]
-
-    # define the batch_size to create the loader
-    batch_size = args.batch_size
-
-    #hack for multi-gpu training
-    if not multi_gpu:
-        def collate(items):
-            l = sum(items, [])
-            return Batch.from_data_list(l)
-    else:
-        def collate(items):
-            l = sum(items, [])
-            return l
-
-    train_loader = DataListLoader(train_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=True)
-    train_loader.collate_fn = collate
-    valid_loader = DataListLoader(valid_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=False)
-    valid_loader.collate_fn = collate
-
-    #one-hot encoded element ID + element parameters
+    # element parameters
     input_dim = 12
 
     #one-hot particle ID and momentum
@@ -405,7 +370,6 @@ if __name__ == "__main__":
                     'activation': args.activation,
                     'nearest': args.nearest,
                     'input_encoding': args.input_encoding}
-
 
     #instantiate the model
     model = model_class(**model_kwargs)

@@ -54,10 +54,10 @@ import matplotlib.pyplot as plt
 import mplhep
 
 from sklearn.metrics import accuracy_score
-
-import graph_data
-from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
 from sklearn.metrics import confusion_matrix
+
+import graph_data_cms
+from graph_data_cms import PFGraphDataset, elem_to_id, class_to_id, class_labels
 
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
@@ -66,6 +66,68 @@ def onehot(a):
     b = np.zeros((a.size, len(class_labels)))
     b[np.arange(a.size),a] = 1
     return b
+
+#Creates the dataframe of predictions given a trained model and a data loader
+def prepare_dataframe(model, loader, multi_gpu, device):
+    model.eval()
+    dfs = []
+    dfs_edges = []
+    eval_time = 0
+
+    for i, data in enumerate(loader):
+        if not multi_gpu:
+            data = data.to(device)
+
+        pred_id_onehot, pred_momentum, new_edges = model(data)
+        _, pred_id = torch.max(pred_id_onehot, -1)
+        pred_momentum[pred_id==0] = 0
+        if not multi_gpu:
+            data = [data]
+
+        x = torch.cat([d.x.to("cpu") for d in data])
+        gen_id = torch.cat([d.y_gen_id.to("cpu") for d in data])
+        gen_p4 = torch.cat([d.ygen[:, :4].to("cpu") for d in data])
+        cand_id = torch.cat([d.y_candidates_id.to("cpu") for d in data])
+        cand_p4 = torch.cat([d.ycand[:, :4].to("cpu") for d in data])
+
+        df = pandas.DataFrame()
+
+        df["elem_type"] = [int(graph_data_cms.elem_labels[i]) for i in torch.argmax(x[:, :len(graph_data_cms.elem_labels)], axis=-1).numpy()]
+        for ifeat, feat in enumerate([
+                'pt', 'eta', 'phi', 'e',
+                'layer', 'depth', 'charge', 'trajpoint',
+                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+                'muon_dt_hits', 'muon_csc_hits']):
+            df["elem_{}".format(feat)] = x[:, len(graph_data_cms.elem_labels)+ifeat].numpy()
+
+        df["elem_type"] = [int(graph_data_cms.elem_labels[i]) for i in torch.argmax(x[:, :len(graph_data_cms.elem_labels)], axis=-1).numpy()]
+        df["gen_pid"] = [int(graph_data_cms.class_labels[i]) for i in gen_id.numpy()]
+        df["gen_eta"] = gen_p4[:, 0].numpy()
+        df["gen_phi"] = gen_p4[:, 1].numpy()
+        df["gen_e"] = gen_p4[:, 2].numpy()
+        df["gen_charge"] = gen_p4[:, 3].numpy()
+
+        df["cand_pid"] = [int(graph_data_cms.class_labels[i]) for i in cand_id.numpy()]
+        df["cand_eta"] = cand_p4[:, 0].numpy()
+        df["cand_phi"] = cand_p4[:, 1].numpy()
+        df["cand_e"] = cand_p4[:, 2].numpy()
+        df["cand_charge"] = cand_p4[:, 3].numpy()
+        df["pred_pid"] = [int(graph_data_cms.class_labels[i]) for i in pred_id.detach().cpu().numpy()]
+
+        df["pred_eta"] = pred_momentum[:, 0].detach().cpu().numpy()
+        df["pred_phi"] = pred_momentum[:, 1].detach().cpu().numpy()
+        df["pred_e"] = pred_momentum[:, 2].detach().cpu().numpy()
+        df["pred_charge"] = pred_momentum[:, 3].detach().cpu().numpy()
+
+        dfs.append(df)
+        #df_edges = pandas.DataFrame()
+        #df_edges["edge0"] = edges[0].to("cpu")
+        #df_edges["edge1"] = edges[1].to("cpu")
+        #dfs_edges += [df_edges]
+
+    df = pandas.concat(dfs, ignore_index=True)
+    #df_edges = pandas.concat(dfs_edges, ignore_index=True)
+    return df#, df_edges
 
 #Get a unique directory name for the model
 def get_model_fname(dataset, model, n_train, lr, target_type):

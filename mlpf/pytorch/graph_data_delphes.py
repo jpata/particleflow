@@ -82,6 +82,7 @@ class PFGraphDataset(Dataset):
     def process_single_file(self, raw_file_name):
         with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
             data = pickle.load(fi, encoding='iso-8859-1')
+
         x=[]
         ygen=[]
         ycand=[]
