@@ -95,7 +95,7 @@ def weighted_mse_loss(input, target, weight):
     return torch.sum(weight * (input - target).sum(axis=1) ** 2)
 
 @torch.no_grad()
-def test(model, loader, epoch, l1m, l2m, l3m, target_type):
+def test(model, loader, epoch, target_type):
     with torch.no_grad():
         ret = train(model, loader, epoch, None, l1m, l2m, l3m, target_type, None)
     return ret
@@ -333,37 +333,39 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    # #the next part defines args (to run the script not from terminal)
+    # # the next part initializes some args values (to run the script not from terminal)
     # class objectview(object):
     #     def __init__(self, d):
     #         self.__dict__ = d
     #
-    # args = objectview({'n_train': 30, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
+    # args = objectview({'n_train': 2, 'n_val': 1, 'n_epochs': 2, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
     # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
     # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
     # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
     # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
+
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
 
-    #one-hot encoded element ID + element parameters
-    input_dim = 12
+    train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=args.n_train))
+    valid_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.n_train, stop=args.n_train+args.n_val))
 
-    #one-hot particle ID and momentum
-    output_dim_id = 6
-    output_dim_p4 = 6
+    # preprocessing the data in a good format for passing batches to the GNN
+    train_dataset_batched=[]
+    for i in range(len(train_dataset)):
+        train_dataset_batched += train_dataset[i]
 
-    edge_dim = 1
+    train_dataset_batched = [[i] for i in train_dataset_batched]
 
-    patience = args.patience
+    valid_dataset_batched=[]
+    for i in range(len(valid_dataset_batched)):
+        valid_dataset_batched += valid_dataset[i]
 
-    # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
-    # TODO: find a better way kiddo
-    full_dataset_batched=[]
-    for i in range(len(full_dataset)):
-        for j in range(len(full_dataset[0])):
-            full_dataset_batched.append([full_dataset[i][j]])
+    valid_dataset_batched = [[i] for i in valid_dataset_batched]
+
+    # define the batch_size to create the loader
+    batch_size = args.batch_size
 
     #hack for multi-gpu training
     if not multi_gpu:
@@ -375,22 +377,19 @@ if __name__ == "__main__":
             l = sum(items, [])
             return l
 
-    torch.manual_seed(0)
-    valid_frac = 0.20
-    full_length = len(full_dataset_batched)
-    valid_num = int(valid_frac*full_length)
-    batch_size = 1
-
-    train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
-
-    train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+    train_loader = DataListLoader(train_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=True)
     train_loader.collate_fn = collate
-    valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+    valid_loader = DataListLoader(valid_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=False)
     valid_loader.collate_fn = collate
 
-    train_samples = len(train_dataset)
-    valid_samples = len(valid_dataset)
+    #one-hot encoded element ID + element parameters
+    input_dim = 12
 
+    #one-hot particle ID and momentum
+    output_dim_id = 6
+    output_dim_p4 = 6
+
+    patience = args.patience
 
     model_class = model_classes[args.model]
     model_kwargs = {'input_dim': input_dim,
@@ -459,9 +458,6 @@ if __name__ == "__main__":
             epochs=args.n_epochs + 1,
             anneal_strategy='linear',
         )
-
-    loss = torch.nn.MSELoss()
-    loss2 = torch.nn.BCELoss()
 
     print(model)
     print(model_fname)

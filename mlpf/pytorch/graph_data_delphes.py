@@ -16,7 +16,7 @@ import scipy.sparse
 import math
 import multiprocessing
 
-# assuming pkl files exist in /test_tmp_delphes/data/delphes_cfi/raw
+# assumes pkl files exist in /test_tmp_delphes/data/delphes_cfi/raw
 # they are processed and saved as pt files in /test_tmp_delphes/data/delphes_cfi/processed
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
 
@@ -99,8 +99,8 @@ class PFGraphDataset(Dataset):
             ygen_id.append(ygen[i][:,0])
             ycand_id.append(ycand[i][:,0])
 
-            ygen_id[i] = torch.tensor(ygen_id[i], dtype=torch.long)
-            ycand_id[i] = torch.tensor(ycand_id[i], dtype=torch.long)
+            ygen_id[i] = ygen_id[i].long()
+            ycand_id[i] = ycand_id[i].long()
 
             ygen_id[i] = one_hot_embedding(ygen_id[i], 6)
             ycand_id[i] = one_hot_embedding(ycand_id[i], 6)
@@ -161,41 +161,3 @@ if __name__ == "__main__":
 
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
-
-
-
-
-
-
-
-# import pickle
-# import os
-# import torch
-#
-# from torch_geometric.data import Data
-#
-# directory = '../../test_tmp_delphes/data/delphes_cfi/raw/'
-# datas = []
-# for filename in os.listdir(directory):
-#     if filename.endswith(".pkl"):
-#         with open(os.path.join(directory, filename), "rb") as fi:
-#             data = pickle.load(fi, encoding='iso-8859-1')
-#         x=[]
-#         ygen=[]
-#         ycand=[]
-#         batch_data = []
-#         for i in range(len(data['X'])):
-#             x.append(torch.tensor(data['X'][i], dtype=torch.float))
-#             ygen.append(torch.tensor(data['ygen'][i], dtype=torch.float))
-#             ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
-#             d = Data(
-#                 x=x[i],
-#                 #edge_index=r[0].to(dtype=torch.long),
-#                 #edge_attr=r[1].to(dtype=torch.float),
-#                 ygen=ygen[i], ycand=ycand[i],
-#             )
-#
-#             data_prep(d)
-#             batch_data += [d]
-#             datas.append(batch_data)
-#         print("done with:", filename)

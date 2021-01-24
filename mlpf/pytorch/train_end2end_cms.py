@@ -475,18 +475,18 @@ def parse_args():
 
 if __name__ == "__main__":
 
-    # args = parse_args()
+    args = parse_args()
 
-    # the next part defines args (to run the script not from terminal)
-    class objectview(object):
-        def __init__(self, d):
-            self.__dict__ = d
-
-    args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256,
-    'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp/data/TTbar_14TeV_TuneCUETP8M1_cfi',
-    'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
-    'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
-    'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
+    # # the next part initializes some args values (to run the script not from terminal)
+    # class objectview(object):
+    #     def __init__(self, d):
+    #         self.__dict__ = d
+    #
+    # args = objectview({'n_train': 3, 'n_val': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':64, 'encoding_dim': 256,
+    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp/data/TTbar_14TeV_TuneCUETP8M1_cfi',
+    # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
+    # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
+    # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 
     # define the dataset
     full_dataset = PFGraphDataset(args.dataset)
