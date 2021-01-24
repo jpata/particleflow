@@ -132,49 +132,52 @@ class PFNet7(nn.Module):
 
 
 # #------------------------------------------------------------------------------------
-# # test a forward pass
+#test a forward pass
 # full_dataset = PFGraphDataset('../../test_tmp_delphes/data/delphes_cfi')
 #
-# # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
-# full_dataset_batched=[]
-# for i in range(len(full_dataset)):
-#     for j in range(len(full_dataset[0])):
-#         full_dataset_batched.append([full_dataset[i][j]])
+# full_dataset
 #
-# torch.manual_seed(0)
-# valid_frac = 0.20
-# full_length = len(full_dataset_batched)
-# valid_num = int(valid_frac*full_length)
-# batch_size = 2
+# train_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=2))
+# valid_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=2, stop=2+1))
 #
-# train_dataset, valid_dataset = random_split(full_dataset_batched, [full_length-valid_num,valid_num])
 # len(train_dataset)
-# len(valid_dataset)
+#
+# train_dataset_batched=[]
+# for i in range(len(train_dataset)):
+#     train_dataset_batched += train_dataset[i]
+#
+# train_dataset_batched = [[i] for i in train_dataset_batched]
+#
+#
+#
+#
+#
+# # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+# train_dataset_batched=[]
+# for i in range(len(train_dataset)):
+#     for j in range(len(train_dataset[i])):
+#         train_dataset_batched.append([train_dataset[i][j]])
+#
+#
+# # unfold the lists of data in the full_dataset for appropriate batch passing to the GNN
+# valid_dataset_batched=[]
+# for i in range(len(valid_dataset)):
+#     for j in range(len(valid_dataset[i])):
+#         valid_dataset_batched.append([valid_dataset[i][j]])
+#
+# len(valid_dataset_batched)
+#
+#
+# batch_size = 1
+#
 #
 # def collate(items):
 #     l = sum(items, [])
 #     return Batch.from_data_list(l)
 #
-# train_loader = DataListLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+# train_loader = DataListLoader(train_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=True)
 # train_loader.collate_fn = collate
-# valid_loader = DataListLoader(valid_dataset, batch_size=batch_size, pin_memory=True, shuffle=False)
+# valid_loader = DataListLoader(valid_dataset_batched, batch_size=batch_size, pin_memory=True, shuffle=False)
 # valid_loader.collate_fn = collate
 #
 # next(iter(train_loader))
-#
-#
-#
-# model = PFNet7()
-#
-# for batch in train_loader:
-#     cand_id_onehot, cand_momentum, new_edge_index = model(batch)
-#     break
-#
-#
-# len(cand_id_onehot)
-# cand_id_onehot.shape
-# len(cand_momentum)
-# cand_momentum.shape
-# len(new_edge_index)
-# new_edge_index
-#
