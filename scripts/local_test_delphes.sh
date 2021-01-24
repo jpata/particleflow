@@ -21,7 +21,7 @@ bzip2 -d tev14_pythia8_ttbar_0_0.pkl.bz2
 bzip2 -d tev14_pythia8_ttbar_0_1.pkl.bz2
 bzip2 -d tev14_pythia8_ttbar_0_10.pkl.bz2
 
-cd ../../../..
+cd ../../..
 
 #generate pytorch data files from pkl files
 python3 ../mlpf/pytorch/graph_data_delphes.py --dataset data/delphes_cfi \
