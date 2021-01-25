@@ -6,73 +6,199 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas
 import mplhep
+import math
 
 import sys
 import os.path as osp
 
 from plot_utils import plot_confusion_matrix, cms_label, particle_label, sample_label
 from plot_utils import plot_E_reso, plot_eta_reso, plot_phi_reso, bins
+import torch
 
-#from tf_model import class_labels
+elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 class_labels = [0, 1, 2, 3, 4, 5]
+
+#map these to ids 0...Nclass
+class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
+# map these to ids 0...Nclass
+elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
 
 def deltaphi(phi1, phi2):
     return np.fmod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
 
-def prepare_resolution_plots(big_df, pid, bins, target='cand', outpath='./'):
-    msk_true = (big_df["{}_pid".format(target)]==pid)
-    msk_pred = (big_df["pred_pid"]==pid)
-    msk_both = msk_true&msk_pred
-    v0 = big_df[["{}_e".format(target), "pred_e"]].values
-    v1 = big_df[["{}_eta".format(target), "pred_eta"]].values
-    v2 = big_df[["{}_phi".format(target), "pred_phi"]].values
+def mse_unreduced(true, pred):
+    return torch.square(true-pred)
 
-    plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
-    plot_eta_reso(big_df, pid, v1, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
-    plot_phi_reso(big_df, pid, v2, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
+# computes accuracy of PID predictions given a one_hot_embedding: truth & pred
+def accuracy(true_id, pred_id):
+    # revert one_hot_embedding
+    _, true_id = torch.max(true_id, -1)
+    _, pred_id = torch.max(pred_id, -1)
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
-    parser.add_argument("--pkl", type=str, default = 'data/test.pkl.bz2', help="Dataframe pkl")
-    args = parser.parse_args()
+    is_true = (true_id !=0)
+    is_same = (true_id == pred_id)
 
+    acc = (is_same&is_true).sum() / is_true.sum()
+    return acc
 
-    big_df = pandas.read_pickle(args.pkl)
+# computes the resolution given a one_hot_embedding truth & pred + p4 of truth & pred
+def energy_resolution(true_id, true_p4, pred_id, pred_p4):
+    # revert one_hot_embedding
+    _,true_id= torch.max(true_id, -1)
+    _,pred_id = torch.max(pred_id, -1)
 
-    big_df["pred_phi"] = np.arctan2(np.sin(big_df["pred_phi"]), np.cos(big_df["pred_phi"]))
+    msk = (true_id!=0)
 
-    #msk = (big_df["{}_pid".format(args.target)] != 0) & ((big_df["pred_pid"] != 0))
-    msk = np.ones(len(big_df), dtype=np.bool)
+    return mse_unreduced(true_p4[msk], pred_p4[msk])
 
-    plt.figure()
-    plt.hist(big_df["{}_pid".format(args.target)][msk])
-    plt.savefig(osp.join(osp.dirname(args.pkl),"{}_pid.pdf".format(args.target)), bbox_inches="tight")
+def plot_confusion_matrix(cm):
+    fig = plt.figure(figsize=(5,5))
+    plt.imshow(cm, cmap="Blues")
+    plt.title("Reconstructed PID (normed to gen)")
+    plt.xlabel("MLPF PID")
+    plt.ylabel("Gen PID")
+    plt.xticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
+    plt.yticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
+    plt.colorbar()
+    plt.tight_layout()
+    return fig
 
+import imageio
+def plot_to_image(figure):
+    """
+    Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call.
+    """
 
-    confusion2 = sklearn.metrics.confusion_matrix(
-        big_df["{}_pid".format(args.target)][msk], big_df["pred_pid"][msk],
-        labels=class_labels
-    )
+    # Use plt.savefig to save the plot to a PNG in memory.
+    plt.savefig('name', format='png')
+    plt.close(figure)
 
-    fig, ax = plot_confusion_matrix(
-        cm=confusion2, target_names=[int(x) for x in class_labels], normalize=True
-    )
+    image = imageio.imread('name')
+    return image
 
-    acc = sklearn.metrics.accuracy_score(big_df["{}_pid".format(args.target)][msk], big_df["pred_pid"][msk])
-    plt.title("")
-    #plt.title("ML-PF, accuracy={:.2f}".format(acc))
-    plt.ylabel("{} PF candidate PID\nassociated to input PFElement".format(args.target))
-    plt.xlabel("predicted PID\nML-PF candidate,\naccuracy: {:.2f}".format(acc))
-    cms_label(x0=0.20, x1=0.26, y=0.95)
-    sample_label(ax, y=0.995)
-    plt.savefig(osp.join(osp.dirname(args.pkl),"confusion_mlpf.pdf"), bbox_inches="tight")
+def plot_regression(val_x, val_y, var_name, rng, fname):
+    fig = plt.figure(figsize=(5,5))
+    plt.hist2d(
+        val_x,
+        val_y,
+        bins=(rng, rng),
+        cmap="Blues",
+        #norm=matplotlib.colors.LogNorm()
+    );
+    plt.xlabel("Gen {}".format(var_name))
+    plt.ylabel("MLPF {}".format(var_name))
 
-    prepare_resolution_plots(big_df, 211, bins[211], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 130, bins[130], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 11, bins[11], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 13, bins[13], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 22, bins[22], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 1, bins[1], target=args.target, outpath=osp.dirname(args.pkl))
-    prepare_resolution_plots(big_df, 2, bins[2], target=args.target, outpath=osp.dirname(args.pkl))
+    plt.savefig(fname + '.png')
+    return fig
+
+def plot_distributions(val_x, val_y, var_name, rng, fname):
+    fig = plt.figure(figsize=(5,5))
+    plt.hist(val_x, bins=rng, density=True, histtype="step", lw=2, label="gen");
+    plt.hist(val_y, bins=rng, density=True, histtype="step", lw=2, label="MLPF");
+    plt.xlabel(var_name)
+    plt.legend(loc="best", frameon=False)
+    plt.ylim(0,1.5)
+
+    plt.savefig(fname + '.png')
+    return fig
+
+def plot_particles(fname, true_id, true_p4, pred_id, pred_p4, pid=1):
+    #Ground truth vs model prediction particles
+    fig = plt.figure(figsize=(10,10))
+
+    true_p4 = true_p4.detach().numpy()
+    pred_p4 = pred_p4.detach().numpy()
+
+    msk = (true_id == pid)
+    plt.scatter(true_p4[msk, 2], np.arctan2(true_p4[msk, 3], true_p4[msk, 4]), s=2*true_p4[msk, 2], marker="o", alpha=0.5)
+
+    msk = (pred_id == pid)
+    plt.scatter(pred_p4[msk, 2], np.arctan2(pred_p4[msk, 3], pred_p4[msk, 4]), s=2*pred_p4[msk, 2], marker="o", alpha=0.5)
+
+    plt.xlabel("eta")
+    plt.ylabel("phi")
+    plt.xlim(-5,5)
+    plt.ylim(-4,4)
+
+    plt.savefig(fname + '.png')
+    return fig
+
+def make_plots(true_id, true_p4, pred_id, pred_p4, out):
+
+    num_output_classes = len(class_labels)
+
+    _, true_id = torch.max(true_id, -1)
+    _, pred_id = torch.max(pred_id, -1)
+
+    cm = sklearn.metrics.confusion_matrix(
+        true_id,
+        pred_id, labels=list(range(num_output_classes)))
+    cm_normed = sklearn.metrics.confusion_matrix(
+        true_id,
+        pred_id, labels=list(range(num_output_classes)), normalize="true")
+
+    figure = plot_confusion_matrix(cm)
+    #cm_image = plot_to_image(figure)
+
+    figure = plot_confusion_matrix(cm_normed)
+    #cm_image_normed = plot_to_image(figure)
+
+    msk = (pred_id!=0) & (true_id!=0)
+
+    ch_true = true_p4[msk, 0].flatten().detach().numpy()
+    ch_pred = pred_p4[msk, 0].flatten().detach().numpy()
+
+    pt_true = true_p4[msk, 1].flatten().detach().numpy()
+    pt_pred = pred_p4[msk, 1].flatten().detach().numpy()
+
+    e_true = true_p4[msk, 5].flatten().detach().numpy()
+    e_pred = pred_p4[msk, 5].flatten().detach().numpy()
+
+    eta_true = true_p4[msk, 2].flatten().detach().numpy()
+    eta_pred = pred_p4[msk, 2].flatten().detach().numpy()
+
+    sphi_true = true_p4[msk, 3].flatten().detach().numpy()
+    sphi_pred = pred_p4[msk, 3].flatten().detach().numpy()
+
+    cphi_true = true_p4[msk, 4].flatten().detach().numpy()
+    cphi_pred = pred_p4[msk, 4].flatten().detach().numpy()
+
+    figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100), fname = out+'charge_regression')
+    #ch_image = plot_to_image(figure)
+
+    figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), fname = out+'pt_regression')
+    #pt_image = plot_to_image(figure)
+
+    figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), fname = out+'pt_distribution')
+    #pt_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(e_true, e_pred, "E", np.linspace(-1, 5, 100), fname = out+'energy_regression')
+    #e_image = plot_to_image(figure)
+
+    figure = plot_distributions(e_true, e_pred, "E", np.linspace(-1, 5, 100), fname = out+'energy_distribution')
+    #e_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), fname = out+'eta_regression')
+    #eta_image = plot_to_image(figure)
+
+    figure = plot_distributions(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), fname = out+'eta_distribution')
+    #eta_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), fname = out+'sphi_regression')
+    #sphi_image = plot_to_image(figure)
+
+    figure = plot_distributions(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), fname = out+'sphi_distribution')
+    #sphi_distr_image = plot_to_image(figure)
+
+    figure = plot_regression(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), fname = out+'cphi_regression')
+    #cphi_image = plot_to_image(figure)
+
+    figure = plot_distributions(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), fname = out+'cphi_distribution')
+    #cphi_distr_image = plot_to_image(figure)
+
+    figure = plot_particles( out+'particleID1', true_id, true_p4, pred_id, pred_p4, pid=1)
+    #pid_image_1 = plot_to_image(figure)
+
+    figure = plot_particles( out+'particleID2', true_id, true_p4, pred_id, pred_p4, pid=2)
+    #pid_image_2 = plot_to_image(figure)
