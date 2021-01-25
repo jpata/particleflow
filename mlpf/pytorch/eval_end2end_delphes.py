@@ -14,84 +14,52 @@ from graph_data_delphes import PFGraphDataset
 from data_preprocessing import from_data_to_loader
 import train_end2end_delphes
 import time
+import math
 
-elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-class_labels = [0, 1, 2, 3, 4, 5]
+import sys
+sys.path.insert(1, '../plotting/')
+sys.path.insert(1, '../mlpf/plotting/')
 
-#map these to ids 0...Nclass
-class_to_id = {r: class_labels[r] for r in range(len(class_labels))}
+import plots_delphes
+from plots_delphes import make_plots
 
-# map these to ids 0...Nclass
-elem_to_id = {r: elem_labels[r] for r in range(len(elem_labels))}
+use_gpu = torch.cuda.device_count()>0
+multi_gpu = torch.cuda.device_count()>1
+
+#define the global base device
+if use_gpu:
+    device = torch.device('cuda:0')
+else:
+    device = torch.device('cpu')
 
 def collate(items):
     l = sum(items, [])
     return Batch.from_data_list(l)
 
-#Creates the dataframe of predictions given a trained model and a data loader
-def prepare_dataframe(model, loader, multi_gpu, device):
-    model.eval()
-    dfs = []
-    dfs_edges = []
-    eval_time = 0
+def prepare_test_data(full_dataset, start, stop, batch_size):
 
-    for i, data in enumerate(loader):
-        if not multi_gpu:
-            data = data.to(device)
-        pred_id_onehot, pred_momentum, new_edges = model(data)
-        _, pred_id = torch.max(pred_id_onehot, -1)
-        pred_momentum[pred_id==0] = 0
-        data = [data]
+    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=start, stop=stop))
 
-        x = torch.cat([d.x.to("cpu") for d in data])
-        gen_id = torch.cat([d.ygen_id.to("cpu") for d in data])
-        gen_p4 = torch.cat([d.ygen[:, :].to("cpu") for d in data])
-        cand_id = torch.cat([d.ycand_id.to("cpu") for d in data])
-        cand_p4 = torch.cat([d.ycand[:, :].to("cpu") for d in data])
+    # preprocessing the test_dataset in a good format for passing correct batches of events to the GNN
+    test_dataset_batched=[]
+    for i in range(len(test_dataset)):
+        test_dataset_batched += test_dataset[i]
+    test_dataset_batched = [[i] for i in test_dataset_batched]
 
-        # reverting the one_hot_embedding
-        gen_id_flat = torch.max(gen_id, -1)[1]
-        cand_id_flat = torch.max(cand_id, -1)[1]
+    #hack for multi-gpu training
+    if not multi_gpu:
+        def collate(items):
+            l = sum(items, [])
+            return Batch.from_data_list(l)
+    else:
+        def collate(items):
+            l = sum(items, [])
+            return l
 
-        df = pandas.DataFrame()
-        gen_p4.shape
-        gen_id.shape
+    test_loader = DataListLoader(test_dataset_batched, batch_size, pin_memory=True, shuffle=True)
+    test_loader.collate_fn = collate
 
-        # Recall:
-        # [pid] takes from 1 to 6
-        # [charge, pt (GeV), eta, sin phi, cos phi, E (GeV)]
-
-        df["elem_type"] = [int(elem_labels[i]) for i in torch.argmax(x[:, :len(elem_labels)], axis=-1).numpy()]
-
-        df["gen_pid"] = [int(class_labels[i]) for i in gen_id_flat.numpy()]
-        df["gen_charge"] = gen_p4[:, 0].numpy()
-        df["gen_eta"] = gen_p4[:, 2].numpy()
-        df["gen_sin_phi"] = gen_p4[:, 3].numpy()
-        df["gen_cos_phi"] = gen_p4[:, 4].numpy()
-        df["gen_e"] = gen_p4[:, 5].numpy()
-
-        df["cand_pid"] = [int(class_labels[i]) for i in cand_id_flat.numpy()]
-        df["cand_charge"] = cand_p4[:, 0].numpy()
-        df["cand_eta"] = cand_p4[:, 2].numpy()
-        df["cand_sin_phi"] = cand_p4[:, 3].numpy()
-        df["cand_cos_phi"] = cand_p4[:, 4].numpy()
-        df["cand_e"] = cand_p4[:, 5].numpy()
-
-        df["pred_pid"] = [int(class_labels[i]) for i in pred_id.detach().cpu().numpy()]
-        df["pred_charge"] = pred_momentum[:, 0].detach().cpu().numpy()
-        df["pred_eta"] = pred_momentum[:, 2].detach().cpu().numpy()
-        df["pred_sin_phi"] = pred_momentum[:, 3].detach().cpu().numpy()
-        df["pred_cos_phi"] = pred_momentum[:, 4].detach().cpu().numpy()
-        df["pred_e"] = pred_momentum[:, 5].detach().cpu().numpy()
-
-        dfs.append(df)
-        #df_edges = pandas.DataFrame()
-        #df_edges["edge0"] = edges[0].to("cpu")
-        #df_edges["edge1"] = edges[1].to("cpu")
-        #dfs_edges += [df_edges]
-
-    df = pandas.concat(dfs, ignore_index=True)
-    return df
+    return test_loader
 
 def parse_args():
     import argparse
@@ -102,12 +70,22 @@ def parse_args():
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--start", type=int, default=3800, help="first file index to evaluate")
     parser.add_argument("--stop", type=int, default=4000, help="last file index to evaluate")
+    parser.add_argument("--target", type=str, choices=["cand", "gen"], default="cand", help="type of data the model trained on (cand or gen)")
+
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = parse_args()
     device = torch.device("cpu")
+    #
+    # # the next part initializes some args values (to run the script not from terminal)
+    # class objectview(object):
+    #     def __init__(self, d):
+    #         self.__dict__ = d
+    #
+    # args = objectview({'model': 'PFNet7', 'dataset': '../../test_tmp_delphes/data/delphes_cfi', 'epoch' : 1, 'target': 'cand', 'start':1, 'stop':2,
+    # 'path': '../../test_tmp_delphes/data/PFNet7_delphes_cfi_cand__npar_41414__cfg_fca529f313__user_fmokhtar__ntrain_1__lr_0.0001__1611496860'})
 
     epoch = args.epoch
     model = args.model
@@ -124,18 +102,79 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
-    print(args.dataset)
+    # prepare some test_data
+    print('Creating the test data and feeding it to the model..')
     full_dataset = PFGraphDataset(root=args.dataset)
+    loader = prepare_test_data(full_dataset, start=args.start, stop=args.stop, batch_size=10)
 
-    print("full_dataset", len(full_dataset))
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=args.start, stop=args.stop))
+    for batch in loader:
+        pred_id, pred_p4, new_edges_ = model(batch)
+        break
 
-    loader = DataListLoader(test_dataset, batch_size=1, pin_memory=True, shuffle=True)
-    loader.collate_fn = collate
+    print('Making plots for evaluation..')
+    make_plots(batch.ycand_id, batch.ycand, pred_id, pred_p4, out=path +'/')
 
-    big_df = prepare_dataframe(model, loader, False, device)
 
-    big_df.to_pickle("{}/df.pkl.bz2".format(path))
-    #edges_df.to_csv("{}/edges.csv".format(path))
-    print(big_df)
-    #print(edges_df)
+
+# #Creates the dataframe of predictions given a trained model and a data loader
+# def prepare_dataframe(model, loader, multi_gpu, device, target_type="cand"):
+#     model.eval()
+#     dfs = []
+#     dfs_edges = []
+#     eval_time = 0
+#
+#     for i, data in enumerate(loader):
+#         if not multi_gpu:
+#             data = data.to(device)
+#         pred_id_onehot, pred_momentum, new_edges = model(data)
+#         _, pred_id = torch.max(pred_id_onehot, -1)
+#         pred_momentum[pred_id==0] = 0
+#         data = [data]
+#
+#         x = torch.cat([d.x.to("cpu") for d in data])
+#         gen_id = torch.cat([d.ygen_id.to("cpu") for d in data])
+#         gen_p4 = torch.cat([d.ygen[:, :].to("cpu") for d in data])
+#         cand_id = torch.cat([d.ycand_id.to("cpu") for d in data])
+#         cand_p4 = torch.cat([d.ycand[:, :].to("cpu") for d in data])
+#
+#         # reverting the one_hot_embedding
+#         gen_id_flat = torch.max(gen_id, -1)[1]
+#         cand_id_flat = torch.max(cand_id, -1)[1]
+#
+#         df = pandas.DataFrame()
+#         gen_p4.shape
+#         gen_id.shape
+#
+#         # Recall:
+#         # [pid] takes from 1 to 6
+#         # [charge, pt (GeV), eta, sin phi, cos phi, E (GeV)]
+#
+#         df["elem_type"] = [int(elem_labels[i]) for i in torch.argmax(x[:, :len(elem_labels)], axis=-1).numpy()]
+#
+#         if target_type == "gen":
+#             df["gen_pid"] = [int(class_labels[i]) for i in gen_id_flat.numpy()]
+#             df["gen_charge"] = gen_p4[:, 0].numpy()
+#             df["gen_eta"] = gen_p4[:, 2].numpy()
+#             df["gen_sphi"] = gen_p4[:, 3].numpy()
+#             df["gen_cphi"] = gen_p4[:, 4].numpy()
+#             df["gen_e"] = gen_p4[:, 5].numpy()
+#
+#         elif target_type == "cand":
+#             df["cand_pid"] = [int(class_labels[i]) for i in cand_id_flat.numpy()]
+#             df["cand_charge"] = cand_p4[:, 0].numpy()
+#             df["cand_eta"] = cand_p4[:, 2].numpy()
+#             df["cand_sphi"] = cand_p4[:, 3].numpy()
+#             df["cand_cphi"] = cand_p4[:, 4].numpy()
+#             df["cand_e"] = cand_p4[:, 5].numpy()
+#
+#         df["pred_pid"] = [int(class_labels[i]) for i in pred_id.detach().cpu().numpy()]
+#         df["pred_charge"] = pred_momentum[:, 0].detach().cpu().numpy()
+#         df["pred_eta"] = pred_momentum[:, 2].detach().cpu().numpy()
+#         df["pred_sphi"] = pred_momentum[:, 3].detach().cpu().numpy()
+#         df["pred_cphi"] = pred_momentum[:, 4].detach().cpu().numpy()
+#         df["pred_e"] = pred_momentum[:, 5].detach().cpu().numpy()
+#
+#         dfs.append(df)
+#
+#     df = pandas.concat(dfs, ignore_index=True)
+#     return df
