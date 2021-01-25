@@ -22,7 +22,7 @@ Minor modifications for TF 2.3 by Joosep Pata:
 """
 import math
 import tensorflow as tf
-import util
+import tfmodel.util as util
 
 BIG_CONSTANT = 1e8
 
