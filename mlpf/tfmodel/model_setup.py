@@ -462,179 +462,176 @@ def main(args, yaml_path, config):
 
     global_batch_size = config['setup']['batch_size']
 
-    if args.action == "train":
-        model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
-        print("model_name=", model_name)
+    model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
+    print("model_name=", model_name)
 
-        tfr_files = glob.glob(dataset_def.processed_path)
-        if len(tfr_files) == 0:
-            raise Exception("Could not find any files in {}".format(dataset_def.datapath))
-            
-        dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-        print("dataset loaded")
-
-        num_events = 0
-        for i in dataset:
-            num_events += 1
-
-        n_train = config['setup']['num_events_train']
-        n_test = config['setup']['num_events_test']
-        n_epochs = config['setup']['num_epochs']
-        weight_func = weight_functions[config['setup']['sample_weights']]
-        assert(n_train + n_test <= num_events)
-
-        ps = (
-            tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-            tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-            tf.TensorShape([dataset_def.padded_num_elem_size, ])
-        )
-
-        ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-        ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-        #small test dataset used in the callback for making monitoring plots
-        X_test = ds_test.take(100).map(lambda x,y,w: x)
-        y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
-
-        ds_train_r = ds_train.repeat(n_epochs)
-        ds_test_r = ds_test.repeat(n_epochs)
-    
-    if args.action=="train" or args.action=="eval":
-
-        weights = config['setup']['weights']
-        if args.weights:
-            weights = args.weights
-        if weights is None:
-            outdir = 'experiments/{}'.format(model_name)
-            if os.path.isdir(outdir):
-                print("Output directory exists: {}".format(outdir), file=sys.stderr)
-                sys.exit(1)
-        else:
-            outdir = os.path.dirname(weights)
-
-        try:
-            num_gpus = len(os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(","))
-            print("num_gpus=", num_gpus)
-            if num_gpus > 1:
-                strategy = tf.distribute.MirroredStrategy()
-                global_batch_size = num_gpus * global_batch_size
-            else:
-                strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-        except Exception as e:
-            print("fallback to CPU", e)
-            strategy = tf.distribute.OneDeviceStrategy("cpu")
-            num_gpus = 0
-
-        actual_lr = global_batch_size*float(config['setup']['lr'])
+    tfr_files = glob.glob(dataset_def.processed_path)
+    if len(tfr_files) == 0:
+        raise Exception("Could not find any files in {}".format(dataset_def.datapath))
         
-        Xs = []
-        ygens = []
-        ycands = []
-        #for faster loading        
-        if args.action == "train":
-            dataset_def.test_filelist = dataset_def.test_filelist[:1]
-  
-        for fi in dataset_def.test_filelist:
-            X, ygen, ycand = dataset_def.prepare_data(fi)
+    dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    print("dataset loaded")
 
-            Xs.append(np.concatenate(X))
-            ygens.append(np.concatenate(ygen))
-            ycands.append(np.concatenate(ycand))
+    num_events = 0
+    for i in dataset:
+        num_events += 1
 
-        X = np.concatenate(Xs)
-        ygen = np.concatenate(ygens)
-        ycand = np.concatenate(ycands)
+    n_train = config['setup']['num_events_train']
+    n_test = config['setup']['num_events_test']
+    n_epochs = config['setup']['num_epochs']
+    weight_func = weight_functions[config['setup']['sample_weights']]
+    assert(n_train + n_test <= num_events)
 
-        with strategy.scope():
-            if config['setup']['dtype'] == 'float16':
-                model_dtype = tf.dtypes.float16
-                from tensorflow.keras.mixed_precision import experimental as mixed_precision
-                policy = mixed_precision.Policy('mixed_float16')
-                mixed_precision.set_policy(policy)
+    ps = (
+        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
+        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
+        tf.TensorShape([dataset_def.padded_num_elem_size, ])
+    )
 
-                opt = mixed_precision.LossScaleOptimizer(
-                    tf.keras.optimizers.Adam(learning_rate=actual_lr),
-                    loss_scale="dynamic"
+    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+
+    #small test dataset used in the callback for making monitoring plots
+    X_test = ds_test.take(100).map(lambda x,y,w: x)
+    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
+
+    ds_train_r = ds_train.repeat(n_epochs)
+    ds_test_r = ds_test.repeat(n_epochs)
+
+    weights = config['setup']['weights']
+    if args.weights:
+        weights = args.weights
+    if weights is None:
+        outdir = 'experiments/{}'.format(model_name)
+        if os.path.isdir(outdir):
+            print("Output directory exists: {}".format(outdir), file=sys.stderr)
+            sys.exit(1)
+    else:
+        outdir = os.path.dirname(weights)
+
+    try:
+        num_gpus = len(os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(","))
+        print("num_gpus=", num_gpus)
+        if num_gpus > 1:
+            strategy = tf.distribute.MirroredStrategy()
+            global_batch_size = num_gpus * global_batch_size
+        else:
+            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    except Exception as e:
+        print("fallback to CPU", e)
+        strategy = tf.distribute.OneDeviceStrategy("cpu")
+        num_gpus = 0
+
+    actual_lr = global_batch_size*float(config['setup']['lr'])
+    
+    Xs = []
+    ygens = []
+    ycands = []
+    #for faster loading        
+    if args.action == "train":
+        dataset_def.test_filelist = dataset_def.test_filelist[:1]
+
+    for fi in dataset_def.test_filelist:
+        X, ygen, ycand = dataset_def.prepare_data(fi)
+
+        Xs.append(np.concatenate(X))
+        ygens.append(np.concatenate(ygen))
+        ycands.append(np.concatenate(ycand))
+
+    X = np.concatenate(Xs)
+    ygen = np.concatenate(ygens)
+    ycand = np.concatenate(ycands)
+
+    with strategy.scope():
+        if config['setup']['dtype'] == 'float16':
+            model_dtype = tf.dtypes.float16
+            from tensorflow.keras.mixed_precision import experimental as mixed_precision
+            policy = mixed_precision.Policy('mixed_float16')
+            mixed_precision.set_policy(policy)
+
+            opt = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=actual_lr),
+                loss_scale="dynamic"
+            )
+        else:
+            model_dtype = tf.dtypes.float32
+            opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
+
+        if args.action=="train" or args.action=="eval":
+            model = make_model(config, model_dtype)
+
+            loss_cls = PFNetLoss(
+                num_input_classes=config["dataset"]["num_input_classes"],
+                num_output_classes=config["dataset"]["num_output_classes"],
+                momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
+            )
+
+            loss_fn = loss_cls.my_loss_full
+            if config["setup"]["trainable"] == "cls":
+                model.set_trainable_classification()
+                loss_fn = loss_cls.my_loss_cls
+            elif config["setup"]["trainable"] == "reg":
+                model.set_trainable_regression()
+                loss_fn = loss_cls.my_loss_reg
+
+            #we use the "temporal" mode to have per-particle weights
+            model.compile(
+                loss=loss_fn,
+                optimizer=opt,
+                sample_weight_mode='temporal'
+            )
+
+            #Evaluate model once to build the layers
+            model(tf.cast(X[:1], model_dtype))
+            model.summary()
+
+            if weights:
+                model.load_weights(weights)
+
+            if args.action=="train":
+                file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
+                callbacks = prepare_callbacks(
+                    X_test, y_test,
+                    loss_cls,
+                    model, outdir,
+                    config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"],
+                    file_writer_cm
                 )
-            else:
-                model_dtype = tf.dtypes.float32
-                opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
 
-            if args.action=="train" or args.action=="eval":
-                model = make_model(config, model_dtype)
-
-                loss_cls = PFNetLoss(
-                    num_input_classes=config["dataset"]["num_input_classes"],
-                    num_output_classes=config["dataset"]["num_output_classes"],
-                    momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
+                model.fit(
+                    ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
+                    steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
                 )
 
-                loss_fn = loss_cls.my_loss_full
-                if config["setup"]["trainable"] == "cls":
-                    model.set_trainable_classification()
-                    loss_fn = loss_cls.my_loss_cls
-                elif config["setup"]["trainable"] == "reg":
-                    model.set_trainable_regression()
-                    loss_fn = loss_cls.my_loss_reg
+                model.save(outdir + "/model_full", save_format="tf")
+            
+            if args.action=="eval":
+                eval_model(X, ygen, ycand, model, config, outdir, global_batch_size)
+                freeze_model(model, config, outdir)
 
-                #we use the "temporal" mode to have per-particle weights
-                model.compile(
-                    loss=loss_fn,
-                    optimizer=opt,
-                    sample_weight_mode='temporal'
-                )
+        if args.action=="time":
+            synthetic_timing_data = []
+            for iteration in range(config["timing"]["num_iter"]):
+                numev = config["timing"]["num_ev"]
+                for evsize in [128*10, 128*20, 128*30, 128*40, 128*50, 128*60, 128*70, 128*80, 128*90, 128*100]:
+                    for batch_size in [1,2,3,4]:
+                        x = np.random.randn(batch_size, evsize, config["dataset"]["num_input_features"]).astype(np.float32)
 
-                #Evaluate model once to build the layers
-                model(tf.cast(X[:1], model_dtype))
-                model.summary()
+                        model = make_model(config, model_dtype)
+                        model(x)
 
-                if weights:
-                    model.load_weights(weights)
+                        if weights:
+                            model.load_weights(weights)
 
-                if args.action=="train":
-                    file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-                    callbacks = prepare_callbacks(
-                        X_test, y_test,
-                        loss_cls,
-                        model, outdir,
-                        config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"],
-                        file_writer_cm
-                    )
-
-                    model.fit(
-                        ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-                        steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
-                    )
-
-                    model.save(outdir + "/model_full", save_format="tf")
-                
-                if args.action=="eval":
-                    eval_model(X, ygen, ycand, model, config, outdir, global_batch_size)
-                    freeze_model(model, config, outdir)
-
-            if args.action=="time":
-                synthetic_timing_data = []
-                for iteration in range(3):
-                    numev = 100
-                    for evsize in [128*10, 128*20, 128*30, 128*40, 128*50, 128*60, 128*70, 128*80, 128*90, 128*100]:
-                        for batch_size in [1,2,3,4]:
-                            x = np.random.randn(batch_size, evsize, config["dataset"]["num_input_features"]).astype(np.float32)
-
-                            model = make_model(config, model_dtype)
+                        t0 = time.time()
+                        for i in range(numev//batch_size):
                             model(x)
+                        t1 = time.time()
+                        dt = t1 - t0
 
-                            if weights:
-                                model.load_weights(weights)
-
-                            t0 = time.time()
-                            for i in range(numev//batch_size):
-                                model(x)
-                            t1 = time.time()
-                            dt = t1 - t0
-
-                            time_per_event = 1000.0*(dt / numev)
-                            synthetic_timing_data.append(
-                                    [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
-                            print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
-                with open("{}/synthetic_timing.json".format(outdir), "w") as fi:
-                    json.dump(synthetic_timing_data, fi)
+                        time_per_event = 1000.0*(dt / numev)
+                        synthetic_timing_data.append(
+                                [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
+                        print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
+            with open("{}/synthetic_timing.json".format(outdir), "w") as fi:
+                json.dump(synthetic_timing_data, fi)

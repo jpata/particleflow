@@ -49,3 +49,7 @@ parameters:
   dist_mult: 1.0
   activation: elu
   skip_connection: True
+
+timing:
+  num_ev: 1
+  num_iter: 1

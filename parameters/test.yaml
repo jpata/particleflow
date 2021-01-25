@@ -28,8 +28,8 @@ setup:
   lr: 1e-6
   batch_size: 5
   num_events_train: 100
-  num_events_test: 1000
-  num_epochs: 10
+  num_events_test: 100
+  num_epochs: 2
   dtype: float32
   sample_weights: none
   trainable: all
@@ -51,3 +51,7 @@ parameters:
   dist_mult: 1.0
   activation: elu
   skip_connection: True
+
+timing:
+  num_ev: 1
+  num_iter: 1
