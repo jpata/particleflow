@@ -41,3 +41,7 @@ parameters:
   support: 32
   skip_connection: yes
   dropout: 0.2
+
+timing:
+  num_ev: 1
+  num_iter: 1
