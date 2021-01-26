@@ -78,14 +78,14 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     device = torch.device("cpu")
-    #
+
     # # the next part initializes some args values (to run the script not from terminal)
     # class objectview(object):
     #     def __init__(self, d):
     #         self.__dict__ = d
     #
     # args = objectview({'model': 'PFNet7', 'dataset': '../../test_tmp_delphes/data/delphes_cfi', 'epoch' : 1, 'target': 'cand', 'start':1, 'stop':2,
-    # 'path': '../../test_tmp_delphes/data/PFNet7_delphes_cfi_cand__npar_41414__cfg_fca529f313__user_fmokhtar__ntrain_1__lr_0.0001__1611496860'})
+    # 'path': '../../test_tmp_delphes/data/PFNet7_delphes_cfi_gen__npar_41414__cfg_fca529f313__user_fmokhtar__ntrain_1__lr_0.0001__1611654293'})
 
     epoch = args.epoch
     model = args.model
@@ -112,11 +112,12 @@ if __name__ == "__main__":
         break
 
     print('Making plots for evaluation..')
-    make_plots(batch.ycand_id, batch.ycand, pred_id, pred_p4, out=path +'/')
 
+    if args.target=='cand':
+        make_plots(batch.ycand_id, batch.ycand, pred_id, pred_p4, out=path +'/')
+    elif args.target=='gen':
+        make_plots(batch.ygen_id, batch.ygen, pred_id, pred_p4, out=path +'/')
 
-
-# #Creates the dataframe of predictions given a trained model and a data loader
 # def prepare_dataframe(model, loader, multi_gpu, device, target_type="cand"):
 #     model.eval()
 #     dfs = []
