@@ -2,6 +2,7 @@ backend: tensorflow
 
 dataset:
   schema: cms
+  target_particles: cand
   num_input_features: 15
   num_output_features: 7
   num_input_classes: 3

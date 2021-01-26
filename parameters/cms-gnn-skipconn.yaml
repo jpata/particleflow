@@ -2,6 +2,7 @@ backend: tensorflow
 
 dataset:
   schema: cms
+  target_particles: cand
   num_input_features: 15
   num_output_features: 7
   num_input_classes: 3
@@ -27,8 +28,8 @@ setup:
   weights:
   lr: 1e-6
   batch_size: 5
-  num_events_train: 400
-  num_events_test: 50
+  num_events_train: 1400
+  num_events_test: 440
   num_epochs: 100
   dtype: float32
   sample_weights: none

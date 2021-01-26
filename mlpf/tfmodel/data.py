@@ -38,6 +38,7 @@ class Dataset:
         self.padded_num_elem_size = kwargs.get("padded_num_elem_size")
         self.raw_path = kwargs.get("raw_path")
         self.processed_path = kwargs.get("processed_path")
+        self.target_particles = kwargs.get("target_particles")
 
         self.validation_file_path = kwargs.get("validation_file_path")
 
@@ -203,10 +204,14 @@ class Dataset:
         ws = []
 
         for fi in files:
-            X, y, _ = self.prepare_data(fi)
+            X, ygen, ycand = self.prepare_data(fi)
 
             Xs += X
-            ys += y
+
+            if self.target_particles == "cand":
+                ys += ycand
+            else:
+                ys += ygen
 
         Xs = np.concatenate(Xs)
         ys = np.concatenate(ys)

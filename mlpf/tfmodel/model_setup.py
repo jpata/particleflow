@@ -545,13 +545,13 @@ def main(args, yaml_path, config):
 
                 model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-                    steps_per_epoch=n_train/global_batch_size, validation_steps=n_test/global_batch_size
+                    steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size
                 )
 
                 model.save(outdir + "/model_full", save_format="tf")
             
             if args.action=="eval":
-                eval_model(X, ygen, ycand, model, config, outdir, global_batch_size)
+                eval_model(X_val, ygen_val, ycand_val, model, config, outdir, global_batch_size)
                 freeze_model(model, config, outdir)
 
         if args.action=="time":
