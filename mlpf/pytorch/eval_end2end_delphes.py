@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # prepare some test_data
     print('Creating the test data and feeding it to the model..')
     full_dataset = PFGraphDataset(root=args.dataset)
-    loader = prepare_test_data(full_dataset, start=args.start, stop=args.stop, batch_size=100)
+    loader = prepare_test_data(full_dataset, start=args.start, stop=args.stop, batch_size=10)
 
     # TODO: here we only evaluate a forward pass of only one batch of the allocated test data
     for batch in loader:
