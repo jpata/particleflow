@@ -306,12 +306,12 @@ def parse_args():
     parser.add_argument("--model", type=str, choices=sorted(model_classes.keys()), help="type of model to use", default="PFNet6")
     parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
     parser.add_argument("--dataset", type=str, help="Input dataset", required=True)
-    parser.add_argument("--outpath", type=str, default = 'data/', help="Output folder")
+    parser.add_argument("--outpath", type=str, default = 'experiments/', help="Output folder")
     parser.add_argument("--activation", type=str, default='leaky_relu', choices=["selu", "leaky_relu", "relu"], help="activation function")
     parser.add_argument("--optimizer", type=str, default='adam', choices=["adam", "adamw"], help="optimizer to use")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--l1", type=float, default=1.0, help="Loss multiplier for pdg-id classification")
-    parser.add_argument("--l2", type=float, default=1.0, help="Loss multiplier for momentum regression")
+    parser.add_argument("--l2", type=float, default=0.001, help="Loss multiplier for momentum regression")
     parser.add_argument("--l3", type=float, default=1.0, help="Loss multiplier for clustering")
     parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
     parser.add_argument("--radius", type=float, default=0.1, help="Radius-graph radius")
@@ -337,8 +337,8 @@ if __name__ == "__main__":
     #         self.__dict__ = d
     #
     # args = objectview({'n_train': 2, 'n_val': 1, 'n_epochs': 3, 'patience': 100, 'hidden_dim':32, 'encoding_dim': 256,
-    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/delphes_cfi',
-    # 'outpath': 'data/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 1, 'l3': 1, 'dropout': 0.5,
+    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'cand', 'dataset': '../../test_tmp_delphes/data/pythia8_ttbar',
+    # 'outpath': 'experiments/', 'activation': 'leaky_relu', 'optimizer': 'adam', 'lr': 1e-4, 'l1': 1, 'l2': 0.001, 'l3': 1, 'dropout': 0.5,
     # 'radius': 0.1, 'convlayer': 'gravnet-radius', 'convlayer2': 'none', 'space_dim': 2, 'nearest': 3, 'overwrite': True,
     # 'disable_comet': True, 'input_encoding': 0, 'load': None, 'scheduler': 'none'})
 

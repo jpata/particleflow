@@ -16,8 +16,8 @@ import scipy.sparse
 import math
 import multiprocessing
 
-# assumes pkl files exist in /test_tmp_delphes/data/delphes_cfi/raw
-# they are processed and saved as pt files in /test_tmp_delphes/data/delphes_cfi/processed
+# assumes pkl files exist in /test_tmp_delphes/data/pythia8_ttbar/raw
+# they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
 
 def one_hot_embedding(labels, num_classes):
