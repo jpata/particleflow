@@ -2,6 +2,7 @@ backend: tensorflow
 
 dataset:
   schema: delphes
+  target_particles: gen
   num_input_features: 12
   num_output_features: 7
   num_input_classes: 3
@@ -27,8 +28,8 @@ setup:
   weights:
   lr: 1e-6
   batch_size: 5
-  num_events_train: 100
-  num_events_test: 100
+  num_events_train: 50
+  num_events_test: 50
   num_epochs: 2
   dtype: float32
   sample_weights: none
