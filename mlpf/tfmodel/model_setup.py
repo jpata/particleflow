@@ -80,8 +80,6 @@ def plot_confusion_matrix(cm):
     plt.title("Reconstructed PID (normed to gen)")
     plt.xlabel("MLPF PID")
     plt.ylabel("Gen PID")
-    plt.xticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
-    plt.yticks(range(6), ["none", "ch.had", "n.had", "g", "el", "mu"]);
     plt.colorbar()
     plt.tight_layout()
     return fig
@@ -153,7 +151,7 @@ class ConfusionMatrixValidation:
         self.outdir = outdir
         self.model = model
         self.num_input_classes = num_input_classes
-        self.num_output_classes = num_input_classes
+        self.num_output_classes = num_output_classes
         self.file_writer_cm = file_writer_cm
 
     def log_confusion_matrix(self, epoch, logs):
@@ -191,77 +189,24 @@ class ConfusionMatrixValidation:
         ch_true = y_test[msk, 1].flatten()
         ch_pred = test_pred[msk, 1].flatten()
 
-        # pt_true = y_test[msk, 2].flatten()
-        # pt_pred = test_pred[msk, 2].flatten()
-
-        # e_true = y_test[msk, 6].flatten()
-        # e_pred = test_pred[msk, 6].flatten()
-
-        # eta_true = y_test[msk, 3].flatten()
-        # eta_pred = test_pred[msk, 3].flatten()
-
-        # sphi_true = y_test[msk, 4].flatten()
-        # sphi_pred = test_pred[msk, 4].flatten()
-
-        # cphi_true = y_test[msk, 5].flatten()
-        # cphi_pred = test_pred[msk, 5].flatten()
-
         figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
         ch_image = plot_to_image(figure)
 
-        # figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 5, 100))
-        # pt_image = plot_to_image(figure)
+        images = {}
+        for ireg in range(l2_r.shape[-1]):
+            reg_true = y_test[msk, 2+ireg].flatten()
+            reg_pred = test_pred[msk, 2+ireg].flatten()
 
-        # figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 5, 100))
-        # pt_distr_image = plot_to_image(figure)
-
-        # figure = plot_regression(e_true, e_pred, "E", np.linspace(-1, 5, 100))
-        # e_image = plot_to_image(figure)
-
-        # figure = plot_distributions(e_true, e_pred, "E", np.linspace(-1, 5, 100))
-        # e_distr_image = plot_to_image(figure)
-
-        # figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
-        # eta_image = plot_to_image(figure)
-
-        # figure = plot_distributions(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100))
-        # eta_distr_image = plot_to_image(figure)
-
-        # figure = plot_regression(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100))
-        # sphi_image = plot_to_image(figure)
-
-        # figure = plot_distributions(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100))
-        # sphi_distr_image = plot_to_image(figure)
-
-        # figure = plot_regression(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100))
-        # cphi_image = plot_to_image(figure)
-
-        # figure = plot_distributions(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100))
-        # cphi_distr_image = plot_to_image(figure)
-
-        # figure = plot_particles(test_pred, y_test, 1)
-        # pid_image_1 = plot_to_image(figure)
-
-        # figure = plot_particles(test_pred, y_test, 2)
-        # pid_image_2 = plot_to_image(figure)
+            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.min(reg_true), np.max(reg_true), 100))
+            images[ireg] = plot_to_image(figure)
 
         with self.file_writer_cm.as_default():
             tf.summary.image("Confusion Matrix", cm_image, step=epoch)
             tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
             tf.summary.image("charge regression", ch_image, step=epoch)
-            # tf.summary.image("pT regression", pt_image, step=epoch)
-            # tf.summary.image("pT distibution", pt_distr_image, step=epoch)
-            # tf.summary.image("E regression", e_image, step=epoch)
-            # tf.summary.image("E distribution", e_distr_image, step=epoch)
-            # tf.summary.image("eta regression", eta_image, step=epoch)
-            # tf.summary.image("eta distribution", eta_distr_image, step=epoch)
-            # tf.summary.image("sin phi regression", sphi_image, step=epoch)
-            # tf.summary.image("sin phi distribution", sphi_distr_image, step=epoch)
-            # tf.summary.image("cos phi regression", cphi_image, step=epoch)
-            # tf.summary.image("cos phi distribution", cphi_distr_image, step=epoch)
 
-            # tf.summary.image("charged hadron particles", pid_image_1, step=epoch)
-            # tf.summary.image("neutral hadron particles", pid_image_2, step=epoch)
+            for ireg in images.keys():
+                tf.summary.image("regression {}".format(ireg), images[ireg], step=epoch)
 
             tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
             for i in range(l2_r.shape[-1]):
@@ -451,7 +396,7 @@ def main(args, yaml_path, config):
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
         raw_path=cds["raw_path"],
         processed_path=cds["processed_path"],
-        test_file_pattern=cds["test_file_pattern"],
+        validation_file_path=cds["validation_file_path"],
         schema=cds["schema"]
     )
 
@@ -465,7 +410,7 @@ def main(args, yaml_path, config):
     model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
     print("model_name=", model_name)
 
-    tfr_files = glob.glob(dataset_def.processed_path)
+    tfr_files = sorted(glob.glob(dataset_def.processed_path))
     if len(tfr_files) == 0:
         raise Exception("Could not find any files in {}".format(dataset_def.datapath))
         
@@ -529,18 +474,18 @@ def main(args, yaml_path, config):
     ycands = []
     #for faster loading        
     if args.action == "train":
-        dataset_def.test_filelist = dataset_def.test_filelist[:1]
+        dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.test_filelist:
+    for fi in dataset_def.val_filelist:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
         ygens.append(np.concatenate(ygen))
         ycands.append(np.concatenate(ycand))
 
-    X = np.concatenate(Xs)
-    ygen = np.concatenate(ygens)
-    ycand = np.concatenate(ycands)
+    X_val = np.concatenate(Xs)
+    ygen_val = np.concatenate(ygens)
+    ycand_val = np.concatenate(ycands)
 
     with strategy.scope():
         if config['setup']['dtype'] == 'float16':
@@ -582,7 +527,7 @@ def main(args, yaml_path, config):
             )
 
             #Evaluate model once to build the layers
-            model(tf.cast(X[:1], model_dtype))
+            model(tf.cast(X_val[:1], model_dtype))
             model.summary()
 
             if weights:

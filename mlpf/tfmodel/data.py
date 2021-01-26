@@ -39,19 +39,15 @@ class Dataset:
         self.raw_path = kwargs.get("raw_path")
         self.processed_path = kwargs.get("processed_path")
 
-        self.test_file_pattern = kwargs.get("test_file_pattern")
+        self.validation_file_path = kwargs.get("validation_file_path")
 
         self.raw_filelist = sorted(glob.glob(self.raw_path))
         assert(len(self.raw_filelist) > 0)
 
-        self.test_filelist = []
-        for fi in self.raw_filelist:
-            if re.search(self.test_file_pattern, fi):
-                self.test_filelist.append(fi)
-
-        assert(len(self.test_filelist) > 0)
+        self.val_filelist = sorted(glob.glob(self.validation_file_path))
+        assert(len(self.val_filelist) > 0)
         print("raw files: {}".format(len(self.raw_filelist)))
-        print("test files: {}".format(len(self.test_filelist)))
+        print("val files: {}".format(len(self.val_filelist)))
 
 
         self.schema = kwargs.get("schema")
@@ -60,9 +56,8 @@ class Dataset:
         elif self.schema == "cms":
             self.prepare_data = self.prepare_data_cms
 
-
-        self.elem_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        self.class_labels = [0, 1, 2, 11, 13, 22, 130, 211]
+        self.elem_labels_cms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        self.class_labels_cms = [0, 211, 130, 1, 2, 22, 11, 13]
 
     def prepare_data_cms(self, fn):
         Xs = []
@@ -82,9 +77,9 @@ class Dataset:
             ygen = ygen[~msk_ps]
             ycand = ycand[~msk_ps]
 
-            Xelem = append_fields(Xelem, "typ_idx", np.array([self.elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
-            ygen = append_fields(ygen, "typ_idx", np.array([self.class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
-            ycand = append_fields(ycand, "typ_idx", np.array([self.class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
+            Xelem = append_fields(Xelem, "typ_idx", np.array([self.elem_labels_cms.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
+            ygen = append_fields(ygen, "typ_idx", np.array([self.class_labels_cms.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
+            ycand = append_fields(ycand, "typ_idx", np.array([self.class_labels_cms.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
         
             Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
                 'typ_idx',
@@ -95,12 +90,12 @@ class Dataset:
             )
             ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
                 'typ_idx', 'charge',
-                'eta', 'phi', 'e',
+                'pt', 'eta', 'sin_phi', 'cos_phi', 'e',
                 ]], axis=-1
             )
             ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
                 'typ_idx', 'charge',
-                'eta', 'phi', 'e',
+                'pt', 'eta', 'sin_phi', 'cos_phi', 'e',
                 ]], axis=-1
             )
 

@@ -16,7 +16,7 @@ Short instructions with a single test file:
 ./scripts/local_test.sh
 ```
 
-Long instructions for reproducing the full training from scratch in [delphes/README.md](delphes/README.md).
+Long instructions for reproducing the full training from scratch in [README_delphes.md](README_delphes.md).
 The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
 
 ### Delphes dataset
