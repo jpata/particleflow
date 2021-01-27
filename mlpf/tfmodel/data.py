@@ -43,13 +43,9 @@ class Dataset:
         self.validation_file_path = kwargs.get("validation_file_path")
 
         self.raw_filelist = sorted(glob.glob(self.raw_path))
-        assert(len(self.raw_filelist) > 0)
-
         self.val_filelist = sorted(glob.glob(self.validation_file_path))
-        assert(len(self.val_filelist) > 0)
         print("raw files: {}".format(len(self.raw_filelist)))
         print("val files: {}".format(len(self.val_filelist)))
-
 
         self.schema = kwargs.get("schema")
         if self.schema == "delphes":
