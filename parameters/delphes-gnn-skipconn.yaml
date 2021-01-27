@@ -14,11 +14,11 @@ dataset:
     - 1.0
     - 1.0
     - 1.0
-    - 1.0
-  raw_path: delphes/out/pythia8_ttbar/*.pkl.bz2
-  processed_path: delphes/out/pythia8_ttbar/tfr/*.tfrecords
+    - 0.001
+  raw_path: data/pythia8_ttbar/raw/*.pkl.bz2
+  processed_path: data/pythia8_ttbar/tfr/*.tfrecords
   num_files_per_chunk: 5
-  test_file_pattern: tev14_pythia8_ttbar_[8-9]_\d+\.pkl\.bz2
+  validation_file_path: data/val/*.pkl.bz2
 
 tensorflow:
   eager: no
@@ -29,7 +29,7 @@ setup:
   lr: 1e-6
   batch_size: 5
   num_events_train: 40000
-  num_events_test: 10000
+  num_events_test: 5000
   num_epochs: 300
   dtype: float32
   sample_weights: none
