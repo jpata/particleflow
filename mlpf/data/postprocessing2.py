@@ -111,6 +111,14 @@ def cleanup_graph(g, edge_energy_threshold=0.01, edge_fraction_threshold=0.05, g
     edges_to_remove = []
     nodes_to_remove = []
 
+    #remove gen particles with no links to elements 
+    nodes_to_remove = []
+    for n in g.nodes:
+        if ((n[0] == "tp") or (n[0] == "sc")) and len(g.edges(n)) == 0:
+            nodes_to_remove.append(n)
+    g.remove_nodes_from(nodes_to_remove)
+    nodes_to_remove = []
+
     #remove edges that contribute little
     for edge in g.edges:
         if edge[0][0] == "sc":
