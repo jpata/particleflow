@@ -404,6 +404,7 @@ def main(args, yaml_path, config):
         dataset_def.process(
             config["dataset"]["num_files_per_chunk"]
         )
+        return
 
     global_batch_size = config['setup']['batch_size']
 
