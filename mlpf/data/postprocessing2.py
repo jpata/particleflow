@@ -2,7 +2,6 @@ import sys
 import pickle
 import networkx as nx
 import numpy as np
-import numba
 import os
 import uproot3 as uproot
 import uproot3_methods as uproot_methods
@@ -12,8 +11,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-import scipy
-import scipy.sparse
 from networkx.readwrite import json_graph
 from networkx.drawing.nx_pydot import graphviz_layout
 
@@ -35,7 +32,6 @@ for candid, pdgids in map_candid_to_pdgid.items():
     for p in pdgids:
         map_pdgid_to_candid[p] = candid
 
-@numba.njit
 def get_charge(pid):
     abs_pid = abs(pid)
     if pid == 130 or pid == 22 or pid == 1 or pid == 2:
