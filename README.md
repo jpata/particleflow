@@ -1,4 +1,5 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4452283.svg)](https://doi.org/10.5281/zenodo.4452283)
+[![CI](https://github.com/jpata/particleflow/workflows/CI/badge.svg)](https://github.com/jpata/particleflow/actions)
 
 <p float="left">
   <img src="delphes/plots/event.png" alt="Simulated event" width="600"/>
