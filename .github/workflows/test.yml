@@ -16,7 +16,7 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  build:
+  setup:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -32,6 +32,13 @@ jobs:
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.3 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0 keras-tuner
-          
+  delphes-tf:
+      needs: setup
+      runs-on: ubuntu-latest 
       - name: Run delphes TF test
         run: ./scripts/local_test_delphes_tf.sh
+  cms-tf:
+      needs: setup
+      runs-on: ubuntu-latest 
+      - name: Run CMS TF test
+        run: ./scripts/local_test_cms_tf.sh
