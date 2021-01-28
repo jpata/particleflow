@@ -11,10 +11,7 @@
 
 ## MLPF with Delphes
 
-Short instructions with a single test file:
-```bash
-./scripts/local_test.sh
-```
+Short instructions with a single test file in [notebooks/delphes-tf-mlpf-quickstart.ipynb](notebooks/delphes-tf-mlpf-quickstart.ipynb).
 
 Long instructions for reproducing the full training from scratch in [README_delphes.md](README_delphes.md).
 The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
