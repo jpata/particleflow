@@ -18,7 +18,7 @@ dataset:
   raw_path: data/pythia8_ttbar/*.pkl.bz2
   processed_path: data/pythia8_ttbar/tfr/*.tfrecords
   num_files_per_chunk: 5
-  test_file_pattern: tev14_pythia8_ttbar_0_1\.pkl\.bz2
+  validation_file_path: data/pythia8_ttbar/val/*.pkl.bz2
 
 tensorflow:
   eager: no
