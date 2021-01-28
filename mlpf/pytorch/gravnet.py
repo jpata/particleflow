@@ -64,7 +64,7 @@ class GravNetConv(MessagePassing):
 
         if self.neighbor_algo == "knn":
             edge_index = knn_graph(spatial, self.k, batch, loop=False,
-                                   flow=self.flow, cosine=False, max_dist=1.0)
+                                   flow=self.flow, cosine=False)
         elif self.neighbor_algo == "radius":
             edge_index = radius_graph(spatial, self.radius, batch, loop=False,
                                    flow=self.flow, max_num_neighbors=self.k)

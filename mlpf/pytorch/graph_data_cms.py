@@ -86,7 +86,7 @@ class PFGraphDataset(Dataset):
     @property
     def processed_dir(self):
         return self._processed_dir
- 
+
     @property
     def processed_file_names(self):
         proc_list = glob(osp.join(self.processed_dir, '*.pt'))
@@ -104,47 +104,53 @@ class PFGraphDataset(Dataset):
             all_data = pickle.load(fi, encoding='iso-8859-1')
 
         batch_data = []
-        for idata, data in enumerate(all_data):
-            mat = data["dm_elem_cand"].copy()
 
-            Xelem = data["Xelem"]
-            ygen = data["ygen"]
-            ycand = data["ycand"]
-            Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
-            ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
-            ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
+        # all_data is a list of only one element.. this element is a dictionary with keys: ["Xelem", "ycan", "ygen", 'dm', 'dm_elem_cand', 'dm_elem_gen']
+        data = all_data[0]
+        mat = data["dm_elem_cand"].copy()
 
-            Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
-                'typ_idx',
-                'pt', 'eta', 'phi', 'e',
-                'layer', 'depth', 'charge', 'trajpoint',
-                'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
-                'muon_dt_hits', 'muon_csc_hits']], axis=-1
-            )
-            ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
-                'typ_idx',
-                'eta', 'phi', 'e', 'charge',
-                ]], axis=-1
-            )
-            ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
-                'typ_idx',
-                'eta', 'phi', 'e', 'charge',
-                ]], axis=-1
-            )
-            r = torch_geometric.utils.from_scipy_sparse_matrix(mat)
+        # Xelem contains all elements in 1 event
+        # Xelem[i] contains the element #i in the event
+        Xelem = data["Xelem"]
+        ygen = data["ygen"]
+        ycand = data["ycand"]
 
-            x = torch.tensor(Xelem_flat, dtype=torch.float)
-            ygen = torch.tensor(ygen_flat, dtype=torch.float)
-            ycand = torch.tensor(ycand_flat, dtype=torch.float)
+        # attach to every Xelem[i] (which is one element in the event) an extra elem_label
+        Xelem = append_fields(Xelem, "typ_idx", np.array([elem_labels.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
+        ygen = append_fields(ygen, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
+        ycand = append_fields(ycand, "typ_idx", np.array([class_labels.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
 
-            data = Data(
-                x=x,
-                edge_index=r[0].to(dtype=torch.long),
-                #edge_attr=r[1].to(dtype=torch.float),
-                ygen=ygen, ycand=ycand,
-            )
-            data_prep(data)
-            batch_data += [data]
+        Xelem_flat = np.stack([Xelem[k].view(np.float32).data for k in [
+            'typ_idx',
+            'pt', 'eta', 'phi', 'e',
+            'layer', 'depth', 'charge', 'trajpoint',
+            'eta_ecal', 'phi_ecal', 'eta_hcal', 'phi_hcal',
+            'muon_dt_hits', 'muon_csc_hits']], axis=-1
+        )
+        ygen_flat = np.stack([ygen[k].view(np.float32).data for k in [
+            'typ_idx',
+            'eta', 'phi', 'e', 'charge',
+            ]], axis=-1
+        )
+        ycand_flat = np.stack([ycand[k].view(np.float32).data for k in [
+            'typ_idx',
+            'eta', 'phi', 'e', 'charge',
+            ]], axis=-1
+        )
+        r = torch_geometric.utils.from_scipy_sparse_matrix(mat)
+
+        x = torch.tensor(Xelem_flat, dtype=torch.float)
+        ygen = torch.tensor(ygen_flat, dtype=torch.float)
+        ycand = torch.tensor(ycand_flat, dtype=torch.float)
+
+        data = Data(
+            x=x,
+            edge_index=r[0].to(dtype=torch.long),
+            #edge_attr=r[1].to(dtype=torch.float),
+            ygen=ygen, ycand=ycand,
+        )
+        data_prep(data)
+        batch_data += [data]
 
         return batch_data
 
@@ -186,11 +192,11 @@ if __name__ == "__main__":
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
     parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
     args = parser.parse_args()
- 
+
     pfgraphdataset = PFGraphDataset(root=args.dataset)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
- 
+
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
