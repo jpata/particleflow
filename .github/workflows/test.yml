@@ -30,4 +30,5 @@ jobs:
         run: |
           sudo apt install python3 python3-pip
           sudo python3 -m pip install --upgrade pip
+          sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.3 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0
