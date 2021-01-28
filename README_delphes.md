@@ -15,20 +15,34 @@ singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_ntuple.s
 
 #Alternatively, to skip run_sim.sh and run_ntuple.sh, download everything from https://doi.org/10.5281/zenodo.4452283 and put into out/pythia8_ttbar
 
+#now move the data into the right place
+mv out/pythia8_ttbar ../data/
+cd ../data/pythia8_ttbar
+mkdir raw
+mkdir val
+mkdir root
+mv *.root root/
+mb *.promc root/
+
+#these are held out for validation
+mv tev14_pythia8_ttbar_9_*.pkl.bz2 val/
+mv *.pkl.bz2 raw/
+cd ../..
+
 # Generate the TFRecord datasets needed for larger-than-RAM training
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_data.py --datapath out/pythia8_ttbar
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action data --model-spec parameters/delphes-gnn-skipconn.yaml
 
 # Run the training of the base GNN model using e.g. 5 GPUs in a data-parallel mode
-CUDA_VISIBLE_DEVICES=0,1,2,3,4 singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action train
+CUDA_VISIBLE_DEVICES=0,1,2,3,4 singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action train --model-spec parameters/delphes-gnn-skipconn.yaml
 
 #Run the validation to produce the predictions file
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action validate --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action eval --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
 
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 ../mlpf/tensorflow/delphes_model.py --model-spec parameters/delphes-gnn-skipconn.yaml --action timing --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action time --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
 ```
 
 ## Recipe to prepare Delphes singularity image
-NB: The Delphes AngularSmearing module has been modified to take into account the smearing, see [install.sh](install.sh)
+NB: The Delphes AngularSmearing module has been modified to correctly take into account the smearing for tracks, see [delphes/install.sh](delphes/install.sh)
 
 ```bash
 wget http://atlaswww.hep.anl.gov/hepsim/soft/centos7hepsim.img
