@@ -7,9 +7,9 @@ mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_2.root
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_3.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_1.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_2.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/pfntuple_3.root
 
 cd ../../..
 
@@ -38,4 +38,4 @@ python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
 python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action train
 
 #Generate the pred.npz file of predictions
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action eval --weights ./experiments/test-*/weights.02-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action eval --weights ./experiments/test-*/weights.01-*.hdf5

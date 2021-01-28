@@ -33,5 +33,5 @@ git clone https://github.com/jpata/particleflow.git
 cd particleflow
 
 #run a small local test including data prep and training
-./scripts/local_test_cms.sh
+./scripts/local_test_cms_tf.sh
 ```
