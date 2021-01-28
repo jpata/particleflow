@@ -1,0 +1,58 @@
+backend: tensorflow
+
+dataset:
+  schema: delphes
+  target_particles: gen
+  num_input_features: 12
+  num_output_features: 7
+  num_input_classes: 3
+  num_output_classes: 6
+  num_momentum_outputs: 5
+  padded_num_elem_size: 6400
+  momentum_loss_coefs:
+    - 1.0
+    - 1.0
+    - 1.0
+    - 1.0
+    - 1.0
+  raw_path: data/pythia8_ttbar/*.pkl.bz2
+  processed_path: data/pythia8_ttbar/tfr/*.tfrecords
+  num_files_per_chunk: 5
+  test_file_pattern: tev14_pythia8_ttbar_0_1\.pkl\.bz2
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  lr: 1e-6
+  batch_size: 5
+  num_events_train: 50
+  num_events_test: 50
+  num_epochs: 2
+  dtype: float32
+  sample_weights: none
+  trainable: all
+ 
+parameters:
+  model: gnn
+  bin_size: 128
+  num_convs_id: 2
+  num_convs_reg: 2
+  num_hidden_id_enc: 2
+  num_hidden_id_dec: 2
+  num_hidden_reg_enc: 2
+  num_hidden_reg_dec: 2
+  num_neighbors: 16 
+  hidden_dim_id: 256
+  hidden_dim_reg: 256
+  distance_dim: 256
+  dropout: 0.2
+  dist_mult: 1.0
+  activation: elu
+  skip_connection: True
+
+timing:
+  num_ev: 1
+  num_iter: 1

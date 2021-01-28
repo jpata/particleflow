@@ -22,12 +22,12 @@ Minor modifications for TF 2.3 by Joosep Pata:
 """
 import math
 import tensorflow as tf
-import util
+import tfmodel.util as util
 
 BIG_CONSTANT = 1e8
 
 @tf.function
-def create_projection_matrix(m, d, seed=0, scaling=0):
+def create_projection_matrix(m, d, seed=0, scaling=0, dtype=tf.float32):
   r"""Constructs the matrix of random projections.
 
   Constructs a matrix of random orthogonal projections. Each projection vector
@@ -51,14 +51,14 @@ def create_projection_matrix(m, d, seed=0, scaling=0):
   block_list = []
   #current_seed = tf.constant(seed)
   for iblock in range(nb_full_blocks):
-    unstructured_block = tf.random.normal((d, d))
+    unstructured_block = tf.random.normal((d, d), dtype=dtype)
     q, _ = tf.linalg.qr(unstructured_block)
     q = tf.transpose(q)
     block_list.append(q)
     #current_seed += 1
   remaining_rows = m - nb_full_blocks * d
   if remaining_rows > 0:
-    unstructured_block = tf.random.normal((d, d))
+    unstructured_block = tf.random.normal((d, d), dtype=dtype)
     q, _ = tf.linalg.qr(unstructured_block)
     q = tf.transpose(q)
     block_list.append(q[0:remaining_rows])
@@ -66,14 +66,14 @@ def create_projection_matrix(m, d, seed=0, scaling=0):
   #current_seed += 1
 
   if scaling == 0:
-    multiplier = tf.norm(tf.random.normal((m, d)), axis=1)
+    multiplier = tf.norm(tf.random.normal((m, d), dtype=dtype), axis=1)
   elif scaling == 1:
     multiplier = tf.math.sqrt(float(d)) * tf.ones((m))
   else:
     raise ValueError("Scaling must be one of {0, 1}. Was %s" % scaling)
 
-  return tf.linalg.matmul(tf.linalg.diag(multiplier), final_matrix)
-
+  ret = tf.linalg.matmul(tf.linalg.diag(multiplier), final_matrix)
+  return ret
 
 def relu_kernel_transformation(data,
                                is_query,
@@ -101,7 +101,7 @@ def relu_kernel_transformation(data,
     return tf.nn.relu(data) + numerical_stabilizer
   else:
     ratio = 1.0 / tf.math.sqrt(
-        tf.dtypes.cast(projection_matrix.shape[0], tf.float32))
+        tf.dtypes.cast(projection_matrix.shape[0], data.dtype))
     data_dash = ratio * tf.einsum("blhd,md->blhm", data, projection_matrix)
     return tf.nn.relu(data_dash) + numerical_stabilizer
 
@@ -161,8 +161,8 @@ def noncausal_numerator(qs, ks, vs):
   Returns:
     Not-normalized FAVOR noncausal attention AV.
   """
-  kvs = tf.einsum("lbhm,lbhd->bhmd", ks, vs)
-  return tf.einsum("lbhm,bhmd->lbhd", qs, kvs)
+  kvs = tf.clip_by_value(tf.einsum("lbhm,lbhd->bhmd", ks, vs), -1e4, 1e4)
+  return tf.clip_by_value(tf.einsum("lbhm,bhmd->lbhd", qs, kvs), -1e4, 1e4)
 
 
 def noncausal_denominator(qs, ks):
@@ -175,9 +175,9 @@ def noncausal_denominator(qs, ks):
   Returns:
     FAVOR normalizer in noncausal attention.
   """
-  all_ones = tf.ones([ks.shape[0]])
-  ks_sum = tf.einsum("lbhm,l->bhm", ks, all_ones)
-  return tf.einsum("lbhm,bhm->lbh", qs, ks_sum)
+  all_ones = tf.ones([ks.shape[0]], dtype=qs.dtype)
+  ks_sum = tf.clip_by_value(tf.einsum("lbhm,l->bhm", ks, all_ones), -1e-4, 1e4)
+  return tf.clip_by_value(tf.einsum("lbhm,bhm->lbh", qs, ks_sum), -1e-4, 1e4)
 
 
 @tf.custom_gradient
@@ -443,7 +443,7 @@ class Attention(tf.keras.layers.Layer):
       seed = tf.math.ceil(tf.math.abs(tf.math.reduce_sum(query) * BIG_CONSTANT))
       seed = tf.dtypes.cast(seed, tf.int32)
       projection_matrix = create_projection_matrix(
-          self.nb_random_features, dim, seed=seed)
+          self.nb_random_features, dim, seed=seed, dtype=query_input.dtype)
 
     if cache is not None:
       # Combine cached keys and values with new keys and values.
