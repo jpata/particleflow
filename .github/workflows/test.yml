@@ -34,4 +34,4 @@ jobs:
           sudo python3 -m pip install tensorflow==2.3 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0 keras-tuner
           
       - name: Run delphes TF test
-        run: ./scripts/local_test.sh
+        run: ./scripts/local_test_delphes_tf.sh
