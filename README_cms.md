@@ -25,55 +25,7 @@
 
 In case the above links do not load, the presentations are also mirrored on the following CERNBox link: https://cernbox.cern.ch/index.php/s/GkIRJU1YZuai4ix
 
-## CMSSW recipe (CMS-only)
-
-Evaluation recipe in CMSSW:
-
-```
-cmsrel CMSSW_11_2_DEVEL_X_2020-11-01-2300
-cd CMSSW_11_2_DEVEL_X_2020-11-01-2300
-cmsenv
-git cms-merge-topic jpata:mlpfproducer
-scram b -j4
-
-mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf
-wget http://jpata.web.cern.ch/jpata/mlpf/mlpf_2020_10_27.pb -O src/RecoParticleFlow/PFProducer/data/mlpf/mlpf_2020_10_27.pb
-
-#Phase 2: timing extraction
-runTheMatrix.py -l 23434.21 -w upgrade --command="-n 100 --nThreads 2 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_aod"
-
-#Run 3: physics performance checks
-runTheMatrix.py -l 11834.0 -w upgrade --command="-n 100 --nThreads 2 --customise Validation/Performance/TimeMemoryInfo.customise --customise RecoParticleFlow/PFProducer/mlpfproducer_customise.customise_step3_reco"
-```
-
-Retraining recipe:
-
-```
-cmsrel CMSSW_11_2_DEVEL_X_2020-11-01-2300
-cd CMSSW_11_2_DEVEL_X_2020-11-01-2300
-cmsenv
-git cms-merge-topic jpata:mlpfproducer
-scram b -j4
-
-#TF 2.3 is needed for training, run this once only
-cd src/RecoParticleFlow/PFProducer/test/mlpf_training
-python3 -m venv training_env
-source training_env/bin/activate
-pip3 install --upgrade pip
-pip3 install tensorflow==2.3 protobuf==3.13 google-cloud==0.34
-
-#retrain on data provided by the MLPF team
-source training_env/bin/activate
-python3 tf_model.py --datapath /eos/user/j/jpata/www/particleflow/TTbar_14TeV_TuneCUETP8M1_cfi/
-deactivate
-
-#generate your own data and run an example training on it
-./run.sh
-```
-
-Internal documentation and results can be found at https://twiki.cern.ch/twiki/bin/view/CMS/MLParticleFlow.
-
-Quickstart with training the CMS model:
+# CMS training
 
 ```
 #get the code
@@ -81,5 +33,5 @@ git clone https://github.com/jpata/particleflow.git
 cd particleflow
 
 #run a small local test including data prep and training
-./scripts/local_test.sh
+./scripts/local_test_cms.sh
 ```
