@@ -30,7 +30,7 @@ setup:
   batch_size: 5
   num_events_train: 50
   num_events_test: 50
-  num_epochs: 2
+  num_epochs: 1
   dtype: float32
   sample_weights: none
   trainable: all

@@ -23,8 +23,8 @@ python3 mlpf/launcher.py --model-spec parameters/test.yaml --action data
 python3 mlpf/launcher.py --model-spec parameters/test.yaml --action train
 
 #Generate the pred.npz file of predictions
-python3 mlpf/launcher.py --model-spec parameters/test.yaml --action eval --weights ./experiments/test-*/weights.02-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test.yaml --action eval --weights ./experiments/test-*/weights.01-*.hdf5
 
 #Generate the timing file
-python3 mlpf/launcher.py --model-spec parameters/test.yaml --action time --weights ./experiments/test-*/weights.02-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test.yaml --action time --weights ./experiments/test-*/weights.01-*.hdf5
 
