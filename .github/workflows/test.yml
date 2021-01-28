@@ -1,16 +1,11 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-# Controls when the action will run. 
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
@@ -24,7 +19,7 @@ jobs:
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.3 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0 keras-tuner networkx
-      - name: Run delphes TF test
+      - name: Run delphes TF model
         run: ./scripts/local_test_delphes_tf.sh
 
   cms-tf:
@@ -37,5 +32,5 @@ jobs:
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.3 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0 keras-tuner networkx
-      - name: Run delphes TF test
+      - name: Run CMS TF model
         run: ./scripts/local_test_cms_tf.sh
