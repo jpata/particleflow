@@ -416,11 +416,11 @@ def main(args, yaml_path, config):
         raise Exception("Could not find any files in {}".format(dataset_def.datapath))
         
     dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    print("dataset loaded")
 
     num_events = 0
     for i in dataset:
         num_events += 1
+    print("dataset loaded, len={}".format(num_events))
 
     n_train = config['setup']['num_events_train']
     n_test = config['setup']['num_events_test']

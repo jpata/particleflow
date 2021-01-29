@@ -29,9 +29,9 @@ setup:
   weights:
   lr: 1e-6
   batch_size: 5
-  num_events_train: 400
-  num_events_test: 50
-  num_epochs: 100
+  num_events_train: 80000
+  num_events_test: 10000
+  num_epochs: 300
   dtype: float32
   sample_weights: none
   trainable: all
