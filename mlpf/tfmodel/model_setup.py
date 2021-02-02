@@ -161,12 +161,18 @@ class ConfusionMatrixValidation:
         X_test = self.X_test
         y_test = self.y_test
 
-        with open("{}/logs_{}.json".format(outdir, epoch), "w") as fi:
-            json.dump(logs, fi)
-
         test_pred = model.predict(X_test, batch_size=5)
 
         l1, l2, l3, l2_r = self.loss_cls.loss_components(y_test, test_pred)
+
+        logs["epoch"] = int(epoch)
+        logs["l1"] = float(tf.reduce_mean(l1).numpy())
+        logs["l2"] = float(tf.reduce_mean(l2).numpy())
+        logs["l2_split"] = [float(x) for x in tf.reduce_mean(l2_r, axis=[0,1])]
+        logs["l3"] = float(tf.reduce_mean(l3).numpy())
+
+        with open("{}/logs_{}.json".format(outdir, epoch), "w") as fi:
+            json.dump(logs, fi)
 
         test_pred_id = np.argmax(test_pred[:, :, :self.num_output_classes], axis=-1)
         test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, self.num_output_classes:]], axis=-1)
@@ -227,7 +233,7 @@ def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes
     callbacks += [terminate_cb]
 
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=outdir + "/weights.{epoch:02d}-{val_loss:.6f}.hdf5",
+        filepath=outdir + "/weights-{epoch:02d}-{val_loss:.6f}.hdf5",
         save_weights_only=True,
         verbose=0
     )
@@ -531,8 +537,10 @@ def main(args, yaml_path, config):
             model(tf.cast(X_val[:1], model_dtype))
             model.summary()
 
+            initial_epoch = 0
             if weights:
                 model.load_weights(weights)
+                initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
             if args.action=="train":
                 file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
@@ -545,8 +553,9 @@ def main(args, yaml_path, config):
                 )
 
                 model.fit(
-                    ds_train_r, validation_data=ds_test_r, epochs=n_epochs, callbacks=callbacks,
-                    steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size
+                    ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
+                    steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
+                    initial_epoch=initial_epoch
                 )
 
                 model.save(outdir + "/model_full", save_format="tf")
