@@ -38,4 +38,4 @@ python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
 python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action train
 
 #Generate the pred.npz file of predictions
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action eval --weights ./experiments/test-*/weights.01-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action eval --weights ./experiments/test-*/weights-01-*.hdf5
