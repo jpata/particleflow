@@ -1,0 +1,51 @@
+backend: tensorflow
+
+dataset:
+  schema: cms
+  target_particles: cand
+  num_input_features: 15
+  num_output_features: 7
+  num_input_classes: 12
+  #(none, ch.had, n.had, hfem, hfhad, gamma, e, mu)
+  num_output_classes: 8
+  num_momentum_outputs: 5
+  padded_num_elem_size: 6400
+  momentum_loss_coefs:
+    - 1.0
+    - 1.0
+    - 1.0
+    - 1.0
+    - 0.001
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  num_files_per_chunk: 5
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  lr: 1e-6
+  batch_size: 5
+  num_events_train: 400
+  num_events_test: 50
+  num_epochs: 100
+  dtype: float32
+  sample_weights: none
+  trainable: all
+
+parameters:
+  model: transformer
+  num_layers: 4
+  d_model: 128
+  num_heads: 4
+  dff: 128
+  support: 32
+  skip_connection: yes
+  dropout: 0.2
+
+timing:
+  num_ev: 1
+  num_iter: 1

@@ -1,0 +1,62 @@
+Bootstrap: docker
+
+From: nvcr.io/nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
+%post
+    export CUDA=cu101
+    export TORCH_CUDA_ARCH_LIST=All
+    export TORCH=1.6.0
+
+    apt update
+    apt upgrade -y
+    apt install -y python3 python3-dev python3-pip
+    apt install -y gcc g++
+    apt install -y make cmake
+    apt install -y libhdf5-dev
+    apt install -y parallel
+    apt install -y language-pack-en
+    apt install -y wget
+    apt install -y libomp-dev
+
+    python3 -m pip install --upgrade pip
+    python3 -m pip install tensorflow==2.3
+    python3 -m pip install torch==${TORCH}+${CUDA} torchvision==0.7.0+${CUDA} -f https://download.pytorch.org/whl/torch_stable.html
+    python3 -m pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+    python3 -m pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+    python3 -m pip install --no-index torch-cluster -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+    python3 -m pip install --no-index torch-spline-conv -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+    python3 -m pip install torch-geometric
+    python3 -m pip install pytorch-lightning
+    python3 -m pip install torchvision
+    python3 -m pip install tensorboard_plugin_profile
+    python3 -m pip install keras-tuner
+    python3 -m pip install jax jaxlib
+    python3 -m pip install flax
+    python3 -m pip install gin-config
+    python3 -m pip install spektral
+
+    python3 -m pip install setGPU
+    python3 -m pip install sklearn
+    python3 -m pip install matplotlib
+    python3 -m pip install mplhep
+    python3 -m pip install pandas
+    python3 -m pip install scipy
+    python3 -m pip install numba
+    python3 -m pip install uproot3
+    python3 -m pip install uproot3-methods
+    python3 -m pip install awkward0
+    python3 -m pip install tqdm
+    python3 -m pip install comet_ml
+    python3 -m pip install jupyter notebook
+    python3 -m pip install dask distributed parsl
+    
+    python3 -m pip install energyflow
+    python3 -m pip install POT
+
+    python3 -m pip install astropy
+    python3 -m pip install girder-client
+
+%environment
+
+%runscript
+    /bin/bash 
