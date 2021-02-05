@@ -2,18 +2,15 @@ import sys
 import pickle
 import networkx as nx
 import numpy as np
-import numba
 import os
-import uproot
-import uproot_methods
+import uproot3 as uproot
+import uproot3_methods as uproot_methods
 import math
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-import scipy
-import scipy.sparse
 from networkx.readwrite import json_graph
 from networkx.drawing.nx_pydot import graphviz_layout
 
@@ -35,11 +32,6 @@ for candid, pdgids in map_candid_to_pdgid.items():
     for p in pdgids:
         map_pdgid_to_candid[p] = candid
 
-@numba.njit
-def deltaphi(phi1, phi2):
-    return np.mod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
-
-@numba.njit
 def get_charge(pid):
     abs_pid = abs(pid)
     if pid == 130 or pid == 22 or pid == 1 or pid == 2:
@@ -50,154 +42,6 @@ def get_charge(pid):
     #211: pi+
     elif abs_pid == 211:
         return math.copysign(1.0, pid)
-
-@numba.njit
-def associate_deltar(etaphi, dr2cut, ret):
-    for i in range(len(etaphi)):
-        for j in range(i+1, len(etaphi)):
-            dphi = deltaphi(etaphi[i, 1], etaphi[j, 1])
-            deta = etaphi[i, 0] - etaphi[j, 0]
-            dr2 = dphi**2 + deta**2
-            #dr = np.sqrt(dphi**2 + deta**2)
-            if dr2 < dr2cut:
-                ret[i,j] += np.sqrt(dr2)                   
-
-def graph_to_images(data):
-    ndim_ecal = 128
-    img_ecal = np.zeros((ndim_ecal, ndim_ecal))
-    bins_ecal_eta = np.linspace(-4, 4, ndim_ecal)
-    bins_ecal_phi = np.linspace(-4, 4, ndim_ecal)
-
-    ndim_hcal = 128
-    img_hcal = np.zeros((ndim_hcal, ndim_hcal))
-    bins_hcal_eta = np.linspace(-4, 4, ndim_hcal)
-    bins_hcal_phi = np.linspace(-4, 4, ndim_hcal)
-
-    ndim_hfem = 128
-    img_hfem = np.zeros((ndim_hfem, ndim_hfem))
-    bins_hfem_eta = np.linspace(-6, 6, ndim_hfem)
-    bins_hfem_phi = np.linspace(-4, 4, ndim_hfem)
-
-    ndim_hfhad = 128
-    img_hfhad = np.zeros((ndim_hfhad, ndim_hfhad))
-    bins_hfhad_eta = np.linspace(-6, 6, ndim_hfhad)
-    bins_hfhad_phi = np.linspace(-4, 4, ndim_hfhad)
-
-    ndim_tracker_1 = 128
-    img_tracker_1 = np.zeros((ndim_tracker_1, ndim_tracker_1))
-    img_tracker_2 = np.zeros((ndim_tracker_1, ndim_tracker_1))
-    img_tracker_3 = np.zeros((ndim_tracker_1, ndim_tracker_1))
-    bins_tracker_1_eta = np.linspace(-4, 4, ndim_tracker_1)
-    bins_tracker_1_phi = np.linspace(-4, 4, ndim_tracker_1)
-
-    ndim_gen = 128
-    img_gen = np.zeros((ndim_gen, ndim_gen))
-    bins_gen_eta = np.linspace(-6, 6, ndim_gen)
-    bins_gen_phi = np.linspace(-4, 4, ndim_gen)
-
-    img_gen_pid = {}
-    for k in map_candid_to_pdgid.keys():
-        img_gen_pid[k] = np.zeros((ndim_gen, ndim_gen))
-
-    necal = 0
-    ngen = 0
-    for node in data.nodes:
-        if node[0] == "elem":
-            if data.nodes[node]["typ"] == 4:
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_ecal_eta, eta)
-                iphi = np.searchsorted(bins_ecal_phi, phi)
-                img_ecal[ieta, iphi] += data.nodes[node]["e"]
-                necal += 1
-            elif data.nodes[node]["typ"] == 5:
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_hcal_eta, eta)
-                iphi = np.searchsorted(bins_hcal_phi, phi)
-                img_hcal[ieta, iphi] += data.nodes[node]["e"]
-            elif data.nodes[node]["typ"] == 8:
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_hfem_eta, eta)
-                iphi = np.searchsorted(bins_hfem_phi, phi)
-                img_hfem[ieta, iphi] += data.nodes[node]["e"]
-            elif data.nodes[node]["typ"] == 9:
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_hfhad_eta, eta)
-                iphi = np.searchsorted(bins_hfhad_phi, phi)
-                img_hfhad[ieta, iphi] += data.nodes[node]["e"]
-            elif data.nodes[node]["typ"] == 1:
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_tracker_1_eta, eta)
-                iphi = np.searchsorted(bins_tracker_1_phi, phi)
-                img_tracker_1[ieta, iphi] += data.nodes[node]["e"]
-
-                eta_ecal = data.nodes[node]["eta_ecal"]
-                phi_ecal = data.nodes[node]["phi_ecal"]
-                if eta_ecal != 0:
-                    ieta = np.searchsorted(bins_tracker_1_eta, eta_ecal)
-                    iphi = np.searchsorted(bins_tracker_1_phi, phi_ecal)
-                    img_tracker_2[ieta, iphi] += data.nodes[node]["e"]
-
-                eta_hcal = data.nodes[node]["eta_hcal"]
-                phi_hcal = data.nodes[node]["phi_hcal"]
-                if eta_hcal != 0:
-                    ieta = np.searchsorted(bins_tracker_1_eta, eta_hcal)
-                    iphi = np.searchsorted(bins_tracker_1_phi, phi_hcal)
-                    img_tracker_3[ieta, iphi] += data.nodes[node]["e"]
-
-        elif node[0] == "tp" or node[0] == "sc":
-            ngen += 1
-            pid = data.nodes[node]["typ"]
-            if pid in map_pdgid_to_candid:  
-                eta = data.nodes[node]["eta"]
-                phi = data.nodes[node]["phi"]
-                ieta = np.searchsorted(bins_gen_eta, eta)
-                iphi = np.searchsorted(bins_gen_phi, phi)
-                if ieta >= ndim_gen:
-                    ieta = ndim_gen-1
-                if iphi >= ndim_gen:
-                    iphi = ndim_gen-1
-                img_gen_pid[map_pdgid_to_candid[pid]][ieta, iphi] += data.nodes[node]["e"]
-            else:
-                print(pid, data.nodes[node]["e"])
-
-
-    ret = {
-        "ecal": img_ecal,
-        "hcal": img_hcal,
-        "tracker_1": img_tracker_1,
-        "tracker_2": img_tracker_2,
-        "tracker_3": img_tracker_3,
-        "hfem": img_hfem,
-        "hfhad": img_hfhad,
-    }
-
-    print("necal", necal)
-    print("ngen", ngen)
-    #X = np.stack([ret[k] for k in ["ecal", "hcal", "tracker_1", "tracker_2", "tracker_3", "hfem", "hfhad"]], axis=-1)
-    #y = np.stack([img_gen_pid[p] for p in [211, -211]], axis=-1)
-    #y = np.sum(y, axis=-1).reshape((64, 64, 1))
-    return ret, img_gen_pid
-
-def prepare_elem_distance_matrix(ev):
-    di = ev[b'element_distance_i']
-    dj = ev[b'element_distance_j']
-    d = ev[b'element_distance_d']
-    etas = ev[b'element_eta']
-    phis = ev[b'element_phi']
-    etaphis = np.vstack([etas, phis]).T
-    dm_dr = np.zeros((etaphis.shape[0], etaphis.shape[0]), dtype=np.float32)
-    associate_deltar(etaphis, 0.2**2, dm_dr)
-    n = len(etas)
-    dm = scipy.sparse.coo_matrix((d, (di, dj)), shape=(n,n)).todense()
-    dm += dm_dr 
-    dm += dm.T
-    dm = scipy.sparse.coo_matrix(dm)
-    return dm
 
 def save_ego_graph(g, node, radius=4, undirected=False):
     sg = nx.ego_graph(g, node, radius, undirected=undirected).reverse()
@@ -261,6 +105,14 @@ def cleanup_graph(g, edge_energy_threshold=0.01, edge_fraction_threshold=0.05, g
     g = g.copy()
 
     edges_to_remove = []
+    nodes_to_remove = []
+
+    #remove gen particles with no links to elements 
+    nodes_to_remove = []
+    for n in g.nodes:
+        if ((n[0] == "tp") or (n[0] == "sc")) and len(g.edges(n)) == 0:
+            nodes_to_remove.append(n)
+    g.remove_nodes_from(nodes_to_remove)
     nodes_to_remove = []
 
     #remove edges that contribute little
@@ -428,7 +280,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         "layer", "depth", "charge", "trajpoint", 
         "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits"
     ]
-    target_branches = ["typ", "pt", "eta", "phi", "e", "px", "py", "pz", "charge"]
+    target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
     Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
     Xelem.fill(0.0)
@@ -508,7 +360,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             eta = np.sign(lv.z)*10e10
         
         gp = {
-            "pt": lv.pt, "eta": eta, "phi": lv.phi, "e": lv.energy, "typ": pid, "px": lv.x, "py": lv.y, "pz": lv.z, "charge": get_charge(pid)
+            "pt": lv.pt, "eta": eta, "sin_phi": np.sin(lv.phi), "cos_phi": np.cos(lv.phi), "e": lv.energy, "typ": pid, "px": lv.x, "py": lv.y, "pz": lv.z, "charge": get_charge(pid)
         }
 
         for j in range(len(elem_branches)):
@@ -519,18 +371,14 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                 ycand[target_branches[j]][ielem] = g.nodes[candidate][target_branches[j]]
             ygen[target_branches[j]][ielem] = gp[target_branches[j]]
 
-    dm_elem_cand = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_cand, nodelist=all_elements))
-    dm_elem_gen = scipy.sparse.coo_matrix(nx.to_numpy_matrix(graph_elem_gen, nodelist=all_elements))
-    return Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen
+    return Xelem, ycand, ygen
 #end of prepare_normalized_table
-
 
 def process(args):
     infile = args.input
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
     tt = tf["ana/pftree"]
-
     events_to_process = [i for i in range(tt.numentries)] 
     if not (args.event is None):
         events_to_process = [args.event]
@@ -667,7 +515,8 @@ def process(args):
                 pt=pfcandidate_pt[iobj],
                 e=pfcandidate_e[iobj],
                 eta=pfcandidate_eta[iobj],
-                phi=pfcandidate_phi[iobj],
+                sin_phi=np.sin(pfcandidate_phi[iobj]),
+                cos_phi=np.cos(pfcandidate_phi[iobj]),
                 px=pfcandidate_px[iobj],
                 py=pfcandidate_py[iobj],
                 pz=pfcandidate_pz[iobj],
@@ -699,8 +548,7 @@ def process(args):
         #plt.clf()
 
         #do one-to-one associations
-        Xelem, ycand, ygen, dm_elem_cand, dm_elem_gen = prepare_normalized_table(g)
-        dm = prepare_elem_distance_matrix(ev)
+        Xelem, ycand, ygen = prepare_normalized_table(g)
         data = {}
 
         if args.save_normalized_table:
@@ -708,9 +556,9 @@ def process(args):
                 "Xelem": Xelem,
                 "ycand": ycand,
                 "ygen": ygen,
-                "dm": dm,
-                "dm_elem_cand": dm_elem_cand,
-                "dm_elem_gen": dm_elem_gen
+#                "dm": dm,
+#                "dm_elem_cand": dm_elem_cand,
+#                "dm_elem_gen": dm_elem_gen
             }
 
         if args.save_full_graph:
