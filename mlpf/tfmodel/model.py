@@ -31,7 +31,7 @@ def pairwise_dist(A, B):
 sp_a: (nbatch, nelem, nelem) sparse distance matrices
 b: (nbatch, nelem, ncol) dense per-element feature matrices
 """
-def sparse_dense_matmult_batch(sp_a, b, nelem, ncol):
+def sparse_dense_matmult_batch(sp_a, b):
 
     dtype = b.dtype
     b = tf.cast(b, tf.float32)
@@ -48,7 +48,7 @@ def sparse_dense_matmult_batch(sp_a, b, nelem, ncol):
         return mult_slice
 
     elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
-    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((nelem, ncol), b.dtype), back_prop=True)
+    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
 
 class InputEncoding(tf.keras.layers.Layer):
@@ -97,7 +97,7 @@ class GHConv(tf.keras.layers.Layer):
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
 
         f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm, self.nelem, self.hidden_dim)*norm
+        f_hom = sparse_dense_matmult_batch(adj, f_hom*norm)*norm
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
