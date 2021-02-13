@@ -379,13 +379,13 @@ def freeze_model(model, config, outdir):
         tf.TensorSpec((None, None, config["dataset"]["num_input_features"]), tf.float32))
     from tensorflow.python.framework import convert_to_constants
     frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
-    frozen_func.graph.as_graph_def()
+    graph = tf.compat.v1.graph_util.remove_training_nodes(frozen_func.graph.as_graph_def())
     
-    tf.io.write_graph(graph_or_graph_def=frozen_func.graph,
+    tf.io.write_graph(graph_or_graph_def=graph,
       logdir="{}/model_frozen".format(outdir),
       name="frozen_graph.pb",
       as_text=False)
-    tf.io.write_graph(graph_or_graph_def=frozen_func.graph,
+    tf.io.write_graph(graph_or_graph_def=graph,
       logdir="{}/model_frozen".format(outdir),
       name="frozen_graph.pbtxt",
       as_text=True)
@@ -483,7 +483,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist:
+    for fi in dataset_def.val_filelist[:1]:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
