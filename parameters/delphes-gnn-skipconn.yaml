@@ -25,7 +25,7 @@ tensorflow:
 
 setup:
   train: yes
-  weights:
+  weights: experiments/delphes-gnn-skipconn-9d47b79d/weights-300-1.145966.hdf5
   lr: 1e-6
   batch_size: 5
   num_events_train: 40000

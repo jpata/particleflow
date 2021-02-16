@@ -8,16 +8,17 @@ dataset:
   num_input_classes: 12
   #(none, ch.had, n.had, hfem, hfhad, gamma, e, mu)
   num_output_classes: 8
-  num_momentum_outputs: 5
   padded_num_elem_size: 6400
+  #pt, eta, sin phi, cos phi, E
+  num_momentum_outputs: 5
   momentum_loss_coefs:
     - 1.0
+    - 10.0
+    - 100.0
+    - 100.0
     - 1.0
-    - 1.0
-    - 1.0
-    - 0.001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 5
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
@@ -26,8 +27,8 @@ tensorflow:
 
 setup:
   train: yes
-  weights:
-  lr: 1e-7
+  weights: experiments/cms-gnn-skipconn-cb3939ed/weights-03-123.788956.hdf5
+  lr: 1e-6
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
