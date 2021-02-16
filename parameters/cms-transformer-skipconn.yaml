@@ -12,12 +12,12 @@ dataset:
   padded_num_elem_size: 6400
   momentum_loss_coefs:
     - 1.0
+    - 10.0
+    - 100.0
+    - 100.0
     - 1.0
-    - 1.0
-    - 1.0
-    - 0.001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 5
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
@@ -26,14 +26,14 @@ tensorflow:
 
 setup:
   train: yes
-  weights:
-  lr: 1e-6
+  weights: experiments/cms-transformer-skipconn-b48a9882/weights-200-0.012074.hdf5
+  lr: 1e-7
   batch_size: 5
-  num_events_train: 400
-  num_events_test: 50
+  num_events_train: 80000
+  num_events_test: 10000
   num_epochs: 100
-  dtype: float32
-  sample_weights: none
+  dtype: float16
+  sample_weights: inverse_sqrt
   trainable: all
 
 parameters:
