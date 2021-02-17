@@ -130,7 +130,7 @@ class Dataset:
             X = np.expand_dims(X, 0)
             ygen = np.expand_dims(ygen, 0)
             ycand = np.expand_dims(ycand, 0)
-            
+
             Xs.append(X)
             ygens.append(ygen)
             ycands.append(ycand)

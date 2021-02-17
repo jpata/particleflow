@@ -31,7 +31,7 @@ dataset:
     - 1.0
     - 0.001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 5
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 

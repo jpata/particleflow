@@ -427,8 +427,8 @@ def main(args, yaml_path, config):
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
     if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.datapath))
-        
+        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
+
     dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     num_events = 0
