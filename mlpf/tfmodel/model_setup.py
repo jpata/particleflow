@@ -163,6 +163,9 @@ class ConfusionMatrixValidation:
 
         test_pred = model.predict(X_test, batch_size=5)
 
+        if isinstance(test_pred, tuple):
+            test_pred = tf.concat(list(test_pred), axis=-1)
+
         l1, l2, l3, l2_r = self.loss_cls.loss_components(y_test, test_pred)
 
         logs["epoch"] = int(epoch)
@@ -286,6 +289,9 @@ def scale_outputs(X,y,w):
     ynew = ynew/out_s
     return X, ynew, w
 
+def targets_multi_output(X,y,w):
+    return X, (y[:, :, 0:1],  y[:, :, 1:2], y[:, :, 2:]), w
+
 def make_model(config, dtype):
     model = config['parameters']['model']
     if model == 'gnn':
@@ -318,6 +324,7 @@ def make_gnn(config, dtype):
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNet(
+        multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
@@ -443,6 +450,10 @@ def main(args, yaml_path, config):
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
     ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
+    if config['setup']['multi_output']:
+        ds_train = ds_train.map(targets_multi_output)
+        ds_test = ds_test.map(targets_multi_output)
+
     #small test dataset used in the callback for making monitoring plots
     X_test = ds_test.take(100).map(lambda x,y,w: x)
     y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
@@ -483,7 +494,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:1]:
+    for fi in dataset_def.val_filelist[:10]:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
@@ -509,6 +520,11 @@ def main(args, yaml_path, config):
             model_dtype = tf.dtypes.float32
             opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
 
+
+            if config['setup']['multi_output']:
+                from tfmodel.PCGrad_tf import PCGrad
+                opt = PCGrad(tf.compat.v1.train.AdamOptimizer(actual_lr))
+
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
 
@@ -528,7 +544,11 @@ def main(args, yaml_path, config):
 
             #we use the "temporal" mode to have per-particle weights
             model.compile(
-                loss=loss_fn,
+                loss=(
+                    tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                    tf.keras.losses.MeanSquaredError(),
+                    tf.keras.losses.MeanSquaredError()
+                ),
                 optimizer=opt,
                 sample_weight_mode='temporal'
             )

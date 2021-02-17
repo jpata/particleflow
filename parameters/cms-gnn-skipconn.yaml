@@ -26,15 +26,16 @@ tensorflow:
 
 setup:
   train: yes
-  weights:
+  weights: experiments/cms-gnn-skipconn-d89aab04/weights-100-43.411991.hdf5
   lr: 1e-7
   batch_size: 5
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 150
+  num_events_train: 100
+  num_events_test: 100
+  num_epochs: 100
   dtype: float32
   sample_weights: none
   trainable: all
+  multi_output: yes
 
 parameters:
   model: gnn
