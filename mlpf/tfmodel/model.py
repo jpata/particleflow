@@ -309,6 +309,7 @@ def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu'
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     def __init__(self,
+        multi_output=False,
         num_input_classes=8,
         num_output_classes=3,
         num_momentum_outputs=3,
@@ -334,6 +335,7 @@ class PFNet(tf.keras.Model):
         self.num_dists = 1
         self.num_momentum_outputs = num_momentum_outputs
         self.skip_connection = skip_connection
+        self.multi_output = multi_output
 
         encoding_id = []
         decoding_id = []
@@ -433,7 +435,10 @@ class PFNet(tf.keras.Model):
 
         pred_momentum = self.layer_momentum(to_decode)
 
-        return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+        if self.multi_output:
+            return out_id_logits, out_charge, pred_momentum
+        else:
+            return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
         for layer in self.layers:

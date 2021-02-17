@@ -53,7 +53,21 @@ class Dataset:
         elif self.schema == "cms":
             self.prepare_data = self.prepare_data_cms
 
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
         self.elem_labels_cms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+        #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.class_labels_cms = [0, 211, 130, 1, 2, 22, 11, 13]
 
     def prepare_data_cms(self, fn):
