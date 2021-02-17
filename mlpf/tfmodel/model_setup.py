@@ -19,11 +19,12 @@ import time
 import json
 
 class PFNetLoss:
-    def __init__(self, num_input_classes, num_output_classes, momentum_loss_coefs=[1.0, 1.0, 1.0], charge_loss_coef=1e-3):
+    def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0], charge_loss_coef=1e-3):
         self.num_input_classes = num_input_classes
         self.num_output_classes = num_output_classes
         self.momentum_loss_coefs = tf.constant(momentum_loss_coefs)
         self.charge_loss_coef = charge_loss_coef
+        self.classification_loss_coef = classification_loss_coef
 
     def mse_unreduced(self, true, pred):
         return tf.math.pow(true-pred,2)
@@ -47,7 +48,7 @@ class PFNetLoss:
         true_id, true_charge, true_momentum = self.separate_truth(y_true)
         true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
 
-        l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)
+        l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
       
         l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
@@ -494,7 +495,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:10]:
+    for fi in dataset_def.val_filelist[:100]:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
@@ -529,6 +530,7 @@ def main(args, yaml_path, config):
             model = make_model(config, model_dtype)
 
             loss_cls = PFNetLoss(
+                classification_loss_coef=config["dataset"]["classification_loss_coef"],
                 num_input_classes=config["dataset"]["num_input_classes"],
                 num_output_classes=config["dataset"]["num_output_classes"],
                 momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
