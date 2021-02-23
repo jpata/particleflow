@@ -4,6 +4,7 @@ set +e
 NUM=$1
 
 XDIR="out/pythia8_qcd"
+mkdir -p $XDIR
 OUTROOT="tev14_pythia8_qcd_$NUM.root"
 OUT="tev14_pythia8_qcd_$NUM.promc"
 LOG="logfile_$NUM.txt"
