@@ -11,7 +11,7 @@ mkdir -p $XDIR
 ./run_pileup.sh
 
 for i in `seq 0 9`; do
-  nohup ./run_sim_seed.sh $i &
+  nohup ./run_sim_seed.sh $i tev14_pythia8_ttbar.py &
 done
 
 wait

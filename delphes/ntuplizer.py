@@ -425,7 +425,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ycand_all.append(ycand)
 
     with bz2.BZ2File(outfile, "wb") as fi:
-        pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
+        pickle.dump({"X": X_all, "ygen": ygen_all, "ycand": ycand_all}, fi)
 
 def process_chunk_args(args):
     process_chunk(*args)
