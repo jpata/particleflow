@@ -18,18 +18,18 @@ dataset:
   raw_path: data/pythia8_ttbar/raw/*.pkl.bz2
   processed_path: data/pythia8_ttbar/tfr/*.tfrecords
   num_files_per_chunk: 5
-  validation_file_path: data/pythia8_ttbar/val/*.pkl.bz2
+  validation_file_path: data/pythia8_qcd/val/*.pkl.bz2
 
 tensorflow:
   eager: no
 
 setup:
   train: yes
-  weights: experiments/delphes-gnn-skipconn-9d47b79d/weights-300-1.145966.hdf5
+  weights: 
   lr: 1e-6
   batch_size: 5
-  num_events_train: 40000
-  num_events_test: 5000
+  num_events_train: 100
+  num_events_test: 100
   num_epochs: 300
   dtype: float32
   sample_weights: none
@@ -52,6 +52,7 @@ parameters:
   dist_mult: 1.0
   activation: elu
   skip_connection: True
+
 timing:
   num_ev: 100
   num_iter: 3
