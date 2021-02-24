@@ -12,6 +12,7 @@ singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_sim.sh
 # Run the ntuplization step
 # generate X,y input matrices for NN training in out/pythia8_ttbar/*.pkl.bz2
 singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_ntuple.sh
+singularity exec http://jpata.web.cern.ch/jpata/centos7hepsim.sif ./run_ntuple_qcd.sh
 
 #Alternatively, to skip run_sim.sh and run_ntuple.sh, download everything from https://doi.org/10.5281/zenodo.4452283 and put into out/pythia8_ttbar
 
@@ -23,10 +24,16 @@ mkdir val
 mkdir root
 mv *.root root/
 mb *.promc root/
-
-#these are held out for validation
-mv tev14_pythia8_ttbar_9_*.pkl.bz2 val/
 mv *.pkl.bz2 raw/
+cd ../..
+
+mv out/pythia8_qcd ../data/
+cd ../data/pythia8_qcd
+mkdir val
+mkdir root
+mv *.root root/
+mv *.promc root/
+mv *.pkl.bz2 val/
 cd ../..
 
 # Generate the TFRecord datasets needed for larger-than-RAM training
@@ -36,9 +43,9 @@ singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/laun
 CUDA_VISIBLE_DEVICES=0,1,2,3,4 singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action train --model-spec parameters/delphes-gnn-skipconn.yaml
 
 #Run the validation to produce the predictions file
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action eval --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action eval --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights-300-*.hdf5
 
-singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action time --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights.300-*.hdf5
+singularity exec --nv http://jpata.web.cern.ch/jpata/base.simg python3 mlpf/launcher.py --action time --model-spec parameters/delphes-gnn-skipconn.yaml --weights ./experiments/delphes-gnn-skipconn-*/weights-300-*.hdf5
 ```
 
 ## Recipe to prepare Delphes singularity image

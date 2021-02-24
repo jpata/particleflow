@@ -13,5 +13,6 @@ mkdir -p $XDIR
 for i in `seq 0 9`; do
   nohup ./run_sim_seed.sh $i &
 done
+nohup ./run_sim_seed_qcd.sh 10 &
 
 wait
