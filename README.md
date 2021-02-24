@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4452283.svg)](https://doi.org/10.5281/zenodo.4452283)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4559587.svg)](https://doi.org/10.5281/zenodo.4559587)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4559324.svg)](https://doi.org/10.5281/zenodo.4559324)
 [![CI](https://github.com/jpata/particleflow/workflows/CI/badge.svg)](https://github.com/jpata/particleflow/actions)
 
