@@ -19,7 +19,7 @@ Long instructions for reproducing the full training from scratch in [README_delp
 The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
 
 ### Delphes dataset
-The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283.
+The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4559324.
 
 ### Software setup
 The software setup for the ML training is available in the singularity spec file [scripts/base.singularity](scripts/base.singularity).
