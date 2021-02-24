@@ -3,12 +3,12 @@
 [![CI](https://github.com/jpata/particleflow/workflows/CI/badge.svg)](https://github.com/jpata/particleflow/actions)
 
 <p float="left">
-  <img src="delphes/plots/event.png" alt="Simulated event" width="600"/>
+  <img src="notebooks/plots/event.png" alt="Simulated event" width="600"/>
 </p>
 
 <p float="left">
-  <img src="delphes/plots/num_particles.png" alt="Particle multiplicity" width="300"/>
-  <img src="delphes/plots/res_pid2.png" alt="Neutral hadron resolution" width="300"/>
+  <img src="notebooks/plots/num_particles.png" alt="Particle multiplicity" width="300"/>
+  <img src="notebooks/plots/res_pid2.png" alt="Neutral hadron resolution" width="300"/>
 </p>
 
 ## MLPF with Delphes
