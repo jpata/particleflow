@@ -13,7 +13,7 @@ ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 
 #for debugging
-save_full_graphs = True
+save_full_graphs = False
 
 #0 - nothing associated
 #1 - charged hadron
@@ -226,14 +226,16 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
 
         #find the PFCandidate matched to this tower.
         #again, we need to loop over the GenParticles that are associated to the tower.
-        pf_ptcl = None   
-        for ptcl in ptcls:
-            for e in g.edges(ptcl):
-                if e[1][0] in ["pfneutral", "pfcharged", "pfel", "pfphoton", "pfmu"] and e[1] in remaining_pfcandidates:
-                    pf_ptcl = e[1]
-                    break
-        if pf_ptcl:
+        found_pf = False
+        for pf_ptcl in remaining_pfcandidates:
+            if (g.nodes[pf_ptcl]["eta"] == g.nodes[t]["eta"]) and (g.nodes[pf_ptcl]["phi"] == g.nodes[t]["phi"]):
+                found_pf = True
+                break
+
+        if found_pf:
             remaining_pfcandidates.remove(pf_ptcl)
+        else:
+            pf_ptcl = None
 
         triplets.append((t, gen_ptcl, pf_ptcl))
     return triplets, list(remaining_particles), list(remaining_pfcandidates)
@@ -364,8 +366,8 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
                 graph.add_edge(("pfphoton", i), ("particle", ip))
 
         #write the full graph, mainly for study purposes
-        # if iev<10 and save_full_graphs:
-        #     nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2","_graph_{}.pkl".format(iev)))
+        if iev<10 and save_full_graphs:
+            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2","_graph_{}.pkl".format(iev)))
 
         #now clean up the graph, keeping only reconstructable genparticles
         #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -376,9 +378,9 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
         triplets, remaining_particles, remaining_pfcandidates = make_triplets(graph, tracks, towers, particles, pfcand)
-        # print("remaining PF", len(remaining_pfcandidates))
-        # for pf in remaining_pfcandidates:
-        #     print(graph.nodes[pf])
+        print("remaining PF", len(remaining_pfcandidates))
+        for pf in remaining_pfcandidates:
+            print(pf, graph.nodes[pf])
 
         X = []
         ygen = []
@@ -436,13 +438,13 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 if __name__ == "__main__":
-    pool = multiprocessing.Pool(24)
+    pool = multiprocessing.Pool(15)
 
     infile = sys.argv[1]
     f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
     num_evs = tree.GetEntries()
-    #num_evs = 1000
+    #num_evs = 10
 
     arg_list = []
     ichunk = 0
