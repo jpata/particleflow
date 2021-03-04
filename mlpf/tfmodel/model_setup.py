@@ -399,6 +399,11 @@ def freeze_model(model, config, outdir):
       as_text=True)
 
 def main(args, yaml_path, config):
+
+    #Switch off multi-output for the evaluation for backwards compatibility
+    if args.action == "eval":
+        config['setup']['multi_output'] = False
+
     tf.config.run_functions_eagerly(config['tensorflow']['eager'])
 
     from tfmodel.data import Dataset
@@ -552,7 +557,12 @@ def main(args, yaml_path, config):
                     tf.keras.losses.MeanSquaredError()
                 ),
                 optimizer=opt,
-                sample_weight_mode='temporal'
+                sample_weight_mode='temporal',
+                loss_weights=[
+                    config["dataset"]["classification_loss_coef"],
+                    config["dataset"]["charge_loss_coef"],
+                    config["dataset"]["momentum_loss_coef"]
+                ]
             )
 
             #Evaluate model once to build the layers
