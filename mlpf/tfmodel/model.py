@@ -566,10 +566,12 @@ class Transformer(tf.keras.Model):
                 num_output_classes=3,
                 num_momentum_outputs=3,
                 dtype=tf.dtypes.float32,
-                skip_connection=False):
+                skip_connection=False,
+                multi_output=False):
         super(Transformer, self).__init__()
 
         self.skip_connection = skip_connection
+        self.multi_output = multi_output
         self.num_momentum_outputs = num_momentum_outputs
 
         self.enc = InputEncoding(num_input_classes)
@@ -620,8 +622,10 @@ class Transformer(tf.keras.Model):
             dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
-        ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
-        return ret
+        if self.multi_output:
+            return out_id_logits, out_charge, pred_momentum
+        else:
+            return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
 
 
 
