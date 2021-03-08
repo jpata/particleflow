@@ -138,30 +138,50 @@ def make_cand_array(cand_dict):
 
 #make (reco, gen, cand) triplets from tracks and towers
 #also return genparticles that were not associated to any reco object
-def make_triplets(g, tracks, towers, particles):
+def make_triplets(g, tracks, towers, particles, pfparticles):
     triplets = []
     remaining_particles = set(particles)
+    remaining_pfcandidates = set(pfparticles)
+
+    #loop over all reco tracks
     for t in tracks:
+
+        #for each track, find the associated GenParticle
         ptcl = None
-        
         for e in g.edges(t):
             if e[1][0] == "particle":
                 ptcl = e[1]
                 break
         
+        #for each track, find the associated PFCandidate.
+        #The track does not store the PFCandidate links directly.
+        #Instead, we need to get the links to PFCandidates from the GenParticle found above.
+        #We should only look for charged PFCandidates,
+        #we assume the track makes only one genparticle, and the GenParticle makes only one charged PFCandidate
         pf_ptcl = None
         for e in g.edges(ptcl):
-            if e[1][0] in ["pfneutral", "pfcharged", "pfel", "pfphoton", "pfmu"]:
+            if e[1][0] in ["pfcharged", "pfel", "pfmu"] and e[1] in remaining_pfcandidates:
                 pf_ptcl = e[1]
                 break
+
         remaining_particles.remove(ptcl)
+
+        if pf_ptcl:
+            remaining_pfcandidates.remove(pf_ptcl)
+
         triplets.append((t, ptcl, pf_ptcl))
-            
+    
+    #now loop over all the reco calo towers
     for t in towers:
+
+        #get all the genparticles in the tower
         num_ptcls = 0
         ptcls, fracs = get_tower_gen_fracs(g, t)
+
+        #get the index of the highest energy deposit in the array (neutral hadron, charged hadron, photon, electron)
         imax = np.argmax(fracs)
         
+        #determine the PID based on which energy deposit is maximal
         charge = 0
         if len(ptcls) > 0:
             if imax==0:
@@ -175,7 +195,8 @@ def make_triplets(g, tracks, towers, particles):
             for ptcl in ptcls:
                 if ptcl in remaining_particles:
                     remaining_particles.remove(ptcl)
-                    
+        
+        #add up the genparticles in the tower   
         lvs = []
         for ptcl in ptcls:
             lv = uproot_methods.TLorentzVector.from_ptetaphie(
@@ -189,6 +210,7 @@ def make_triplets(g, tracks, towers, particles):
         lv = None
         gen_ptcl = None
 
+        #determine the GenParticle to reconstruct from this tower
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
             gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
@@ -197,18 +219,26 @@ def make_triplets(g, tracks, towers, particles):
             if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
                 gen_ptcl["pid"] = 130
             
-            #we don't want to reconstruct neutral genparticles that have too low energy. the threshold is set according to the delphes PFCandidate energy distribution
+            #we don't want to reconstruct neutral genparticles that have too low energy.
+            #the threshold is set according to the delphes PFCandidate energy distribution
             if gen_ptcl["pid"] == 130 and gen_ptcl["energy"] < 9.0:
                 gen_ptcl = None
 
-        pf_ptcl = None   
-        for ptcl in ptcls:
-            for e in g.edges(ptcl):
-                if e[1][0] in ["pfneutral", "pfcharged", "pfel", "pfphoton", "pfmu"]:
-                    pf_ptcl = e[1]
-                    break
+        #find the PFCandidate matched to this tower.
+        #again, we need to loop over the GenParticles that are associated to the tower.
+        found_pf = False
+        for pf_ptcl in remaining_pfcandidates:
+            if (g.nodes[pf_ptcl]["eta"] == g.nodes[t]["eta"]) and (g.nodes[pf_ptcl]["phi"] == g.nodes[t]["phi"]):
+                found_pf = True
+                break
+
+        if found_pf:
+            remaining_pfcandidates.remove(pf_ptcl)
+        else:
+            pf_ptcl = None
+
         triplets.append((t, gen_ptcl, pf_ptcl))
-    return triplets, list(remaining_particles)
+    return triplets, list(remaining_particles), list(remaining_pfcandidates)
 
 def process_chunk(infile, ev_start, ev_stop, outfile):
     f = ROOT.TFile.Open(infile)
@@ -272,6 +302,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
             graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
             graph.nodes[node]["phi_outer"] = tracks[i].PhiOuter
             graph.nodes[node]["pt"] = tracks[i].PT
+            graph.nodes[node]["pid"] = tracks[i].PID
             graph.nodes[node]["charge"] = tracks[i].Charge
             ip = pileupmix_idxdict[tracks[i].Particle.GetObject()]
             graph.add_edge(("track", i), ("particle", ip))
@@ -335,17 +366,21 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
                 graph.add_edge(("pfphoton", i), ("particle", ip))
 
         #write the full graph, mainly for study purposes
-        # if iev<10 and save_full_graphs:
-        #     nx.readwrite.write_gpickle(graph, sys.argv[2].replace(".pkl","_graph_{}.pkl".format(iev)))
+        if iev<10 and save_full_graphs:
+            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2","_graph_{}.pkl".format(iev)))
 
         #now clean up the graph, keeping only reconstructable genparticles
         #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
         particles = [n for n in graph.nodes if n[0] == "particle"]
+        pfcand = [n for n in graph.nodes if n[0].startswith("pf")]
 
         tracks = [n for n in graph.nodes if n[0] == "track"]
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
-        triplets, remaining_particles = make_triplets(graph, tracks, towers, particles)
+        triplets, remaining_particles, remaining_pfcandidates = make_triplets(graph, tracks, towers, particles, pfcand)
+        print("remaining PF", len(remaining_pfcandidates))
+        for pf in remaining_pfcandidates:
+            print(pf, graph.nodes[pf])
 
         X = []
         ygen = []
@@ -392,7 +427,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ycand_all.append(ycand)
 
     with bz2.BZ2File(outfile, "wb") as fi:
-        pickle.dump({"X": X_all, "ygen": ygen_all, "ygen_remaining": ygen_remaining_all, "ycand": ycand_all}, fi)
+        pickle.dump({"X": X_all, "ygen": ygen_all, "ycand": ycand_all}, fi)
 
 def process_chunk_args(args):
     process_chunk(*args)
@@ -409,7 +444,6 @@ if __name__ == "__main__":
     f = ROOT.TFile.Open(infile)
     tree = f.Get("Delphes")
     num_evs = tree.GetEntries()
-    #num_evs = 5000
 
     arg_list = []
     ichunk = 0
@@ -421,5 +455,5 @@ if __name__ == "__main__":
         ichunk += 1
 
     pool.map(process_chunk_args, arg_list)
-    #for arg in arg_list:
+    # for arg in arg_list:
     #    process_chunk_args(arg)
