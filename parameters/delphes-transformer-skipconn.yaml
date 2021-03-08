@@ -9,6 +9,9 @@ dataset:
   num_output_classes: 6
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
+  classification_loss_coef: 1.0
+  momentum_loss_coef: 1.0
+  charge_loss_coef: 1.0
   momentum_loss_coefs:
     - 1.0
     - 1.0
@@ -34,6 +37,7 @@ setup:
   dtype: float16
   sample_weights: none
   trainable: all
+  multi_output: no
 
 parameters:
   model: transformer

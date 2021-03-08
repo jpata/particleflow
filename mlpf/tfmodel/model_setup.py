@@ -342,6 +342,7 @@ def make_transformer(config, dtype):
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = Transformer(
+        multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
@@ -525,7 +526,6 @@ def main(args, yaml_path, config):
         else:
             model_dtype = tf.dtypes.float32
             opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
-
 
             if config['setup']['multi_output']:
                 from tfmodel.PCGrad_tf import PCGrad

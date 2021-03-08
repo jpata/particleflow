@@ -43,13 +43,13 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-7
+  lr: 1e-6
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 50
   dtype: float32
-  sample_weights: inverse_sqrt
+  sample_weights: none
   trainable: all
   multi_output: yes
 
@@ -66,7 +66,7 @@ parameters:
   hidden_dim_id: 256
   hidden_dim_reg: 256
   distance_dim: 256
-  dropout: 0.2
+  dropout: 0.4
   dist_mult: 1.0
   activation: elu
   skip_connection: True

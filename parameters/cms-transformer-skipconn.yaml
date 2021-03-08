@@ -6,10 +6,13 @@ dataset:
   num_input_features: 15
   num_output_features: 7
   num_input_classes: 12
-  #(none, ch.had, n.had, hfem, hfhad, gamma, e, mu)
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
   num_output_classes: 8
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
+  classification_loss_coef: 10.0
+  momentum_loss_coef: 1.0
+  charge_loss_coef: 1.0
   momentum_loss_coefs:
     - 1.0
     - 1.0
@@ -17,7 +20,7 @@ dataset:
     - 1.0
     - 0.001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 5
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
@@ -29,23 +32,24 @@ setup:
   weights:
   lr: 1e-6
   batch_size: 5
-  num_events_train: 400
-  num_events_test: 50
-  num_epochs: 100
+  num_events_train: 80000
+  num_events_test: 10000
+  num_epochs: 150
   dtype: float32
   sample_weights: none
   trainable: all
+  multi_output: yes
 
 parameters:
   model: transformer
   num_layers: 4
-  d_model: 128
+  d_model: 256
   num_heads: 4
-  dff: 128
+  dff: 256
   support: 32
   skip_connection: yes
-  dropout: 0.2
+  dropout: 0.4
 
 timing:
-  num_ev: 1
-  num_iter: 1
+  num_ev: 100
+  num_iter: 3
