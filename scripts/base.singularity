@@ -17,8 +17,10 @@ From: nvcr.io/nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
     apt install -y language-pack-en
     apt install -y wget
     apt install -y libomp-dev
+    apt install -y git
 
     python3 -m pip install --upgrade pip
+
     python3 -m pip install tensorflow==2.3
     python3 -m pip install torch==${TORCH}+${CUDA} torchvision==0.7.0+${CUDA} -f https://download.pytorch.org/whl/torch_stable.html
     python3 -m pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
@@ -30,11 +32,6 @@ From: nvcr.io/nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
     python3 -m pip install torchvision
     python3 -m pip install tensorboard_plugin_profile
     python3 -m pip install keras-tuner
-    python3 -m pip install jax jaxlib
-    python3 -m pip install flax
-    python3 -m pip install gin-config
-    python3 -m pip install spektral
-
     python3 -m pip install setGPU
     python3 -m pip install sklearn
     python3 -m pip install matplotlib
@@ -48,13 +45,10 @@ From: nvcr.io/nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
     python3 -m pip install tqdm
     python3 -m pip install comet_ml
     python3 -m pip install jupyter notebook
-    python3 -m pip install dask distributed parsl
     
-    python3 -m pip install energyflow
-    python3 -m pip install POT
-
-    python3 -m pip install astropy
-    python3 -m pip install girder-client
+    #https://github.com/keras-team/keras/issues/14265
+    python3 -m pip uninstall -y h5py
+    python3 -m pip install 'h5py<3.0.0'
 
 %environment
 
