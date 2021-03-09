@@ -19,9 +19,10 @@ import time
 import json
 
 class PFNetLoss:
-    def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0], charge_loss_coef=1e-3):
+    def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, charge_loss_coef=1e-3, momentum_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0]):
         self.num_input_classes = num_input_classes
         self.num_output_classes = num_output_classes
+        self.momentum_loss_coef = momentum_loss_coef
         self.momentum_loss_coefs = tf.constant(momentum_loss_coefs)
         self.charge_loss_coef = charge_loss_coef
         self.classification_loss_coef = classification_loss_coef
@@ -50,7 +51,7 @@ class PFNetLoss:
 
         l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
       
-        l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coefs
+        l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
 
         l3 = self.charge_loss_coef*self.mse_unreduced(true_charge, pred_charge)[:, :, 0]
@@ -96,6 +97,24 @@ def plot_regression(val_x, val_y, var_name, rng):
     );
     plt.xlabel("Gen {}".format(var_name))
     plt.ylabel("MLPF {}".format(var_name))
+    return fig
+
+def plot_multiplicity(num_pred, num_true):
+    fig = plt.figure(figsize=(5,5))
+    xs = np.arange(len(num_pred))
+    plt.bar(xs, num_true, alpha=0.8)
+    plt.bar(xs, num_pred, alpha=0.8)
+    plt.xticks(xs)
+    return fig
+
+def plot_num_particle(num_pred, num_true, pid):
+    fig = plt.figure(figsize=(5,5))
+    plt.scatter(num_true, num_pred)
+    plt.title("particle id {}".format(pid))
+    plt.xlabel("num true")
+    plt.ylabel("num pred")
+    plt.xlim(np.min(num_true), np.max(num_true))
+    plt.ylim(np.min(num_true), np.max(num_true))
     return fig
 
 def plot_to_image(figure):
@@ -179,6 +198,9 @@ class ConfusionMatrixValidation:
             json.dump(logs, fi)
 
         test_pred_id = np.argmax(test_pred[:, :, :self.num_output_classes], axis=-1)
+        
+        counts_pred = np.unique(test_pred_id, return_counts=True)
+
         test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, self.num_output_classes:]], axis=-1)
 
         cm = sklearn.metrics.confusion_matrix(
@@ -187,6 +209,9 @@ class ConfusionMatrixValidation:
         cm_normed = sklearn.metrics.confusion_matrix(
             y_test[:, :, 0].astype(np.int64).flatten(),
             test_pred[:, :, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
+
+        num_pred = np.sum(cm, axis=0)
+        num_true = np.sum(cm, axis=1)
 
         figure = plot_confusion_matrix(cm)
         cm_image = plot_to_image(figure)
@@ -202,18 +227,32 @@ class ConfusionMatrixValidation:
         figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
         ch_image = plot_to_image(figure)
 
+        figure = plot_multiplicity(num_pred, num_true)
+        n_image = plot_to_image(figure)
+
+        images_mult = []
+        for icls in range(self.num_output_classes):
+            n_pred = np.sum(test_pred[:, :, 0]==icls, axis=1)
+            n_true = np.sum(y_test[:, :, 0]==icls, axis=1)
+            figure = plot_num_particle(n_pred, n_true, icls)
+            images_mult.append(plot_to_image(figure))
+
         images = {}
         for ireg in range(l2_r.shape[-1]):
             reg_true = y_test[msk, 2+ireg].flatten()
             reg_pred = test_pred[msk, 2+ireg].flatten()
 
-            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.min(reg_true), np.max(reg_true), 100))
+            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.mean(reg_true) - 3*np.std(reg_true), np.mean(reg_true) + 3*np.std(reg_true), 100))
             images[ireg] = plot_to_image(figure)
 
         with self.file_writer_cm.as_default():
             tf.summary.image("Confusion Matrix", cm_image, step=epoch)
             tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
             tf.summary.image("charge regression", ch_image, step=epoch)
+            tf.summary.image("particle multiplicity", n_image, step=epoch)
+
+            for icls, img in enumerate(images_mult):
+                tf.summary.image("npart {}".format(icls), img, step=epoch)
 
             for ireg in images.keys():
                 tf.summary.image("regression {}".format(ireg), images[ireg], step=epoch)
@@ -274,7 +313,7 @@ def get_rundir(base='experiments'):
 def compute_weights_invsqrt(X, y, w):
     wn = 1.0/tf.sqrt(w)
     #wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    wn /= tf.reduce_sum(wn)
+    #wn /= tf.reduce_sum(wn)
     return X, y, wn
 
 def compute_weights_none(X, y, w):
@@ -516,6 +555,9 @@ def main(args, yaml_path, config):
 
     with strategy.scope():
         if config['setup']['dtype'] == 'float16':
+            if config['setup']['multi_output']:
+                raise Exception("float16 and multi_output are not supported at the same time")
+
             model_dtype = tf.dtypes.float16
             from tensorflow.keras.mixed_precision import experimental as mixed_precision
             policy = mixed_precision.Policy('mixed_float16')
@@ -538,6 +580,8 @@ def main(args, yaml_path, config):
 
             loss_cls = PFNetLoss(
                 classification_loss_coef=config["dataset"]["classification_loss_coef"],
+                charge_loss_coef=config["dataset"]["charge_loss_coef"],
+                momentum_loss_coef=config["dataset"]["momentum_loss_coef"],
                 num_input_classes=config["dataset"]["num_input_classes"],
                 num_output_classes=config["dataset"]["num_output_classes"],
                 momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
@@ -552,20 +596,27 @@ def main(args, yaml_path, config):
                 loss_fn = loss_cls.my_loss_reg
 
             #we use the "temporal" mode to have per-particle weights
-            model.compile(
-                loss=(
-                    tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                    tf.keras.losses.MeanSquaredError(),
-                    tf.keras.losses.MeanSquaredError()
-                ),
-                optimizer=opt,
-                sample_weight_mode='temporal',
-                loss_weights=[
-                    config["dataset"]["classification_loss_coef"],
-                    config["dataset"]["charge_loss_coef"],
-                    config["dataset"]["momentum_loss_coef"]
-                ]
-            )
+            if config['setup']['multi_output']:
+                model.compile(
+                    loss=(
+                        tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                        tf.keras.losses.MeanSquaredError(),
+                        tf.keras.losses.MeanSquaredError()
+                    ),
+                    optimizer=opt,
+                    sample_weight_mode='temporal',
+                    loss_weights=[
+                        config["dataset"]["classification_loss_coef"],
+                        config["dataset"]["charge_loss_coef"],
+                        config["dataset"]["momentum_loss_coef"]
+                    ]
+                )
+            else:
+                model.compile(
+                    loss=loss_cls.my_loss_full,
+                    optimizer=opt,
+                    sample_weight_mode='temporal',
+                )
 
             #Evaluate model once to build the layers
             model(tf.cast(X_val[:1], model_dtype))

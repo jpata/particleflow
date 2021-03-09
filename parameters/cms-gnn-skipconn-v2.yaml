@@ -44,32 +44,32 @@ setup:
   train: yes
   weights:
   lr: 1e-6
-  batch_size: 5
-  num_events_train: 80000
-  num_events_test: 10000
+  batch_size: 4
+  num_events_train: 100
+  num_events_test: 100
   num_epochs: 50
   dtype: float32
-  sample_weights: none
+  sample_weights: inverse_sqrt
   trainable: all
-  multi_output: yes
+  multi_output: no
 
 parameters:
   model: gnn
   bin_size: 128
-  num_convs_id: 2
-  num_convs_reg: 2
-  num_hidden_id_enc: 2
-  num_hidden_id_dec: 2
-  num_hidden_reg_enc: 2
-  num_hidden_reg_dec: 2
+  num_convs_id: 3
+  num_convs_reg: 3
+  num_hidden_id_enc: 3
+  num_hidden_id_dec: 3
+  num_hidden_reg_enc: 3
+  num_hidden_reg_dec: 3
   num_neighbors: 16 
-  hidden_dim_id: 256
-  hidden_dim_reg: 256
-  distance_dim: 256
-  dropout: 0.4
+  hidden_dim_id: 512
+  hidden_dim_reg: 512
+  distance_dim: 512
+  dropout: 0.0
   dist_mult: 1.0
   activation: elu
-  skip_connection: True
+  skip_connection: False
 
 timing:
   num_ev: 100
