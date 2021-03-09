@@ -29,9 +29,9 @@ tensorflow:
 
 setup:
   train: yes
-  weights: experiments/cms-transformer-skipconn-b48a9882/weights-200-0.012074.hdf5
+  weights:
   lr: 1e-7
-  batch_size: 5
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 150
@@ -43,12 +43,12 @@ setup:
 parameters:
   model: transformer
   num_layers: 4
-  d_model: 256
+  d_model: 512
   num_heads: 4
-  dff: 256
+  dff: 512
   support: 32
   skip_connection: yes
-  dropout: 0.4
+  dropout: 0.2
 
 timing:
   num_ev: 100
