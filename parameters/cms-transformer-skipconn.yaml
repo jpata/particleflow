@@ -5,14 +5,27 @@ dataset:
   target_particles: cand
   num_input_features: 15
   num_output_features: 7
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
   num_input_classes: 12
   #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
   num_output_classes: 8
-  num_momentum_outputs: 5
   padded_num_elem_size: 6400
+  #(pt, eta, sin phi, cos phi, E)
+  num_momentum_outputs: 5
   classification_loss_coef: 10.0
   momentum_loss_coef: 1.0
-  charge_loss_coef: 1.0
+  charge_loss_coef: 0.001
   momentum_loss_coefs:
     - 1.0
     - 10.0
@@ -30,15 +43,15 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-7
-  batch_size: 2
+  lr: 1e-6
+  batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 150
+  num_epochs: 100
   dtype: float32
-  sample_weights: none
+  sample_weights: inverse_sqrt
   trainable: all
-  multi_output: yes
+  multi_output: no
 
 parameters:
   model: transformer
@@ -48,7 +61,7 @@ parameters:
   dff: 512
   support: 32
   skip_connection: yes
-  dropout: 0.2
+  dropout: 0.4
 
 timing:
   num_ev: 100
