@@ -1,5 +1,7 @@
 from tfmodel.model import PFNet, Transformer, DummyNet
 import tensorflow as tf
+import tensorflow_probability
+import tensorflow_addons as tfa
 import pickle
 import numpy as np
 import os
@@ -49,8 +51,8 @@ class PFNetLoss:
         true_id, true_charge, true_momentum = self.separate_truth(y_true)
         true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
 
-        l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
-      
+        #l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
+        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=True)*self.classification_loss_coef
         l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
 
@@ -113,8 +115,10 @@ def plot_num_particle(num_pred, num_true, pid):
     plt.title("particle id {}".format(pid))
     plt.xlabel("num true")
     plt.ylabel("num pred")
-    plt.xlim(np.min(num_true), np.max(num_true))
-    plt.ylim(np.min(num_true), np.max(num_true))
+    a = min(np.min(num_true), np.min(num_pred))
+    b = max(np.max(num_true), np.max(num_pred))
+    plt.xlim(a, b)
+    plt.ylim(a, b)
     return fig
 
 def plot_to_image(figure):
