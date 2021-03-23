@@ -52,7 +52,7 @@ class PFNetLoss:
         true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
 
         #l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
-        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=True)*self.classification_loss_coef
+        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=True, gamma=5.0)*self.classification_loss_coef
         l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
 
@@ -252,6 +252,7 @@ class ConfusionMatrixValidation:
         with self.file_writer_cm.as_default():
             tf.summary.image("Confusion Matrix", cm_image, step=epoch)
             tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
+            tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
             tf.summary.image("charge regression", ch_image, step=epoch)
             tf.summary.image("particle multiplicity", n_image, step=epoch)
 
@@ -322,6 +323,7 @@ def compute_weights_invsqrt(X, y, w):
 
 def compute_weights_none(X, y, w):
     wn = tf.ones_like(w)
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
     return X, y, wn
 
 weight_functions = {
