@@ -28,6 +28,7 @@ class PFNetLoss:
         self.momentum_loss_coefs = tf.constant(momentum_loss_coefs)
         self.charge_loss_coef = charge_loss_coef
         self.classification_loss_coef = classification_loss_coef
+        self.gamma = 10.0
 
     def mse_unreduced(self, true, pred):
         return tf.math.pow(true-pred,2)
@@ -52,7 +53,7 @@ class PFNetLoss:
         true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
 
         #l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
-        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=True, gamma=5.0)*self.classification_loss_coef
+        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=False, gamma=self.gamma)*self.classification_loss_coef
         l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
 
