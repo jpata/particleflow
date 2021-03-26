@@ -24,8 +24,8 @@ dataset:
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   classification_loss_coef: 10.0
-  momentum_loss_coef: 1.0
-  charge_loss_coef: 0.001
+  momentum_loss_coef: 0.0
+  charge_loss_coef: 0.000
   momentum_loss_coefs:
     - 1.0
     - 10.0
@@ -49,7 +49,7 @@ setup:
   num_events_test: 10000
   num_epochs: 100
   dtype: float32
-  sample_weights: inverse_sqrt
+  sample_weights: none
   trainable: all
   multi_output: no
 

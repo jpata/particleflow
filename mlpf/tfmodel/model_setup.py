@@ -316,12 +316,13 @@ def get_rundir(base='experiments'):
 
 def compute_weights_invsqrt(X, y, w):
     wn = 1.0/tf.sqrt(w)
-    #wn *= tf.cast(X[:, 0]!=0, tf.float32)
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
     #wn /= tf.reduce_sum(wn)
     return X, y, wn
 
 def compute_weights_none(X, y, w):
     wn = tf.ones_like(w)
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
     return X, y, wn
 
 weight_functions = {

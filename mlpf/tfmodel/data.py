@@ -88,6 +88,7 @@ class Dataset:
             ygen = ygen[~msk_ps]
             ycand = ycand[~msk_ps]
 
+            print(Xelem.shape)
             Xelem = append_fields(Xelem, "typ_idx", np.array([self.elem_labels_cms.index(int(i)) for i in Xelem["typ"]], dtype=np.float32))
             ygen = append_fields(ygen, "typ_idx", np.array([self.class_labels_cms.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32))
             ycand = append_fields(ycand, "typ_idx", np.array([self.class_labels_cms.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32))
