@@ -134,11 +134,18 @@ class SGConv(tf.keras.layers.Layer):
 
         return self.activation(out + self.b)
 
+def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
+    return tf.keras.Sequential(
+        [tf.keras.layers.Dense(dff, activation=activation) for i in range(num_layers)] +
+        [tf.keras.layers.Dense(d_model, dtype=dtype)]
+    )
+
 class SparseHashedNNDistance(tf.keras.layers.Layer):
-    def __init__(self, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, **kwargs):
+    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=500, num_neighbors=5, dist_mult=0.1, **kwargs):
         super(SparseHashedNNDistance, self).__init__(**kwargs)
         self.num_neighbors = tf.constant(num_neighbors)
         self.dist_mult = dist_mult
+        self.distance_dim = distance_dim
 
         #generate the codebook for LSH hashing at model instantiation for up to this many bins
         #set this to a high-enough value at model generation to take into account the largest possible input 
@@ -147,20 +154,22 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #each bin will receive this many input elements, in total we can accept max_num_bins*bin_size input elements
         #in each bin, we will do a dense top_k evaluation
         self.bin_size = bin_size
+        self.layer_encoding = point_wise_feed_forward_network(distance_dim, 128)
+        self.layer_edge = point_wise_feed_forward_network(1, 128)
 
     def build(self, input_shape):
         #(n_batch, n_points, n_features)
 
         #generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = self.add_weight(
-            shape=(input_shape[-1], self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
+            shape=(self.distance_dim, self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
         )
 
     @tf.function
     def call(self, inputs, training=True):
 
         #(n_batch, n_points, n_features)
-        point_embedding = inputs
+        point_embedding = self.layer_encoding(inputs)
 
         n_batches = tf.shape(point_embedding)[0]
         n_points = tf.shape(point_embedding)[1]
@@ -185,7 +194,18 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
             (n_batches, n_points, n_points)
         )
 
-        return tf.sparse.reorder(dms)
+        dm = tf.sparse.reorder(dms)
+
+        i1 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 1]]))
+        i2 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 2]]))
+        x1 = tf.gather_nd(inputs, i1)
+        x2 = tf.gather_nd(inputs, i2)
+
+        #run an edge net on (src node, dst node, edge)
+        edge_vals = self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
+        dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
+
+        return dm2
 
     @tf.function
     def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
@@ -300,12 +320,6 @@ class AddSparse(tf.keras.layers.Layer):
             ret = tf.sparse.add(ret, mat)
         return ret
 
-def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
-    return tf.keras.Sequential(
-        [tf.keras.layers.Dense(dff, activation=activation) for i in range(num_layers)] +
-        [tf.keras.layers.Dense(d_model, dtype=dtype)]
-    )
-
 #Simple message passing based on a matrix multiplication
 class PFNet(tf.keras.Model):
     def __init__(self,
@@ -356,15 +370,11 @@ class PFNet(tf.keras.Model):
             decoding_reg.append(hidden_dim_reg)
 
         self.enc = InputEncoding(num_input_classes)
-        self.layer_embedding = tf.keras.layers.Dense(distance_dim, name="embedding_attention", activation=self.activation)
-        
-        self.embedding_dropout = None
-        if dropout > 0.0:
-            self.embedding_dropout = tf.keras.layers.Dropout(dropout)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.dist1 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
+        self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
 
-        self.dist = SparseHashedNNDistance(bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
-
-        self.layer_edge = point_wise_feed_forward_network(1, 128, num_layers=2, activation=activation)
+        self.dist2 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
 
         convs_id = []
         convs_reg = []
@@ -380,11 +390,11 @@ class PFNet(tf.keras.Model):
                 convs_reg.append(GHConv(activation=activation, name="conv_reg{}".format(iconv)))
 
         self.gnn_id = EncoderDecoderGNN(encoding_id, decoding_id, dropout, activation, convs_id, name="gnn_id")
-        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, num_layers=2, activation=activation)
-        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, num_layers=1, activation=activation)
+        self.layer_id = point_wise_feed_forward_network(num_output_classes, hidden_dim_id, num_layers=3, activation=activation)
+        self.layer_charge = point_wise_feed_forward_network(1, hidden_dim_id, num_layers=3, activation=activation)
         
         self.gnn_reg = EncoderDecoderGNN(encoding_reg, decoding_reg, dropout, activation, convs_reg, name="gnn_reg")
-        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, num_layers=2, activation=activation)
+        self.layer_momentum = point_wise_feed_forward_network(num_momentum_outputs, hidden_dim_reg, num_layers=3, activation=activation)
 
     # def create_model(self, num_max_elems, num_input_features, training=True):
     #     inputs = tf.keras.Input(shape=(num_max_elems, num_input_features,))
@@ -394,25 +404,16 @@ class PFNet(tf.keras.Model):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
-        enc = self.enc(inputs)
-
-        #embed inputs for graph structure prediction
-        embedding_attention = self.layer_embedding(enc)
-        if self.embedding_dropout:
-            embedding_attention = self.embedding_dropout(embedding_attention, training)
+        enc = self.layernorm(self.enc(inputs))
 
         #create graph structure by predicting a sparse distance matrix
-        dm = self.dist(embedding_attention, training)
+        dm1 = self.dist1(enc, training)
 
-        #gather node vals for src,dst
-        i1 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 1]]))
-        i2 = tf.transpose(tf.stack([dm.indices[:, 0], dm.indices[:, 2]]))
-        x1 = tf.gather_nd(enc, i1)
-        x2 = tf.gather_nd(enc, i2)
+        #graph net to encode-decode the nodes
+        x_dm = self.gnn_dm(enc, dm1, training)
 
-        #run an edge net on (src node, dst node, edge)
-        edge_vals = self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
-        dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
+        #create a graph structure from the encoded nodes
+        dm2 = self.dist2(x_dm, training)
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm2, training)
@@ -422,8 +423,8 @@ class PFNet(tf.keras.Model):
         else:
             to_decode = tf.concat([x_id], axis=-1)
 
-        out_id_logits = self.layer_id(to_decode)
-        out_charge = self.layer_charge(to_decode)
+        out_id_logits = self.layer_id(to_decode)*msk_input
+        out_charge = self.layer_charge(to_decode)*msk_input
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
         x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
@@ -433,12 +434,12 @@ class PFNet(tf.keras.Model):
         else:
             to_decode = tf.concat([tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
 
-        pred_momentum = self.layer_momentum(to_decode)
+        pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         if self.multi_output:
-            return out_id_logits, out_charge, pred_momentum
+            return tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum
         else:
-            return tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+            return tf.concat([tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
         for layer in self.layers:
