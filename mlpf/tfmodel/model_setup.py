@@ -266,6 +266,10 @@ class ConfusionMatrixValidation:
             tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
             for i in range(l2_r.shape[-1]):
                 tf.summary.scalar("loss_reg_{}".format(i), tf.reduce_mean(l2_r[:, :, i]), step=epoch)
+
+            for i in range(cm_normed.shape[0]):
+                tf.summary.scalar("acc_cls_{}".format(i), cm_normed[i, i], step=epoch)
+                
             tf.summary.scalar("loss_chg", tf.reduce_mean(l3), step=epoch)
 
 def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes, num_output_classes, file_writer_cm):
