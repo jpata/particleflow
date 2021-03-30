@@ -24,8 +24,8 @@ dataset:
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   classification_loss_coef: 1000.0
-  momentum_loss_coef: 0.0
-  charge_loss_coef: 0.000
+  momentum_loss_coef: 0.001
+  charge_loss_coef: 0.001
   momentum_loss_coefs:
     - 1.0
     - 10.0
@@ -43,11 +43,11 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 1e-6
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 102
+  num_epochs: 150
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: cls

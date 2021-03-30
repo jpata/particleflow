@@ -531,7 +531,8 @@ def main(args, yaml_path, config):
         outdir = os.path.dirname(weights)
 
     try:
-        num_gpus = len(os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(","))
+        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
+        num_gpus = len(gpus)
         print("num_gpus=", num_gpus)
         if num_gpus > 1:
             strategy = tf.distribute.MirroredStrategy()
