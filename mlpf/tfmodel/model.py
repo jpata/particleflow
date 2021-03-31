@@ -23,7 +23,7 @@ def pairwise_dist(A, B):
     na = tf.expand_dims(na, -1)
     nb = tf.expand_dims(nb, -2)
 
-    # return pairwise euclidead difference matrix
+    # return pairwise euclidean difference matrix
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
 
@@ -250,11 +250,9 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #compute the number of LSH bins to divide the input points into on the fly
         #n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
-        #tf.debugging.assert_greater(n_bins, 0)
 
         #put each input item into a bin defined by the softmax output across the LSH embedding
         mul = tf.linalg.matmul(points, self.codebook_random_rotations[:, :n_bins//2])
-
         cmul = tf.concat([mul, -mul], axis=-1)
 
         #cmul is now an integer in [0..nbins) for each input point
@@ -412,7 +410,7 @@ class PFNet(tf.keras.Model):
         #graph net to encode-decode the nodes
         x_dm = self.gnn_dm(enc, dm1, training)
 
-        #create a graph structure from the encoded nodes
+        #create another graph structure from the encoded nodes
         dm2 = self.dist2(x_dm, training)
 
         #run graph net for multiclass id prediction
@@ -437,7 +435,7 @@ class PFNet(tf.keras.Model):
         pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         if self.multi_output:
-            return tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum
+            return {"cls": tf.nn.sigmoid(out_id_logits), "charge": out_charge, "momentum": pred_momentum}
         else:
             return tf.concat([tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum], axis=-1)
 
@@ -624,7 +622,7 @@ class Transformer(tf.keras.Model):
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         if self.multi_output:
-            return tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum
+            return {"cls": tf.nn.sigmoid(out_id_logits), "charge": out_charge, "momentum": pred_momentum}
         else:
             return tf.concat([tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum], axis=-1)
 
