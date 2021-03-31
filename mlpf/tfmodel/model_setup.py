@@ -469,7 +469,8 @@ def main(args, yaml_path, config):
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds["raw_path"],
+        raw_path=cds.get("raw_path", None),
+        raw_files=cds.get("raw_files", None),
         processed_path=cds["processed_path"],
         validation_file_path=cds["validation_file_path"],
         schema=cds["schema"]
@@ -633,6 +634,11 @@ def main(args, yaml_path, config):
                                 thresholds=0.9,
                                 class_id=icls,
                                 name="precision_{}".format(icls)) for icls in range(config["dataset"]["num_output_classes"])
+                        ] + [
+                            tf.keras.metrics.Recall(
+                                thresholds=0.9,
+                                class_id=icls,
+                                name="recall_{}".format(icls)) for icls in range(config["dataset"]["num_output_classes"])
                         ]
                     }
                 )
@@ -664,12 +670,13 @@ def main(args, yaml_path, config):
                 )
                 #callbacks = []
 
-                model.fit(
+                fit_result = model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-
+                with open("{}/history.json".format(outdir), "w") as fi:
+                    json.dump(fit_result["history"], fi)
                 model.save(outdir + "/model_full", save_format="tf")
             
             if args.action=="eval":
