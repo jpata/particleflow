@@ -39,10 +39,13 @@ class Dataset:
         self.raw_path = kwargs.get("raw_path")
         self.processed_path = kwargs.get("processed_path")
         self.target_particles = kwargs.get("target_particles")
+        self.raw_filelist = kwargs.get("raw_files")
 
         self.validation_file_path = kwargs.get("validation_file_path")
 
-        self.raw_filelist = sorted(glob.glob(self.raw_path))
+        if self.raw_filelist is None:
+            self.raw_filelist = sorted(glob.glob(self.raw_path))
+
         self.val_filelist = sorted(glob.glob(self.validation_file_path))
         print("raw files: {}".format(len(self.raw_filelist)))
         print("val files: {}".format(len(self.val_filelist)))
