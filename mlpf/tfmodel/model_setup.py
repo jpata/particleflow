@@ -19,6 +19,7 @@ import kerastuner as kt
 from argparse import Namespace
 import time
 import json
+import random
 
 class PFNetLoss:
     def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, charge_loss_coef=1e-3, momentum_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0]):
@@ -187,6 +188,7 @@ class ConfusionMatrixValidation:
         y_test = self.y_test
 
         test_pred = model.predict(X_test, batch_size=5)
+        msk = X_test[:, :, 0] != 0
 
         if isinstance(test_pred, tuple):
             test_pred = tf.concat(list(test_pred), axis=-1)
@@ -209,11 +211,11 @@ class ConfusionMatrixValidation:
         test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, self.num_output_classes:]], axis=-1)
 
         cm = sklearn.metrics.confusion_matrix(
-            y_test[:, :, 0].astype(np.int64).flatten(),
-            test_pred[:, :, 0].flatten(), labels=list(range(self.num_output_classes)))
+            y_test[msk][:, 0].astype(np.int64).flatten(),
+            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)))
         cm_normed = sklearn.metrics.confusion_matrix(
-            y_test[:, :, 0].astype(np.int64).flatten(),
-            test_pred[:, :, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
+            y_test[msk][:, 0].astype(np.int64).flatten(),
+            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
 
         num_pred = np.sum(cm, axis=0)
         num_true = np.sum(cm, axis=1)
@@ -294,16 +296,16 @@ def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cmv = ConfusionMatrixValidation(
-        X_test, y_test, loss_cls,
-        outdir=outdir, model=model,
-        num_input_classes=num_input_classes,
-        num_output_classes=num_output_classes,
-        file_writer_cm = file_writer_cm
-    )
+    # cmv = ConfusionMatrixValidation(
+    #     X_test, y_test, loss_cls,
+    #     outdir=outdir, model=model,
+    #     num_input_classes=num_input_classes,
+    #     num_output_classes=num_output_classes,
+    #     file_writer_cm = file_writer_cm
+    # )
 
-    cm_callback = tf.keras.callbacks.LambdaCallback(on_epoch_end=cmv.log_confusion_matrix)
-    callbacks += [cm_callback]
+    # cm_callback = tf.keras.callbacks.LambdaCallback(on_epoch_end=cmv.log_confusion_matrix)
+    # callbacks += [cm_callback]
 
     return callbacks
 
@@ -341,8 +343,10 @@ def scale_outputs(X,y,w):
     ynew = ynew/out_s
     return X, ynew, w
 
-def targets_multi_output(X,y,w):
-    return X, (y[:, :, 0:1],  y[:, :, 1:2], y[:, :, 2:]), w
+def targets_multi_output(num_output_classes):
+    def func(X, y, w):
+        return X, {"cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),  "charge": y[:, :, 1:2], "momentum": y[:, :, 2:]}, w
+    return func
 
 def make_model(config, dtype):
     model = config['parameters']['model']
@@ -486,6 +490,7 @@ def main(args, yaml_path, config):
     if len(tfr_files) == 0:
         raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
 
+    random.shuffle(tfr_files)
     dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     num_events = 0
@@ -509,15 +514,15 @@ def main(args, yaml_path, config):
     ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
     if config['setup']['multi_output']:
-        ds_train = ds_train.map(targets_multi_output)
-        ds_test = ds_test.map(targets_multi_output)
-
-    #small test dataset used in the callback for making monitoring plots
-    X_test = ds_test.take(100).map(lambda x,y,w: x)
-    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
+        ds_train = ds_train.map(targets_multi_output(config['dataset']['num_output_classes']))
+        ds_test = ds_test.map(targets_multi_output(config['dataset']['num_output_classes']))
 
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
+
+    #small test dataset used in the callback for making monitoring plots
+    #X_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: x).as_numpy_iterator()))
+    #y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
 
     weights = config['setup']['weights']
     if args.weights:
@@ -609,18 +614,26 @@ def main(args, yaml_path, config):
             #we use the "temporal" mode to have per-particle weights
             if config['setup']['multi_output']:
                 model.compile(
-                    loss=(
-                        tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                        tf.keras.losses.MeanSquaredError(),
-                        tf.keras.losses.MeanSquaredError()
-                    ),
+                    loss={
+                        "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
+                        "charge": tf.keras.losses.MeanSquaredError(),
+                        "momentum": tf.keras.losses.MeanSquaredLogarithmicError()
+                    },
                     optimizer=opt,
                     sample_weight_mode='temporal',
-                    loss_weights=[
-                        config["dataset"]["classification_loss_coef"],
-                        config["dataset"]["charge_loss_coef"],
-                        config["dataset"]["momentum_loss_coef"]
-                    ]
+                    loss_weights={
+                        "cls": config["dataset"]["classification_loss_coef"],
+                        "charge": config["dataset"]["charge_loss_coef"],
+                        "momentum": config["dataset"]["momentum_loss_coef"]
+                    },
+                    metrics={
+                        "cls": [
+                            tf.keras.metrics.Precision(
+                                thresholds=0.9,
+                                class_id=icls,
+                                name="precision_{}".format(icls)) for icls in range(config["dataset"]["num_output_classes"])
+                        ]
+                    }
                 )
             else:
                 model.compile(
@@ -630,7 +643,8 @@ def main(args, yaml_path, config):
                 )
 
             #Evaluate model once to build the layers
-            model(tf.cast(X_val[:1], model_dtype))
+            print(X_val.shape)
+            model(tf.cast(X_val[:5], model_dtype))
             model.summary()
 
             initial_epoch = 0
@@ -639,14 +653,15 @@ def main(args, yaml_path, config):
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
             if args.action=="train":
-                file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
+                #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    X_test, y_test,
+                    X_val, ycand_val,
                     loss_cls,
                     model, outdir,
                     config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"],
-                    file_writer_cm
+                    None
                 )
+                #callbacks = []
 
                 model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
