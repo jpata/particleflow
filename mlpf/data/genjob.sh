@@ -15,7 +15,7 @@ SEED=$2
 
 PILEUP=NoPileUp
 
-N=5000
+N=1000
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
