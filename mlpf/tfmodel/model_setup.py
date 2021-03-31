@@ -675,8 +675,8 @@ def main(args, yaml_path, config):
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-                with open("{}/history.json".format(outdir), "w") as fi:
-                    json.dump(fit_result["history"], fi)
+                with open("{}/history_{}.json".format(outdir, initial_epoch), "w") as fi:
+                    json.dump(fit_result.history, fi)
                 model.save(outdir + "/model_full", save_format="tf")
             
             if args.action=="eval":
