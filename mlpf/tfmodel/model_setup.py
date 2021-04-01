@@ -420,22 +420,22 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
     
     #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-    y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-    y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
+    # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
+    # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
 
-    msk = np.ones(y_pred_id_sm.shape, dtype=np.bool)
+    msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
 
     #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-    msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
-    msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-    y_pred_id_sm = y_pred_id_sm*msk
+    # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
+    # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
+    y_pred_raw_ids = y_pred_raw_ids*msk
 
-    y_pred_id = np.argmax(y_pred_id_sm, axis=-1)
+    y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
     y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
     np_outfile = "{}/pred.npz".format(outdir)
     print("saving output to {}".format(np_outfile))
-    np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :config["dataset"]["num_output_classes"]])
+    np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
 
 def freeze_model(model, config, outdir):
     full_model = tf.function(lambda x: model(x, training=False))
@@ -559,7 +559,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist:
+    for fi in dataset_def.val_filelist[:10]:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
@@ -629,17 +629,7 @@ def main(args, yaml_path, config):
                         "momentum": config["dataset"]["momentum_loss_coef"]
                     },
                     metrics={
-                        "cls": [
-                            tf.keras.metrics.Precision(
-                                thresholds=0.9,
-                                class_id=icls,
-                                name="precision_{}".format(icls)) for icls in range(config["dataset"]["num_output_classes"])
-                        ] + [
-                            tf.keras.metrics.Recall(
-                                thresholds=0.9,
-                                class_id=icls,
-                                name="recall_{}".format(icls)) for icls in range(config["dataset"]["num_output_classes"])
-                        ]
+                        "cls": [tf.keras.metrics.MeanIoU(config["dataset"]["num_output_classes"])]
                     }
                 )
             else:
