@@ -202,7 +202,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         x2 = tf.gather_nd(inputs, i2)
 
         #run an edge net on (src node, dst node, edge)
-        edge_vals = self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1))
+        edge_vals = tf.nn.elu(self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1)))
         dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
 
         return dm2
@@ -368,7 +368,7 @@ class PFNet(tf.keras.Model):
             decoding_reg.append(hidden_dim_reg)
 
         self.enc = InputEncoding(num_input_classes)
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        #self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.dist1 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
         self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
 
@@ -402,7 +402,7 @@ class PFNet(tf.keras.Model):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
-        enc = self.layernorm(self.enc(inputs))
+        enc = self.enc(inputs)
 
         #create graph structure by predicting a sparse distance matrix
         dm1 = self.dist1(enc, training)
