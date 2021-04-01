@@ -20,7 +20,7 @@ dataset:
   num_input_classes: 12
   #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
   num_output_classes: 8
-  padded_num_elem_size: 256
+  padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   classification_loss_coef: 10000.0
@@ -32,10 +32,10 @@ dataset:
     - 100.0
     - 100.0
     - 1.0
-  raw_path: data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl
-  processed_path: data/gun/tfr_cand/*.tfrecords
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
-  validation_file_path: data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl 
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
 tensorflow:
   eager: no
@@ -44,21 +44,21 @@ setup:
   train: yes
   weights:
   lr: 1e-5
-  batch_size: 250
-  num_events_train: 250000
-  num_events_test: 50000
-  num_epochs: 20
+  batch_size: 5
+  num_events_train: 3500
+  num_events_test: 500
+  num_epochs: 100
   dtype: float32
-  sample_weights: none
+  sample_weights: inverse_sqrt
   trainable: all
   multi_output: yes
 
 parameters:
   model: transformer
   num_layers: 2
-  d_model: 128
+  d_model: 256
   num_heads: 2
-  dff: 128
+  dff: 256
   support: 32
   skip_connection: yes
   dropout: 0.0
