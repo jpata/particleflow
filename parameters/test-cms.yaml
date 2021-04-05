@@ -38,7 +38,7 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
-  multi_output: no
+  multi_output: yes
 
 parameters:
   model: gnn
