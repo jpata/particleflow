@@ -45,8 +45,8 @@ setup:
   weights:
   lr: 1e-5
   batch_size: 5
-  num_events_train: 3500
-  num_events_test: 500
+  num_events_train: 80000
+  num_events_test: 10000
   num_epochs: 100
   dtype: float32
   sample_weights: inverse_sqrt
