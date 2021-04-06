@@ -23,9 +23,9 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 10000.0
+  classification_loss_coef: 1.0
   momentum_loss_coef: 0.0
-  charge_loss_coef: 0.0
+  charge_loss_coef: 0.0001
   momentum_loss_coefs:
     - 1.0
     - 10.0
@@ -43,11 +43,11 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-6
-  batch_size: 5
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 79
+  lr: 1e-4
+  batch_size: 10
+  num_events_train: 3500
+  num_events_test: 500
+  num_epochs: 100
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: cls
@@ -56,16 +56,16 @@ setup:
 parameters:
   model: gnn
   bin_size: 256
-  num_convs_id: 2
-  num_convs_reg: 2
+  num_convs_id: 1
+  num_convs_reg: 1
   num_hidden_id_enc: 2
-  num_hidden_id_dec: 2
+  num_hidden_id_dec: 0
   num_hidden_reg_enc: 2
-  num_hidden_reg_dec: 2
-  num_neighbors: 32
-  hidden_dim_id: 256
-  hidden_dim_reg: 256
-  distance_dim: 256
+  num_hidden_reg_dec: 0
+  num_neighbors: 16
+  hidden_dim_id: 512
+  hidden_dim_reg: 512
+  distance_dim: 16
   dropout: 0.0
   dist_mult: 1.0
   activation: elu

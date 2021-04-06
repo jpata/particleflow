@@ -323,7 +323,7 @@ def get_rundir(base='experiments'):
     return '{}/{}'.format(base, logdir)
 
 def compute_weights_invsqrt(X, y, w):
-    wn = 1.0/tf.sqrt(w)
+    wn = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
     wn *= tf.cast(X[:, 0]!=0, tf.float32)
     #wn /= tf.reduce_sum(wn)
     return X, y, wn
@@ -643,6 +643,7 @@ def main(args, yaml_path, config):
             print(X_val.shape)
             model(tf.cast(X_val[:5], model_dtype))
             model.summary()
+            #import pdb;pdb.set_trace()
 
             initial_epoch = 0
             if weights:
