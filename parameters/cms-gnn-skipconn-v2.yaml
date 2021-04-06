@@ -44,12 +44,12 @@ setup:
   train: yes
   weights:
   lr: 5e-5
-  batch_size: 10
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
   dtype: float32
-  sample_weights: inverse_sqrt
+  sample_weights: none
   trainable: cls
   multi_output: yes
 
