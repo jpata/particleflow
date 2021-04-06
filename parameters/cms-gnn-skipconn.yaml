@@ -45,9 +45,9 @@ setup:
   weights:
   lr: 1e-4
   batch_size: 10
-  num_events_train: 3500
-  num_events_test: 500
-  num_epochs: 100
+  num_events_train: 80000
+  num_events_test: 10000
+  num_epochs: 50
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: cls
