@@ -15,7 +15,7 @@ def split_indices_to_bins(cmul, nbins, bin_size):
     bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
     return bins_split
 
-def pairwise_dist(A, B):  
+def pairwise_gaussian_dist(A, B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
 
@@ -26,6 +26,9 @@ def pairwise_dist(A, B):
     # return pairwise euclidean difference matrix
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
+
+def pairwise_sigmoid_dist(A, B):
+    return tf.nn.sigmoid(tf.matmul(A, tf.transpose(B, perm=[0,2,1])))
 
 """
 sp_a: (nbatch, nelem, nelem) sparse distance matrices
@@ -80,10 +83,10 @@ class GHConv(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.hidden_dim = input_shape[0][-1]
         self.nelem = input_shape[0][-2]
-        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal")
-        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal")
-        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal")
-        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal")
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal", trainable=True)
+        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal", trainable=True)
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal", trainable=True)
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal", trainable=True)
  
     #@tf.function
     def call(self, inputs):
@@ -113,8 +116,8 @@ class SGConv(tf.keras.layers.Layer):
     
     def build(self, input_shape):
         hidden_dim = input_shape[0][-1]
-        self.W = self.add_weight(shape=(hidden_dim, hidden_dim), name="w", initializer="random_normal")
-        self.b = self.add_weight(shape=(hidden_dim,), name="b", initializer="random_normal")
+        self.W = self.add_weight(shape=(hidden_dim, hidden_dim), name="w", initializer="random_normal", trainable=True)
+        self.b = self.add_weight(shape=(hidden_dim,), name="b", initializer="random_normal", trainable=True)
 
     #@tf.function
     def call(self, inputs):
@@ -202,17 +205,19 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         x2 = tf.gather_nd(inputs, i2)
 
         #run an edge net on (src node, dst node, edge)
-        edge_vals = tf.nn.elu(self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1)))
+        edge_vals = tf.nn.sigmoid(self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1)))
         dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
 
         return dm2
 
     @tf.function
-    def subpoints_to_sparse_matrix(self, n_points, subindices, subpoints):
+    def subpoints_to_sparse_matrix(self, subindices, subpoints):
 
-        #find the distance matrix between the given points using dense matrix multiplication
-        dm = pairwise_dist(subpoints, subpoints)
-        dm = tf.exp(-self.dist_mult*dm)
+        #find the distance matrix between the given points in all the LSH bins
+        #dm = pairwise_gaussian_dist(subpoints, subpoints)
+        #dm = tf.exp(-self.dist_mult*dm)
+
+        dm = pairwise_sigmoid_dist(subpoints, subpoints) #(LSH_bins, points_per_bin, points_per_bin)
 
         dmshape = tf.shape(dm)
         nbins = dmshape[0]
@@ -264,7 +269,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         #sparse_distance_matrix: (n_points, n_points) sparse distance matrix
         #where higher values (closer to 1) are associated with points that are closely related
-        sparse_distance_matrix = self.subpoints_to_sparse_matrix(n_points, bins_split, parts)
+        sparse_distance_matrix = self.subpoints_to_sparse_matrix(bins_split, parts)
 
         return sparse_distance_matrix
 
