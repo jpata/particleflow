@@ -440,9 +440,9 @@ class PFNet(tf.keras.Model):
         pred_momentum = self.layer_momentum(to_decode)*msk_input
 
         if self.multi_output:
-            return {"cls": tf.nn.sigmoid(out_id_logits), "charge": out_charge, "momentum": pred_momentum}
+            return {"cls": tf.clip_by_value(tf.nn.sigmoid(out_id_logits), 0, 1), "charge": tf.clip_by_value(out_charge, -2, 2), "momentum": pred_momentum}
         else:
-            return tf.concat([tf.nn.sigmoid(out_id_logits), out_charge, pred_momentum], axis=-1)
+            return tf.concat([tf.clip_by_value(tf.nn.sigmoid(out_id_logits), 0, 1), tf.clip_by_value(out_charge, -2, 2), pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
         for layer in self.layers:
