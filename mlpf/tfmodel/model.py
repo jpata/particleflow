@@ -375,9 +375,9 @@ class PFNet(tf.keras.Model):
         self.enc = InputEncoding(num_input_classes)
         #self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.dist1 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
-        self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
+        #self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
 
-        self.dist2 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
+        #self.dist2 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
 
         convs_id = []
         convs_reg = []
@@ -410,13 +410,13 @@ class PFNet(tf.keras.Model):
         enc = self.enc(inputs)
 
         #create graph structure by predicting a sparse distance matrix
-        dm1 = self.dist1(enc, training)
+        #dm1 = self.dist1(enc, training)
 
         #graph net to encode-decode the nodes
-        x_dm = self.gnn_dm(enc, dm1, training)
+        #x_dm = self.gnn_dm(enc, dm1, training)
 
-        #create another graph structure from the encoded nodes
-        dm2 = self.dist2(x_dm, training)
+        #create a graph structure from the encoded nodes
+        dm2 = self.dist1(enc, training)
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm2, training)
