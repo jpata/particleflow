@@ -629,7 +629,7 @@ def main(args, yaml_path, config):
                         "momentum": config["dataset"]["momentum_loss_coef"]
                     },
                     metrics={
-                        "cls": [tf.keras.metrics.MeanIoU(config["dataset"]["num_output_classes"])]
+                        #"cls": [tf.keras.metrics.MeanIoU(config["dataset"]["num_output_classes"])]
                     }
                 )
             else:
