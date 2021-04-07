@@ -83,10 +83,10 @@ class GHConv(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.hidden_dim = input_shape[0][-1]
         self.nelem = input_shape[0][-2]
-        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal", trainable=True)
-        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal", trainable=True)
-        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal", trainable=True)
-        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal", trainable=True)
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
+        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
  
     #@tf.function
     def call(self, inputs):
@@ -138,8 +138,10 @@ class SGConv(tf.keras.layers.Layer):
         return self.activation(out + self.b)
 
 def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
+    bias_regularizer =  tf.keras.regularizers.L1(0.0001)
+    kernel_regularizer = tf.keras.regularizers.L1(0.0001)
     return tf.keras.Sequential(
-        [tf.keras.layers.Dense(dff, activation=activation) for i in range(num_layers)] +
+        [tf.keras.layers.Dense(dff, activation=activation, bias_regularizer=bias_regularizer, kernel_regularizer=kernel_regularizer) for i in range(num_layers)] +
         [tf.keras.layers.Dense(d_model, dtype=dtype)]
     )
 
@@ -286,8 +288,8 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         for ilayer, nunits in enumerate(encoders):
             self.encoding_layers.append(
                 tf.keras.layers.Dense(nunits, activation=activation,
-                    kernel_regularizer=tf.keras.regularizers.L1(0.001),
-                    bias_regularizer=tf.keras.regularizers.L1(0.001),
+                    kernel_regularizer=tf.keras.regularizers.L1(0.0001),
+                    bias_regularizer=tf.keras.regularizers.L1(0.0001),
                     name="encoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.encoding_layers.append(tf.keras.layers.Dropout(dropout))
@@ -298,8 +300,8 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         for ilayer, nunits in enumerate(decoders):
             self.decoding_layers.append(
                 tf.keras.layers.Dense(nunits, activation=activation,
-                    kernel_regularizer=tf.keras.regularizers.L1(0.001),
-                    bias_regularizer=tf.keras.regularizers.L1(0.001),
+                    kernel_regularizer=tf.keras.regularizers.L1(0.0001),
+                    bias_regularizer=tf.keras.regularizers.L1(0.0001),
                     name="decoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.decoding_layers.append(tf.keras.layers.Dropout(dropout))
@@ -379,7 +381,7 @@ class PFNet(tf.keras.Model):
             decoding_reg.append(hidden_dim_reg)
 
         self.enc = InputEncoding(num_input_classes)
-        #self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.dist1 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
         #self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
 
@@ -413,7 +415,7 @@ class PFNet(tf.keras.Model):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.dtypes.float32), -1)
 
-        enc = self.enc(inputs)
+        enc = self.layernorm(self.enc(inputs))
 
         #create graph structure by predicting a sparse distance matrix
         #dm1 = self.dist1(enc, training)
