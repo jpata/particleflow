@@ -652,7 +652,6 @@ def main(args, yaml_path, config):
                     metrics={
                         "cls": [
                             FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                            FlattenedMeanIoU(num_classes=config["dataset"]["num_output_classes"], name="iou_unweighted", dtype=tf.float64)
                         ]
                     }
                 )
