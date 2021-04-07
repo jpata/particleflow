@@ -285,7 +285,10 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         self.encoding_layers = []
         for ilayer, nunits in enumerate(encoders):
             self.encoding_layers.append(
-                tf.keras.layers.Dense(nunits, activation=activation, name="encoding_{}_{}".format(name, ilayer)))
+                tf.keras.layers.Dense(nunits, activation=activation,
+                    kernel_regularizer=tf.keras.regularizers.L1(0.001),
+                    bias_regularizer=tf.keras.regularizers.L1(0.001),
+                    name="encoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.encoding_layers.append(tf.keras.layers.Dropout(dropout))
 
@@ -294,7 +297,10 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         self.decoding_layers = []
         for ilayer, nunits in enumerate(decoders):
             self.decoding_layers.append(
-                tf.keras.layers.Dense(nunits, activation=activation, name="decoding_{}_{}".format(name, ilayer)))
+                tf.keras.layers.Dense(nunits, activation=activation,
+                    kernel_regularizer=tf.keras.regularizers.L1(0.001),
+                    bias_regularizer=tf.keras.regularizers.L1(0.001),
+                    name="decoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.decoding_layers.append(tf.keras.layers.Dropout(dropout))
 
