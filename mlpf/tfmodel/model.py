@@ -445,13 +445,13 @@ class PFNet(tf.keras.Model):
 
         pred_momentum = self.layer_momentum(to_decode)*msk_input
 
-        out_id_sigmoid = tf.clip_by_value(tf.nn.sigmoid(out_id_logits), 0, 1)
+        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
         if self.multi_output:
-            return {"cls": out_id_sigmoid, "charge": out_charge, "momentum": pred_momentum}
+            return {"cls": out_id_softmax, "charge": out_charge, "momentum": pred_momentum}
         else:
-            return tf.concat([out_id_sigmoid, out_charge, pred_momentum], axis=-1)
+            return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
         for layer in self.layers:
@@ -635,12 +635,12 @@ class Transformer(tf.keras.Model):
             dec_output_reg = tf.concat([tf.cast(out_id_logits, X.dtype), dec_output_reg], axis=-1)
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
-        out_id_sigmoid = tf.clip_by_value(tf.nn.sigmoid(out_id_logits), 0, 1)
+        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
         if self.multi_output:
-            return {"cls": out_id_sigmoid, "charge": out_charge, "momentum": pred_momentum}
+            return {"cls": out_id_softmax, "charge": out_charge, "momentum": pred_momentum}
         else:
-            return tf.concat([out_id_sigmoid, out_charge, pred_momentum], axis=-1)
+            return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
     
     def set_trainable_classification(self):
         for layer in self.layers:
