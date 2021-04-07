@@ -454,6 +454,27 @@ def freeze_model(model, config, outdir):
       name="frozen_graph.pbtxt",
       as_text=True)
 
+class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
+    def __init__(self, use_weights=False, **kwargs):
+        super(FlattenedCategoricalAccuracy, self).__init__(**kwargs)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
+        super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, None)
+
+class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
+    def __init__(self, use_weights=False, **kwargs):
+        super(FlattenedMeanIoU, self).__init__(**kwargs)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
+        super(FlattenedMeanIoU, self).update_state(_y_true, _y_pred, None)
+
+
 def main(args, yaml_path, config):
 
     #Switch off multi-output for the evaluation for backwards compatibility
@@ -629,7 +650,10 @@ def main(args, yaml_path, config):
                         "momentum": config["dataset"]["momentum_loss_coef"]
                     },
                     metrics={
-                        #"cls": [tf.keras.metrics.MeanIoU(config["dataset"]["num_output_classes"])]
+                        "cls": [
+                            FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                            FlattenedMeanIoU(num_classes=config["dataset"]["num_output_classes"], name="iou_unweighted", dtype=tf.float64)
+                        ]
                     }
                 )
             else:
