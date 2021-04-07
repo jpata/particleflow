@@ -43,11 +43,11 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 5e-6
   batch_size: 10
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 50
+  num_epochs: 100
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: cls
