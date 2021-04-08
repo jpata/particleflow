@@ -610,9 +610,9 @@ def main(args, yaml_path, config):
             model_dtype = tf.dtypes.float32
             opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
 
-            if config['setup']['multi_output']:
-                from tfmodel.PCGrad_tf import PCGrad
-                opt = PCGrad(tf.compat.v1.train.AdamOptimizer(actual_lr))
+            #if config['setup']['multi_output']:
+            #    from tfmodel.PCGrad_tf import PCGrad
+            #    opt = PCGrad(tf.compat.v1.train.AdamOptimizer(actual_lr))
 
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)

@@ -10,6 +10,8 @@ from tfmodel.fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
+regularizer_weight = 1e-6
+
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
     bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
@@ -83,10 +85,10 @@ class GHConv(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.hidden_dim = input_shape[0][-1]
         self.nelem = input_shape[0][-2]
-        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
-        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
-        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
-        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(0.0001))
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.b_t = self.add_weight(shape=(self.hidden_dim,), name="b_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="w_h", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.hidden_dim), name="theta", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
  
     #@tf.function
     def call(self, inputs):
@@ -138,8 +140,8 @@ class SGConv(tf.keras.layers.Layer):
         return self.activation(out + self.b)
 
 def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
-    bias_regularizer =  tf.keras.regularizers.L1(0.0001)
-    kernel_regularizer = tf.keras.regularizers.L1(0.0001)
+    bias_regularizer =  tf.keras.regularizers.L1(regularizer_weight)
+    kernel_regularizer = tf.keras.regularizers.L1(regularizer_weight)
     return tf.keras.Sequential(
         [tf.keras.layers.Dense(dff, activation=activation, bias_regularizer=bias_regularizer, kernel_regularizer=kernel_regularizer) for i in range(num_layers)] +
         [tf.keras.layers.Dense(d_model, dtype=dtype)]
@@ -288,8 +290,8 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         for ilayer, nunits in enumerate(encoders):
             self.encoding_layers.append(
                 tf.keras.layers.Dense(nunits, activation=activation,
-                    kernel_regularizer=tf.keras.regularizers.L1(0.0001),
-                    bias_regularizer=tf.keras.regularizers.L1(0.0001),
+                    kernel_regularizer=tf.keras.regularizers.L1(regularizer_weight),
+                    bias_regularizer=tf.keras.regularizers.L1(regularizer_weight),
                     name="encoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.encoding_layers.append(tf.keras.layers.Dropout(dropout))
@@ -300,8 +302,8 @@ class EncoderDecoderGNN(tf.keras.layers.Layer):
         for ilayer, nunits in enumerate(decoders):
             self.decoding_layers.append(
                 tf.keras.layers.Dense(nunits, activation=activation,
-                    kernel_regularizer=tf.keras.regularizers.L1(0.0001),
-                    bias_regularizer=tf.keras.regularizers.L1(0.0001),
+                    kernel_regularizer=tf.keras.regularizers.L1(regularizer_weight),
+                    bias_regularizer=tf.keras.regularizers.L1(regularizer_weight),
                     name="decoding_{}_{}".format(name, ilayer)))
             if dropout > 0.0:
                 self.decoding_layers.append(tf.keras.layers.Dropout(dropout))
