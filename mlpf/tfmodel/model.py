@@ -453,7 +453,15 @@ class PFNet(tf.keras.Model):
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
         if self.multi_output:
-            return {"cls": out_id_softmax, "charge": out_charge, "momentum": pred_momentum}
+            return {
+                "cls": out_id_softmax,
+                "charge": out_charge,
+                "pt": pred_momentum[:, :, 0:1],
+                "eta": pred_momentum[:, :, 1:2],
+                "sin_phi": pred_momentum[:, :, 2:3],
+                "cos_phi": pred_momentum[:, :, 3:4],
+                "energy": pred_momentum[:, :, 4:5]
+            }
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
@@ -642,7 +650,14 @@ class Transformer(tf.keras.Model):
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
         if self.multi_output:
-            return {"cls": out_id_softmax, "charge": out_charge, "momentum": pred_momentum}
+            return {
+                "cls": out_id_softmax, "charge": out_charge,
+                "pt": pred_momentum[:, :, 0:1],
+                "eta": pred_momentum[:, :, 1:2],
+                "sin_phi": pred_momentum[:, :, 2:3],
+                "cos_phi": pred_momentum[:, :, 3:4],
+                "energy": pred_momentum[:, :, 4:5],
+            }
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
     

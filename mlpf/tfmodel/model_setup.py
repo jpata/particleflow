@@ -274,7 +274,7 @@ class ConfusionMatrixValidation:
                 
             tf.summary.scalar("loss_chg", tf.reduce_mean(l3), step=epoch)
 
-def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes, num_output_classes, file_writer_cm):
+def prepare_callbacks(model, outdir):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
@@ -295,17 +295,6 @@ def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
-
-    # cmv = ConfusionMatrixValidation(
-    #     X_test, y_test, loss_cls,
-    #     outdir=outdir, model=model,
-    #     num_input_classes=num_input_classes,
-    #     num_output_classes=num_output_classes,
-    #     file_writer_cm = file_writer_cm
-    # )
-
-    # cm_callback = tf.keras.callbacks.LambdaCallback(on_epoch_end=cmv.log_confusion_matrix)
-    # callbacks += [cm_callback]
 
     return callbacks
 
@@ -345,7 +334,15 @@ def scale_outputs(X,y,w):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
-        return X, {"cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),  "charge": y[:, :, 1:2], "momentum": y[:, :, 2:]}, w
+        return X, {
+            "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes), 
+            "charge": y[:, :, 1:2],
+            "pt": y[:, :, 2:3],
+            "eta": y[:, :, 3:4],
+            "sin_phi": y[:, :, 4:5],
+            "cos_phi": y[:, :, 5:6],
+            "energy": y[:, :, 6:7],
+        }, w
     return func
 
 def make_model(config, dtype):
@@ -603,12 +600,19 @@ def main(args, yaml_path, config):
             mixed_precision.set_policy(policy)
 
             opt = mixed_precision.LossScaleOptimizer(
-                tf.keras.optimizers.Adam(learning_rate=actual_lr),
+                tf.keras.optimizers.Adam(learning_rate=lr_schedule),
                 loss_scale="dynamic"
             )
         else:
+            lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+                actual_lr,
+                decay_steps=20000,
+                decay_rate=0.96,
+                staircase=True
+            )
+
             model_dtype = tf.dtypes.float32
-            opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
+            opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
             #if config['setup']['multi_output']:
             #    from tfmodel.PCGrad_tf import PCGrad
@@ -617,50 +621,33 @@ def main(args, yaml_path, config):
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
 
-            loss_cls = PFNetLoss(
-                classification_loss_coef=config["dataset"]["classification_loss_coef"],
-                charge_loss_coef=config["dataset"]["charge_loss_coef"],
-                momentum_loss_coef=config["dataset"]["momentum_loss_coef"],
-                num_input_classes=config["dataset"]["num_input_classes"],
-                num_output_classes=config["dataset"]["num_output_classes"],
-                momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
+            model.compile(
+                loss={
+                    "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
+                    "charge": tf.keras.losses.MeanSquaredError(),
+                    "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "eta": tf.keras.losses.MeanSquaredError(),
+                    "sin_phi": tf.keras.losses.MeanSquaredError(),
+                    "cos_phi": tf.keras.losses.MeanSquaredError(),
+                    "energy": tf.keras.losses.MeanSquaredLogarithmicError(),
+                },
+                optimizer=opt,
+                sample_weight_mode='temporal',
+                loss_weights={
+                    "cls": config["dataset"]["classification_loss_coef"],
+                    "charge": config["dataset"]["charge_loss_coef"],
+                    "pt": config["dataset"]["pt_loss_coef"],
+                    "eta": config["dataset"]["eta_loss_coef"],
+                    "sin_phi": config["dataset"]["sin_phi_loss_coef"],
+                    "cos_phi": config["dataset"]["cos_phi_loss_coef"],
+                    "energy": config["dataset"]["energy_loss_coef"],
+                },
+                metrics={
+                    "cls": [
+                        FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                    ]
+                }
             )
-
-            loss_fn = loss_cls.my_loss_full
-            if config["setup"]["trainable"] == "cls":
-                model.set_trainable_classification()
-                loss_fn = loss_cls.my_loss_cls
-            elif config["setup"]["trainable"] == "reg":
-                model.set_trainable_regression()
-                loss_fn = loss_cls.my_loss_reg
-
-            #we use the "temporal" mode to have per-particle weights
-            if config['setup']['multi_output']:
-                model.compile(
-                    loss={
-                        "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
-                        "charge": tf.keras.losses.MeanSquaredError(),
-                        "momentum": tf.keras.losses.MeanSquaredLogarithmicError()
-                    },
-                    optimizer=opt,
-                    sample_weight_mode='temporal',
-                    loss_weights={
-                        "cls": config["dataset"]["classification_loss_coef"],
-                        "charge": config["dataset"]["charge_loss_coef"],
-                        "momentum": config["dataset"]["momentum_loss_coef"]
-                    },
-                    metrics={
-                        "cls": [
-                            FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                        ]
-                    }
-                )
-            else:
-                model.compile(
-                    loss=loss_cls.my_loss_full,
-                    optimizer=opt,
-                    sample_weight_mode='temporal',
-                )
 
             #Evaluate model once to build the layers
             print(X_val.shape)
@@ -676,11 +663,7 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    X_val, ycand_val,
-                    loss_cls,
-                    model, outdir,
-                    config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"],
-                    None
+                    model, outdir
                 )
                 #callbacks = []
 
