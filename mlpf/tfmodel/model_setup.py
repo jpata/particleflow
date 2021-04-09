@@ -475,8 +475,9 @@ class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
 def main(args, yaml_path, config):
 
     #Switch off multi-output for the evaluation for backwards compatibility
+    multi_output = True
     if args.action == "eval":
-        config['setup']['multi_output'] = False
+        multi_output = False
 
     tf.config.run_functions_eagerly(config['tensorflow']['eager'])
 
@@ -501,6 +502,7 @@ def main(args, yaml_path, config):
         return
 
     global_batch_size = config['setup']['batch_size']
+    config['setup']['multi_output'] = multi_output
 
     model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
     print("model_name=", model_name)
@@ -532,7 +534,7 @@ def main(args, yaml_path, config):
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
     ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
-    if config['setup']['multi_output']:
+    if multi_output:
         ds_train = ds_train.map(targets_multi_output(config['dataset']['num_output_classes']))
         ds_test = ds_test.map(targets_multi_output(config['dataset']['num_output_classes']))
 
@@ -591,7 +593,7 @@ def main(args, yaml_path, config):
 
     with strategy.scope():
         if config['setup']['dtype'] == 'float16':
-            if config['setup']['multi_output']:
+            if multi_output:
                 raise Exception("float16 and multi_output are not supported at the same time")
 
             model_dtype = tf.dtypes.float16

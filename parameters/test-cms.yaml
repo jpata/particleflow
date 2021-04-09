@@ -13,12 +13,11 @@ dataset:
   classification_loss_coef: 1.0
   momentum_loss_coef: 1.0
   charge_loss_coef: 1.0
-  momentum_loss_coefs:
-    - 1.0
-    - 1.0
-    - 1.0
-    - 1.0
-    - 0.001
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 0.001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
   num_files_per_chunk: 5
@@ -38,7 +37,6 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
-  multi_output: yes
 
 parameters:
   model: gnn
