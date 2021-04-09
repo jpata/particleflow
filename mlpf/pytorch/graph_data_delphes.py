@@ -7,8 +7,8 @@ import torch_geometric.utils
 from torch_geometric.data import Dataset, Data, Batch
 import itertools
 from glob import glob
-import numba
 from numpy.lib.recfunctions import append_fields
+import bz2
 
 import pickle
 import scipy
@@ -53,7 +53,8 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        raw_list = glob(osp.join(self.raw_dir, '*.pkl'))
+        raw_list = list(glob(osp.join(self.raw_dir, '*.pkl')))
+        raw_list += list(glob(osp.join(self.raw_dir, '*.pkl.bz2')))
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
         return sorted([l.replace(self.raw_dir, '.') for l in raw_list])
 
@@ -80,8 +81,13 @@ class PFGraphDataset(Dataset):
         pass
 
     def process_single_file(self, raw_file_name):
-        with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-            data = pickle.load(fi, encoding='iso-8859-1')
+        if raw_file_name.endswith(".pkl"):
+            with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
+                data = pickle.load(fi, encoding='iso-8859-1')
+        elif raw_file_name.endswith(".pkl.bz2"):
+            data = pickle.load(bz2.BZ2File(osp.join(self.raw_dir, raw_file_name), "rb"), encoding='iso-8859-1')
+        else:
+            raise Exception("Unknown file format")
 
         x=[]
         ygen=[]
@@ -156,6 +162,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     pfgraphdataset = PFGraphDataset(root=args.dataset)
+
+    pdir = osp.join(args.dataset, args.processed_dir)
+    if not os.path.isdir(pdir):
+        os.makedirs(pdir)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
