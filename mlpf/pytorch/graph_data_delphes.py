@@ -163,12 +163,11 @@ if __name__ == "__main__":
 
     pfgraphdataset = PFGraphDataset(root=args.dataset)
 
-    pdir = osp.join(args.dataset, args.processed_dir)
-    if not os.path.isdir(pdir):
-        os.makedirs(pdir)
-
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
+    
+    if not os.path.isdir(pfgraphdataset._processed_dir):
+        os.makedirs(pfgraphdataset._processed_dir)
 
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
