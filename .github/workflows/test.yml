@@ -50,6 +50,6 @@ jobs:
           sudo python3 -m pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/torch-1.6.0+cpu.html
           sudo python3 -m pip install --no-index torch-cluster -f https://pytorch-geometric.com/whl/torch-1.6.0+cpu.html
           sudo python3 -m pip install --no-index torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.6.0+cpu.html
-          sudo python3 -m pip install torch-geometric
+          sudo python3 -m pip install torch-geometric comet_ml
       - name: Run Delphes Pytorch model
         run: ./scripts/local_test_delphes_pytorch.sh
