@@ -41,8 +41,8 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-4
-  batch_size: 4
+  lr: 1e-5
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
