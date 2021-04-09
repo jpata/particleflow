@@ -49,7 +49,6 @@ setup:
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: all
-  multi_output: yes
 
 parameters:
   model: gnn
