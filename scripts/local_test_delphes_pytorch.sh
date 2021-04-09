@@ -17,11 +17,6 @@ wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_py
 wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_pythia8_ttbar_0_1.pkl.bz2
 wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_pythia8_ttbar_0_10.pkl.bz2
 
-#decompress them
-bzip2 -d tev14_pythia8_ttbar_0_0.pkl.bz2
-bzip2 -d tev14_pythia8_ttbar_0_1.pkl.bz2
-bzip2 -d tev14_pythia8_ttbar_0_10.pkl.bz2
-
 cd ../../..
 
 # # if you have the data in place and want to avoid downloading it you can comment all of the above and uncomment the next line

@@ -43,7 +43,6 @@ import os.path as osp
 import pickle
 import math
 import time
-import numba
 import tqdm
 import sklearn
 import pandas
@@ -51,7 +50,6 @@ import pandas
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import mplhep
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
 
