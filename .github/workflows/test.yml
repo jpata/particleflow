@@ -51,5 +51,5 @@ jobs:
           sudo python3 -m pip install --no-index torch-cluster -f https://pytorch-geometric.com/whl/torch-1.6.0+cpu.html
           sudo python3 -m pip install --no-index torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.6.0+cpu.html
           sudo python3 -m pip install torch-geometric
-      - name: Run CMS TF model
-        run: ./scripts/local_test_cms_pytorch.sh
+      - name: Run Delphes Pytorch model
+        run: ./scripts/local_test_delphes_pytorch.sh
