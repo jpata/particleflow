@@ -471,6 +471,13 @@ class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
         _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
         super(FlattenedMeanIoU, self).update_state(_y_true, _y_pred, None)
 
+class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
+    # def __init__(self, opt, **kwargs):
+    #     super(LearningRateLoggingCallback, self).__init__(**kwargs)
+    #     self.opt = opt
+    def on_epoch_end(self, epoch, numpy_logs):
+        lr = self.model.optimizer._decayed_lr(tf.float32).numpy()
+        tf.summary.scalar('learning rate', data=lr, step=epoch)
 
 def main(args, yaml_path, config):
 
@@ -608,8 +615,8 @@ def main(args, yaml_path, config):
         else:
             lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
                 actual_lr,
-                decay_steps=20000,
-                decay_rate=0.96,
+                decay_steps=1000,
+                decay_rate=0.99,
                 staircase=True
             )
 
@@ -667,6 +674,8 @@ def main(args, yaml_path, config):
                 callbacks = prepare_callbacks(
                     model, outdir
                 )
+                callbacks.append(LearningRateLoggingCallback())
+
                 #callbacks = []
 
                 fit_result = model.fit(
