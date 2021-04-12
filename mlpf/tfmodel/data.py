@@ -39,10 +39,13 @@ class Dataset:
         self.raw_path = kwargs.get("raw_path")
         self.processed_path = kwargs.get("processed_path")
         self.target_particles = kwargs.get("target_particles")
+        self.raw_filelist = kwargs.get("raw_files")
 
         self.validation_file_path = kwargs.get("validation_file_path")
 
-        self.raw_filelist = sorted(glob.glob(self.raw_path))
+        if self.raw_filelist is None:
+            self.raw_filelist = sorted(glob.glob(self.raw_path))
+
         self.val_filelist = sorted(glob.glob(self.validation_file_path))
         print("raw files: {}".format(len(self.raw_filelist)))
         print("val files: {}".format(len(self.val_filelist)))
@@ -53,7 +56,21 @@ class Dataset:
         elif self.schema == "cms":
             self.prepare_data = self.prepare_data_cms
 
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
         self.elem_labels_cms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+        #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.class_labels_cms = [0, 211, 130, 1, 2, 22, 11, 13]
 
     def prepare_data_cms(self, fn):
@@ -116,7 +133,7 @@ class Dataset:
             X = np.expand_dims(X, 0)
             ygen = np.expand_dims(ygen, 0)
             ycand = np.expand_dims(ycand, 0)
-            
+
             Xs.append(X)
             ygens.append(ygen)
             ycands.append(ycand)

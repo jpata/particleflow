@@ -1,14 +1,25 @@
 #!/bin/bash
-
 set -e
+set -x
 
-SAMPLE=SingleElectronFlatPt1To100_pythia8_cfi
-PILEUP=NoPileUp
-PILEUP_INPUT=
-#SAMPLE=TTbar_14TeV_TuneCUETP8M1_cfi
-#PILEUP=Run3_Flat55To75_PoissonOOTPU
-#PILEUP_INPUT=das:/RelValMinBias_14TeV/CMSSW_11_0_0_pre12-110X_mcRun3_2021_realistic_v5-v1/GEN-SIM
-N=1
+CMSSWDIR=/home/joosep/particleflow/mlpf/data/CMSSW_11_3_0_pre4
+
+#seed must be greater than 0
+SAMPLE=$1
+SEED=$2
+
+PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP_INPUT=filelist:/home/joosep/particleflow/mlpf/data/pu_files.txt
+
+N=10
+
+env
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+
+cd $CMSSWDIR
+eval `scramv1 runtime -sh`
+
+cd $WORKDIR
 
 #Generate the MC
 cmsDriver.py $SAMPLE \
@@ -20,6 +31,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
@@ -41,6 +53,10 @@ cmsDriver.py step3 \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step3 \
   --python_filename=step3_phase1_new.py
 
-#cmsRun step2_phase1_new.py &> log_step2.txt
-#cmsRun step3_phase1_new.py &> log_step3.txt
-#cmsRun CMSSW_11_0_0_pre12/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
+pwd
+ls -lrt
+
+echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
+cmsRun step2_phase1_new.py
+cmsRun step3_phase1_new.py
+cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py

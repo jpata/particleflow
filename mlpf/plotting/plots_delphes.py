@@ -63,12 +63,12 @@ def plot_confusion_matrix(cm):
     plt.tight_layout()
     return fig
 
-import imageio
 def plot_to_image(figure):
     """
     Converts the matplotlib plot specified by 'figure' to a PNG image and
     returns it. The supplied figure is closed and inaccessible after this call.
     """
+    import imageio
 
     # Use plt.savefig to save the plot to a PNG in memory.
     plt.savefig('name', format='png')
@@ -139,10 +139,8 @@ def make_plots(true_id, true_p4, pred_id, pred_p4, out):
         pred_id, labels=list(range(num_output_classes)), normalize="true")
 
     figure = plot_confusion_matrix(cm)
-    #cm_image = plot_to_image(figure)
 
     figure = plot_confusion_matrix(cm_normed)
-    #cm_image_normed = plot_to_image(figure)
 
     msk = (pred_id!=0) & (true_id!=0)
 
@@ -165,40 +163,27 @@ def make_plots(true_id, true_p4, pred_id, pred_p4, out):
     cphi_pred = pred_p4[msk, 4].flatten().detach().numpy()
 
     figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100), fname = out+'charge_regression')
-    #ch_image = plot_to_image(figure)
 
     figure = plot_regression(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), fname = out+'pt_regression')
-    #pt_image = plot_to_image(figure)
 
     figure = plot_distributions(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), fname = out+'pt_distribution')
-    #pt_distr_image = plot_to_image(figure)
 
     figure = plot_regression(e_true, e_pred, "E", np.linspace(-1, 5, 100), fname = out+'energy_regression')
-    #e_image = plot_to_image(figure)
 
     figure = plot_distributions(e_true, e_pred, "E", np.linspace(-1, 5, 100), fname = out+'energy_distribution')
-    #e_distr_image = plot_to_image(figure)
 
     figure = plot_regression(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), fname = out+'eta_regression')
-    #eta_image = plot_to_image(figure)
 
     figure = plot_distributions(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), fname = out+'eta_distribution')
-    #eta_distr_image = plot_to_image(figure)
 
     figure = plot_regression(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), fname = out+'sphi_regression')
-    #sphi_image = plot_to_image(figure)
 
     figure = plot_distributions(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), fname = out+'sphi_distribution')
-    #sphi_distr_image = plot_to_image(figure)
 
     figure = plot_regression(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), fname = out+'cphi_regression')
-    #cphi_image = plot_to_image(figure)
 
     figure = plot_distributions(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), fname = out+'cphi_distribution')
-    #cphi_distr_image = plot_to_image(figure)
 
     figure = plot_particles( out+'particleID1', true_id, true_p4, pred_id, pred_p4, pid=1)
-    #pid_image_1 = plot_to_image(figure)
 
     figure = plot_particles( out+'particleID2', true_id, true_p4, pred_id, pred_p4, pid=2)
-    #pid_image_2 = plot_to_image(figure)
