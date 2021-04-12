@@ -13,14 +13,9 @@ mkdir -p data/pythia8_ttbar/processed
 cd data/pythia8_ttbar/raw
 
 #download some pickle data files (for this test we download 3 pkl files and allocate 2 for train and 1 for valid)
-wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_pythia8_ttbar_0_0.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_pythia8_ttbar_0_1.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4452283/files/tev14_pythia8_ttbar_0_10.pkl.bz2
-
-#decompress them
-bzip2 -d tev14_pythia8_ttbar_0_0.pkl.bz2
-bzip2 -d tev14_pythia8_ttbar_0_1.pkl.bz2
-bzip2 -d tev14_pythia8_ttbar_0_10.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_0.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_1.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_2.pkl.bz2
 
 cd ../../..
 

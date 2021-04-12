@@ -1,5 +1,7 @@
 from tfmodel.model import PFNet, Transformer, DummyNet
 import tensorflow as tf
+import tensorflow_probability
+import tensorflow_addons as tfa
 import pickle
 import numpy as np
 import os
@@ -17,13 +19,17 @@ import kerastuner as kt
 from argparse import Namespace
 import time
 import json
+import random
 
 class PFNetLoss:
-    def __init__(self, num_input_classes, num_output_classes, momentum_loss_coefs=[1.0, 1.0, 1.0], charge_loss_coef=1e-3):
+    def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, charge_loss_coef=1e-3, momentum_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0]):
         self.num_input_classes = num_input_classes
         self.num_output_classes = num_output_classes
+        self.momentum_loss_coef = momentum_loss_coef
         self.momentum_loss_coefs = tf.constant(momentum_loss_coefs)
         self.charge_loss_coef = charge_loss_coef
+        self.classification_loss_coef = classification_loss_coef
+        self.gamma = 10.0
 
     def mse_unreduced(self, true, pred):
         return tf.math.pow(true-pred,2)
@@ -47,9 +53,9 @@ class PFNetLoss:
         true_id, true_charge, true_momentum = self.separate_truth(y_true)
         true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
 
-        l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)
-      
-        l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coefs
+        #l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
+        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=False, gamma=self.gamma)*self.classification_loss_coef
+        l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
         l2s = tf.reduce_sum(l2, axis=-1)
 
         l3 = self.charge_loss_coef*self.mse_unreduced(true_charge, pred_charge)[:, :, 0]
@@ -95,6 +101,26 @@ def plot_regression(val_x, val_y, var_name, rng):
     );
     plt.xlabel("Gen {}".format(var_name))
     plt.ylabel("MLPF {}".format(var_name))
+    return fig
+
+def plot_multiplicity(num_pred, num_true):
+    fig = plt.figure(figsize=(5,5))
+    xs = np.arange(len(num_pred))
+    plt.bar(xs, num_true, alpha=0.8)
+    plt.bar(xs, num_pred, alpha=0.8)
+    plt.xticks(xs)
+    return fig
+
+def plot_num_particle(num_pred, num_true, pid):
+    fig = plt.figure(figsize=(5,5))
+    plt.scatter(num_true, num_pred)
+    plt.title("particle id {}".format(pid))
+    plt.xlabel("num true")
+    plt.ylabel("num pred")
+    a = min(np.min(num_true), np.min(num_pred))
+    b = max(np.max(num_true), np.max(num_pred))
+    plt.xlim(a, b)
+    plt.ylim(a, b)
     return fig
 
 def plot_to_image(figure):
@@ -162,6 +188,10 @@ class ConfusionMatrixValidation:
         y_test = self.y_test
 
         test_pred = model.predict(X_test, batch_size=5)
+        msk = X_test[:, :, 0] != 0
+
+        if isinstance(test_pred, tuple):
+            test_pred = tf.concat(list(test_pred), axis=-1)
 
         l1, l2, l3, l2_r = self.loss_cls.loss_components(y_test, test_pred)
 
@@ -175,14 +205,20 @@ class ConfusionMatrixValidation:
             json.dump(logs, fi)
 
         test_pred_id = np.argmax(test_pred[:, :, :self.num_output_classes], axis=-1)
+        
+        counts_pred = np.unique(test_pred_id, return_counts=True)
+
         test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, self.num_output_classes:]], axis=-1)
 
         cm = sklearn.metrics.confusion_matrix(
-            y_test[:, :, 0].astype(np.int64).flatten(),
-            test_pred[:, :, 0].flatten(), labels=list(range(self.num_output_classes)))
+            y_test[msk][:, 0].astype(np.int64).flatten(),
+            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)))
         cm_normed = sklearn.metrics.confusion_matrix(
-            y_test[:, :, 0].astype(np.int64).flatten(),
-            test_pred[:, :, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
+            y_test[msk][:, 0].astype(np.int64).flatten(),
+            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
+
+        num_pred = np.sum(cm, axis=0)
+        num_true = np.sum(cm, axis=1)
 
         figure = plot_confusion_matrix(cm)
         cm_image = plot_to_image(figure)
@@ -198,18 +234,33 @@ class ConfusionMatrixValidation:
         figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
         ch_image = plot_to_image(figure)
 
+        figure = plot_multiplicity(num_pred, num_true)
+        n_image = plot_to_image(figure)
+
+        images_mult = []
+        for icls in range(self.num_output_classes):
+            n_pred = np.sum(test_pred[:, :, 0]==icls, axis=1)
+            n_true = np.sum(y_test[:, :, 0]==icls, axis=1)
+            figure = plot_num_particle(n_pred, n_true, icls)
+            images_mult.append(plot_to_image(figure))
+
         images = {}
         for ireg in range(l2_r.shape[-1]):
             reg_true = y_test[msk, 2+ireg].flatten()
             reg_pred = test_pred[msk, 2+ireg].flatten()
 
-            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.min(reg_true), np.max(reg_true), 100))
+            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.mean(reg_true) - 3*np.std(reg_true), np.mean(reg_true) + 3*np.std(reg_true), 100))
             images[ireg] = plot_to_image(figure)
 
         with self.file_writer_cm.as_default():
             tf.summary.image("Confusion Matrix", cm_image, step=epoch)
             tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
+            tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
             tf.summary.image("charge regression", ch_image, step=epoch)
+            tf.summary.image("particle multiplicity", n_image, step=epoch)
+
+            for icls, img in enumerate(images_mult):
+                tf.summary.image("npart {}".format(icls), img, step=epoch)
 
             for ireg in images.keys():
                 tf.summary.image("regression {}".format(ireg), images[ireg], step=epoch)
@@ -217,9 +268,13 @@ class ConfusionMatrixValidation:
             tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
             for i in range(l2_r.shape[-1]):
                 tf.summary.scalar("loss_reg_{}".format(i), tf.reduce_mean(l2_r[:, :, i]), step=epoch)
+
+            for i in range(cm_normed.shape[0]):
+                tf.summary.scalar("acc_cls_{}".format(i), cm_normed[i, i], step=epoch)
+                
             tf.summary.scalar("loss_chg", tf.reduce_mean(l3), step=epoch)
 
-def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes, num_output_classes, file_writer_cm):
+def prepare_callbacks(model, outdir):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
@@ -241,17 +296,6 @@ def prepare_callbacks(X_test, y_test, loss_cls, model, outdir, num_input_classes
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cmv = ConfusionMatrixValidation(
-        X_test, y_test, loss_cls,
-        outdir=outdir, model=model,
-        num_input_classes=num_input_classes,
-        num_output_classes=num_output_classes,
-        file_writer_cm = file_writer_cm
-    )
-
-    cm_callback = tf.keras.callbacks.LambdaCallback(on_epoch_end=cmv.log_confusion_matrix)
-    callbacks += [cm_callback]
-
     return callbacks
 
 def get_rundir(base='experiments'):
@@ -268,13 +312,14 @@ def get_rundir(base='experiments'):
     return '{}/{}'.format(base, logdir)
 
 def compute_weights_invsqrt(X, y, w):
-    wn = 1.0/tf.sqrt(w)
-    #wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    wn /= tf.reduce_sum(wn)
+    wn = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
+    #wn /= tf.reduce_sum(wn)
     return X, y, wn
 
 def compute_weights_none(X, y, w):
     wn = tf.ones_like(w)
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
     return X, y, wn
 
 weight_functions = {
@@ -286,6 +331,19 @@ def scale_outputs(X,y,w):
     ynew = y-out_m
     ynew = ynew/out_s
     return X, ynew, w
+
+def targets_multi_output(num_output_classes):
+    def func(X, y, w):
+        return X, {
+            "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes), 
+            "charge": y[:, :, 1:2],
+            "pt": y[:, :, 2:3],
+            "eta": y[:, :, 3:4],
+            "sin_phi": y[:, :, 4:5],
+            "cos_phi": y[:, :, 5:6],
+            "energy": y[:, :, 6:7],
+        }, w
+    return func
 
 def make_model(config, dtype):
     model = config['parameters']['model']
@@ -319,6 +377,7 @@ def make_gnn(config, dtype):
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNet(
+        multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
@@ -335,6 +394,7 @@ def make_transformer(config, dtype):
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = Transformer(
+        multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
@@ -357,22 +417,22 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
     
     #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-    y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-    y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
+    # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
+    # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
 
-    msk = np.ones(y_pred_id_sm.shape, dtype=np.bool)
+    msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
 
     #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-    msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
-    msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-    y_pred_id_sm = y_pred_id_sm*msk
+    # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
+    # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
+    y_pred_raw_ids = y_pred_raw_ids*msk
 
-    y_pred_id = np.argmax(y_pred_id_sm, axis=-1)
+    y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
     y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
     np_outfile = "{}/pred.npz".format(outdir)
     print("saving output to {}".format(np_outfile))
-    np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred[:, :, :config["dataset"]["num_output_classes"]])
+    np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
 
 def freeze_model(model, config, outdir):
     full_model = tf.function(lambda x: model(x, training=False))
@@ -391,7 +451,41 @@ def freeze_model(model, config, outdir):
       name="frozen_graph.pbtxt",
       as_text=True)
 
+class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
+    def __init__(self, use_weights=False, **kwargs):
+        super(FlattenedCategoricalAccuracy, self).__init__(**kwargs)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
+        super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, None)
+
+class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
+    def __init__(self, use_weights=False, **kwargs):
+        super(FlattenedMeanIoU, self).__init__(**kwargs)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
+        super(FlattenedMeanIoU, self).update_state(_y_true, _y_pred, None)
+
+class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
+    # def __init__(self, opt, **kwargs):
+    #     super(LearningRateLoggingCallback, self).__init__(**kwargs)
+    #     self.opt = opt
+    def on_epoch_end(self, epoch, numpy_logs):
+        lr = self.model.optimizer._decayed_lr(tf.float32).numpy()
+        tf.summary.scalar('learning rate', data=lr, step=epoch)
+
 def main(args, yaml_path, config):
+
+    #Switch off multi-output for the evaluation for backwards compatibility
+    multi_output = True
+    if args.action == "eval":
+        multi_output = False
+
     tf.config.run_functions_eagerly(config['tensorflow']['eager'])
 
     from tfmodel.data import Dataset
@@ -401,7 +495,8 @@ def main(args, yaml_path, config):
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds["raw_path"],
+        raw_path=cds.get("raw_path", None),
+        raw_files=cds.get("raw_files", None),
         processed_path=cds["processed_path"],
         validation_file_path=cds["validation_file_path"],
         schema=cds["schema"]
@@ -414,14 +509,16 @@ def main(args, yaml_path, config):
         return
 
     global_batch_size = config['setup']['batch_size']
+    config['setup']['multi_output'] = multi_output
 
     model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
     print("model_name=", model_name)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
     if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.datapath))
-        
+        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
+
+    random.shuffle(tfr_files)
     dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     num_events = 0
@@ -444,12 +541,16 @@ def main(args, yaml_path, config):
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
     ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
-    #small test dataset used in the callback for making monitoring plots
-    X_test = ds_test.take(100).map(lambda x,y,w: x)
-    y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
+    if multi_output:
+        ds_train = ds_train.map(targets_multi_output(config['dataset']['num_output_classes']))
+        ds_test = ds_test.map(targets_multi_output(config['dataset']['num_output_classes']))
 
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
+
+    #small test dataset used in the callback for making monitoring plots
+    #X_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: x).as_numpy_iterator()))
+    #y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
 
     weights = config['setup']['weights']
     if args.weights:
@@ -463,7 +564,8 @@ def main(args, yaml_path, config):
         outdir = os.path.dirname(weights)
 
     try:
-        num_gpus = len(os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(","))
+        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
+        num_gpus = len(gpus)
         print("num_gpus=", num_gpus)
         if num_gpus > 1:
             strategy = tf.distribute.MirroredStrategy()
@@ -484,7 +586,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist:
+    for fi in dataset_def.val_filelist[:10]:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
@@ -498,46 +600,69 @@ def main(args, yaml_path, config):
 
     with strategy.scope():
         if config['setup']['dtype'] == 'float16':
+            if multi_output:
+                raise Exception("float16 and multi_output are not supported at the same time")
+
             model_dtype = tf.dtypes.float16
             from tensorflow.keras.mixed_precision import experimental as mixed_precision
             policy = mixed_precision.Policy('mixed_float16')
             mixed_precision.set_policy(policy)
 
             opt = mixed_precision.LossScaleOptimizer(
-                tf.keras.optimizers.Adam(learning_rate=actual_lr),
+                tf.keras.optimizers.Adam(learning_rate=lr_schedule),
                 loss_scale="dynamic"
             )
         else:
+            lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+                actual_lr,
+                decay_steps=1000,
+                decay_rate=0.99,
+                staircase=True
+            )
+
             model_dtype = tf.dtypes.float32
-            opt = tf.keras.optimizers.Adam(learning_rate=actual_lr)
+            opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+
+            #if config['setup']['multi_output']:
+            #    from tfmodel.PCGrad_tf import PCGrad
+            #    opt = PCGrad(tf.compat.v1.train.AdamOptimizer(actual_lr))
 
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
 
-            loss_cls = PFNetLoss(
-                num_input_classes=config["dataset"]["num_input_classes"],
-                num_output_classes=config["dataset"]["num_output_classes"],
-                momentum_loss_coefs=config["dataset"]["momentum_loss_coefs"]
-            )
-
-            loss_fn = loss_cls.my_loss_full
-            if config["setup"]["trainable"] == "cls":
-                model.set_trainable_classification()
-                loss_fn = loss_cls.my_loss_cls
-            elif config["setup"]["trainable"] == "reg":
-                model.set_trainable_regression()
-                loss_fn = loss_cls.my_loss_reg
-
-            #we use the "temporal" mode to have per-particle weights
             model.compile(
-                loss=loss_fn,
+                loss={
+                    "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
+                    "charge": tf.keras.losses.MeanSquaredError(),
+                    "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "eta": tf.keras.losses.MeanSquaredError(),
+                    "sin_phi": tf.keras.losses.MeanSquaredError(),
+                    "cos_phi": tf.keras.losses.MeanSquaredError(),
+                    "energy": tf.keras.losses.MeanSquaredLogarithmicError(),
+                },
                 optimizer=opt,
-                sample_weight_mode='temporal'
+                sample_weight_mode='temporal',
+                loss_weights={
+                    "cls": config["dataset"]["classification_loss_coef"],
+                    "charge": config["dataset"]["charge_loss_coef"],
+                    "pt": config["dataset"]["pt_loss_coef"],
+                    "eta": config["dataset"]["eta_loss_coef"],
+                    "sin_phi": config["dataset"]["sin_phi_loss_coef"],
+                    "cos_phi": config["dataset"]["cos_phi_loss_coef"],
+                    "energy": config["dataset"]["energy_loss_coef"],
+                },
+                metrics={
+                    "cls": [
+                        FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                    ]
+                }
             )
 
             #Evaluate model once to build the layers
-            model(tf.cast(X_val[:1], model_dtype))
+            print(X_val.shape)
+            model(tf.cast(X_val[:5], model_dtype))
             model.summary()
+            #import pdb;pdb.set_trace()
 
             initial_epoch = 0
             if weights:
@@ -545,21 +670,21 @@ def main(args, yaml_path, config):
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
             if args.action=="train":
-                file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
+                #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    X_test, y_test,
-                    loss_cls,
-                    model, outdir,
-                    config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"],
-                    file_writer_cm
+                    model, outdir
                 )
+                callbacks.append(LearningRateLoggingCallback())
 
-                model.fit(
+                #callbacks = []
+
+                fit_result = model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-
+                with open("{}/history_{}.json".format(outdir, initial_epoch), "w") as fi:
+                    json.dump(fit_result.history, fi)
                 model.save(outdir + "/model_full", save_format="tf")
             
             if args.action=="eval":
