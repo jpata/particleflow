@@ -619,7 +619,7 @@ def main(args, yaml_path, config):
         else:
             lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
                 actual_lr,
-                decay_steps=1000,
+                decay_steps=10000,
                 decay_rate=0.99,
                 staircase=True
             )
