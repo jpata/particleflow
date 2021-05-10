@@ -233,7 +233,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         indices_gathered = tf.map_fn(
             lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
-            tf.range(self.num_neighbors, dtype=tf.int32)
+            tf.range(self.num_neighbors, dtype=tf.int32), fn_output_signature=tf.TensorSpec(None, tf.int32)
         )
         indices_gathered = tf.transpose(indices_gathered, [1,2,0])
 

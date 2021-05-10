@@ -435,6 +435,10 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
 
 def freeze_model(model, config, outdir):
+
+    model.compile(loss="mse", optimizer="adam")
+    model.save(outdir + "/model_full", save_format="tf")
+
     full_model = tf.function(lambda x: model(x, training=False))
     full_model = full_model.get_concrete_function(
         tf.TensorSpec((None, None, config["dataset"]["num_input_features"]), tf.float32))
@@ -586,7 +590,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:10]:
+    for fi in dataset_def.val_filelist[:1]:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
