@@ -41,7 +41,7 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 1e-6
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
@@ -62,7 +62,7 @@ parameters:
   num_neighbors: 16
   hidden_dim_id: 512
   hidden_dim_reg: 512
-  distance_dim: 256
+  distance_dim: 32
   dropout: 0.0
   dist_mult: 1.0
   activation: elu
