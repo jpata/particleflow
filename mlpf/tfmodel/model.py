@@ -172,12 +172,12 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
             shape=(self.distance_dim, self.max_num_bins//2), initializer="random_normal", trainable=False, name="lsh_projections"
         )
 
-    @tf.function
+    #@tf.function
     def call(self, inputs, training=True):
 
         #(n_batch, n_points, n_features)
         point_embedding = self.layer_encoding(inputs)
-
+        
         n_batches = tf.shape(point_embedding)[0]
         n_points = tf.shape(point_embedding)[1]
         #points_neighbors = n_points * self.num_neighbors
@@ -186,12 +186,21 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #https://github.com/tensorflow/tensorflow/blob/df3a3375941b9e920667acfe72fb4c33a8f45503/tensorflow/python/ops/sparse_grad.py#L33
         def func(args):
             ibatch, points_batch = args[0], args[1]
-            inds, vals = self.construct_sparse_dm_batch(points_batch)
+            bins_split, (inds, vals) = self.construct_sparse_dm_batch(points_batch)
             inds = tf.concat([tf.expand_dims(tf.cast(ibatch, tf.int64)*tf.ones(tf.shape(inds)[0], dtype=tf.int64), -1), inds], axis=-1)
-            return inds, vals
+            return inds, vals, bins_split
 
         elems = (tf.range(0, n_batches, delta=1, dtype=tf.int64), point_embedding)
-        ret = tf.map_fn(func, elems, fn_output_signature=(tf.TensorSpec((None, 3), tf.int64), tf.TensorSpec((None, ), inputs.dtype)), parallel_iterations=2, back_prop=True)
+        ret = tf.map_fn(func, elems,
+            fn_output_signature=(
+                tf.TensorSpec((None, 3), tf.int64),
+                tf.TensorSpec((None, ), inputs.dtype),
+                tf.TensorSpec((None, self.bin_size), tf.int32),
+            ),
+            parallel_iterations=2, back_prop=True
+        )
+
+        print("ret2", ret[2])
 
         # #now create a new SparseTensor that is a concatenation of the per-batch tensor indices and values
         shp = tf.shape(ret[0])
@@ -212,9 +221,9 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         edge_vals = tf.nn.sigmoid(self.layer_edge(tf.concat([x1, x2, tf.expand_dims(dm.values, axis=-1)], axis=-1)))
         dm2 = tf.sparse.SparseTensor(indices=dm.indices, values=edge_vals[:, 0], dense_shape=dm.dense_shape)
 
-        return dm2
+        return dm2, ret[2]
 
-    @tf.function
+    #@tf.function
     def subpoints_to_sparse_matrix(self, subindices, subpoints):
 
         #find the distance matrix between the given points in all the LSH bins
@@ -230,6 +239,8 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #run KNN in the dense distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
+
+        #import pdb;pdb.set_trace()
 
         indices_gathered = tf.map_fn(
             lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
@@ -275,7 +286,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #where higher values (closer to 1) are associated with points that are closely related
         sparse_distance_matrix = self.subpoints_to_sparse_matrix(bins_split, parts)
 
-        return sparse_distance_matrix
+        return bins_split, sparse_distance_matrix
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
     def __init__(self, encoders, decoders, dropout, activation, conv, **kwargs):
@@ -356,7 +367,7 @@ class PFNet(tf.keras.Model):
         num_neighbors=5,
         dist_mult=0.1,
         skip_connection=False,
-        knn_steps=1):
+        return_matrix=False):
 
         super(PFNet, self).__init__()
         self.activation = activation
@@ -364,6 +375,7 @@ class PFNet(tf.keras.Model):
         self.num_momentum_outputs = num_momentum_outputs
         self.skip_connection = skip_connection
         self.multi_output = multi_output
+        self.return_matrix = return_matrix
 
         encoding_id = []
         decoding_id = []
@@ -419,7 +431,7 @@ class PFNet(tf.keras.Model):
         enc = self.enc(inputs)
 
         #create a graph structure from the encoded nodes
-        dm = self.dist(enc, training)
+        dm, bins = self.dist(enc, training)
 
         #run graph net for multiclass id prediction
         x_id = self.gnn_id(enc, dm, training)
@@ -446,7 +458,7 @@ class PFNet(tf.keras.Model):
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
         if self.multi_output:
-            return {
+            ret = {
                 "cls": out_id_softmax,
                 "charge": out_charge,
                 "pt": pred_momentum[:, :, 0:1],
@@ -455,6 +467,10 @@ class PFNet(tf.keras.Model):
                 "cos_phi": pred_momentum[:, :, 3:4],
                 "energy": pred_momentum[:, :, 4:5]
             }
+            if self.return_matrix:
+                ret["dm"] = dm
+                ret["bins"] = bins
+            return ret
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
