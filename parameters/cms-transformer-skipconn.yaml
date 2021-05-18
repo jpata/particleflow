@@ -45,7 +45,7 @@ setup:
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 1000
   dtype: float32
   sample_weights: none
   trainable: cls

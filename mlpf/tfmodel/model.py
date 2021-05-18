@@ -10,7 +10,7 @@ from tfmodel.fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 1e-9
+regularizer_weight = 1e-7
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -218,10 +218,10 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
     def subpoints_to_sparse_matrix(self, subindices, subpoints):
 
         #find the distance matrix between the given points in all the LSH bins
-        #dm = pairwise_gaussian_dist(subpoints, subpoints)
-        #dm = tf.exp(-self.dist_mult*dm)
+        dm = pairwise_gaussian_dist(subpoints, subpoints) #(LSH_bins, points_per_bin, points_per_bin)
+        dm = tf.exp(-self.dist_mult*dm)
 
-        dm = pairwise_sigmoid_dist(subpoints, subpoints) #(LSH_bins, points_per_bin, points_per_bin)
+        #dm = pairwise_sigmoid_dist(subpoints, subpoints) #(LSH_bins, points_per_bin, points_per_bin)
 
         dmshape = tf.shape(dm)
         nbins = dmshape[0]
@@ -355,7 +355,8 @@ class PFNet(tf.keras.Model):
         num_hidden_reg_dec=1,
         num_neighbors=5,
         dist_mult=0.1,
-        skip_connection=False):
+        skip_connection=False,
+        knn_steps=1):
 
         super(PFNet, self).__init__()
         self.activation = activation
@@ -384,10 +385,8 @@ class PFNet(tf.keras.Model):
 
         self.enc = InputEncoding(num_input_classes)
         #self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.dist1 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
-        self.gnn_dm = EncoderDecoderGNN([128, 128], [128, 128], dropout, activation, [GHConv(activation=activation, name="conv_dist0")], name="gnn_dist")
 
-        self.dist2 = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
+        self.dist = SparseHashedNNDistance(distance_dim=distance_dim, bin_size=bin_size, num_neighbors=num_neighbors, dist_mult=dist_mult)
 
         convs_id = []
         convs_reg = []
@@ -419,17 +418,11 @@ class PFNet(tf.keras.Model):
 
         enc = self.enc(inputs)
 
-        #create graph structure by predicting a sparse distance matrix
-        dm1 = self.dist1(enc, training)
-
-        #graph net to encode-decode the nodes
-        x_dm = self.gnn_dm(enc, dm1, training)
-
         #create a graph structure from the encoded nodes
-        dm2 = self.dist2(x_dm, training)
+        dm = self.dist(enc, training)
 
         #run graph net for multiclass id prediction
-        x_id = self.gnn_id(enc, dm2, training)
+        x_id = self.gnn_id(enc, dm, training)
         
         if self.skip_connection:
             to_decode = tf.concat([enc, x_id], axis=-1)
@@ -440,7 +433,7 @@ class PFNet(tf.keras.Model):
         out_charge = self.layer_charge(to_decode)*msk_input
 
         #run graph net for regression output prediction, taking as an additonal input the ID predictions
-        x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm2, training)
+        x_reg = self.gnn_reg(tf.concat([enc, tf.cast(out_id_logits, X.dtype)], axis=-1), dm, training)
 
         if self.skip_connection:
             to_decode = tf.concat([enc, tf.cast(out_id_logits, X.dtype), x_reg], axis=-1)
