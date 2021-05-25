@@ -36,12 +36,12 @@ dataset:
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
 tensorflow:
-  eager: yes
+  eager: no
 
 setup:
   train: yes
   weights:
-  lr: 1e-6
+  lr: 1e-5
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000

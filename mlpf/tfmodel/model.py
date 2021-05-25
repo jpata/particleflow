@@ -200,8 +200,6 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
             parallel_iterations=2, back_prop=True
         )
 
-        print("ret2", ret[2])
-
         # #now create a new SparseTensor that is a concatenation of the per-batch tensor indices and values
         shp = tf.shape(ret[0])
         dms = tf.SparseTensor(
@@ -276,7 +274,7 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         cmul = tf.concat([mul, -mul], axis=-1)
 
         #cmul is now an integer in [0..nbins) for each input point
-        #bins_split: (n_bins, bin_size) of integer bin indices, which put each input point into a bin of size (n_points/n_bins)
+        #bins_split: (n_bins, bin_size) of integer bin indices, which puts each input point into a bin of size (n_points/n_bins)
         bins_split = split_indices_to_bins(cmul, n_bins, self.bin_size)
 
         #parts: (n_bins, bin_size, n_features), the input points divided up into bins
