@@ -78,7 +78,11 @@ class Dataset:
         ygens = []
         ycands = []
 
-        data = pickle.load(open(fn, "rb"), encoding='iso-8859-1')
+        if fn.endswith(".pkl"):
+            data = pickle.load(open(fn, "rb"), encoding='iso-8859-1')
+        elif fn.endswith(".pkl.bz2"):
+            data = pickle.load(bz2.BZ2File(fn, "rb"))
+
         for event in data:
             Xelem = event["Xelem"]
             ygen = event["ygen"]
