@@ -163,14 +163,14 @@ class GHConvDense(tf.keras.layers.Layer):
         x, adj = inputs
 
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
+        #in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
         #in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
 
         #add epsilon to prevent numerical issues from 1/sqrt(x)
-        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+        #norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
 
         f_hom = tf.linalg.matmul(x, self.theta)
-        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+        f_hom = tf.linalg.matmul(adj, f_hom)
 
         f_het = tf.linalg.matmul(x, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
@@ -823,7 +823,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         x_binned_enc = self.conv((x_binned, dm))
         x_enc = reverse_lsh(bins_split, x_binned_enc, self.batch_size)
 
-        return x + x_enc
+        return x_enc
 
 class PFNetDense(tf.keras.Model):
     def __init__(self,
@@ -865,9 +865,9 @@ class PFNetDense(tf.keras.Model):
         self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32)
-        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3)
 
     def call(self, inputs, training):
         X = inputs
@@ -882,12 +882,12 @@ class PFNetDense(tf.keras.Model):
         points_reg_enc1 = self.cg_reg1(enc_reg)
         points_reg_enc2 = self.cg_reg2(points_reg_enc1)
 
-        dec_output_id = tf.concat([enc, points_id_enc2], axis=-1)
+        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2], axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc2], axis=-1)
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2], axis=-1)
        
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
