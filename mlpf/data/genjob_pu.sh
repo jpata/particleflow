@@ -2,16 +2,19 @@
 set -e
 set -x
 
-CMSSWDIR=/home/joosep/particleflow/mlpf/data/CMSSW_11_3_0_pre4
-
-#seed must be greater than 0
+CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_11_3_0_pre2
+MLPF_PATH=/home/joosep/particleflow/
 SAMPLE=$1
+#seed must be greater than 0
 SEED=$2
 
-PILEUP=Run3_Flat55To75_PoissonOOTPU
-PILEUP_INPUT=filelist:/home/joosep/particleflow/mlpf/data/pu_files.txt
+WORKDIR=`pwd`/$SAMPLE/$SEED
+mkdir -p $WORKDIR
 
-N=10
+PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/pu_files.txt
+
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -56,7 +59,8 @@ cmsDriver.py step3 \
 pwd
 ls -lrt
 
-echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
+#echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
+python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple.root --outpath raw --save-normalized-table --events-per-file -1
