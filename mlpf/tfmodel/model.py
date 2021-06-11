@@ -62,6 +62,8 @@ def sparse_dense_matmult_batch(sp_a, b):
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
 
+#FIXME: currently this needs to know the batch_size in advance
+#need to understand better how to do scatter_nd across the batch
 @tf.function
 def reverse_lsh(bins_split, points_binned_enc, batch_size):
     # batch_dim = points_binned_enc.shape[0]
@@ -76,13 +78,15 @@ def reverse_lsh(bins_split, points_binned_enc, batch_size):
     bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
     
-    expanded = tf.stack([
-        tf.scatter_nd(
+    def func(ibatch):
+        return tf.scatter_nd(
             tf.expand_dims(bins_split_flat[ibatch], -1),
             points_binned_enc_flat[ibatch],
-            shape=(n_points, n_features))
-        for ibatch in range(batch_size)
-    ])
+            shape=(n_points, n_features)
+        )
+
+    expanded = tf.map_fn(func, tf.range(batch_dim), fn_output_signature=tf.float32)
+
     return expanded
 
 class InputEncoding(tf.keras.layers.Layer):
@@ -385,7 +389,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         x_features_binned = tf.gather(x_features, bins_split, batch_dims=1)
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
-        dm = tf.exp(-0.1*dm)
+        dm = tf.exp(-self.distance_dim*dm)
         dm = tf.clip_by_value(dm, 1e-3, 1)
 
         return bins_split, x_features_binned, dm
@@ -799,7 +803,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.output_dim = kwargs.pop("output_dim")
         self.batch_size = kwargs.pop("batch_size")
 
-        self.layernorm = tf.keras.layers.LayerNormalization(axis=[1,2], epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
         self.dist = ExponentialLSHDistanceDense(distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
         self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
@@ -834,7 +838,7 @@ class PFNetDense(tf.keras.Model):
 
         self.enc = InputEncoding(num_input_classes)
 
-        dff = 256
+        dff = 128
         self.ffn_enc_id = point_wise_feed_forward_network(dff, dff)
         self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff)
 
@@ -852,9 +856,9 @@ class PFNetDense(tf.keras.Model):
         self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls")
-        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge")
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum")
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32)
 
     def call(self, inputs, training):
         X = inputs
