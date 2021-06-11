@@ -20,6 +20,7 @@ from argparse import Namespace
 import time
 import json
 import random
+import platform
 
 class PFNetLoss:
     def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, charge_loss_coef=1e-3, momentum_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0]):
@@ -451,7 +452,7 @@ def make_gnn(config, dtype):
 
 def make_gnn_dense(config, dtype):
 
-    parameters = ["layernorm", "hidden_dim"]
+    parameters = ["layernorm", "hidden_dim", "bin_size"]
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNetDense(
@@ -593,7 +594,7 @@ def main(args, yaml_path, config):
     global_batch_size = config['setup']['batch_size']
     config['setup']['multi_output'] = multi_output
 
-    model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8]
+    model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8] + "." + platform.node()
     print("model_name=", model_name)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
