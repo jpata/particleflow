@@ -41,7 +41,7 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-4
+  lr: 1e-5
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
@@ -53,6 +53,8 @@ setup:
 parameters:
   model: gnn_dense
   activation: elu
+  layernorm: yes
+  hidden_dim: 256
 
 timing:
   num_ev: 100
