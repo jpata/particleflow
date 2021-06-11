@@ -1,4 +1,4 @@
-from tfmodel.model import PFNet, Transformer, DummyNet
+from tfmodel.model import PFNet, Transformer, DummyNet, PFNetDense
 import tensorflow as tf
 import tensorflow_probability
 import tensorflow_addons as tfa
@@ -274,7 +274,62 @@ class ConfusionMatrixValidation:
                 
             tf.summary.scalar("loss_chg", tf.reduce_mean(l3), step=epoch)
 
-def prepare_callbacks(model, outdir):
+
+
+class CustomCallback(tf.keras.callbacks.Callback):
+    def __init__(self, outpath, X, y, dataset_transform):
+        super(CustomCallback, self).__init__()
+        self.X = X
+        self.y = y
+        self.dataset_transform = dataset_transform
+        self.outpath = outpath
+
+        #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
+        self.color_map = {
+            1: "black",
+            2: "green",
+            3: "red",
+            4: "orange",
+            5: "blue",
+            6: "cyan",
+            7: "purple"
+        }
+
+    def on_epoch_end(self, epoch, logs=None):
+        ypred = self.model(self.X, training=False)
+        ypred_id = np.argmax(ypred["cls"], axis=-1)
+
+        ibatch = 0
+
+        #Plot the predicted particles
+        msk = ypred_id[ibatch] != 0
+        eta = ypred["eta"][ibatch][msk]
+        sphi = ypred["sin_phi"][ibatch][msk]
+        cphi = ypred["cos_phi"][ibatch][msk]
+        phi = np.arctan2(sphi, cphi)
+        energy = ypred["energy"][ibatch][msk]
+        pdgid = ypred_id[ibatch][msk]
+
+        plt.figure(figsize=(5, 5))
+        plt.scatter(eta, phi, marker=".", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.8)
+
+        #Plot the target particles
+        y = self.dataset_transform(self.X, self.y, None)[1]
+        y_id = np.argmax(y["cls"], axis=-1)
+        msk = y_id[ibatch] != 0
+        eta = y["eta"][ibatch][msk]
+        sphi = y["sin_phi"][ibatch][msk]
+        cphi = y["cos_phi"][ibatch][msk]
+        phi = np.arctan2(sphi, cphi)
+        energy = y["energy"][ibatch][msk]
+        pdgid = y_id[ibatch][msk]
+        plt.scatter(eta, phi, marker=".", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3)
+
+        plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.xlim(-8,8)
+        plt.ylim(-4,4)
+
+def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
@@ -295,6 +350,11 @@ def prepare_callbacks(model, outdir):
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
+
+    cb = CustomCallback(outdir, X_val, y_val, dataset_transform)
+    cb.set_model(model)
+
+    callbacks += [cb]
 
     return callbacks
 
@@ -353,6 +413,8 @@ def make_model(config, dtype):
         return make_transformer(config, dtype)
     elif model == 'dense':
         return make_dense(config, dtype)
+    elif model == 'gnn_dense':
+        return make_gnn_dense(config, dtype)
     raise KeyError("Unknown model type {}".format(model))
 
 def make_gnn(config, dtype):
@@ -382,6 +444,22 @@ def make_gnn(config, dtype):
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
         activation=activation,
+        **kwargs
+    )
+
+    return model
+
+def make_gnn_dense(config, dtype):
+
+    parameters = []
+    kwargs = {par: config['parameters'][par] for par in parameters}
+
+    model = PFNetDense(
+        multi_output=config["setup"]["multi_output"],
+        num_input_classes=config["dataset"]["num_input_classes"],
+        num_output_classes=config["dataset"]["num_output_classes"],
+        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
+        batch_size=config["setup"]["batch_size"],
         **kwargs
     )
 
@@ -545,9 +623,11 @@ def main(args, yaml_path, config):
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
     ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
 
+    dataset_transform = None
     if multi_output:
-        ds_train = ds_train.map(targets_multi_output(config['dataset']['num_output_classes']))
-        ds_test = ds_test.map(targets_multi_output(config['dataset']['num_output_classes']))
+        dataset_transform = targets_multi_output(config['dataset']['num_output_classes'])
+        ds_train = ds_train.map(dataset_transform)
+        ds_test = ds_test.map(dataset_transform)
 
     ds_train_r = ds_train.repeat(n_epochs)
     ds_test_r = ds_test.repeat(n_epochs)
@@ -590,7 +670,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:10]:
+    for fi in dataset_def.val_filelist:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
@@ -676,7 +756,7 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    model, outdir
+                    model, outdir, X_val, ycand_val, dataset_transform
                 )
                 callbacks.append(LearningRateLoggingCallback())
 

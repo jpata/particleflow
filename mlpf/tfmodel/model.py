@@ -17,6 +17,12 @@ def split_indices_to_bins(cmul, nbins, bin_size):
     bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
     return bins_split
 
+def split_indices_to_bins_batch(cmul, nbins, bin_size):
+    bin_idx = tf.argmax(cmul, axis=-1)
+    bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
+    return bins_split
+
+
 def pairwise_gaussian_dist(A, B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
@@ -55,6 +61,29 @@ def sparse_dense_matmult_batch(sp_a, b):
     elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
+
+@tf.function
+def reverse_lsh(bins_split, points_binned_enc, batch_size):
+    # batch_dim = points_binned_enc.shape[0]
+    # n_points = points_binned_enc.shape[1]*points_binned_enc.shape[2]
+    # n_features = points_binned_enc.shape[-1]
+    
+    shp = tf.shape(points_binned_enc)
+    batch_dim = shp[0]
+    n_points = shp[1]*shp[2]
+    n_features = shp[-1]
+
+    bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
+    points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+    
+    expanded = tf.stack([
+        tf.scatter_nd(
+            tf.expand_dims(bins_split_flat[ibatch], -1),
+            points_binned_enc_flat[ibatch],
+            shape=(n_points, n_features))
+        for ibatch in range(batch_size)
+    ])
+    return expanded
 
 class InputEncoding(tf.keras.layers.Layer):
     def __init__(self, num_input_classes):
@@ -110,6 +139,41 @@ class GHConv(tf.keras.layers.Layer):
         out = gate*f_hom + (1-gate)*f_het
         return self.activation(out)
 
+class GHConvDense(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        self.activation = kwargs.pop("activation")
+        self.output_dim = kwargs.pop("output_dim")
+
+        super(GHConvDense, self).__init__(*args, **kwargs)
+
+    def build(self, input_shape):
+        self.hidden_dim = input_shape[0][-1]
+        self.nelem = input_shape[0][-2]
+        self.W_t = self.add_weight(shape=(self.hidden_dim, self.output_dim), name="w_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.b_t = self.add_weight(shape=(self.output_dim,), name="b_t", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.W_h = self.add_weight(shape=(self.hidden_dim, self.output_dim), name="w_h", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+        self.theta = self.add_weight(shape=(self.hidden_dim, self.output_dim), name="theta", initializer="random_normal", trainable=True, regularizer=tf.keras.regularizers.L1(regularizer_weight))
+ 
+    #@tf.function
+    def call(self, inputs):
+        x, adj = inputs
+
+        #compute the normalization of the adjacency matrix
+        in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
+        #in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
+
+        #add epsilon to prevent numerical issues from 1/sqrt(x)
+        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+
+        f_hom = tf.linalg.matmul(x, self.theta)
+        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+
+        f_het = tf.linalg.matmul(x, self.W_h)
+        gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
+
+        out = gate*f_hom + (1-gate)*f_het
+        return self.activation(out)
+
 class SGConv(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
         self.activation = kwargs.pop("activation")
@@ -139,12 +203,13 @@ class SGConv(tf.keras.layers.Layer):
 
         return self.activation(out + self.b)
 
-def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32):
+def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32, name=None):
     bias_regularizer =  tf.keras.regularizers.L1(regularizer_weight)
     kernel_regularizer = tf.keras.regularizers.L1(regularizer_weight)
     return tf.keras.Sequential(
         [tf.keras.layers.Dense(dff, activation=activation, bias_regularizer=bias_regularizer, kernel_regularizer=kernel_regularizer) for i in range(num_layers)] +
-        [tf.keras.layers.Dense(d_model, dtype=dtype)]
+        [tf.keras.layers.Dense(d_model, dtype=dtype)],
+        name=name
     )
 
 class SparseHashedNNDistance(tf.keras.layers.Layer):
@@ -285,6 +350,45 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         sparse_distance_matrix = self.subpoints_to_sparse_matrix(bins_split, parts)
 
         return bins_split, sparse_distance_matrix
+
+class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
+    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, dist_mult=0.1, **kwargs):
+        super(ExponentialLSHDistanceDense, self).__init__(**kwargs)
+        self.dist_mult = dist_mult
+        self.distance_dim = distance_dim
+        self.max_num_bins = max_num_bins
+        self.bin_size = bin_size
+        
+    def build(self, input_shape):
+        #(n_batch, n_points, n_features)
+    
+        #generate the LSH codebook for random rotations (num_features, max_num_bins/2)
+        self.codebook_random_rotations = self.add_weight(
+            shape=(self.distance_dim, self.max_num_bins//2), initializer="random_normal",
+            trainable=False, name="lsh_projections"
+        )
+        
+    def call(self, x_dist, x_features):
+        n_batches = tf.shape(x_dist)[0]
+        n_points = tf.shape(x_dist)[1]
+        n_features = tf.shape(x_dist)[2]
+
+        #compute the number of LSH bins to divide the input points into on the fly
+        #n_points must be divisible by bin_size exactly due to the use of reshape
+        n_bins = tf.math.floordiv(n_points, self.bin_size)
+
+        #put each input item into a bin defined by the softmax output across the LSH embedding
+        mul = tf.linalg.matmul(x_dist, self.codebook_random_rotations[:, :n_bins//2])
+        cmul = tf.concat([mul, -mul], axis=-1)
+        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size)
+        x_dist_binned = tf.gather(x_dist, bins_split, batch_dims=1)
+        x_features_binned = tf.gather(x_features, bins_split, batch_dims=1)
+
+        dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
+        dm = tf.exp(-0.1*dm)
+        dm = tf.clip_by_value(dm, 1e-3, 1)
+
+        return bins_split, x_features_binned, dm
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
     def __init__(self, encoders, decoders, dropout, activation, conv, **kwargs):
@@ -683,6 +787,110 @@ class Transformer(tf.keras.Model):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
 
+
+class CombinedGraphLayer(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+    
+        self.max_num_bins = kwargs.pop("max_num_bins")
+        self.bin_size = kwargs.pop("bin_size")
+        self.dist_mult = kwargs.pop("dist_mult")
+
+        self.distance_dim = kwargs.pop("distance_dim")
+        self.output_dim = kwargs.pop("output_dim")
+        self.batch_size = kwargs.pop("batch_size")
+
+        self.layernorm = tf.keras.layers.LayerNormalization(axis=[1,2], epsilon=1e-6)
+        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
+        self.dist = ExponentialLSHDistanceDense(distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
+        self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
+        super(CombinedGraphLayer, self).__init__(*args, **kwargs)
+
+    def call(self, x):
+
+        x = self.layernorm(x)
+        x_dist = self.ffn_dist(x)
+        bins_split, x_binned, dm = self.dist(x_dist, x)
+        x_binned_enc = self.conv((x_binned, dm))
+        x_enc = reverse_lsh(bins_split, x_binned_enc, self.batch_size)
+
+        return x + x_enc
+
+class PFNetDense(tf.keras.Model):
+    def __init__(self,
+            multi_output=False,
+            num_input_classes=8,
+            num_output_classes=3,
+            num_momentum_outputs=3,
+            max_num_bins=200,
+            bin_size=320,
+            dist_mult=0.1,
+            distance_dim=128,
+            batch_size=1
+        ):
+        super(PFNetDense, self).__init__()
+
+        self.multi_output = multi_output
+        self.num_momentum_outputs = num_momentum_outputs
+
+        self.enc = InputEncoding(num_input_classes)
+
+        dff = 256
+        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff)
+        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff)
+
+        kwargs_cg = {
+            "output_dim": dff,
+            "max_num_bins": max_num_bins,
+            "bin_size": bin_size,
+            "dist_mult": dist_mult,
+            "distance_dim": distance_dim,
+            "batch_size": batch_size
+        }
+        self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_id2 = CombinedGraphLayer(**kwargs_cg)
+
+        self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
+
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls")
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge")
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum")
+
+    def call(self, inputs, training):
+        X = inputs
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+
+        enc = self.enc(X)
+        enc_id = self.ffn_enc_id(enc)
+        points_id_enc1 = self.cg_id1(enc_id)
+        points_id_enc2 = self.cg_id2(points_id_enc1)
+
+        enc_reg = self.ffn_enc_reg(enc)
+        points_reg_enc1 = self.cg_reg1(enc_reg)
+        points_reg_enc2 = self.cg_reg2(points_reg_enc1)
+
+        dec_output_id = tf.concat([enc, points_id_enc2], axis=-1)
+
+        out_id_logits = self.ffn_id(dec_output_id)
+        out_charge = self.ffn_charge(dec_output_id)*msk_input
+
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc2], axis=-1)
+       
+        pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+
+        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+        out_charge = tf.clip_by_value(out_charge, -2, 2)
+        if self.multi_output:
+            return {
+                "cls": out_id_softmax, "charge": out_charge,
+                "pt": pred_momentum[:, :, 0:1],
+                "eta": pred_momentum[:, :, 1:2],
+                "sin_phi": pred_momentum[:, :, 2:3],
+                "cos_phi": pred_momentum[:, :, 3:4],
+                "energy": pred_momentum[:, :, 4:5],
+            }
+        else:
+            return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
 
 class DummyNet(tf.keras.Model):
