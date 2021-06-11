@@ -554,12 +554,12 @@ class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
         super(FlattenedMeanIoU, self).update_state(_y_true, _y_pred, None)
 
 class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
-    # def __init__(self, opt, **kwargs):
-    #     super(LearningRateLoggingCallback, self).__init__(**kwargs)
-    #     self.opt = opt
     def on_epoch_end(self, epoch, numpy_logs):
-        lr = self.model.optimizer._decayed_lr(tf.float32).numpy()
-        tf.summary.scalar('learning rate', data=lr, step=epoch)
+        try:
+            lr = self.model.optimizer._decayed_lr(tf.float32).numpy()
+            tf.summary.scalar('learning rate', data=lr, step=epoch)
+        except AttributeError as e:
+            pass
 
 def main(args, yaml_path, config):
 
@@ -683,33 +683,22 @@ def main(args, yaml_path, config):
     ycand_val = np.concatenate(ycands)
 
     with strategy.scope():
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            actual_lr,
+            decay_steps=10000,
+            decay_rate=0.99,
+            staircase=True
+        )
+        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         if config['setup']['dtype'] == 'float16':
-            if multi_output:
-                raise Exception("float16 and multi_output are not supported at the same time")
-
             model_dtype = tf.dtypes.float16
-            from tensorflow.keras.mixed_precision import experimental as mixed_precision
+            from tensorflow.keras import mixed_precision
             policy = mixed_precision.Policy('mixed_float16')
-            mixed_precision.set_policy(policy)
+            mixed_precision.set_global_policy(policy)
 
-            opt = mixed_precision.LossScaleOptimizer(
-                tf.keras.optimizers.Adam(learning_rate=lr_schedule),
-                loss_scale="dynamic"
-            )
+            opt = mixed_precision.LossScaleOptimizer(opt)
         else:
-            lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-                actual_lr,
-                decay_steps=10000,
-                decay_rate=0.99,
-                staircase=True
-            )
-
             model_dtype = tf.dtypes.float32
-            opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-
-            #if config['setup']['multi_output']:
-            #    from tfmodel.PCGrad_tf import PCGrad
-            #    opt = PCGrad(tf.compat.v1.train.AdamOptimizer(actual_lr))
 
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
