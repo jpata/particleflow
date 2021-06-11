@@ -356,12 +356,13 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         return bins_split, sparse_distance_matrix
 
 class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
-    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, dist_mult=0.1, **kwargs):
+    def __init__(self, clip_value_low=0.0, distance_dim=128, max_num_bins=200, bin_size=128, dist_mult=0.1, **kwargs):
         super(ExponentialLSHDistanceDense, self).__init__(**kwargs)
         self.dist_mult = dist_mult
         self.distance_dim = distance_dim
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
+        self.clip_value_low = clip_value_low
         
     def build(self, input_shape):
         #(n_batch, n_points, n_features)
@@ -390,7 +391,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
         dm = tf.exp(-self.distance_dim*dm)
-        dm = tf.clip_by_value(dm, 1e-3, 1)
+        dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
         return bins_split, x_features_binned, dm
 
@@ -804,12 +805,13 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.batch_size = kwargs.pop("batch_size")
         
         self.do_layernorm = kwargs.pop("layernorm")
+        self.clip_value_low = kwargs.pop("clip_value_low")
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
-        self.dist = ExponentialLSHDistanceDense(distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
+        self.dist = ExponentialLSHDistanceDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
         self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
@@ -837,7 +839,8 @@ class PFNetDense(tf.keras.Model):
             distance_dim=128,
             batch_size=1,
             hidden_dim=256,
-            layernorm=False
+            layernorm=False,
+            clip_value_low=0.0
         ):
         super(PFNetDense, self).__init__()
 
@@ -857,7 +860,8 @@ class PFNetDense(tf.keras.Model):
             "dist_mult": dist_mult,
             "distance_dim": distance_dim,
             "batch_size": batch_size,
-            "layernorm": layernorm
+            "layernorm": layernorm,
+            "clip_value_low": clip_value_low
         }
         self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_id2 = CombinedGraphLayer(**kwargs_cg)

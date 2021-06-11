@@ -312,7 +312,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         pdgid = ypred_id[ibatch][msk]
 
         plt.figure(figsize=(5, 5))
-        plt.scatter(eta, phi, marker=".", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.8)
+        plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.8, linewidths=0)
 
         #Plot the target particles
         y = self.dataset_transform(self.X, self.y, None)[1]
@@ -324,7 +324,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         phi = np.arctan2(sphi, cphi)
         energy = y["energy"][ibatch][msk]
         pdgid = y_id[ibatch][msk]
-        plt.scatter(eta, phi, marker=".", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3)
+        plt.scatter(eta, phi, marker="s", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3, linewidths=0)
 
         plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
         plt.xlim(-8,8)
@@ -452,7 +452,7 @@ def make_gnn(config, dtype):
 
 def make_gnn_dense(config, dtype):
 
-    parameters = ["layernorm", "hidden_dim", "bin_size"]
+    parameters = ["layernorm", "hidden_dim", "bin_size", "clip_value_low"]
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNetDense(
