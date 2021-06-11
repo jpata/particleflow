@@ -802,8 +802,12 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.distance_dim = kwargs.pop("distance_dim")
         self.output_dim = kwargs.pop("output_dim")
         self.batch_size = kwargs.pop("batch_size")
+        
+        self.do_layernorm = kwargs.pop("layernorm")
 
-        self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        if self.do_layernorm:
+            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
+
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
         self.dist = ExponentialLSHDistanceDense(distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
         self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
@@ -811,7 +815,9 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
     def call(self, x):
 
-        x = self.layernorm(x)
+        if self.do_layernorm:
+            x = self.layernorm(x)
+
         x_dist = self.ffn_dist(x)
         bins_split, x_binned, dm = self.dist(x_dist, x)
         x_binned_enc = self.conv((x_binned, dm))
@@ -829,7 +835,9 @@ class PFNetDense(tf.keras.Model):
             bin_size=320,
             dist_mult=0.1,
             distance_dim=128,
-            batch_size=1
+            batch_size=1,
+            hidden_dim=256,
+            layernorm=False
         ):
         super(PFNetDense, self).__init__()
 
@@ -838,7 +846,7 @@ class PFNetDense(tf.keras.Model):
 
         self.enc = InputEncoding(num_input_classes)
 
-        dff = 128
+        dff = hidden_dim
         self.ffn_enc_id = point_wise_feed_forward_network(dff, dff)
         self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff)
 
@@ -848,7 +856,8 @@ class PFNetDense(tf.keras.Model):
             "bin_size": bin_size,
             "dist_mult": dist_mult,
             "distance_dim": distance_dim,
-            "batch_size": batch_size
+            "batch_size": batch_size,
+            "layernorm": layernorm
         }
         self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_id2 = CombinedGraphLayer(**kwargs_cg)

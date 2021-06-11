@@ -451,7 +451,7 @@ def make_gnn(config, dtype):
 
 def make_gnn_dense(config, dtype):
 
-    parameters = []
+    parameters = ["layernorm", "hidden_dim"]
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNetDense(
