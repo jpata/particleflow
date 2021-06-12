@@ -53,7 +53,7 @@ setup:
 parameters:
   model: gnn_dense
   activation: elu
-  layernorm: no
+  layernorm: yes
   hidden_dim: 256
   bin_size: 1280
   clip_value_low: 0.0
