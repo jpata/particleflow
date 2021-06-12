@@ -460,7 +460,6 @@ def make_gnn_dense(config, dtype):
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
         num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        batch_size=config["setup"]["batch_size"],
         **kwargs
     )
 

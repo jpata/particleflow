@@ -65,7 +65,7 @@ def sparse_dense_matmult_batch(sp_a, b):
 #FIXME: currently this needs to know the batch_size in advance
 #need to understand better how to do scatter_nd across the batch
 @tf.function
-def reverse_lsh(bins_split, points_binned_enc, batch_size):
+def reverse_lsh(bins_split, points_binned_enc):
     # batch_dim = points_binned_enc.shape[0]
     # n_points = points_binned_enc.shape[1]*points_binned_enc.shape[2]
     # n_features = points_binned_enc.shape[-1]
@@ -390,7 +390,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         x_features_binned = tf.gather(x_features, bins_split, batch_dims=1)
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
-        dm = tf.exp(-self.distance_dim*dm)
+        dm = tf.exp(-self.dist_mult*dm)
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
         return bins_split, x_features_binned, dm
@@ -802,7 +802,6 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         self.distance_dim = kwargs.pop("distance_dim")
         self.output_dim = kwargs.pop("output_dim")
-        self.batch_size = kwargs.pop("batch_size")
         
         self.do_layernorm = kwargs.pop("layernorm")
         self.clip_value_low = kwargs.pop("clip_value_low")
@@ -823,7 +822,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         x_dist = self.ffn_dist(x)
         bins_split, x_binned, dm = self.dist(x_dist, x)
         x_binned_enc = self.conv((x_binned, dm))
-        x_enc = reverse_lsh(bins_split, x_binned_enc, self.batch_size)
+        x_enc = reverse_lsh(bins_split, x_binned_enc)
 
         return x_enc
 
@@ -837,7 +836,6 @@ class PFNetDense(tf.keras.Model):
             bin_size=320,
             dist_mult=0.1,
             distance_dim=128,
-            batch_size=1,
             hidden_dim=256,
             layernorm=False,
             clip_value_low=0.0
@@ -859,21 +857,22 @@ class PFNetDense(tf.keras.Model):
             "bin_size": bin_size,
             "dist_mult": dist_mult,
             "distance_dim": distance_dim,
-            "batch_size": batch_size,
             "layernorm": layernorm,
             "clip_value_low": clip_value_low
         }
         self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_id2 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_id3 = CombinedGraphLayer(**kwargs_cg)
 
         self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_reg3 = CombinedGraphLayer(**kwargs_cg)
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3)
         self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3)
 
-    def call(self, inputs, training):
+    def call(self, inputs, training=False):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
@@ -881,24 +880,26 @@ class PFNetDense(tf.keras.Model):
         enc_id = self.ffn_enc_id(enc)
         points_id_enc1 = self.cg_id1(enc_id)
         points_id_enc2 = self.cg_id2(points_id_enc1)
+        points_id_enc3 = self.cg_id3(points_id_enc2)
 
         enc_reg = self.ffn_enc_reg(enc)
         points_reg_enc1 = self.cg_reg1(enc_reg)
         points_reg_enc2 = self.cg_reg2(points_reg_enc1)
+        points_reg_enc3 = self.cg_reg3(points_reg_enc2)
 
-        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2], axis=-1)
+        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2, points_id_enc3], axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2], axis=-1)
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2, points_reg_enc3], axis=-1)
        
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
         if self.multi_output:
-            return {
+            ret = {
                 "cls": out_id_softmax, "charge": out_charge,
                 "pt": pred_momentum[:, :, 0:1],
                 "eta": pred_momentum[:, :, 1:2],
@@ -906,6 +907,7 @@ class PFNetDense(tf.keras.Model):
                 "cos_phi": pred_momentum[:, :, 3:4],
                 "energy": pred_momentum[:, :, 4:5],
             }
+            return ret
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
