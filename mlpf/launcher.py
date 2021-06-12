@@ -11,6 +11,8 @@ def parse_args():
     parser.add_argument("--model-spec", type=str, default="parameters/delphes-gnn-skipconn.yaml", help="the model specification")
     parser.add_argument("--action", type=str, choices=["data", "train", "eval", "time"], help="Run training, validation or timing", default="train")
     parser.add_argument("--weights", type=str, help="weight file to load", default=None)
+    parser.add_argument("--ntrain", type=int, help="override the number of training events", default=None)
+    parser.add_argument("--ntest", type=int, help="override the number of testing events", default=None)
     args = parser.parse_args()
     return args
 
