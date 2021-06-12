@@ -610,6 +610,12 @@ def main(args, yaml_path, config):
 
     n_train = config['setup']['num_events_train']
     n_test = config['setup']['num_events_test']
+
+    if args.ntrain:
+        n_train = args.ntrain
+    if args.ntest:
+        n_test = args.ntest
+
     n_epochs = config['setup']['num_epochs']
     weight_func = weight_functions[config['setup']['sample_weights']]
     assert(n_train + n_test <= num_events)
