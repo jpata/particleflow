@@ -17,8 +17,8 @@ def split_indices_to_bins(cmul, nbins, bin_size):
     bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
     return bins_split
 
-def split_indices_to_bins_batch(cmul, nbins, bin_size):
-    bin_idx = tf.argmax(cmul, axis=-1)
+def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
+    bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins-1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
     return bins_split
 
@@ -160,8 +160,7 @@ class GHConvDense(tf.keras.layers.Layer):
  
     #@tf.function
     def call(self, inputs):
-        x, adj = inputs
-
+        x, adj, msk = inputs
         #compute the normalization of the adjacency matrix
         in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
         #in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
@@ -169,14 +168,14 @@ class GHConvDense(tf.keras.layers.Layer):
         #add epsilon to prevent numerical issues from 1/sqrt(x)
         norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
 
-        f_hom = tf.linalg.matmul(x, self.theta)
+        f_hom = tf.linalg.matmul(x*msk, self.theta)
         f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
 
-        f_het = tf.linalg.matmul(x, self.W_h)
+        f_het = tf.linalg.matmul(x*msk, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
 
         out = gate*f_hom + (1-gate)*f_het
-        return self.activation(out)
+        return self.activation(out)*msk
 
 class SGConv(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -373,7 +372,8 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
             trainable=False, name="lsh_projections"
         )
         
-    def call(self, x_dist, x_features):
+    def call(self, x_dist, x_features, msk):
+        msk_f = tf.expand_dims(tf.cast(msk, tf.float32), -1)
         n_batches = tf.shape(x_dist)[0]
         n_points = tf.shape(x_dist)[1]
         n_features = tf.shape(x_dist)[2]
@@ -385,15 +385,17 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         #put each input item into a bin defined by the softmax output across the LSH embedding
         mul = tf.linalg.matmul(x_dist, self.codebook_random_rotations[:, :n_bins//2])
         cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size)
+        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
         x_dist_binned = tf.gather(x_dist, bins_split, batch_dims=1)
         x_features_binned = tf.gather(x_features, bins_split, batch_dims=1)
+        msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
         dm = tf.exp(-self.dist_mult*dm)
+        dm *= msk_f_binned
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
-        return bins_split, x_features_binned, dm
+        return bins_split, x_features_binned, dm, msk_f_binned
 
 class EncoderDecoderGNN(tf.keras.layers.Layer):
     def __init__(self, encoders, decoders, dropout, activation, conv, **kwargs):
@@ -814,14 +816,14 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
-    def call(self, x):
+    def call(self, x, msk):
 
         if self.do_layernorm:
             x = self.layernorm(x)
 
         x_dist = self.ffn_dist(x)
-        bins_split, x_binned, dm = self.dist(x_dist, x)
-        x_binned_enc = self.conv((x_binned, dm))
+        bins_split, x_binned, dm, msk_binned = self.dist(x_dist, x, msk)
+        x_binned_enc = self.conv((x_binned, dm, msk_binned))
         x_enc = reverse_lsh(bins_split, x_binned_enc)
 
         return x_enc
@@ -876,18 +878,19 @@ class PFNetDense(tf.keras.Model):
 
     def call(self, inputs, training=False):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        msk = X[:, :, 0] != 0
+        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
         enc = self.enc(X)
         enc_id = self.activation(self.ffn_enc_id(enc))
-        points_id_enc1 = self.cg_id1(enc_id)
-        points_id_enc2 = self.cg_id2(points_id_enc1)
-        points_id_enc3 = self.cg_id3(points_id_enc2)
+        points_id_enc1 = self.cg_id1(enc_id, msk)
+        points_id_enc2 = self.cg_id2(points_id_enc1, msk)
+        points_id_enc3 = self.cg_id3(points_id_enc2, msk)
 
         enc_reg = self.activation(self.ffn_enc_reg(enc))
-        points_reg_enc1 = self.cg_reg1(enc_reg)
-        points_reg_enc2 = self.cg_reg2(points_reg_enc1)
-        points_reg_enc3 = self.cg_reg3(points_reg_enc2)
+        points_reg_enc1 = self.cg_reg1(enc_reg, msk)
+        points_reg_enc2 = self.cg_reg2(points_reg_enc1, msk)
+        points_reg_enc3 = self.cg_reg3(points_reg_enc2, msk)
 
         dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2, points_id_enc3], axis=-1)
 
