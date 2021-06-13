@@ -862,11 +862,11 @@ class PFNetDense(tf.keras.Model):
         }
         self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_id2 = CombinedGraphLayer(**kwargs_cg)
-        #self.cg_id3 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_id3 = CombinedGraphLayer(**kwargs_cg)
 
         self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
         self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
-        #self.cg_reg3 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_reg3 = CombinedGraphLayer(**kwargs_cg)
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3)
@@ -880,19 +880,19 @@ class PFNetDense(tf.keras.Model):
         enc_id = self.ffn_enc_id(enc)
         points_id_enc1 = self.cg_id1(enc_id)
         points_id_enc2 = self.cg_id2(points_id_enc1)
-        #points_id_enc3 = self.cg_id3(points_id_enc2)
+        points_id_enc3 = self.cg_id3(points_id_enc2)
 
         enc_reg = self.ffn_enc_reg(enc)
         points_reg_enc1 = self.cg_reg1(enc_reg)
         points_reg_enc2 = self.cg_reg2(points_reg_enc1)
-        #points_reg_enc3 = self.cg_reg3(points_reg_enc2)
+        points_reg_enc3 = self.cg_reg3(points_reg_enc2)
 
-        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2], axis=-1)
+        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2, points_id_enc3], axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2], axis=-1)
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2, points_reg_enc3], axis=-1)
        
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
