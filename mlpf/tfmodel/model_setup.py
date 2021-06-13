@@ -22,106 +22,13 @@ import json
 import random
 import platform
 
-class PFNetLoss:
-    def __init__(self, num_input_classes, num_output_classes, classification_loss_coef=1.0, charge_loss_coef=1e-3, momentum_loss_coef=1.0, momentum_loss_coefs=[1.0, 1.0, 1.0]):
-        self.num_input_classes = num_input_classes
-        self.num_output_classes = num_output_classes
-        self.momentum_loss_coef = momentum_loss_coef
-        self.momentum_loss_coefs = tf.constant(momentum_loss_coefs)
-        self.charge_loss_coef = charge_loss_coef
-        self.classification_loss_coef = classification_loss_coef
-        self.gamma = 10.0
-
-    def mse_unreduced(self, true, pred):
-        return tf.math.pow(true-pred,2)
-
-    def separate_prediction(self, y_pred):
-        N = self.num_output_classes
-        pred_id_logits = y_pred[:, :, :N]
-        pred_charge = y_pred[:, :, N:N+1]
-        pred_momentum = y_pred[:, :, N+1:]
-        return pred_id_logits, pred_charge, pred_momentum
-
-    def separate_truth(self, y_true):
-        true_id = tf.cast(y_true[:, :, :1], tf.int32)
-        true_charge = y_true[:, :, 1:2]
-        true_momentum = y_true[:, :, 2:]
-        return true_id, true_charge, true_momentum
-
-    def loss_components(self, y_true, y_pred):
-        pred_id_logits, pred_charge, pred_momentum = self.separate_prediction(y_pred)
-        pred_id = tf.cast(tf.argmax(pred_id_logits, axis=-1), tf.int32)
-        true_id, true_charge, true_momentum = self.separate_truth(y_true)
-        true_id_onehot = tf.one_hot(tf.cast(true_id, tf.int32), depth=self.num_output_classes)
-
-        #l1 = tf.nn.softmax_cross_entropy_with_logits(true_id_onehot, pred_id_logits)*self.classification_loss_coef
-        l1 = tfa.losses.sigmoid_focal_crossentropy(tf.squeeze(true_id_onehot, [2]), pred_id_logits, from_logits=False, gamma=self.gamma)*self.classification_loss_coef
-        l2 = self.mse_unreduced(true_momentum, pred_momentum) * self.momentum_loss_coef * self.momentum_loss_coefs
-        l2s = tf.reduce_sum(l2, axis=-1)
-
-        l3 = self.charge_loss_coef*self.mse_unreduced(true_charge, pred_charge)[:, :, 0]
-
-        return l1, l2s, l3, l2
-
-    def my_loss_full(self, y_true, y_pred):
-        l1, l2, l3, _ = self.loss_components(y_true, y_pred)
-        loss = l1 + l2 + l3
-
-        return loss
-
-    def my_loss_cls(self, y_true, y_pred):
-        l1, l2, l3, _ = self.loss_components(y_true, y_pred)
-        loss = l1
-
-        return loss
-
-    def my_loss_reg(self, y_true, y_pred):
-        l1, l2, l3, _ = self.loss_components(y_true, y_pred)
-        loss = l3
-
-        return loss
-
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
     plt.imshow(cm, cmap="Blues")
-    plt.title("Reconstructed PID (normed to gen)")
-    plt.xlabel("MLPF PID")
-    plt.ylabel("Gen PID")
+    plt.xlabel("Predicted PID")
+    plt.ylabel("Target PID")
     plt.colorbar()
     plt.tight_layout()
-    return fig
-
-def plot_regression(val_x, val_y, var_name, rng):
-    fig = plt.figure(figsize=(5,5))
-    plt.hist2d(
-        val_x,
-        val_y,
-        bins=(rng, rng),
-        cmap="Blues",
-        #norm=matplotlib.colors.LogNorm()
-    );
-    plt.xlabel("Gen {}".format(var_name))
-    plt.ylabel("MLPF {}".format(var_name))
-    return fig
-
-def plot_multiplicity(num_pred, num_true):
-    fig = plt.figure(figsize=(5,5))
-    xs = np.arange(len(num_pred))
-    plt.bar(xs, num_true, alpha=0.8)
-    plt.bar(xs, num_pred, alpha=0.8)
-    plt.xticks(xs)
-    return fig
-
-def plot_num_particle(num_pred, num_true, pid):
-    fig = plt.figure(figsize=(5,5))
-    plt.scatter(num_true, num_pred)
-    plt.title("particle id {}".format(pid))
-    plt.xlabel("num true")
-    plt.ylabel("num pred")
-    a = min(np.min(num_true), np.min(num_pred))
-    b = max(np.max(num_true), np.max(num_pred))
-    plt.xlim(a, b)
-    plt.ylim(a, b)
     return fig
 
 def plot_to_image(figure):
@@ -142,148 +49,14 @@ def plot_to_image(figure):
     
     return image
 
-def plot_distributions(val_x, val_y, var_name, rng):
-    fig = plt.figure(figsize=(5,5))
-    plt.hist(val_x, bins=rng, density=True, histtype="step", lw=2, label="gen");
-    plt.hist(val_y, bins=rng, density=True, histtype="step", lw=2, label="MLPF");
-    plt.xlabel(var_name)
-    plt.legend(loc="best", frameon=False)
-    plt.ylim(0,1.5)
-    return fig
-
-def plot_particles(y_pred, y_true, pid=1):
-    #Ground truth vs model prediction particles
-    fig = plt.figure(figsize=(10,10))
-
-    ev = y_true[0, :]
-    msk = ev[:, 0] == pid
-    plt.scatter(ev[msk, 3], np.arctan2(ev[msk, 4], ev[msk, 5]), s=2*ev[msk, 2], marker="o", alpha=0.5)
-
-    ev = y_pred[0, :]
-    msk = ev[:, 0] == pid
-    plt.scatter(ev[msk, 3], np.arctan2(ev[msk, 4], ev[msk, 5]), s=2*ev[msk, 2], marker="s", alpha=0.5)
-
-    plt.xlabel("eta")
-    plt.ylabel("phi")
-    plt.xlim(-5,5)
-    plt.ylim(-4,4)
-
-    return fig
-
-class ConfusionMatrixValidation:
-    def __init__(self, X_test, y_test, loss_cls, outdir, model, num_input_classes, num_output_classes, file_writer_cm):
-        self.X_test = X_test
-        self.y_test = y_test
-        self.loss_cls = loss_cls
-        self.outdir = outdir
-        self.model = model
-        self.num_input_classes = num_input_classes
-        self.num_output_classes = num_output_classes
-        self.file_writer_cm = file_writer_cm
-
-    def log_confusion_matrix(self, epoch, logs):
-      
-        outdir = self.outdir
-        model = self.model
-        X_test = self.X_test
-        y_test = self.y_test
-
-        test_pred = model.predict(X_test, batch_size=5)
-        msk = X_test[:, :, 0] != 0
-
-        if isinstance(test_pred, tuple):
-            test_pred = tf.concat(list(test_pred), axis=-1)
-
-        l1, l2, l3, l2_r = self.loss_cls.loss_components(y_test, test_pred)
-
-        logs["epoch"] = int(epoch)
-        logs["l1"] = float(tf.reduce_mean(l1).numpy())
-        logs["l2"] = float(tf.reduce_mean(l2).numpy())
-        logs["l2_split"] = [float(x) for x in tf.reduce_mean(l2_r, axis=[0,1])]
-        logs["l3"] = float(tf.reduce_mean(l3).numpy())
-
-        with open("{}/logs_{}.json".format(outdir, epoch), "w") as fi:
-            json.dump(logs, fi)
-
-        test_pred_id = np.argmax(test_pred[:, :, :self.num_output_classes], axis=-1)
-        
-        counts_pred = np.unique(test_pred_id, return_counts=True)
-
-        test_pred = np.concatenate([np.expand_dims(test_pred_id, axis=-1), test_pred[:, :, self.num_output_classes:]], axis=-1)
-
-        cm = sklearn.metrics.confusion_matrix(
-            y_test[msk][:, 0].astype(np.int64).flatten(),
-            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)))
-        cm_normed = sklearn.metrics.confusion_matrix(
-            y_test[msk][:, 0].astype(np.int64).flatten(),
-            test_pred[msk][:, 0].flatten(), labels=list(range(self.num_output_classes)), normalize="true")
-
-        num_pred = np.sum(cm, axis=0)
-        num_true = np.sum(cm, axis=1)
-
-        figure = plot_confusion_matrix(cm)
-        cm_image = plot_to_image(figure)
-
-        figure = plot_confusion_matrix(cm_normed)
-        cm_image_normed = plot_to_image(figure)
-
-        msk = (test_pred[:, :, 0]!=0) & (y_test[:, :, 0]!=0)
-
-        ch_true = y_test[msk, 1].flatten()
-        ch_pred = test_pred[msk, 1].flatten()
-
-        figure = plot_regression(ch_true, ch_pred, "charge", np.linspace(-2, 2, 100))
-        ch_image = plot_to_image(figure)
-
-        figure = plot_multiplicity(num_pred, num_true)
-        n_image = plot_to_image(figure)
-
-        images_mult = []
-        for icls in range(self.num_output_classes):
-            n_pred = np.sum(test_pred[:, :, 0]==icls, axis=1)
-            n_true = np.sum(y_test[:, :, 0]==icls, axis=1)
-            figure = plot_num_particle(n_pred, n_true, icls)
-            images_mult.append(plot_to_image(figure))
-
-        images = {}
-        for ireg in range(l2_r.shape[-1]):
-            reg_true = y_test[msk, 2+ireg].flatten()
-            reg_pred = test_pred[msk, 2+ireg].flatten()
-
-            figure = plot_regression(reg_true, reg_pred, "reg {}".format(ireg), np.linspace(np.mean(reg_true) - 3*np.std(reg_true), np.mean(reg_true) + 3*np.std(reg_true), 100))
-            images[ireg] = plot_to_image(figure)
-
-        with self.file_writer_cm.as_default():
-            tf.summary.image("Confusion Matrix", cm_image, step=epoch)
-            tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
-            tf.summary.image("Confusion Matrix Normed", cm_image_normed, step=epoch)
-            tf.summary.image("charge regression", ch_image, step=epoch)
-            tf.summary.image("particle multiplicity", n_image, step=epoch)
-
-            for icls, img in enumerate(images_mult):
-                tf.summary.image("npart {}".format(icls), img, step=epoch)
-
-            for ireg in images.keys():
-                tf.summary.image("regression {}".format(ireg), images[ireg], step=epoch)
-
-            tf.summary.scalar("loss_cls", tf.reduce_mean(l1), step=epoch)
-            for i in range(l2_r.shape[-1]):
-                tf.summary.scalar("loss_reg_{}".format(i), tf.reduce_mean(l2_r[:, :, i]), step=epoch)
-
-            for i in range(cm_normed.shape[0]):
-                tf.summary.scalar("acc_cls_{}".format(i), cm_normed[i, i], step=epoch)
-                
-            tf.summary.scalar("loss_chg", tf.reduce_mean(l3), step=epoch)
-
-
-
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, X, y, dataset_transform):
+    def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
         super(CustomCallback, self).__init__()
         self.X = X
         self.y = y
         self.dataset_transform = dataset_transform
         self.outpath = outpath
+        self.num_output_classes = num_output_classes
 
         #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.color_map = {
@@ -301,6 +74,38 @@ class CustomCallback(tf.keras.callbacks.Callback):
         ypred_id = np.argmax(ypred["cls"], axis=-1)
 
         ibatch = 0
+       
+        msk = self.X[:, :, 0] != 0
+        cm = sklearn.metrics.confusion_matrix(
+            self.y[msk][:, 0].astype(np.int64).flatten(),
+            ypred_id[msk].flatten(), labels=list(range(self.num_output_classes))
+        )
+        figure = plot_confusion_matrix(cm)
+        plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.clf()
+
+        cm = sklearn.metrics.confusion_matrix(
+            self.y[msk][:, 0].astype(np.int64).flatten(),
+            ypred_id[msk].flatten(), labels=list(range(self.num_output_classes)), normalize="true"
+        )
+        figure = plot_confusion_matrix(cm)
+        plt.savefig("{}/cm_normed_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.clf()
+
+        # for icls in range(self.num_output_classes):
+        #     fig = plt.figure(figsize=(4,4))
+        #     msk = self.y[:, :, 0] == icls
+        #     msk = msk.flatten()
+        #     b = np.linspace(0,1,21)
+        #     ids = ypred["cls"][:, :, icls].numpy().flatten()
+        #     plt.hist(ids[msk], bins=b, density=True, histtype="step", lw=2)
+        #     plt.hist(ids[~msk], bins=b, density=True, histtype="step", lw=2)
+        #     plt.savefig("{}/cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
+        # for icls in range(self.num_output_classes):
+        #     n_pred = np.sum(self.y[:, :, 0]==icls, axis=1)
+        #     n_true = np.sum(ypred_id==icls, axis=1)
+        #     figure = plot_num_particle(n_pred, n_true, icls)
+        #     plt.savefig("{}/num_cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
 
         #Plot the predicted particles
         msk = ypred_id[ibatch] != 0
@@ -325,12 +130,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
         energy = y["energy"][ibatch][msk]
         pdgid = y_id[ibatch][msk]
         plt.scatter(eta, phi, marker="s", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3, linewidths=0)
-
-        plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform):
+        plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.clf()
+
+def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
         log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
@@ -352,7 +158,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform):
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cb = CustomCallback(outdir, X_val, y_val, dataset_transform)
+    cb = CustomCallback(outdir, X_val, y_val, dataset_transform, num_output_classes)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -491,26 +297,29 @@ def make_dense(config, dtype):
 
 def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     import scipy
-    y_pred = model.predict(X, batch_size=global_batch_size)
-    y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
-    
-    #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-    # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-    # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
+    for ibatch in range(X.shape[0]//global_batch_size):
+        nb1 = ibatch*global_batch_size
+        nb2 = (ibatch+1)*global_batch_size
 
-    msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
+        y_pred = model.predict(X[nb1:nb2], batch_size=global_batch_size)
+        y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
+        
+        #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
+        # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
+        # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
 
-    #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-    # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
-    # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-    y_pred_raw_ids = y_pred_raw_ids*msk
+        msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
 
-    y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
+        #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
+        # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
+        # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
+        y_pred_raw_ids = y_pred_raw_ids*msk
 
-    y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
-    np_outfile = "{}/pred.npz".format(outdir)
-    print("saving output to {}".format(np_outfile))
-    np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
+        y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
+
+        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        np_outfile = "{}/pred_{}.npz".format(outdir, ibatch)
+        np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
 
 def freeze_model(model, config, outdir):
 
@@ -751,7 +560,7 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    model, outdir, X_val, ycand_val, dataset_transform
+                    model, outdir, X_val, ycand_val, dataset_transform, config["dataset"]["num_output_classes"]
                 )
                 callbacks.append(LearningRateLoggingCallback())
 

@@ -754,7 +754,7 @@ class Transformer(tf.keras.Model):
         enc_output_reg = self.layernorm3(enc_output_reg)
         dec_output_reg = self.decoder_reg(enc_reg, enc_output_reg, training)
 
-        out_id_logits = self.ffn_id(dec_output_id)
+        out_id_logits = self.ffn_id(dec_output_id)*msk_input
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
         if self.skip_connection:
@@ -838,18 +838,20 @@ class PFNetDense(tf.keras.Model):
             distance_dim=128,
             hidden_dim=256,
             layernorm=False,
-            clip_value_low=0.0
+            clip_value_low=0.0,
+            activation=tf.keras.activations.elu
         ):
         super(PFNetDense, self).__init__()
 
         self.multi_output = multi_output
         self.num_momentum_outputs = num_momentum_outputs
+        self.activation = activation
 
         self.enc = InputEncoding(num_input_classes)
 
         dff = hidden_dim
-        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff)
-        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff)
+        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation)
+        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation)
 
         kwargs_cg = {
             "output_dim": dff,
@@ -868,21 +870,21 @@ class PFNetDense(tf.keras.Model):
         self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
         self.cg_reg3 = CombinedGraphLayer(**kwargs_cg)
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3)
-        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
 
     def call(self, inputs, training=False):
         X = inputs
         msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
 
         enc = self.enc(X)
-        enc_id = self.ffn_enc_id(enc)
+        enc_id = self.activation(self.ffn_enc_id(enc))
         points_id_enc1 = self.cg_id1(enc_id)
         points_id_enc2 = self.cg_id2(points_id_enc1)
         points_id_enc3 = self.cg_id3(points_id_enc2)
 
-        enc_reg = self.ffn_enc_reg(enc)
+        enc_reg = self.activation(self.ffn_enc_reg(enc))
         points_reg_enc1 = self.cg_reg1(enc_reg)
         points_reg_enc2 = self.cg_reg2(points_reg_enc1)
         points_reg_enc3 = self.cg_reg3(points_reg_enc2)
