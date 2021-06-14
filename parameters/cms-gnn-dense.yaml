@@ -47,7 +47,7 @@ setup:
   num_events_test: 10000
   num_epochs: 500
   dtype: float32
-  sample_weights: inverse_sqrt
+  sample_weights: none
   trainable: all
 
 parameters:
