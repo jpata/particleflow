@@ -41,7 +41,7 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
@@ -55,8 +55,10 @@ parameters:
   activation: elu
   layernorm: no
   hidden_dim: 256
-  bin_size: 1280
+  bin_size: 640
   clip_value_low: 0.0
+  num_conv: 2
+  num_gsl: 2
 
 timing:
   num_ev: 100
