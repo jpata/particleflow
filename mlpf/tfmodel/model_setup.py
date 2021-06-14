@@ -1,4 +1,5 @@
-from model import PFNet, Transformer, DummyNet, PFNetDense
+from .model import PFNet, Transformer, DummyNet, PFNetDense
+
 import tensorflow as tf
 import tensorflow_probability
 import tensorflow_addons as tfa
@@ -82,7 +83,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         )
         figure = plot_confusion_matrix(cm)
         plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        plt.clf()
+        plt.close("all")
 
         cm = sklearn.metrics.confusion_matrix(
             self.y[msk][:, 0].astype(np.int64).flatten(),
@@ -90,7 +91,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         )
         figure = plot_confusion_matrix(cm)
         plt.savefig("{}/cm_normed_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        plt.clf()
+        plt.close("all")
 
         # for icls in range(self.num_output_classes):
         #     fig = plt.figure(figsize=(4,4))
@@ -129,12 +130,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
         phi = np.arctan2(sphi, cphi)
         energy = y["energy"][ibatch][msk]
         pdgid = y_id[ibatch][msk]
+
         plt.scatter(eta, phi, marker="s", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
         plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        plt.clf()
+        plt.close("all")
 
 def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
@@ -319,7 +321,13 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
 
         y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
         np_outfile = "{}/pred_{}.npz".format(outdir, ibatch)
-        np.savez(np_outfile, X=X, ygen=ygen, ycand=ycand, ypred=y_pred_id, ypred_raw=y_pred_raw_ids)
+        np.savez(
+            np_outfile,
+            X=X[nb1:nb2],
+            ygen=ygen[nb1:nb2],
+            ycand=ycand[nb1:nb2],
+            ypred=y_pred_id, ypred_raw=y_pred_raw_ids
+        )
 
 def freeze_model(model, config, outdir):
 
@@ -485,7 +493,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist:
+    for fi in dataset_def.val_filelist[:10]:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 

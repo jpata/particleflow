@@ -1,4 +1,6 @@
 import yaml
+import tfmodel
+import tfmodel.model_setup
 
 def load_config(yaml_path):
     with open(yaml_path) as f:
@@ -23,8 +25,6 @@ if __name__ == "__main__":
     config = load_config(yaml_path)
 
     if config["backend"] == "tensorflow":
-        import tfmodel
-        from tfmodel.model_setup import main
-        main(args, yaml_path, config)
+        tfmodel.model_setup.main(args, yaml_path, config)
     elif config["backend"] == "pytorch":
         pass
