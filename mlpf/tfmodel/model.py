@@ -5,7 +5,7 @@
 
 import tensorflow as tf
 
-from fast_attention import Attention, SelfAttention
+from .fast_attention import Attention, SelfAttention
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
@@ -807,13 +807,14 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         
         self.do_layernorm = kwargs.pop("layernorm")
         self.clip_value_low = kwargs.pop("clip_value_low")
+        self.num_conv = kwargs.pop("num_conv")
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
         self.dist = ExponentialLSHDistanceDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
-        self.conv = GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim)
+        self.convs = [GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim) for iconv in range(self.num_conv)]
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
     def call(self, x, msk):
@@ -823,8 +824,10 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         x_dist = self.ffn_dist(x)
         bins_split, x_binned, dm, msk_binned = self.dist(x_dist, x, msk)
-        x_binned_enc = self.conv((x_binned, dm, msk_binned))
-        x_enc = reverse_lsh(bins_split, x_binned_enc)
+        for conv in self.convs:
+            x_binned = conv((x_binned, dm, msk_binned))
+
+        x_enc = reverse_lsh(bins_split, x_binned)
 
         return x_enc
 
@@ -841,7 +844,9 @@ class PFNetDense(tf.keras.Model):
             hidden_dim=256,
             layernorm=False,
             clip_value_low=0.0,
-            activation=tf.keras.activations.elu
+            activation=tf.keras.activations.elu,
+            num_convs=2,
+            num_gsl=1
         ):
         super(PFNetDense, self).__init__()
 
@@ -862,15 +867,11 @@ class PFNetDense(tf.keras.Model):
             "dist_mult": dist_mult,
             "distance_dim": distance_dim,
             "layernorm": layernorm,
-            "clip_value_low": clip_value_low
+            "clip_value_low": clip_value_low,
+            "num_conv": num_convs
         }
-        self.cg_id1 = CombinedGraphLayer(**kwargs_cg)
-        self.cg_id2 = CombinedGraphLayer(**kwargs_cg)
-        self.cg_id3 = CombinedGraphLayer(**kwargs_cg)
-
-        self.cg_reg1 = CombinedGraphLayer(**kwargs_cg)
-        self.cg_reg2 = CombinedGraphLayer(**kwargs_cg)
-        self.cg_reg3 = CombinedGraphLayer(**kwargs_cg)
+        self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
+        self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
@@ -883,21 +884,23 @@ class PFNetDense(tf.keras.Model):
 
         enc = self.enc(X)
         enc_id = self.activation(self.ffn_enc_id(enc))
-        points_id_enc1 = self.cg_id1(enc_id, msk)
-        points_id_enc2 = self.cg_id2(points_id_enc1, msk)
-        points_id_enc3 = self.cg_id3(points_id_enc2, msk)
+        encs_id = []
+        for cg in self.cg_id:
+            enc_id = cg(enc_id, msk)
+            encs_id.append(enc_id)
 
         enc_reg = self.activation(self.ffn_enc_reg(enc))
-        points_reg_enc1 = self.cg_reg1(enc_reg, msk)
-        points_reg_enc2 = self.cg_reg2(points_reg_enc1, msk)
-        points_reg_enc3 = self.cg_reg3(points_reg_enc2, msk)
+        encs_reg = []
+        for cg in self.cg_reg:
+            enc_reg = cg(enc_reg, msk)
+            encs_reg.append(enc_reg)
 
-        dec_output_id = tf.concat([enc, points_reg_enc1, points_id_enc2, points_id_enc3], axis=-1)
+        dec_output_id = tf.concat([enc] + encs_id, axis=-1)
 
-        out_id_logits = self.ffn_id(dec_output_id)
+        out_id_logits = self.ffn_id(dec_output_id)*msk_input
         out_charge = self.ffn_charge(dec_output_id)*msk_input
 
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype), points_reg_enc1, points_reg_enc2, points_reg_enc3], axis=-1)
+        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
        
         pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
