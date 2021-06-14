@@ -71,6 +71,10 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
     def on_epoch_end(self, epoch, logs=None):
+
+        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+            json.dump(logs, fi)
+
         ypred = self.model(self.X, training=False)
         ypred_id = np.argmax(ypred["cls"], axis=-1)
 
@@ -268,7 +272,7 @@ def make_gnn_dense(config, dtype):
         "num_conv",
         "num_gsl"
     ]
-    
+
     kwargs = {par: config['parameters'][par] for par in parameters}
 
     model = PFNetDense(
@@ -501,7 +505,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:10]:
+    for fi in dataset_def.val_filelist[:500]:
         print(fi)
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
@@ -583,7 +587,7 @@ def main(args, yaml_path, config):
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-                with open("{}/history_{}.json".format(outdir, initial_epoch), "w") as fi:
+                with open("{}/history.json".format(outdir), "w") as fi:
                     json.dump(fit_result.history, fi)
                 model.save(outdir + "/model_full", save_format="tf")
             

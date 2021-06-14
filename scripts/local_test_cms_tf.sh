@@ -35,7 +35,7 @@ rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
 python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
 
 #Run a simple training on a few events
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action train
+python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action train --ntrain 10 --ntest 10
 
 #Generate the pred.npz file of predictions
 python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action eval --weights ./experiments/test-*/weights-01-*.hdf5
