@@ -57,6 +57,8 @@ parameters:
   hidden_dim: 128
   bin_size: 320
   clip_value_low: 0.0
+  num_conv: 1
+  num_gsl: 1
 
 timing:
   num_ev: 100

@@ -845,7 +845,7 @@ class PFNetDense(tf.keras.Model):
             layernorm=False,
             clip_value_low=0.0,
             activation=tf.keras.activations.elu,
-            num_convs=2,
+            num_conv=2,
             num_gsl=1
         ):
         super(PFNetDense, self).__init__()
@@ -853,6 +853,9 @@ class PFNetDense(tf.keras.Model):
         self.multi_output = multi_output
         self.num_momentum_outputs = num_momentum_outputs
         self.activation = activation
+
+        self.num_conv = num_conv
+        self.num_gsl = num_gsl
 
         self.enc = InputEncoding(num_input_classes)
 
@@ -868,7 +871,7 @@ class PFNetDense(tf.keras.Model):
             "distance_dim": distance_dim,
             "layernorm": layernorm,
             "clip_value_low": clip_value_low,
-            "num_conv": num_convs
+            "num_conv": num_conv
         }
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
