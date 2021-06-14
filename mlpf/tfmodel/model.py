@@ -5,7 +5,7 @@
 
 import tensorflow as tf
 
-from tfmodel.fast_attention import Attention, SelfAttention
+from fast_attention import Attention, SelfAttention
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields

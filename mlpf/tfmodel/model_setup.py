@@ -1,4 +1,4 @@
-from tfmodel.model import PFNet, Transformer, DummyNet, PFNetDense
+from model import PFNet, Transformer, DummyNet, PFNetDense
 import tensorflow as tf
 import tensorflow_probability
 import tensorflow_addons as tfa
@@ -517,7 +517,6 @@ def main(args, yaml_path, config):
 
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
-
             model.compile(
                 loss={
                     "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
@@ -550,7 +549,6 @@ def main(args, yaml_path, config):
             print(X_val.shape)
             model(tf.cast(X_val[:5], model_dtype))
             model.summary()
-            #import pdb;pdb.set_trace()
 
             initial_epoch = 0
             if weights:
@@ -563,8 +561,6 @@ def main(args, yaml_path, config):
                     model, outdir, X_val, ycand_val, dataset_transform, config["dataset"]["num_output_classes"]
                 )
                 callbacks.append(LearningRateLoggingCallback())
-
-                #callbacks = []
 
                 fit_result = model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
