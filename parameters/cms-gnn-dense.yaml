@@ -46,10 +46,11 @@ setup:
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
-  num_val_files: -1
+  num_val_files: 100
   dtype: float32
   sample_weights: none
   trainable: all
+  normalize_degrees: yes
 
 parameters:
   model: gnn_dense
@@ -60,7 +61,8 @@ parameters:
   clip_value_low: 0.0
   num_conv: 2
   num_gsl: 2
-
+  normalize_degrees: yes
+  
 timing:
   num_ev: 100
   num_iter: 3

@@ -36,7 +36,7 @@ dataset:
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
 
 tensorflow:
-  eager: no
+  eager: yes
 
 setup:
   train: yes
@@ -60,6 +60,7 @@ parameters:
   clip_value_low: 0.0
   num_conv: 1
   num_gsl: 1
+  normalize_degrees: no
 
 timing:
   num_ev: 100

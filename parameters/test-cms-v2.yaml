@@ -38,6 +38,7 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
+  normalize_degrees: yes
 
 parameters:
   model: gnn_dense
