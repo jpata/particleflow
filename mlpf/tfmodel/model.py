@@ -382,7 +382,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         )
         
     def call(self, x_dist, x_features, msk):
-        msk_f = tf.expand_dims(tf.cast(msk, tf.float32), -1)
+        msk_f = tf.expand_dims(tf.cast(msk, x_dist.dtype), -1)
         n_batches = tf.shape(x_dist)[0]
         n_points = tf.shape(x_dist)[1]
         n_features = tf.shape(x_dist)[2]
@@ -746,7 +746,7 @@ class Transformer(tf.keras.Model):
 
     def call(self, inputs, training):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, inputs.dtype), -1)
 
         enc = self.enc(X)
         enc = self.layernorm1(enc)
@@ -821,7 +821,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
-        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim, dtype=tf.dtypes.float32)
+        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim)
         self.dist = ExponentialLSHDistanceDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
         self.convs = [GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim) for iconv in range(self.num_conv)]
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
