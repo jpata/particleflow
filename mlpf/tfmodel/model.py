@@ -32,6 +32,7 @@ def pairwise_gaussian_dist(A, B):
     nb = tf.expand_dims(nb, -2)
 
     # return pairwise euclidean difference matrix
+    # note that this matrix multiplication can go out of range for float16 in case the absolute values of A and B are large
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
 

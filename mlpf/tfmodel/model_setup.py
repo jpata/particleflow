@@ -271,7 +271,8 @@ def make_gnn_dense(config, dtype):
         "clip_value_low",
         "num_conv",
         "num_gsl",
-        "normalize_degrees"
+        "normalize_degrees",
+        "distance_dim"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}

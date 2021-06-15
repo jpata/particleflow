@@ -36,13 +36,13 @@ dataset:
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
 
 tensorflow:
-  eager: yes
+  eager: no
 
 setup:
   train: yes
   weights:
   lr: 1e-5
-  batch_size: 10
+  batch_size: 20
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
@@ -54,13 +54,14 @@ setup:
 parameters:
   model: gnn_dense
   activation: elu
-  layernorm: no
+  layernorm: yes
   hidden_dim: 128
   bin_size: 320
   clip_value_low: 0.0
   num_conv: 1
   num_gsl: 1
-  normalize_degrees: no
+  normalize_degrees: yes
+  distance_dim: 32
 
 timing:
   num_ev: 100

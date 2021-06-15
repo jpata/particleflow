@@ -38,7 +38,8 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
-  normalize_degrees: yes
+  normalize_degrees: no
+  distance_dim: 128
 
 parameters:
   model: gnn_dense
@@ -49,6 +50,7 @@ parameters:
   clip_value_low: 0.0
   num_conv: 1
   num_gsl: 1
+  distance_dim: 128
 
 timing:
   num_ev: 1
