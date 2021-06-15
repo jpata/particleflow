@@ -50,6 +50,7 @@ parameters:
   clip_value_low: 0.0
   num_conv: 1
   num_gsl: 1
+  normalize_degrees: yes
   distance_dim: 128
 
 timing:
