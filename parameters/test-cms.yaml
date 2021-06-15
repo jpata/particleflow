@@ -40,17 +40,17 @@ setup:
 
 parameters:
   model: gnn
-  bin_size: 128
-  num_convs_id: 2
-  num_convs_reg: 2
-  num_hidden_id_enc: 2
+  bin_size: 64
+  num_convs_id: 1
+  num_convs_reg: 1
+  num_hidden_id_enc: 1
   num_hidden_id_dec: 0
-  num_hidden_reg_enc: 2
+  num_hidden_reg_enc: 1
   num_hidden_reg_dec: 0
   num_neighbors: 16 
-  hidden_dim_id: 128
-  hidden_dim_reg: 128
-  distance_dim: 128
+  hidden_dim_id: 64
+  hidden_dim_reg: 64
+  distance_dim: 64
   dropout: 0.0
   dist_mult: 1.0
   activation: elu
