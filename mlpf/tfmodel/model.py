@@ -156,6 +156,7 @@ class GHConvDense(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
         self.activation = kwargs.pop("activation")
         self.output_dim = kwargs.pop("output_dim")
+        self.normalize_degrees = kwargs.pop("normalize_degrees", True)
 
         super(GHConvDense, self).__init__(*args, **kwargs)
 
@@ -171,19 +172,22 @@ class GHConvDense(tf.keras.layers.Layer):
     def call(self, inputs):
         x, adj, msk = inputs
         #compute the normalization of the adjacency matrix
-        in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
-        #in_degrees = tf.reshape(in_degrees, (tf.shape(x)[0], tf.shape(x)[1]))
+        if self.normalize_degrees:
+            in_degrees = tf.clip_by_value(tf.reduce_sum(tf.abs(adj), axis=-1), 0, 1000)
 
-        #add epsilon to prevent numerical issues from 1/sqrt(x)
-        norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)
+            #add epsilon to prevent numerical issues from 1/sqrt(x)
+            norm = tf.expand_dims(tf.pow(in_degrees + 1e-6, -0.5), -1)*msk
 
-        f_hom = tf.linalg.matmul(x*msk, self.theta)
-        f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+        f_hom = tf.linalg.matmul(x*msk, self.theta)*msk
+        if self.normalize_degrees:
+            f_hom = tf.linalg.matmul(adj, f_hom*norm)*norm
+        else:
+            f_hom = tf.linalg.matmul(adj, f_hom)
 
         f_het = tf.linalg.matmul(x*msk, self.W_h)
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
 
-        out = gate*f_hom + (1-gate)*f_het
+        out = gate*f_hom + (1.0-gate)*f_het
         return self.activation(out)*msk
 
 class SGConv(tf.keras.layers.Layer):
@@ -314,8 +318,6 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
         #run KNN in the dense distance matrix, accumulate each index pair into a sparse distance matrix
         top_k = tf.nn.top_k(dm, k=self.num_neighbors)
         top_k_vals = tf.reshape(top_k.values, (nbins*nelems, self.num_neighbors))
-
-        #import pdb;pdb.set_trace()
 
         indices_gathered = tf.map_fn(
             lambda i: tf.gather_nd(subindices, top_k.indices[:, :, i:i+1], batch_dims=1),
@@ -817,13 +819,19 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.do_layernorm = kwargs.pop("layernorm")
         self.clip_value_low = kwargs.pop("clip_value_low")
         self.num_conv = kwargs.pop("num_conv")
+        self.normalize_degrees = kwargs.pop("normalize_degrees")
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim)
         self.dist = ExponentialLSHDistanceDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
-        self.convs = [GHConvDense(activation=tf.keras.activations.elu, output_dim=self.output_dim) for iconv in range(self.num_conv)]
+        self.convs = [GHConvDense(
+            activation=tf.keras.activations.elu,
+            output_dim=self.output_dim,
+            normalize_degrees=self.normalize_degrees
+            ) for iconv in range(self.num_conv)
+        ]
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
     def call(self, x, msk):
@@ -855,7 +863,8 @@ class PFNetDense(tf.keras.Model):
             clip_value_low=0.0,
             activation=tf.keras.activations.elu,
             num_conv=2,
-            num_gsl=1
+            num_gsl=1,
+            normalize_degrees=False
         ):
         super(PFNetDense, self).__init__()
 
@@ -880,7 +889,8 @@ class PFNetDense(tf.keras.Model):
             "distance_dim": distance_dim,
             "layernorm": layernorm,
             "clip_value_low": clip_value_low,
-            "num_conv": num_conv
+            "num_conv": num_conv,
+            "normalize_degrees": normalize_degrees
         }
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]

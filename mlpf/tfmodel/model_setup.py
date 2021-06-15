@@ -270,7 +270,8 @@ def make_gnn_dense(config, dtype):
         "bin_size",
         "clip_value_low",
         "num_conv",
-        "num_gsl"
+        "num_gsl",
+        "normalize_degrees"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}
@@ -391,6 +392,7 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
             pass
 
 def main(args, yaml_path, config):
+    #tf.debugging.enable_check_numerics()
 
     #Switch off multi-output for the evaluation for backwards compatibility
     multi_output = True
