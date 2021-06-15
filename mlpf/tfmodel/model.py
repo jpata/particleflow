@@ -78,16 +78,25 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
     
-    def func(ibatch):
-        return tf.scatter_nd(
-            tf.expand_dims(bins_split_flat[ibatch], -1),
-            points_binned_enc_flat[ibatch],
-            shape=(n_points, n_features)
-        )
+    # def func(ibatch):
+    #     return tf.scatter_nd(
+    #         tf.expand_dims(bins_split_flat[ibatch], -1),
+    #         points_binned_enc_flat[ibatch],
+    #         shape=(n_points, n_features)
+    #     )
 
-    expanded = tf.map_fn(func, tf.range(batch_dim), fn_output_signature=tf.float32)
+    # expanded = tf.map_fn(func, tf.range(batch_dim), fn_output_signature=tf.float32)
 
-    return expanded
+    batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
+    bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
+
+    ret = tf.scatter_nd(
+        bins_split_flat_batch,
+        points_binned_enc_flat,
+        shape=(batch_dim, n_points, n_features)
+    )
+        
+    return ret
 
 class InputEncoding(tf.keras.layers.Layer):
     def __init__(self, num_input_classes):

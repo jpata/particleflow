@@ -505,8 +505,7 @@ def main(args, yaml_path, config):
     if args.action == "train":
         dataset_def.val_filelist = dataset_def.val_filelist[:1]
 
-    for fi in dataset_def.val_filelist[:500]:
-        print(fi)
+    for fi in dataset_def.val_filelist[:100]:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
