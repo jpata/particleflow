@@ -503,15 +503,20 @@ def main(args, yaml_path, config):
     ycands = []
     #for faster loading        
     if args.action == "train":
-        dataset_def.val_filelist = dataset_def.val_filelist[:1]
+        val_filelist = dataset_def.val_filelist[:1]
+    else:
+        val_filelist = dataset_def.val_filelist
+        if config['setup']['num_val_files']>0:
+            val_filelist = val_filelist[:config['setup']['num_val_files']]
 
-    for fi in dataset_def.val_filelist[:config['setup']['num_val_files']]:
+    for fi in val_filelist:
         X, ygen, ycand = dataset_def.prepare_data(fi)
 
         Xs.append(np.concatenate(X))
         ygens.append(np.concatenate(ygen))
         ycands.append(np.concatenate(ycand))
 
+    assert(len(Xs) > 0)
     X_val = np.concatenate(Xs)
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
