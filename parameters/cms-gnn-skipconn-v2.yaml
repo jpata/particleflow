@@ -46,6 +46,7 @@ setup:
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
+  num_val_files: -1
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: all
