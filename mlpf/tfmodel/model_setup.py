@@ -164,7 +164,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cb = CustomCallback(outdir, X_val, y_val, dataset_transform, num_output_classes)
+    cb = CustomCallback(outdir, X_val[:1], y_val[:1], dataset_transform, num_output_classes)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -534,7 +534,6 @@ def main(args, yaml_path, config):
             from tensorflow.keras import mixed_precision
             policy = mixed_precision.Policy('mixed_float16')
             mixed_precision.set_global_policy(policy)
-
             opt = mixed_precision.LossScaleOptimizer(opt)
         else:
             model_dtype = tf.dtypes.float32

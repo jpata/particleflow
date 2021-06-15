@@ -918,6 +918,7 @@ class PFNetDense(tf.keras.Model):
 
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
+
         if self.multi_output:
             ret = {
                 "cls": out_id_softmax, "charge": out_charge,
