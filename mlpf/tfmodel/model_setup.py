@@ -569,7 +569,21 @@ def main(args, yaml_path, config):
             #Evaluate model once to build the layers
             print(X_val.shape)
             model(tf.cast(X_val[:5], model_dtype))
-            model.summary()
+
+            if config["setup"]["trainable"] == "classification":
+                config["dataset"]["pt_loss_coef"] = 0.0
+                config["dataset"]["eta_loss_coef"] = 0.0
+                config["dataset"]["sin_phi_loss_coef"] = 0.0
+                config["dataset"]["cos_phi_loss_coef"] = 0.0
+                config["dataset"]["energy_loss_coef"] = 0.0
+            elif config["setup"]["trainable"] == "regression":
+                config["dataset"]["classification_loss_coef"] = 0.0
+                config["dataset"]["charge_loss_coef"] = 0.0
+
+            if config["setup"]["trainable"] == "classification":
+                model.set_trainable_classification()
+            elif config["setup"]["trainable"] == "regression":
+                model.set_trainable_regression()
 
             model.compile(
                 loss={
@@ -603,11 +617,6 @@ def main(args, yaml_path, config):
             if weights:
                 model.load_weights(weights)
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
-
-            if config["setup"]["trainable"] == "classification":
-                model.set_trainable_classification()
-            elif config["setup"]["trainable"] == "regression":
-                model.set_trainable_regression()
 
             model.summary()
             
