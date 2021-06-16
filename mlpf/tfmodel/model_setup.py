@@ -67,7 +67,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
             4: "orange",
             5: "blue",
             6: "cyan",
-            7: "purple"
+            7: "purple",
+            8: "gray",
+            9: "gray",
+            10: "gray",
+            11: "gray"
         }
 
     def on_epoch_end(self, epoch, logs=None):
@@ -112,6 +116,19 @@ class CustomCallback(tf.keras.callbacks.Callback):
         #     figure = plot_num_particle(n_pred, n_true, icls)
         #     plt.savefig("{}/num_cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
 
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
+
+        plt.axes(ax1)
+        msk = self.X[ibatch, :, 0] != 0
+        eta = self.X[ibatch][msk][:, 2]
+        phi = self.X[ibatch][msk][:, 3]
+        energy = self.X[ibatch][msk][:, 4]
+        typ = self.X[ibatch][msk][:, 0]
+        plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in typ], alpha=0.5, linewidths=0)
+        plt.xlim(-8,8)
+        plt.ylim(-4,4)
+
+        plt.axes(ax3)
         #Plot the predicted particles
         msk = ypred_id[ibatch] != 0
         eta = ypred["eta"][ibatch][msk]
@@ -120,11 +137,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
         phi = np.arctan2(sphi, cphi)
         energy = ypred["energy"][ibatch][msk]
         pdgid = ypred_id[ibatch][msk]
-
-        plt.figure(figsize=(5, 5))
-        plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.8, linewidths=0)
+        plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
+        plt.xlim(-8,8)
+        plt.ylim(-4,4)
 
         #Plot the target particles
+        plt.axes(ax2)
         y = self.dataset_transform(self.X, self.y, None)[1]
         y_id = np.argmax(y["cls"], axis=-1)
         msk = y_id[ibatch] != 0
@@ -134,8 +152,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         phi = np.arctan2(sphi, cphi)
         energy = y["energy"][ibatch][msk]
         pdgid = y_id[ibatch][msk]
-
-        plt.scatter(eta, phi, marker="s", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.3, linewidths=0)
+        plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
@@ -164,7 +181,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cb = CustomCallback(outdir, X_val[:1], y_val[:1], dataset_transform, num_output_classes)
+    cb = CustomCallback(outdir, X_val, y_val, dataset_transform, num_output_classes)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -547,11 +564,11 @@ def main(args, yaml_path, config):
                 loss={
                     "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
                     "charge": tf.keras.losses.MeanSquaredError(),
-                    "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "pt": tf.keras.losses.MeanSquaredError(),
                     "eta": tf.keras.losses.MeanSquaredError(),
                     "sin_phi": tf.keras.losses.MeanSquaredError(),
                     "cos_phi": tf.keras.losses.MeanSquaredError(),
-                    "energy": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "energy": tf.keras.losses.MeanSquaredError(),
                 },
                 optimizer=opt,
                 sample_weight_mode='temporal',
@@ -584,7 +601,8 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    model, outdir, X_val, ycand_val, dataset_transform, config["dataset"]["num_output_classes"]
+                    model, outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
+                    dataset_transform, config["dataset"]["num_output_classes"]
                 )
                 callbacks.append(LearningRateLoggingCallback())
 
