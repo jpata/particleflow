@@ -41,15 +41,15 @@ tensorflow:
 setup:
   train: yes
   weights:
-  lr: 1e-5
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
   num_val_files: 100
   dtype: float32
-  sample_weights: none
-  trainable: all
+  sample_weights: inverse_sqrt
+  trainable: classification
 
 parameters:
   model: gnn_dense

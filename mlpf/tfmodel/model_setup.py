@@ -565,6 +565,12 @@ def main(args, yaml_path, config):
 
         if args.action=="train" or args.action=="eval":
             model = make_model(config, model_dtype)
+
+            #Evaluate model once to build the layers
+            print(X_val.shape)
+            model(tf.cast(X_val[:5], model_dtype))
+            model.summary()
+
             model.compile(
                 loss={
                     "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
@@ -593,16 +599,18 @@ def main(args, yaml_path, config):
                 }
             )
 
-            #Evaluate model once to build the layers
-            print(X_val.shape)
-            model(tf.cast(X_val[:5], model_dtype))
-            model.summary()
-
             initial_epoch = 0
             if weights:
                 model.load_weights(weights)
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
+            if config["setup"]["trainable"] == "classification":
+                model.set_trainable_classification()
+            elif config["setup"]["trainable"] == "regression":
+                model.set_trainable_regression()
+
+            model.summary()
+            
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
