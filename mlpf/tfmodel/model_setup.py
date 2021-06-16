@@ -569,6 +569,7 @@ def main(args, yaml_path, config):
             #Evaluate model once to build the layers
             print(X_val.shape)
             model(tf.cast(X_val[:5], model_dtype))
+            #import pdb;pdb.set_trace()
 
             if config["setup"]["trainable"] == "classification":
                 config["dataset"]["pt_loss_coef"] = 0.0
@@ -585,9 +586,16 @@ def main(args, yaml_path, config):
             elif config["setup"]["trainable"] == "regression":
                 model.set_trainable_regression()
 
+            if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
+                cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+            elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
+                cls_loss = tfa.losses.sigmoid_focal_crossentropy
+            else:
+                raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
+            
             model.compile(
                 loss={
-                    "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
+                    "cls": cls_loss,
                     "charge": tf.keras.losses.MeanSquaredError(),
                     "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
                     "eta": tf.keras.losses.MeanSquaredError(),

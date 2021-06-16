@@ -38,6 +38,7 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
+  classification_loss_type: categorical_cross_entropy
 
 parameters:
   model: gnn
