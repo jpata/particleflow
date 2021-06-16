@@ -55,15 +55,15 @@ setup:
 parameters:
   model: gnn_dense
   activation: elu
-  layernorm: yes
+  layernorm: no
   hidden_dim: 256
-  bin_size: 1280
+  bin_size: 640
   clip_value_low: 0.0
   num_conv: 2
   num_gsl: 2
   normalize_degrees: yes
   distance_dim: 128
-  dropout: 0.2
+  dropout: 0.0
 
 timing:
   num_ev: 100
