@@ -50,6 +50,7 @@ setup:
   dtype: float32
   sample_weights: inverse_sqrt
   trainable: all
+  classification_loss_type: categorical_cross_entropy
 
 parameters:
   model: gnn

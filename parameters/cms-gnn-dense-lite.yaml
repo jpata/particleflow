@@ -42,25 +42,28 @@ setup:
   train: yes
   weights:
   lr: 1e-5
-  batch_size: 20
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
-  num_val_files: -1
-  dtype: float16
+  num_val_files: 100
+  dtype: float32
+  sample_weights: none
+  trainable: classification
+  classification_loss_type: sigmoid_focal_crossentropy
 
 parameters:
   model: gnn_dense
   activation: elu
   layernorm: yes
-  hidden_dim: 128
-  bin_size: 320
+  hidden_dim: 256
+  bin_size: 1280
   clip_value_low: 0.0
-  num_conv: 1
-  num_gsl: 1
+  num_conv: 2
+  num_gsl: 2
   normalize_degrees: yes
-  distance_dim: 32
-  dropout: 0.0
+  distance_dim: 128
+  dropout: 0.2
 
 timing:
   num_ev: 100
