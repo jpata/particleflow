@@ -821,6 +821,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.clip_value_low = kwargs.pop("clip_value_low")
         self.num_conv = kwargs.pop("num_conv")
         self.normalize_degrees = kwargs.pop("normalize_degrees")
+        self.dropout = kwargs.pop("dropout")
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
@@ -833,6 +834,10 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             normalize_degrees=self.normalize_degrees
             ) for iconv in range(self.num_conv)
         ]
+        self.dropout_layer = None
+        if self.dropout:
+            self.dropout_layer = tf.keras.layers.Dropout(self.dropout)
+
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
     def call(self, x, msk):
@@ -844,6 +849,8 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         bins_split, x_binned, dm, msk_binned = self.dist(x_dist, x, msk)
         for conv in self.convs:
             x_binned = conv((x_binned, dm, msk_binned))
+            if self.dropout_layer:
+                x_binned = self.dropout_layer(x_binned)
 
         x_enc = reverse_lsh(bins_split, x_binned)
 
@@ -865,7 +872,8 @@ class PFNetDense(tf.keras.Model):
             activation=tf.keras.activations.elu,
             num_conv=2,
             num_gsl=1,
-            normalize_degrees=False
+            normalize_degrees=False,
+            dropout=0.0
         ):
         super(PFNetDense, self).__init__()
 
@@ -891,7 +899,8 @@ class PFNetDense(tf.keras.Model):
             "layernorm": layernorm,
             "clip_value_low": clip_value_low,
             "num_conv": num_conv,
-            "normalize_degrees": normalize_degrees
+            "normalize_degrees": normalize_degrees,
+            "dropout": dropout
         }
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]

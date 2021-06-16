@@ -38,8 +38,6 @@ setup:
   dtype: float32
   sample_weights: none
   trainable: all
-  normalize_degrees: no
-  distance_dim: 128
 
 parameters:
   model: gnn_dense
@@ -52,7 +50,8 @@ parameters:
   num_gsl: 1
   normalize_degrees: yes
   distance_dim: 128
-
+  dropout: 0.0
+  
 timing:
   num_ev: 1
   num_iter: 1
