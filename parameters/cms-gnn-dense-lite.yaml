@@ -48,8 +48,6 @@ setup:
   num_epochs: 500
   num_val_files: -1
   dtype: float16
-  sample_weights: inverse_sqrt
-  trainable: all
 
 parameters:
   model: gnn_dense
@@ -62,6 +60,7 @@ parameters:
   num_gsl: 1
   normalize_degrees: yes
   distance_dim: 32
+  dropout: 0.0
 
 timing:
   num_ev: 100

@@ -141,6 +141,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
+        # Xconcat = np.concatenate([self.X[ibatch], ypred["cls"][ibatch]], axis=-1)
+        # np.savez(self.outpath + "/event_{}.npz".format(epoch), Xconcat[Xconcat[:, 0]!=0])
+
         #Plot the target particles
         plt.axes(ax2)
         y = self.dataset_transform(self.X, self.y, None)[1]
@@ -289,7 +292,8 @@ def make_gnn_dense(config, dtype):
         "num_conv",
         "num_gsl",
         "normalize_degrees",
-        "distance_dim"
+        "distance_dim",
+        "dropout"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}
@@ -494,7 +498,8 @@ def main(args, yaml_path, config):
     weights = config['setup']['weights']
     if args.weights:
         weights = args.weights
-    if weights is None:
+
+    if args.recreate or (weights is None):
         outdir = 'experiments/{}'.format(model_name)
         if os.path.isdir(outdir):
             print("Output directory exists: {}".format(outdir), file=sys.stderr)
@@ -564,11 +569,11 @@ def main(args, yaml_path, config):
                 loss={
                     "cls": tf.keras.losses.CategoricalCrossentropy(from_logits=False),
                     "charge": tf.keras.losses.MeanSquaredError(),
-                    "pt": tf.keras.losses.MeanSquaredError(),
+                    "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
                     "eta": tf.keras.losses.MeanSquaredError(),
                     "sin_phi": tf.keras.losses.MeanSquaredError(),
                     "cos_phi": tf.keras.losses.MeanSquaredError(),
-                    "energy": tf.keras.losses.MeanSquaredError(),
+                    "energy": tf.keras.losses.MeanSquaredLogarithmicError(),
                 },
                 optimizer=opt,
                 sample_weight_mode='temporal',

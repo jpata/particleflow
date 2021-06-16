@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument("--weights", type=str, help="weight file to load", default=None)
     parser.add_argument("--ntrain", type=int, help="override the number of training events", default=None)
     parser.add_argument("--ntest", type=int, help="override the number of testing events", default=None)
+    parser.add_argument("--recreate", action="store_true", help="recreate a new output dir", default=None)
     args = parser.parse_args()
     return args
 
