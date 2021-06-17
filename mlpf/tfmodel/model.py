@@ -840,7 +840,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
-    def call(self, x, msk):
+    def call(self, x, msk, training):
 
         if self.do_layernorm:
             x = self.layernorm(x)
@@ -850,7 +850,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         for conv in self.convs:
             x_binned = conv((x_binned, dm, msk_binned))
             if self.dropout_layer:
-                x_binned = self.dropout_layer(x_binned)
+                x_binned = self.dropout_layer(x_binned, training)
 
         x_enc = reverse_lsh(bins_split, x_binned)
 
@@ -918,13 +918,13 @@ class PFNetDense(tf.keras.Model):
         enc_id = self.activation(self.ffn_enc_id(enc))
         encs_id = []
         for cg in self.cg_id:
-            enc_id = cg(enc_id, msk)
+            enc_id = cg(enc_id, msk, training)
             encs_id.append(enc_id)
 
         enc_reg = self.activation(self.ffn_enc_reg(enc))
         encs_reg = []
         for cg in self.cg_reg:
-            enc_reg = cg(enc_reg, msk)
+            enc_reg = cg(enc_reg, msk, training)
             encs_reg.append(enc_reg)
 
         dec_output_id = tf.concat([enc] + encs_id, axis=-1)
@@ -969,6 +969,15 @@ class PFNetDense(tf.keras.Model):
             cg.trainable = False
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
+
+    def set_trainable_transfer(self):
+        for layer in self.layers:
+            layer.trainable = True
+
+        self.ffn_enc_id.trainable = False
+        self.ffn_enc_reg.trainable = False
+        for cg in self.cg_id + self.cg_reg:
+            cg.trainable = False
 
 class DummyNet(tf.keras.Model):
     def __init__(self,

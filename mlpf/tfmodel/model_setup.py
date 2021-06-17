@@ -571,6 +571,11 @@ def main(args, yaml_path, config):
             model(tf.cast(X_val[:5], model_dtype))
             #import pdb;pdb.set_trace()
 
+            initial_epoch = 0
+            if weights:
+                model.load_weights(weights)
+                initial_epoch = int(weights.split("/")[-1].split("-")[1])
+
             if config["setup"]["trainable"] == "classification":
                 config["dataset"]["pt_loss_coef"] = 0.0
                 config["dataset"]["eta_loss_coef"] = 0.0
@@ -585,6 +590,9 @@ def main(args, yaml_path, config):
                 model.set_trainable_classification()
             elif config["setup"]["trainable"] == "regression":
                 model.set_trainable_regression()
+            elif config["setup"]["trainable"] == "transfer":
+                model.set_trainable_transfer()
+            model.summary()
 
             if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
                 cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
@@ -620,13 +628,6 @@ def main(args, yaml_path, config):
                     ]
                 }
             )
-
-            initial_epoch = 0
-            if weights:
-                model.load_weights(weights)
-                initial_epoch = int(weights.split("/")[-1].split("-")[1])
-
-            model.summary()
             
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
