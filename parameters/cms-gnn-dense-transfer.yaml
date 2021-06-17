@@ -1,0 +1,70 @@
+backend: tensorflow
+
+dataset:
+  schema: cms
+  target_particles: cand
+  num_input_features: 15
+  num_output_features: 7
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
+  num_input_classes: 12
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
+  num_output_classes: 8
+  padded_num_elem_size: 6400
+  #(pt, eta, sin phi, cos phi, E)
+  num_momentum_outputs: 5
+  classification_loss_coef: 1.0
+  charge_loss_coef: 0.1
+  pt_loss_coef: 1.0
+  eta_loss_coef: 0.1
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
+  num_files_per_chunk: 1
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights: experiments/cms-gnn-dense-2cc4e7f9.gpu0.local/weights-500-40.204285.hdf5
+  lr: 1e-5
+  batch_size: 20
+  num_events_train: 80000
+  num_events_test: 10000
+  num_epochs: 100
+  num_val_files: 100
+  dtype: float32
+  sample_weights: inverse_sqrt
+  trainable: transfer
+  classification_loss_type: categorical_cross_entropy
+
+parameters:
+  model: gnn_dense
+  activation: elu
+  layernorm: no
+  hidden_dim: 256
+  bin_size: 640
+  clip_value_low: 0.0
+  num_conv: 2
+  num_gsl: 2
+  normalize_degrees: yes
+  distance_dim: 128
+  dropout: 0.0
+
+timing:
+  num_ev: 100
+  num_iter: 3
