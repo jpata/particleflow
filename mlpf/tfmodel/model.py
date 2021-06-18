@@ -953,14 +953,17 @@ class PFNetDense(tf.keras.Model):
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
 
     def set_trainable_classification(self):
+        self.trainable = True
         for layer in self.layers:
             layer.trainable = True
+
         self.ffn_enc_reg.trainable = False
         for cg in self.cg_reg:
             cg.trainable = False
         self.ffn_momentum.trainable = False
 
     def set_trainable_regression(self):
+        self.trainable = True
         for layer in self.layers:
             layer.trainable = True
 
@@ -971,6 +974,7 @@ class PFNetDense(tf.keras.Model):
         self.ffn_charge.trainable = False
 
     def set_trainable_transfer(self):
+        self.trainable = True
         for layer in self.layers:
             layer.trainable = True
 

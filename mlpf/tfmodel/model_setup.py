@@ -414,12 +414,20 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
             pass
 
 def configure_model_weights(model, trainable_layers):
+    print("setting trainable layers: {}".format(trainable_layers))
     if trainable_layers == "classification":
         model.set_trainable_classification()
     elif trainable_layers == "regression":
         model.set_trainable_regression()
     elif trainable_layers == "transfer":
         model.set_trainable_transfer()
+    elif trainable_layers == "all":
+        model.trainable = True
+
+    model.compile()
+    trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.trainable_weights])
+    non_trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.non_trainable_weights])
+    print("trainable={} non_trainable={}".format(trainable_count, non_trainable_count))
 
 def main(args, yaml_path, config):
     #tf.debugging.enable_check_numerics()
@@ -576,16 +584,15 @@ def main(args, yaml_path, config):
 
             #Evaluate model once to build the layers
             print(X_val.shape)
-            model(tf.cast(X_val[:5], model_dtype))
-            model.summary()
+            model(tf.cast(X_val[:1], model_dtype))
 
+            initial_epoch = 0
             if weights:
                 #need to load the weights in the same trainable configuration as the model was set up
                 configure_model_weights(model, config["setup"].get("weights_config", "all"))
-                model.load_weights(weights)
+                model.load_weights(weights, by_name=True)
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
-              
-            initial_epoch = 0
+            model(tf.cast(X_val[:1], model_dtype))
 
             if config["setup"]["trainable"] == "classification":
                 config["dataset"]["pt_loss_coef"] = 0.0
@@ -599,8 +606,7 @@ def main(args, yaml_path, config):
 
             #now set the desirable layers as trainable for the optimization
             configure_model_weights(model, config["setup"]["trainable"])
-
-            model.summary()
+            model(tf.cast(X_val[:1], model_dtype))
 
             if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
                 cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
@@ -636,6 +642,7 @@ def main(args, yaml_path, config):
                     ]
                 }
             )
+            model.summary()
             
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
