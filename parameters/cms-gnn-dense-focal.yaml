@@ -41,15 +41,16 @@ tensorflow:
 setup:
   train: yes
   weights:
+  weights_config: classification
   lr: 1e-5
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
-  num_val_files: 100
+  num_val_files: 10
   dtype: float32
   sample_weights: none
-  trainable: classification
+  trainable: all
   classification_loss_type: sigmoid_focal_crossentropy
 
 parameters:
