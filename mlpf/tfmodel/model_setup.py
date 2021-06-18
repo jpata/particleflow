@@ -413,6 +413,14 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
         except AttributeError as e:
             pass
 
+def configure_model_weights(model, trainable_layers):
+    if trainable_layers == "classification":
+        model.set_trainable_classification()
+    elif trainable_layers == "regression":
+        model.set_trainable_regression()
+    elif trainable_layers == "transfer":
+        model.set_trainable_transfer()
+
 def main(args, yaml_path, config):
     #tf.debugging.enable_check_numerics()
 
@@ -569,12 +577,15 @@ def main(args, yaml_path, config):
             #Evaluate model once to build the layers
             print(X_val.shape)
             model(tf.cast(X_val[:5], model_dtype))
-            #import pdb;pdb.set_trace()
+            model.summary()
 
-            initial_epoch = 0
             if weights:
+                #need to load the weights in the same trainable configuration as the model was set up
+                configure_model_weights(model, config["setup"].get("weights_config", "all"))
                 model.load_weights(weights)
                 initial_epoch = int(weights.split("/")[-1].split("-")[1])
+              
+            initial_epoch = 0
 
             if config["setup"]["trainable"] == "classification":
                 config["dataset"]["pt_loss_coef"] = 0.0
@@ -586,12 +597,9 @@ def main(args, yaml_path, config):
                 config["dataset"]["classification_loss_coef"] = 0.0
                 config["dataset"]["charge_loss_coef"] = 0.0
 
-            if config["setup"]["trainable"] == "classification":
-                model.set_trainable_classification()
-            elif config["setup"]["trainable"] == "regression":
-                model.set_trainable_regression()
-            elif config["setup"]["trainable"] == "transfer":
-                model.set_trainable_transfer()
+            #now set the desirable layers as trainable for the optimization
+            configure_model_weights(model, config["setup"]["trainable"])
+
             model.summary()
 
             if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
