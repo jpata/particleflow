@@ -85,19 +85,29 @@ class CustomCallback(tf.keras.callbacks.Callback):
         ibatch = 0
        
         msk = self.X[:, :, 0] != 0
-        cm = sklearn.metrics.confusion_matrix(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten(), labels=list(range(self.num_output_classes))
-        )
-        figure = plot_confusion_matrix(cm)
-        plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        plt.close("all")
+        # cm = sklearn.metrics.confusion_matrix(
+        #     self.y[msk][:, 0].astype(np.int64).flatten(),
+        #     ypred_id[msk].flatten(), labels=list(range(self.num_output_classes))
+        # )
+        # figure = plot_confusion_matrix(cm)
+        # plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        # plt.close("all")
 
         cm = sklearn.metrics.confusion_matrix(
             self.y[msk][:, 0].astype(np.int64).flatten(),
             ypred_id[msk].flatten(), labels=list(range(self.num_output_classes)), normalize="true"
         )
         figure = plot_confusion_matrix(cm)
+
+        acc = sklearn.metrics.accuracy_score(
+            self.y[msk][:, 0].astype(np.int64).flatten(),
+            ypred_id[msk].flatten()
+        )
+        balanced_acc = sklearn.metrics.balanced_accuracy_score(
+            self.y[msk][:, 0].astype(np.int64).flatten(),
+            ypred_id[msk].flatten()
+        )
+        plt.title("acc={:.3f} bacc={:.3f}".format(acc, balanced_acc))
         plt.savefig("{}/cm_normed_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
         plt.close("all")
 
@@ -388,12 +398,17 @@ def freeze_model(model, config, outdir):
 class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
     def __init__(self, use_weights=False, **kwargs):
         super(FlattenedCategoricalAccuracy, self).__init__(**kwargs)
+        self.use_weights = use_weights
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         #flatten the batch dimension
         _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
         _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
-        super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, None)
+        sample_weights = None
+        if self.use_weights:
+            sample_weights = _y_true*tf.reduce_sum(_y_true, axis=0)
+            sample_weights = 1.0/sample_weights[sample_weights!=0]
+        super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, sample_weights)
 
 class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, use_weights=False, **kwargs):
@@ -619,11 +634,11 @@ def main(args, yaml_path, config):
                 loss={
                     "cls": cls_loss,
                     "charge": tf.keras.losses.MeanSquaredError(),
-                    "pt": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "pt": tf.keras.losses.MeanSquaredError(),
                     "eta": tf.keras.losses.MeanSquaredError(),
                     "sin_phi": tf.keras.losses.MeanSquaredError(),
                     "cos_phi": tf.keras.losses.MeanSquaredError(),
-                    "energy": tf.keras.losses.MeanSquaredLogarithmicError(),
+                    "energy": tf.keras.losses.MeanSquaredError(),
                 },
                 optimizer=opt,
                 sample_weight_mode='temporal',
@@ -639,6 +654,7 @@ def main(args, yaml_path, config):
                 metrics={
                     "cls": [
                         FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                        FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
                     ]
                 }
             )
