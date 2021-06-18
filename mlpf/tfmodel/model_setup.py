@@ -633,12 +633,12 @@ def main(args, yaml_path, config):
             model.compile(
                 loss={
                     "cls": cls_loss,
-                    "charge": tf.keras.losses.MeanSquaredError(),
-                    "pt": tf.keras.losses.MeanSquaredError(),
-                    "eta": tf.keras.losses.MeanSquaredError(),
-                    "sin_phi": tf.keras.losses.MeanSquaredError(),
-                    "cos_phi": tf.keras.losses.MeanSquaredError(),
-                    "energy": tf.keras.losses.MeanSquaredError(),
+                    "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
+                    "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
+                    "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
+                    "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
+                    "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
+                    "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
                 },
                 optimizer=opt,
                 sample_weight_mode='temporal',

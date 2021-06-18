@@ -23,6 +23,8 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
+  pt_loss: MeanSquaredLogarithmicError
+  energy_loss: MeanSquaredLogarithmicError
   classification_loss_coef: 1.0
   charge_loss_coef: 0.1
   pt_loss_coef: 1.0
