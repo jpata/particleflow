@@ -1,3 +1,14 @@
+#!/usr/bin/env fpad
+
+#Run in the HEPSIM environment
+#https://hub.docker.com/r/chekanov/centos7hepsim
+#source /opt/hepsim.sh
+#source /opt/jas4pp.sh
+#fpad dumper.py
+
+#code adapted from https://github.com/nhanvtran/VHEPPStudies/blob/master/sclioProcessing/mc_Zprime1TeVqq.py
+#by J. Pata
+
 from org.lcsim.lcio import LCIOReader
 from hep.io.sio import SIOReader
 from hep.lcio.implementation.sio import SIOLCReader
