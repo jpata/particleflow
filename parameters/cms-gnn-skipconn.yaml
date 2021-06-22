@@ -42,27 +42,29 @@ setup:
   train: yes
   weights:
   lr: 1e-5
-  batch_size: 1
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 50
+  num_epochs: 500
+  num_val_files: -1
   dtype: float32
-  sample_weights: inverse_sqrt
+  sample_weights: none
   trainable: all
+  classification_loss_type: categorical_cross_entropy
 
 parameters:
   model: gnn
-  bin_size: 256
-  num_convs_id: 1
-  num_convs_reg: 1
+  bin_size: 640
+  num_convs_id: 2
+  num_convs_reg: 2
   num_hidden_id_enc: 2
-  num_hidden_id_dec: 0
+  num_hidden_id_dec: 2
   num_hidden_reg_enc: 2
-  num_hidden_reg_dec: 0
+  num_hidden_reg_dec: 2
   num_neighbors: 16
-  hidden_dim_id: 2048
-  hidden_dim_reg: 2048
-  distance_dim: 64
+  hidden_dim_id: 512
+  hidden_dim_reg: 512
+  distance_dim: 32
   dropout: 0.0
   dist_mult: 1.0
   activation: elu

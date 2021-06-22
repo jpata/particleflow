@@ -25,40 +25,44 @@ dataset:
   num_momentum_outputs: 5
   classification_loss_coef: 1.0
   charge_loss_coef: 0.1
-  pt_loss_coef: 0.001
-  eta_loss_coef: 0.001
-  sin_phi_loss_coef: 0.001
-  cos_phi_loss_coef: 0.001
-  energy_loss_coef: 0.001
-  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
+  pt_loss_coef: 1.0
+  eta_loss_coef: 0.1
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
-  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
 
 tensorflow:
   eager: no
 
 setup:
   train: yes
-  weights:
+  weights: experiments/cms-gnn-dense-2cc4e7f9.gpu0.local/weights-500-40.204285.hdf5
   lr: 1e-5
-  batch_size: 5
+  batch_size: 20
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 1000
+  num_epochs: 100
+  num_val_files: 100
   dtype: float32
-  sample_weights: none
-  trainable: cls
-  multi_output: yes
+  sample_weights: inverse_sqrt
+  trainable: transfer
+  classification_loss_type: categorical_cross_entropy
 
 parameters:
-  model: transformer
-  num_layers: 2
-  d_model: 512
-  num_heads: 2
-  dff: 512
-  support: 32
-  skip_connection: yes
+  model: gnn_dense
+  activation: elu
+  layernorm: no
+  hidden_dim: 256
+  bin_size: 640
+  clip_value_low: 0.0
+  num_conv: 2
+  num_gsl: 2
+  normalize_degrees: yes
+  distance_dim: 128
   dropout: 0.0
 
 timing:

@@ -1,4 +1,6 @@
 import yaml
+import tfmodel
+import tfmodel.model_setup
 
 def load_config(yaml_path):
     with open(yaml_path) as f:
@@ -11,6 +13,9 @@ def parse_args():
     parser.add_argument("--model-spec", type=str, default="parameters/delphes-gnn-skipconn.yaml", help="the model specification")
     parser.add_argument("--action", type=str, choices=["data", "train", "eval", "time"], help="Run training, validation or timing", default="train")
     parser.add_argument("--weights", type=str, help="weight file to load", default=None)
+    parser.add_argument("--ntrain", type=int, help="override the number of training events", default=None)
+    parser.add_argument("--ntest", type=int, help="override the number of testing events", default=None)
+    parser.add_argument("--recreate", action="store_true", help="recreate a new output dir", default=None)
     args = parser.parse_args()
     return args
 
@@ -21,8 +26,6 @@ if __name__ == "__main__":
     config = load_config(yaml_path)
 
     if config["backend"] == "tensorflow":
-        import tfmodel
-        from tfmodel.model_setup import main
-        main(args, yaml_path, config)
+        tfmodel.model_setup.main(args, yaml_path, config)
     elif config["backend"] == "pytorch":
         pass
