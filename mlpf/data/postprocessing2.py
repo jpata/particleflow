@@ -3,8 +3,13 @@ import pickle
 import networkx as nx
 import numpy as np
 import os
-import uproot3 as uproot
-import uproot3_methods as uproot_methods
+try:
+    import uproot3 as uproot
+    import uproot3_methods as uproot_methods
+except:
+    import uproot
+    import uproot_methods
+    
 import math
 
 import matplotlib

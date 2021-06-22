@@ -20,9 +20,9 @@ Prefix Sum Tensorflow implementation by Valerii Likhosherstov.
 Minor modifications for TF 2.3 by Joosep Pata:
  - remove seed, use tf.concat in create_projection_matrix, 
 """
+from . import fast_attention_util as util
 import math
 import tensorflow as tf
-import tfmodel.util as util
 
 BIG_CONSTANT = 1e8
 

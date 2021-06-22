@@ -35,11 +35,13 @@ setup:
   num_events_train: 100
   num_events_test: 100
   num_epochs: 400
+  num_val_files: -1
   dtype: float32
   sample_weights: none
   trainable: all
   multi_output: no
- 
+  classification_loss_type: categorical_cross_entropy
+
 parameters:
   model: gnn
   bin_size: 128

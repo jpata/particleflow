@@ -34,6 +34,7 @@ setup:
   num_events_train: 40000
   num_events_test: 5000
   num_epochs: 300
+  num_val_files: -1
   dtype: float16
   sample_weights: none
   trainable: all
