@@ -40,14 +40,14 @@ tensorflow:
 
 setup:
   train: yes
-  weights: experiments/cms-gnn-dense-lite-de4650d3.gpu0.local/weights-500-0.090570.hdf5
-  weights_config: classification
-  lr: 1e-5
+  weights:
+  weights_config: all
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 1000
-  num_val_files: 10
+  num_val_files: 100
   dtype: float32
   sample_weights: none
   trainable: all
