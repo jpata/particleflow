@@ -63,8 +63,6 @@ def sparse_dense_matmult_batch(sp_a, b):
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
 
-#FIXME: currently this needs to know the batch_size in advance
-#need to understand better how to do scatter_nd across the batch
 @tf.function
 def reverse_lsh(bins_split, points_binned_enc):
     # batch_dim = points_binned_enc.shape[0]
@@ -79,15 +77,6 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
     
-    # def func(ibatch):
-    #     return tf.scatter_nd(
-    #         tf.expand_dims(bins_split_flat[ibatch], -1),
-    #         points_binned_enc_flat[ibatch],
-    #         shape=(n_points, n_features)
-    #     )
-
-    # expanded = tf.map_fn(func, tf.range(batch_dim), fn_output_signature=tf.float32)
-
     batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
     bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
 
@@ -394,7 +383,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         #n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
 
-        #put each input item into a bin defined by the softmax output across the LSH embedding
+        #put each input item into a bin defined by the argmax output across the LSH embedding
         mul = tf.linalg.matmul(x_dist, self.codebook_random_rotations[:, :n_bins//2])
         cmul = tf.concat([mul, -mul], axis=-1)
         bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
@@ -404,7 +393,12 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
         dm = tf.exp(-self.dist_mult*dm)
+        
+        #set the distance matrix to 0 for masked elements
         dm *= msk_f_binned
+        shp = tf.shape(msk_f_binned)
+        dm *= tf.reshape(msk_f_binned, (shp[0], shp[1], shp[3], shp[2]))
+
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
         return bins_split, x_features_binned, dm, msk_f_binned
