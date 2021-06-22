@@ -20,8 +20,9 @@ from hephysics.particle import LParticle
 import math
 import json
 import bz2
+import sys
 
-save_calohits = True
+perfile = 10
 
 def genParticleToDict(par):
     mom = par.getMomentum()
@@ -146,7 +147,7 @@ def caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim):
     return vec
 
 if __name__ == "__main__":
-    infile = "/home/joosep/Downloads/pythia6_ttbar_0001_pandora.slcio"
+    infile = sys.argv[1]
 
     factory = LCFactory.getInstance()
     reader = factory.createLCReader()
@@ -154,6 +155,7 @@ if __name__ == "__main__":
     event_data = []
     
     nEvent = 0
+    ioutfile = 0
     while True:
         evt = reader.readNextEvent()
         if (evt == None):
@@ -311,11 +313,14 @@ if __name__ == "__main__":
         }
  
         event_data.append(event)
+        if len(event_data) >= perfile:
+            ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
+            json.dump(event_data, ofi, indent=2, sort_keys=True)
+            ofi.close()
+            event_data = []
+            ioutfile += 1
         nEvent += 1
    
     #save the event data to a file 
-    ofi = bz2.BZ2File(infile.replace(".slcio", ".json.bz2"), "w")
-    json.dump(event_data, ofi, indent=2, sort_keys=True)
-    ofi.close()
     
     reader.close() # close the file
