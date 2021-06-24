@@ -22,6 +22,12 @@ import time
 import json
 import random
 import platform
+from tqdm import tqdm
+from pathlib import Path
+from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+from tfmodel.callbacks import CustomTensorBoard
+from tfmodel.utils import get_lr_schedule, get_weights_func
+
 
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
@@ -174,8 +180,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
 def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
-    tb = tf.keras.callbacks.TensorBoard(
-        log_dir=outdir, histogram_freq=1, write_graph=False, write_images=False,
+    tb = CustomTensorBoard(
+        log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,90),
         profile_batch=0,
@@ -186,15 +192,20 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
 
+    cp_dir = Path(outdir) / "weights"
+    cp_dir.mkdir(parents=True, exist_ok=True)
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=outdir + "/weights-{epoch:02d}-{val_loss:.6f}.hdf5",
+        filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
         save_weights_only=True,
         verbose=0
     )
     cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    cb = CustomCallback(outdir, X_val, y_val, dataset_transform, num_output_classes)
+    history_path = Path(outdir) / "history"
+    history_path.mkdir()
+    history_path = str(history_path)
+    cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -213,22 +224,6 @@ def get_rundir(base='experiments'):
 
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
-
-def compute_weights_invsqrt(X, y, w):
-    wn = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    #wn /= tf.reduce_sum(wn)
-    return X, y, wn
-
-def compute_weights_none(X, y, w):
-    wn = tf.ones_like(w)
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    return X, y, wn
-
-weight_functions = {
-    "inverse_sqrt": compute_weights_invsqrt,
-    "none": compute_weights_none,
-}
 
 def scale_outputs(X,y,w):
     ynew = y-out_m
@@ -344,12 +339,15 @@ def make_dense(config, dtype):
 
 def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     import scipy
-    for ibatch in range(X.shape[0]//global_batch_size):
+    for ibatch in tqdm(range(X.shape[0]//global_batch_size), desc="Evaluating model"):
         nb1 = ibatch*global_batch_size
         nb2 = (ibatch+1)*global_batch_size
 
         y_pred = model.predict(X[nb1:nb2], batch_size=global_batch_size)
-        y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
+        if type(y_pred) is dict:  # for e.g. when the model is multi_output
+            y_pred_raw_ids = y_pred['cls']
+        else:
+            y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
         
         #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
         # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
@@ -364,7 +362,12 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
 
         y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
-        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        if type(y_pred) is dict:
+            y_pred_rest = np.concatenate([y_pred["charge"], y_pred["pt"], y_pred["eta"], y_pred["sin_phi"], y_pred["cos_phi"], y_pred["energy"]], axis=-1)
+            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred_rest], axis=-1)
+        else:
+            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+
         np_outfile = "{}/pred_{}.npz".format(outdir, ibatch)
         np.savez(
             np_outfile,
@@ -501,7 +504,7 @@ def main(args, yaml_path, config):
         n_test = args.ntest
 
     n_epochs = config['setup']['num_epochs']
-    weight_func = weight_functions[config['setup']['sample_weights']]
+    weight_func = get_weights_func(config)
     assert(n_train + n_test <= num_events)
 
     ps = (
@@ -584,6 +587,8 @@ def main(args, yaml_path, config):
             decay_rate=0.99,
             staircase=True
         )
+        total_steps = n_epochs * n_train // global_batch_size
+        lr_schedule, optim_callbacks = get_lr_schedule(config, actual_lr, steps=total_steps)
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         if config['setup']['dtype'] == 'float16':
             model_dtype = tf.dtypes.float16
@@ -666,14 +671,16 @@ def main(args, yaml_path, config):
                     model, outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
                     dataset_transform, config["dataset"]["num_output_classes"]
                 )
-                callbacks.append(LearningRateLoggingCallback())
+                callbacks.append(optim_callbacks)
 
                 fit_result = model.fit(
                     ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-                with open("{}/history.json".format(outdir), "w") as fi:
+                history_path = Path(outdir) / "history"
+                history_path = str(history_path)
+                with open("{}/history.json".format(history_path), "w") as fi:
                     json.dump(fit_result.history, fi)
                 model.save(outdir + "/model_full", save_format="tf")
             
