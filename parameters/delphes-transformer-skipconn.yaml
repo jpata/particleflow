@@ -39,6 +39,7 @@ setup:
   sample_weights: none
   trainable: all
   multi_output: no
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: transformer

@@ -39,6 +39,7 @@ setup:
   sample_weights: none
   trainable: all
   classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: gnn_dense

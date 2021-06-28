@@ -554,8 +554,6 @@ def main(args, yaml_path, config):
         print("fallback to CPU", e)
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
-
-    actual_lr = global_batch_size*float(config['setup']['lr'])
     
     Xs = []
     ygens = []
@@ -580,15 +578,10 @@ def main(args, yaml_path, config):
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
 
+    lr = global_batch_size*float(config['setup']['lr'])
     with strategy.scope():
-        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-            actual_lr,
-            decay_steps=10000,
-            decay_rate=0.99,
-            staircase=True
-        )
         total_steps = n_epochs * n_train // global_batch_size
-        lr_schedule, optim_callbacks = get_lr_schedule(config, actual_lr, steps=total_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, lr, steps=total_steps)
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         if config['setup']['dtype'] == 'float16':
             model_dtype = tf.dtypes.float16

@@ -52,6 +52,7 @@ setup:
   sample_weights: inverse_sqrt
   trainable: all
   multi_output: yes
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: transformer
