@@ -28,8 +28,7 @@ def create_experiment_dir(prefix=None, suffix=None):
     return str(train_dir)
 
 
-def get_strategy():
-    global_batch_size = None
+def get_strategy(global_batch_size):
     try:
         gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
         num_gpus = len(gpus)
