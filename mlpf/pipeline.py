@@ -39,7 +39,7 @@ from tfmodel.utils import (
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
-
+from tfmodel.lr_finder import LRFinder
 
 @click.group()
 @click.help_option("-h", "--help")
@@ -307,6 +307,116 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model.compile()
         eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
         freeze_model(model, config, eval_dir)
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-o", "--outdir", help="output directory", type=click.Path(), default=".")
+@click.option("-n", "--figname", help="name of saved figure", type=click.Path(), default="lr_finder.jpg")
+@click.option("-l", "--log_scale", help="use log scale on y-axis in figure", type=click.Path(), default=False, is_flag=True)
+def find_lr(config, outdir, figname, log_scale):
+    config = load_config(config)
+    tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
+    global_batch_size = config["setup"]["batch_size"]
+
+    if "multi_output" not in config["setup"]:
+        config["setup"]["multi_output"] = True
+    n_train = config["setup"]["num_events_train"]
+    dataset_def, ds_train_r, _, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
+
+    # Decide tf.distribute.strategy depending on number of available GPUs
+    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+
+    # If using more than 1 GPU, we scale the batch size by the number of GPUs
+    if maybe_global_batch_size is not None:
+        global_batch_size = maybe_global_batch_size
+    lr = float(config["setup"]["lr"])
+
+    Xs = []
+    for fi in dataset_def.val_filelist[:1]:
+        X, ygen, ycand = dataset_def.prepare_data(fi)
+        Xs.append(np.concatenate(X))
+
+    assert len(Xs) > 0, "Xs is empty"
+    X_val = np.concatenate(Xs)
+
+    with strategy.scope():
+        opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
+        if config["setup"]["dtype"] == "float16":
+            model_dtype = tf.dtypes.float16
+            policy = mixed_precision.Policy("mixed_float16")
+            mixed_precision.set_global_policy(policy)
+            opt = mixed_precision.LossScaleOptimizer(opt)
+        else:
+            model_dtype = tf.dtypes.float32
+
+        model = make_model(config, model_dtype)
+
+        if config["setup"]["trainable"] == "classification":
+            config["dataset"]["pt_loss_coef"] = 0.0
+            config["dataset"]["eta_loss_coef"] = 0.0
+            config["dataset"]["sin_phi_loss_coef"] = 0.0
+            config["dataset"]["cos_phi_loss_coef"] = 0.0
+            config["dataset"]["energy_loss_coef"] = 0.0
+        elif config["setup"]["trainable"] == "regression":
+            config["dataset"]["classification_loss_coef"] = 0.0
+            config["dataset"]["charge_loss_coef"] = 0.0
+
+        # Run model once to build the layers
+        model(tf.cast(X_val[:1], model_dtype))
+
+        configure_model_weights(model, config["setup"]["trainable"])
+
+        if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
+            cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+        elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
+            cls_loss = tfa.losses.sigmoid_focal_crossentropy
+        else:
+            raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
+
+        model.compile(
+            loss={
+                "cls": cls_loss,
+                "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
+                "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
+                "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
+                "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
+                "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
+                "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
+            },
+            optimizer=opt,
+            sample_weight_mode="temporal",
+            loss_weights={
+                "cls": config["dataset"]["classification_loss_coef"],
+                "charge": config["dataset"]["charge_loss_coef"],
+                "pt": config["dataset"]["pt_loss_coef"],
+                "eta": config["dataset"]["eta_loss_coef"],
+                "sin_phi": config["dataset"]["sin_phi_loss_coef"],
+                "cos_phi": config["dataset"]["cos_phi_loss_coef"],
+                "energy": config["dataset"]["energy_loss_coef"],
+            },
+            metrics={
+                "cls": [
+                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                ]
+            },
+        )
+        model.summary()
+
+        max_steps = 200
+        lr_finder = LRFinder(max_steps=max_steps)
+        callbacks = [lr_finder]
+
+        fit_result = model.fit(
+            ds_train_r,
+            epochs=max_steps,
+            callbacks=callbacks,
+            steps_per_epoch=1,
+        )
+
+        lr_finder.plot(save_dir=outdir, figname=figname, log_scale=log_scale)
 
 
 if __name__ == "__main__":
