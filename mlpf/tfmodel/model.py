@@ -10,7 +10,7 @@ from .fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 1e-7
+regularizer_weight = 1e-8
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -867,13 +867,15 @@ class PFNetDense(tf.keras.Model):
             num_conv=2,
             num_gsl=1,
             normalize_degrees=False,
-            dropout=0.0
+            dropout=0.0,
+            separate_momentum=True
         ):
         super(PFNetDense, self).__init__()
 
         self.multi_output = multi_output
         self.num_momentum_outputs = num_momentum_outputs
         self.activation = activation
+        self.separate_momentum = separate_momentum
 
         self.num_conv = num_conv
         self.num_gsl = num_gsl
@@ -901,7 +903,16 @@ class PFNetDense(tf.keras.Model):
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+        
+        if self.separate_momentum:
+            self.ffn_momentum = [
+                point_wise_feed_forward_network(
+                    1, dff, name="ffn_momentum{}".format(imomentum),
+                    dtype=tf.dtypes.float32, num_layers=3, activation=activation
+                ) for imomentum in range(num_momentum_outputs)
+            ]
+        else:
+            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
 
     def call(self, inputs, training=False):
         X = inputs
@@ -928,7 +939,11 @@ class PFNetDense(tf.keras.Model):
 
         dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
        
-        pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+        if self.separate_momentum:
+            pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
+            pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
+        else:
+            pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
