@@ -578,7 +578,7 @@ def main(args, yaml_path, config):
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
 
-    lr = global_batch_size*float(config['setup']['lr'])
+    lr = float(config['setup']['lr'])
     with strategy.scope():
         total_steps = n_epochs * n_train // global_batch_size
         lr_schedule, optim_callbacks = get_lr_schedule(config, lr, steps=total_steps)
