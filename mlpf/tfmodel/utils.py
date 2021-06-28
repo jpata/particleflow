@@ -3,9 +3,12 @@ import yaml
 from pathlib import Path
 import datetime
 import platform
+import random
+import glob
 
 import tensorflow as tf
 
+from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 
 
@@ -98,3 +101,76 @@ def get_weights_func(config):
         return compute_weights_none
     else:
         raise ValueError("Only supported weight samplings are 'inverse_sqrt' and 'none'.")
+
+
+def targets_multi_output(num_output_classes):
+    def func(X, y, w):
+        return X, {
+            "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes), 
+            "charge": y[:, :, 1:2],
+            "pt": y[:, :, 2:3],
+            "eta": y[:, :, 3:4],
+            "sin_phi": y[:, :, 4:5],
+            "cos_phi": y[:, :, 5:6],
+            "energy": y[:, :, 6:7],
+        }, w
+    return func
+
+
+def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+    cds = config["dataset"]
+
+    dataset_def = Dataset(
+        num_input_features=int(cds["num_input_features"]),
+        num_output_features=int(cds["num_output_features"]),
+        padded_num_elem_size=int(cds["padded_num_elem_size"]),
+        raw_path=cds.get("raw_path", None),
+        raw_files=cds.get("raw_files", None),
+        processed_path=cds["processed_path"],
+        validation_file_path=cds["validation_file_path"],
+        schema=cds["schema"],
+    )
+
+    tfr_files = sorted(glob.glob(dataset_def.processed_path))
+    if len(tfr_files) == 0:
+        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
+
+    random.shuffle(tfr_files)
+    dataset = tf.data.TFRecordDataset(tfr_files).map(
+        dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
+
+    # Due to TFRecords format, the length of the dataset is not known beforehand
+    num_events = 0
+    for _ in dataset:
+        num_events += 1
+    print("dataset loaded, len={}".format(num_events))
+
+    weight_func = get_weights_func(config)
+    assert n_train + n_test <= num_events
+
+    # Padded shapes
+    ps = (
+        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
+        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
+        tf.TensorShape(
+            [
+                dataset_def.padded_num_elem_size,
+            ]
+        ),
+    )
+
+    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
+
+    if config["setup"]["multi_output"]:
+        dataset_transform = targets_multi_output(config["dataset"]["num_output_classes"])
+        ds_train = ds_train.map(dataset_transform)
+        ds_test = ds_test.map(dataset_transform)
+    else:
+        dataset_transform = None
+
+    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
+    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+
+    return dataset_def, ds_train_r, ds_test_r, dataset_transform

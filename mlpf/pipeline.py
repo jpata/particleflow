@@ -17,7 +17,6 @@ import tensorflow_addons as tfa
 
 from tfmodel.data import Dataset
 from tfmodel.model_setup import (
-    targets_multi_output,
     make_model,
     configure_model_weights,
     LearningRateLoggingCallback,
@@ -35,6 +34,8 @@ from tfmodel.utils import (
     load_config,
     compute_weights_invsqrt,
     compute_weights_none,
+    get_train_val_datasets,
+    targets_multi_output,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -60,76 +61,21 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     config_file_stem = Path(config).stem
     config = load_config(config)
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-
-    cds = config["dataset"]
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"],
-    )
-
     global_batch_size = config["setup"]["batch_size"]
-    if "multi_output" in config["setup"]:
-        multi_output = config["setup"]["multi_output"]
-    else:
-        multi_output = True
-        config["setup"]["multi_output"] = True
-    n_train = config["setup"]["num_events_train"]
-    n_test = config["setup"]["num_events_test"]
+    n_epochs = config["setup"]["num_epochs"]
     if ntrain:
         n_train = ntrain
+    else:
+        n_train = config["setup"]["num_events_train"]
     if ntest:
         n_test = ntest
-
-    n_epochs = config["setup"]["num_epochs"]
+    else:
+        n_test = config["setup"]["num_events_test"]
     total_steps = n_epochs * n_train // global_batch_size
 
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
-
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(
-        dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE
-    )
-
-    # Due to TFRecords format, the length of the dataset is not known beforehand
-    num_events = 0
-    for i in dataset:
-        num_events += 1
-    print("dataset loaded, len={}".format(num_events))
-
-    weight_func = get_weights_func(config)
-    assert n_train + n_test <= num_events
-
-    # Padded shapes
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        tf.TensorShape(
-            [
-                dataset_def.padded_num_elem_size,
-            ]
-        ),
-    )
-
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-    if multi_output:
-        dataset_transform = targets_multi_output(config["dataset"]["num_output_classes"])
-        ds_train = ds_train.map(dataset_transform)
-        ds_test = ds_test.map(dataset_transform)
-    else:
-        dataset_transform = None
-
-    ds_train_r = ds_train.repeat(n_epochs)
-    ds_test_r = ds_test.repeat(n_epochs)
+    if "multi_output" not in config["setup"]:
+        config["setup"]["multi_output"] = True
+    dataset_def, ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
 
     if weights is None:
         weights = config["setup"]["weights"]
@@ -145,7 +91,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
-    actual_lr = global_batch_size * float(config["setup"]["lr"])
+    lr = float(config["setup"]["lr"])
 
     val_filelist = dataset_def.val_filelist
     if config["setup"]["num_val_files"] > 0:
@@ -166,7 +112,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     ycand_val = np.concatenate(ycands)
 
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, lr=actual_lr, steps=total_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, lr=lr, steps=total_steps)
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
         if config["setup"]["dtype"] == "float16":
             model_dtype = tf.dtypes.float16
