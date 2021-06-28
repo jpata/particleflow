@@ -26,7 +26,7 @@ from tqdm import tqdm
 from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
-from tfmodel.utils import get_lr_schedule, get_weights_func
+from tfmodel.utils import get_lr_schedule, get_weights_func, targets_multi_output
 
 
 def plot_confusion_matrix(cm):
@@ -230,18 +230,6 @@ def scale_outputs(X,y,w):
     ynew = ynew/out_s
     return X, ynew, w
 
-def targets_multi_output(num_output_classes):
-    def func(X, y, w):
-        return X, {
-            "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes), 
-            "charge": y[:, :, 1:2],
-            "pt": y[:, :, 2:3],
-            "eta": y[:, :, 3:4],
-            "sin_phi": y[:, :, 4:5],
-            "cos_phi": y[:, :, 5:6],
-            "energy": y[:, :, 6:7],
-        }, w
-    return func
 
 def make_model(config, dtype):
     model = config['parameters']['model']
