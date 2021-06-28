@@ -53,7 +53,8 @@ def main():
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
-def train(config, weights, ntrain, ntest, recreate):
+@click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
+def train(config, weights, ntrain, ntest, recreate, prefix):
     """Train a model defined by config
     """
     config_file_stem = Path(config).stem
@@ -134,12 +135,12 @@ def train(config, weights, ntrain, ntest, recreate):
         weights = config["setup"]["weights"]
 
     if recreate or (weights is None):
-        outdir = create_experiment_dir(prefix=config_file_stem + "_", suffix=platform.node())
+        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
         outdir = str(Path(weights).parent)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy()
+    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
 
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
@@ -339,7 +340,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 
     global_batch_size = config["setup"]["batch_size"]
 
-    strategy, maybe_global_batch_size = get_strategy()
+    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
 
