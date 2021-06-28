@@ -41,6 +41,7 @@ setup:
   trainable: all
   multi_output: no
   classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: gnn

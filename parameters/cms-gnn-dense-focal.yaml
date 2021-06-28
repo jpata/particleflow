@@ -52,6 +52,7 @@ setup:
   sample_weights: none
   trainable: all
   classification_loss_type: sigmoid_focal_crossentropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: gnn_dense
