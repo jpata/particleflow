@@ -52,7 +52,8 @@ parameters:
   normalize_degrees: yes
   distance_dim: 128
   dropout: 0.0
-  
+  separate_momentum: yes
+
 timing:
   num_ev: 1
   num_iter: 1
