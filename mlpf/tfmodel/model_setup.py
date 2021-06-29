@@ -457,13 +457,21 @@ def main(args, yaml_path, config):
     from tfmodel.data import Dataset
     cds = config["dataset"]
 
+    raw_path = cds.get("raw_path", None)
+    if args.raw_path:
+        raw_path = args.raw_path
+
+    processed_path = cds.get("processed_path", None)
+    if args.processed_path:
+        processed_path = args.processed_path
+
     dataset_def = Dataset(
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
+        raw_path=raw_path,
         raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
+        processed_path=processed_path,
         validation_file_path=cds["validation_file_path"],
         schema=cds["schema"]
     )
