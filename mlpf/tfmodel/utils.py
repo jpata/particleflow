@@ -5,6 +5,8 @@ import datetime
 import platform
 import random
 import glob
+import numpy as np
+from tqdm import tqdm
 
 import tensorflow as tf
 
@@ -105,22 +107,27 @@ def get_weights_func(config):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
-        return X, {
-            "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes), 
-            "charge": y[:, :, 1:2],
-            "pt": y[:, :, 2:3],
-            "eta": y[:, :, 3:4],
-            "sin_phi": y[:, :, 4:5],
-            "cos_phi": y[:, :, 5:6],
-            "energy": y[:, :, 6:7],
-        }, w
+        return (
+            X,
+            {
+                "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
+                "charge": y[:, :, 1:2],
+                "pt": y[:, :, 2:3],
+                "eta": y[:, :, 3:4],
+                "sin_phi": y[:, :, 4:5],
+                "cos_phi": y[:, :, 5:6],
+                "energy": y[:, :, 6:7],
+            },
+            w,
+        )
+
     return func
 
 
-def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+def get_dataset_def(config):
     cds = config["dataset"]
 
-    dataset_def = Dataset(
+    return Dataset(
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
@@ -130,6 +137,10 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
         validation_file_path=cds["validation_file_path"],
         schema=cds["schema"],
     )
+
+
+def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+    dataset_def = get_dataset_def(config)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
     if len(tfr_files) == 0:
@@ -173,4 +184,77 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
     ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
     ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
 
-    return dataset_def, ds_train_r, ds_test_r, dataset_transform
+    return ds_train_r, ds_test_r, dataset_transform
+
+
+def prepare_val_data(config, dataset_def, single_file=False):
+    if single_file:
+        val_filelist = dataset_def.val_filelist[:1]
+    else:
+        val_filelist = dataset_def.val_filelist
+    if config["setup"]["num_val_files"] > 0:
+        val_filelist = val_filelist[: config["setup"]["num_val_files"]]
+
+    Xs = []
+    ygens = []
+    ycands = []
+    for fi in tqdm(val_filelist[:1], desc="Preparing validation data"):
+        X, ygen, ycand = dataset_def.prepare_data(fi)
+        Xs.append(np.concatenate(X))
+        ygens.append(np.concatenate(ygen))
+        ycands.append(np.concatenate(ycand))
+
+    assert len(Xs) > 0, "Xs is empty"
+    X_val = np.concatenate(Xs)
+    ygen_val = np.concatenate(ygens)
+    ycand_val = np.concatenate(ycands)
+
+    return X_val, ygen_val, ycand_val
+
+
+def set_config_loss(config, trainable):
+    if trainable == "classification":
+        config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["eta_loss_coef"] = 0.0
+        config["dataset"]["sin_phi_loss_coef"] = 0.0
+        config["dataset"]["cos_phi_loss_coef"] = 0.0
+        config["dataset"]["energy_loss_coef"] = 0.0
+    elif trainable == "regression":
+        config["dataset"]["classification_loss_coef"] = 0.0
+        config["dataset"]["charge_loss_coef"] = 0.0
+    elif trainable == "all":
+        pass
+    return config
+
+
+def get_class_loss(config):
+    if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
+        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+    elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
+        cls_loss = tfa.losses.sigmoid_focal_crossentropy
+    else:
+        raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
+    return cls_loss
+
+
+def get_loss_dict(config):
+    cls_loss = get_class_loss(config)
+    loss_dict = {
+        "cls": cls_loss,
+        "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
+        "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
+        "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
+        "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
+        "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
+        "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
+    }
+    loss_weights = {
+        "cls": config["dataset"]["classification_loss_coef"],
+        "charge": config["dataset"]["charge_loss_coef"],
+        "pt": config["dataset"]["pt_loss_coef"],
+        "eta": config["dataset"]["eta_loss_coef"],
+        "sin_phi": config["dataset"]["sin_phi_loss_coef"],
+        "cos_phi": config["dataset"]["cos_phi_loss_coef"],
+        "energy": config["dataset"]["energy_loss_coef"],
+    }
+    return loss_dict, loss_weights

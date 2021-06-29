@@ -36,6 +36,10 @@ from tfmodel.utils import (
     compute_weights_none,
     get_train_val_datasets,
     targets_multi_output,
+    get_dataset_def,
+    prepare_val_data,
+    set_config_loss,
+    get_loss_dict,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -71,11 +75,13 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         n_test = ntest
     else:
         n_test = config["setup"]["num_events_test"]
-    total_steps = n_epochs * n_train // global_batch_size
 
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True
-    dataset_def, ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+
+    dataset_def = get_dataset_def(config)
+    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
 
     if weights is None:
         weights = config["setup"]["weights"]
@@ -87,33 +93,17 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    total_steps = n_epochs * n_train // global_batch_size
 
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
     lr = float(config["setup"]["lr"])
 
-    val_filelist = dataset_def.val_filelist
-    if config["setup"]["num_val_files"] > 0:
-        val_filelist = val_filelist[: config["setup"]["num_val_files"]]
-
-    Xs = []
-    ygens = []
-    ycands = []
-    for fi in tqdm(val_filelist[:1], desc="Preparing validation data"):
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-
-    assert len(Xs) > 0, "Xs is empty"
-    X_val = np.concatenate(Xs)
-    ygen_val = np.concatenate(ygens)
-    ycand_val = np.concatenate(ycands)
-
     with strategy.scope():
         lr_schedule, optim_callbacks = get_lr_schedule(config, lr=lr, steps=total_steps)
         opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+
         if config["setup"]["dtype"] == "float16":
             model_dtype = tf.dtypes.float16
             policy = mixed_precision.Policy("mixed_float16")
@@ -136,47 +126,16 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model(tf.cast(X_val[:1], model_dtype))
 
-        if config["setup"]["trainable"] == "classification":
-            config["dataset"]["pt_loss_coef"] = 0.0
-            config["dataset"]["eta_loss_coef"] = 0.0
-            config["dataset"]["sin_phi_loss_coef"] = 0.0
-            config["dataset"]["cos_phi_loss_coef"] = 0.0
-            config["dataset"]["energy_loss_coef"] = 0.0
-        elif config["setup"]["trainable"] == "regression":
-            config["dataset"]["classification_loss_coef"] = 0.0
-            config["dataset"]["charge_loss_coef"] = 0.0
-
+        config = set_config_loss(config, config["setup"]["trainable"])
         configure_model_weights(model, config["setup"]["trainable"])
         model(tf.cast(X_val[:1], model_dtype))
 
-        if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-            cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
-        elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-            cls_loss = tfa.losses.sigmoid_focal_crossentropy
-        else:
-            raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
-
+        loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
-            loss={
-                "cls": cls_loss,
-                "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-                "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-                "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-                "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-                "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-                "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
-            },
+            loss=loss_dict,
             optimizer=opt,
             sample_weight_mode="temporal",
-            loss_weights={
-                "cls": config["dataset"]["classification_loss_coef"],
-                "charge": config["dataset"]["charge_loss_coef"],
-                "pt": config["dataset"]["pt_loss_coef"],
-                "eta": config["dataset"]["eta_loss_coef"],
-                "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-                "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-                "energy": config["dataset"]["energy_loss_coef"],
-            },
+            loss_weights=loss_weights,
             metrics={
                 "cls": [
                     FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
@@ -194,7 +153,6 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
             dataset_transform,
             config["dataset"]["num_output_classes"],
         )
-        callbacks.append(LearningRateLoggingCallback())
         callbacks.append(optim_callbacks)
 
         fit_result = model.fit(
@@ -255,43 +213,15 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     else:
         model_dtype = tf.dtypes.float32
 
-    cds = config["dataset"]
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"],
-    )
-
-    Xs = []
-    ygens = []
-    ycands = []
-    val_filelist = dataset_def.val_filelist
-    if config["setup"]["num_val_files"] > 0:
-        val_filelist = val_filelist[: config["setup"]["num_val_files"]]
-
-    for fi in tqdm(val_filelist, desc="Preparing validation data"):
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-    assert len(Xs) > 0
-    X_val = np.concatenate(Xs)
-    ygen_val = np.concatenate(ygens)
-    ycand_val = np.concatenate(ycands)
+    dataset_def = get_dataset_def(config)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def)
 
     global_batch_size = config["setup"]["batch_size"]
-
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
 
     with strategy.scope():
-
         model = make_model(config, model_dtype)
 
         # Evaluate model once to build the layers
@@ -323,7 +253,7 @@ def find_lr(config, outdir, figname, log_scale):
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True
     n_train = config["setup"]["num_events_train"]
-    dataset_def, ds_train_r, _, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
+    ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
@@ -331,15 +261,9 @@ def find_lr(config, outdir, figname, log_scale):
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
-    lr = float(config["setup"]["lr"])
 
-    Xs = []
-    for fi in dataset_def.val_filelist[:1]:
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-        Xs.append(np.concatenate(X))
-
-    assert len(Xs) > 0, "Xs is empty"
-    X_val = np.concatenate(Xs)
+    dataset_def = get_dataset_def(config)
+    X_val, _, _ = prepare_val_data(config, dataset_def)
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -352,50 +276,19 @@ def find_lr(config, outdir, figname, log_scale):
             model_dtype = tf.dtypes.float32
 
         model = make_model(config, model_dtype)
-
-        if config["setup"]["trainable"] == "classification":
-            config["dataset"]["pt_loss_coef"] = 0.0
-            config["dataset"]["eta_loss_coef"] = 0.0
-            config["dataset"]["sin_phi_loss_coef"] = 0.0
-            config["dataset"]["cos_phi_loss_coef"] = 0.0
-            config["dataset"]["energy_loss_coef"] = 0.0
-        elif config["setup"]["trainable"] == "regression":
-            config["dataset"]["classification_loss_coef"] = 0.0
-            config["dataset"]["charge_loss_coef"] = 0.0
+        config = set_config_loss(config, config["setup"]["trainable"])
 
         # Run model once to build the layers
         model(tf.cast(X_val[:1], model_dtype))
 
         configure_model_weights(model, config["setup"]["trainable"])
 
-        if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-            cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
-        elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-            cls_loss = tfa.losses.sigmoid_focal_crossentropy
-        else:
-            raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
-
+        loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
-            loss={
-                "cls": cls_loss,
-                "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-                "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-                "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-                "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-                "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-                "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
-            },
+            loss=loss_dict,
             optimizer=opt,
             sample_weight_mode="temporal",
-            loss_weights={
-                "cls": config["dataset"]["classification_loss_coef"],
-                "charge": config["dataset"]["charge_loss_coef"],
-                "pt": config["dataset"]["pt_loss_coef"],
-                "eta": config["dataset"]["eta_loss_coef"],
-                "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-                "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-                "energy": config["dataset"]["energy_loss_coef"],
-            },
+            loss_weights=loss_weights,
             metrics={
                 "cls": [
                     FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
@@ -409,7 +302,7 @@ def find_lr(config, outdir, figname, log_scale):
         lr_finder = LRFinder(max_steps=max_steps)
         callbacks = [lr_finder]
 
-        fit_result = model.fit(
+        model.fit(
             ds_train_r,
             epochs=max_steps,
             callbacks=callbacks,

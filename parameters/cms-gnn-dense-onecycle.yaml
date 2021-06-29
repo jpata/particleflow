@@ -43,7 +43,7 @@ setup:
   weights:
   weights_config: all
   lr: 1e-4
-  batch_size: 16
+  batch_size: 32
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 400
