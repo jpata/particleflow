@@ -26,20 +26,31 @@ perfile = 10
 
 def genParticleToDict(par):
     mom = par.getMomentum()
-    parent_pdgid = 0
+    parent_pdgid0 = 0
+    parent_idx0 = -1
+    parent_pdgid1 = 0
+    parent_idx1 = -1
+
     if len(par.getParents()) > 0:
-        parent_pdgid = par.getParents()[0].getPDG()
- 
+        parent_pdgid0 = par.getParents()[0].getPDG()
+        parent_idx0 = genparticle_dict[par.getParents()[0]]
+    if len(par.getParents()) > 1:
+        parent_pdgid1 = par.getParents()[1].getPDG()
+        parent_idx1 = genparticle_dict[par.getParents()[1]]
+
     vec = {
         "pdgid": par.getPDG(),
         "status": par.getGeneratorStatus(),
         "mass": par.getMass(),
         "charge": par.getCharge(),
-        "pdgid_parent0": parent_pdgid,
         "px": mom[0],
         "py": mom[1],
         "pz": mom[2],
-        "energy": par.getEnergy()
+        "energy": par.getEnergy(),
+        "pdgid_parent0": parent_pdgid0,
+        "idx_parent0": parent_idx0,
+        "pdgid_parent1": parent_pdgid1,
+        "idx_parent1": parent_idx1
     }
     return vec
 
@@ -216,9 +227,12 @@ if __name__ == "__main__":
     
         genparticles = []
         genparticle_dict = {}
-        for i in range(nMc): # loop over all particles 
+        for i in range(nMc):
             par=col.getElementAt(i)
             genparticle_dict[par] = i
+
+        for i in range(nMc):
+            par=col.getElementAt(i)
             vec = genParticleToDict(par)
             genparticles.append(vec)
     
