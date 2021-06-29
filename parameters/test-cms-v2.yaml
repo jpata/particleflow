@@ -53,6 +53,7 @@ parameters:
   distance_dim: 128
   dropout: 0.0
   separate_momentum: yes
+  input_encoding: cms
 
 timing:
   num_ev: 1

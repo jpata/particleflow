@@ -42,16 +42,17 @@ setup:
   train: yes
   weights:
   weights_config: all
-  lr: 1e-5
+  lr: 1e-4
   batch_size: 5
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 1000
+  num_events_train: 8000
+  num_events_test: 1000
+  num_epochs: 20
   num_val_files: 100
   dtype: float32
   sample_weights: none
   trainable: all
   classification_loss_type: sigmoid_focal_crossentropy
+  focal_loss_alpha: 1e-2
 
 parameters:
   model: gnn_dense
@@ -63,9 +64,10 @@ parameters:
   num_conv: 2
   num_gsl: 2
   normalize_degrees: yes
-  distance_dim: 128
-  dropout: 0.0
-  separate_momentum: no
+  distance_dim: 32
+  dropout: 0.2
+  separate_momentum: yes
+  input_encoding: cms
 
 timing:
   num_ev: 100

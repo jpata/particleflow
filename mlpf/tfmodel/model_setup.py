@@ -304,7 +304,8 @@ def make_gnn_dense(config, dtype):
         "normalize_degrees",
         "distance_dim",
         "dropout",
-        "separate_momentum"
+        "separate_momentum",
+        "input_encoding"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}
@@ -444,6 +445,14 @@ def configure_model_weights(model, trainable_layers):
     trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.trainable_weights])
     non_trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.non_trainable_weights])
     print("trainable={} non_trainable={}".format(trainable_count, non_trainable_count))
+
+def make_focal_loss(config):
+    def loss(x,y):
+        return tfa.losses.sigmoid_focal_crossentropy(x,y,
+            alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
+            gamma=float(config["setup"].get("focal_loss_gamma", 2.0))
+        )
+    return loss
 
 def main(args, yaml_path, config):
     #tf.debugging.enable_check_numerics()
@@ -627,7 +636,7 @@ def main(args, yaml_path, config):
             if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
                 cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
             elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-                cls_loss = tfa.losses.sigmoid_focal_crossentropy
+                cls_loss = make_focal_loss(config)
             else:
                 raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
             

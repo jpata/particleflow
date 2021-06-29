@@ -106,6 +106,42 @@ class InputEncoding(tf.keras.layers.Layer):
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
 
+class InputEncodingCMS(tf.keras.layers.Layer):
+    def __init__(self, num_input_classes):
+        super(InputEncodingCMS, self).__init__()
+        self.num_input_classes = num_input_classes
+
+    """
+        X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
+    """        
+    @tf.function
+    def call(self, X):
+
+        #X[:, :, 0] - categorical index of the element type
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
+        Xpt = tf.expand_dims(tf.math.log1p(X[:, :, 1]), axis=-1)
+        Xeta1 = tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1)
+        Xeta2 = tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1)
+        Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
+        Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
+        Xe = tf.expand_dims(tf.math.log1p(X[:, :, 4]), axis=-1)
+        Xlayer = tf.expand_dims(X[:, :, 5]*10.0, axis=-1)
+        Xdepth = tf.expand_dims(X[:, :, 6]*10.0, axis=-1)
+
+        Xphi_ecal1 = tf.expand_dims(tf.sin(X[:, :, 10]), axis=-1)
+        Xphi_ecal2 = tf.expand_dims(tf.cos(X[:, :, 10]), axis=-1)
+        Xphi_hcal1 = tf.expand_dims(tf.sin(X[:, :, 12]), axis=-1)
+        Xphi_hcal2 = tf.expand_dims(tf.cos(X[:, :, 12]), axis=-1)
+
+        return tf.concat([
+            Xid, Xpt,
+            Xeta1, Xeta2,
+            Xphi1, Xphi2,
+            Xe, Xlayer, Xdepth,
+            Xphi_ecal1, Xphi_ecal2, Xphi_hcal1, Xphi_hcal2,
+            X], axis=-1
+        )
+
 #https://arxiv.org/pdf/2004.04635.pdf
 #https://github.com/gcucurull/jax-ghnet/blob/master/models.py 
 class GHConv(tf.keras.layers.Layer):
@@ -868,7 +904,8 @@ class PFNetDense(tf.keras.Model):
             num_gsl=1,
             normalize_degrees=False,
             dropout=0.0,
-            separate_momentum=True
+            separate_momentum=True,
+            input_encoding="cms"
         ):
         super(PFNetDense, self).__init__()
 
@@ -880,7 +917,10 @@ class PFNetDense(tf.keras.Model):
         self.num_conv = num_conv
         self.num_gsl = num_gsl
 
-        self.enc = InputEncoding(num_input_classes)
+        if input_encoding == "cms":
+            self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "default":
+            self.enc = InputEncoding(num_input_classes)
 
         dff = hidden_dim
         self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation)
