@@ -23,7 +23,7 @@ class CosineAnnealer:
 
 
 class OneCycleScheduler(LearningRateSchedule):
-    """`Callback` that schedules the learning rate on a 1cycle policy as per Leslie Smith's paper
+    """`LearningRateSchedule` that schedules the learning rate on a 1cycle policy as per Leslie Smith's paper
     (https://arxiv.org/pdf/1803.09820.pdf).
 
     The implementation adopts additional improvements as per the fastai library:
