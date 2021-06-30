@@ -53,7 +53,7 @@ setup:
   trainable: all
   classification_loss_type: sigmoid_focal_crossentropy
   focal_loss_alpha: 0.0
-  focal_loss_gamma: 5.0
+  focal_loss_gamma: 3.0
 
 parameters:
   model: gnn_dense
