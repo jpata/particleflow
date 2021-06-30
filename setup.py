@@ -12,7 +12,7 @@ with open('requirements.txt', 'r') as req_file:
 DEV_REQUIRE = ["pytest"]
 
 setuptools.setup(
-    name='hep-tfds',
+    name='heptfds',
     version='0.0.1',
     author='Eric Wulff',
     author_email='eric.wulff@cern.ch',
