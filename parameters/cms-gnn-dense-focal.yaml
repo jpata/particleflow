@@ -23,7 +23,7 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 1.0
+  classification_loss_coef: 5.0
   charge_loss_coef: 0.1
   pt_loss_coef: 1.0
   eta_loss_coef: 0.1
@@ -41,18 +41,19 @@ tensorflow:
 setup:
   train: yes
   weights:
-  weights_config: all
-  lr: 1e-4
+  weights_config:
+  lr: 1e-5
   batch_size: 5
-  num_events_train: 8000
-  num_events_test: 1000
+  num_events_train: 80000
+  num_events_test: 10000
   num_epochs: 20
   num_val_files: 100
   dtype: float32
-  sample_weights: none
+  sample_weights: signal_only
   trainable: all
   classification_loss_type: sigmoid_focal_crossentropy
-  focal_loss_alpha: 1e-2
+  focal_loss_alpha: 0.0
+  focal_loss_gamma: 5.0
 
 parameters:
   model: gnn_dense
@@ -60,11 +61,11 @@ parameters:
   layernorm: no
   hidden_dim: 256
   bin_size: 640
-  clip_value_low: 0.0
+  clip_value_low: 0.01
   num_conv: 2
   num_gsl: 2
   normalize_degrees: yes
-  distance_dim: 32
+  distance_dim: 128
   dropout: 0.2
   separate_momentum: yes
   input_encoding: cms

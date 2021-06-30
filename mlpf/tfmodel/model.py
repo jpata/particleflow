@@ -106,6 +106,13 @@ class InputEncoding(tf.keras.layers.Layer):
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
 
+"""
+For the CMS dataset, precompute additional features:
+- log of pt and energy
+- sinh, cosh of eta
+- sin, cos of phi angles
+- scale layer and depth values (small integers) to a larger dynamic range
+"""
 class InputEncodingCMS(tf.keras.layers.Layer):
     def __init__(self, num_input_classes):
         super(InputEncodingCMS, self).__init__()
@@ -923,8 +930,8 @@ class PFNetDense(tf.keras.Model):
             self.enc = InputEncoding(num_input_classes)
 
         dff = hidden_dim
-        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation)
-        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation)
+        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_id")
+        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_reg")
 
         kwargs_cg = {
             "output_dim": dff,
@@ -975,17 +982,19 @@ class PFNetDense(tf.keras.Model):
         dec_output_id = tf.concat([enc] + encs_id, axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)*msk_input
-        out_charge = self.ffn_charge(dec_output_id)*msk_input
+        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+        #pred_cls_nonzero = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
+        out_charge = self.ffn_charge(dec_output_id)*msk_input
         dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
        
+
         if self.separate_momentum:
             pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
             pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
         else:
             pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
-        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
         if self.multi_output:
