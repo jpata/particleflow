@@ -6,12 +6,12 @@ import heptfds
 VERSION = "1.0.0"
 
 dataset, dataset_info = tfds.load(
-            "cms_pf:{}".format(VERSION),
-            split="train",
-            as_supervised=False,
-            with_info=True,
-            shuffle_files=True,
-        )
+    "cms_pf:{}".format(VERSION),
+    split="train",
+    as_supervised=False,
+    with_info=True,
+    shuffle_files=True,
+)
 print("dataset_info", dataset_info)
 
 for item in dataset:
