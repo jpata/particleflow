@@ -23,6 +23,8 @@ import json
 import random
 import platform
 
+from tensorflow.keras.metrics import Recall, CategoricalAccuracy
+
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
     plt.imshow(cm, cmap="Blues")
@@ -80,6 +82,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
             json.dump(logs, fi)
 
         ypred = self.model(self.X, training=False)
+        #ypred["cls"] = np.clip(ypred["cls"], 0.5, 1.0)
+        
         ypred_id = np.argmax(ypred["cls"], axis=-1)
 
         ibatch = 0
@@ -172,6 +176,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
         plt.close("all")
 
+        np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
+
 def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
     tb = tf.keras.callbacks.TensorBoard(
@@ -222,12 +228,23 @@ def compute_weights_invsqrt(X, y, w):
 
 def compute_weights_none(X, y, w):
     wn = tf.ones_like(w)
+
+    #mask the padded entries
+    wn *= tf.cast(X[:, 0]!=0, tf.float32)
+    return X, y, wn
+
+def compute_weights_signal_only(X, y, w):
+    #mask the no particle class
+    wn = tf.where(y[:, 0]==0, 0.0, 1.0)
+
+    #mask the padded entries
     wn *= tf.cast(X[:, 0]!=0, tf.float32)
     return X, y, wn
 
 weight_functions = {
     "inverse_sqrt": compute_weights_invsqrt,
     "none": compute_weights_none,
+    "signal_only": compute_weights_signal_only
 }
 
 def scale_outputs(X,y,w):
@@ -407,10 +424,26 @@ class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
         _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
         _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
         sample_weights = None
+
         if self.use_weights:
             sample_weights = _y_true*tf.reduce_sum(_y_true, axis=0)
             sample_weights = 1.0/sample_weights[sample_weights!=0]
+
         super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, sample_weights)
+
+class SingleClassRecall(Recall):
+    def __init__(self, icls, **kwargs):
+        super(SingleClassRecall, self).__init__(**kwargs)
+        self.icls = icls
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.argmax(tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2])), axis=-1)
+        super(SingleClassRecall, self).update_state(
+            _y_true[:, self.icls],
+            tf.cast(_y_pred==self.icls, tf.float32)
+        )
 
 class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, use_weights=False, **kwargs):
@@ -665,6 +698,11 @@ def main(args, yaml_path, config):
                     "cls": [
                         FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
                         FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                    ] + [
+                        SingleClassRecall(
+                            icls,
+                            name="rec_cls{}".format(icls),
+                            dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
                     ]
                 }
             )
