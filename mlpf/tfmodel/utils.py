@@ -7,6 +7,7 @@ import random
 import glob
 import numpy as np
 from tqdm import tqdm
+import re
 
 import tensorflow as tf
 
@@ -55,6 +56,14 @@ def create_experiment_dir(prefix=None, suffix=None):
 
     train_dir.mkdir(parents=True)
     return str(train_dir)
+
+
+def get_best_checkpoint(train_dir):
+    checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
+    # Sort the checkpoints according to the loss in their filenames
+    checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
+    # Return the checkpoint with smallest loss
+    return str(checkpoint_list[0])
 
 
 def get_strategy(global_batch_size):

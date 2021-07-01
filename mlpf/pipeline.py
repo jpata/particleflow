@@ -41,6 +41,7 @@ from tfmodel.utils import (
     set_config_loss,
     get_loss_dict,
     parse_config,
+    get_best_checkpoint,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -207,6 +208,10 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         if weights:
             # need to load the weights in the same trainable configuration as the model was set up
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
+            model.load_weights(weights, by_name=True)
+        else:
+            weights = get_best_checkpoint(train_dir)
+            print("Loading best weights that could be found from {}".format(weights))
             model.load_weights(weights, by_name=True)
         model(tf.cast(X_val[:1], model_dtype))
 
