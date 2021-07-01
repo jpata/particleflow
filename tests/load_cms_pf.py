@@ -1,15 +1,16 @@
 import tensorflow_datasets as tfds
 import heptfds
 import argparse
-
+import os
 
 VERSION = "1.0.0"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--datadir", type=str, help="Original data directory (before processing to tfrecords).")
+    parser.add_argument("-m", "--manual_dir", type=str, help="Original data directory (before processing to tfrecords).")
+    parser.add_argument("-d", "--data_dir", type=str, help="Directory to store tfrecords.")
     parser.add_argument(
-        "-m",
+        "-n",
         "--max_examples_per_split",
         type=int,
         default=None,
@@ -19,11 +20,12 @@ def parse_args():
     return args
 
 def main(args):
-    download_config = tfds.download.DownloadConfig(manual_dir=args.datadir, max_examples_per_split=args.max_examples_per_split)
+    download_config = tfds.download.DownloadConfig(manual_dir=args.manual_dir, max_examples_per_split=args.max_examples_per_split)
 
     train_dataset, train_dataset_info = tfds.load(
         "cms_pf:{}".format(VERSION),
         split="train",
+        data_dir=args.data_dir,
         as_supervised=False,
         with_info=True,
         shuffle_files=True,
@@ -34,6 +36,7 @@ def main(args):
     test_dataset, test_dataset_info = tfds.load(
         "cms_pf:{}".format(VERSION),
         split="test",
+        data_dir=args.data_dir,
         as_supervised=False,
         with_info=True,
         shuffle_files=True,

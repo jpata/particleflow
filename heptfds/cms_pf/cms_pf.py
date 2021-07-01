@@ -44,8 +44,6 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
     is a tfds.download.DownloadConfig with manual_dir set to <your_dir>.
     """
 
-    def __init__(self, **kwargs):
-        super(CmsPf, self).__init__()
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
