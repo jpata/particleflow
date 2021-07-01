@@ -40,6 +40,7 @@ from tfmodel.utils import (
     prepare_val_data,
     set_config_loss,
     get_loss_dict,
+    parse_config,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -62,29 +63,11 @@ def main():
 def train(config, weights, ntrain, ntest, recreate, prefix):
     """Train a model defined by config
     """
-    config_file_stem = Path(config).stem
-    config = load_config(config)
-    tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-    global_batch_size = config["setup"]["batch_size"]
-    n_epochs = config["setup"]["num_epochs"]
-    if ntrain:
-        n_train = ntrain
-    else:
-        n_train = config["setup"]["num_events_train"]
-    if ntest:
-        n_test = ntest
-    else:
-        n_test = config["setup"]["num_events_test"]
-
-    if "multi_output" not in config["setup"]:
-        config["setup"]["multi_output"] = True
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(config, ntrain, ntest, weights)
 
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
-
-    if weights is None:
-        weights = config["setup"]["weights"]
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -93,11 +76,10 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    total_steps = n_epochs * n_train // global_batch_size
-
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
+    total_steps = n_epochs * n_train // global_batch_size
     lr = float(config["setup"]["lr"])
 
     with strategy.scope():
@@ -190,7 +172,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("-e", "--evaluation_dir", help="force creation of new experiment dir", type=click.Path())
 def evaluate(config, train_dir, weights, evaluation_dir):
-    config = load_config(config)
+    config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
     # Switch off multi-output for the evaluation for backwards compatibility
     config["setup"]["multi_output"] = False
 
@@ -199,11 +181,6 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     else:
         eval_dir = evaluation_dir
     Path(eval_dir).mkdir(parents=True, exist_ok=True)
-
-    tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-
-    if weights is None:
-        weights = config["setup"]["weights"]
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -216,7 +193,6 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     dataset_def = get_dataset_def(config)
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def)
 
-    global_batch_size = config["setup"]["batch_size"]
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
@@ -244,15 +220,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-o", "--outdir", help="output directory", type=click.Path(), default=".")
 @click.option("-n", "--figname", help="name of saved figure", type=click.Path(), default="lr_finder.jpg")
-@click.option("-l", "--log_scale", help="use log scale on y-axis in figure", type=click.Path(), default=False, is_flag=True)
-def find_lr(config, outdir, figname, log_scale):
-    config = load_config(config)
-    tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-    global_batch_size = config["setup"]["batch_size"]
-
-    if "multi_output" not in config["setup"]:
-        config["setup"]["multi_output"] = True
-    n_train = config["setup"]["num_events_train"]
+@click.option("-l", "--logscale", help="use log scale on y-axis in figure", default=False, is_flag=True)
+def find_lr(config, outdir, figname, logscale):
+    config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
     ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
@@ -309,7 +279,7 @@ def find_lr(config, outdir, figname, log_scale):
             steps_per_epoch=1,
         )
 
-        lr_finder.plot(save_dir=outdir, figname=figname, log_scale=log_scale)
+        lr_finder.plot(save_dir=outdir, figname=figname, log_scale=logscale)
 
 
 if __name__ == "__main__":
