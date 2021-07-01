@@ -12,10 +12,9 @@ from numpy.lib.recfunctions import append_fields
 
 # TODO(cms_pf): Markdown description  that will appear on the catalog page.
 _DESCRIPTION = """
-Description is **formatted** as markdown.
+Dataset generated with CMSSW and full detector sim.
 
-It should also contain any processing which has been applied (if any),
-(e.g. corrupted example skipped, images cropped,...):
+TTbar events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -37,6 +36,13 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
     }
+    MANUAL_DOWNLOAD_INSTRUCTIONS = """
+    Ask jpata for the data and place it in <your_dir>. Then build the dataset using 
+    `tfds build <path_to_heptfds>/heptfds/cms_pf --manual_dir <your_dir>`. Alternatively,
+    load the dataset using tfds.load() and give the argument
+    `download_and_prepare_kwargs={"download_config": download_config}` where `download_config`
+    is a tfds.download.DownloadConfig with manual_dir set to <your_dir>.
+    """
 
     def __init__(self, **kwargs):
         super(CmsPf, self).__init__()
@@ -64,10 +70,7 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
-        # TODO(cms_pf): Downloads the data and defines the splits
-        # path = dl_manager.download_and_extract('https://todo-data-url')
-
-        path = Path("/Users/wulff/cern/ai/data/TTbar_14TeV_TuneCUETP8M1_cfi")
+        path = dl_manager.manual_dir
         return {"train": self._generate_examples(path / "raw"), "test": self._generate_examples(path / "val")}
 
     def _generate_examples(self, path):
