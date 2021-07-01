@@ -20,6 +20,30 @@ def load_config(config_file_path):
     return cfg
 
 
+def parse_config(config, ntrain=None, ntest=None, weights=None):
+    config_file_stem = Path(config).stem
+    config = load_config(config)
+    tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
+    global_batch_size = config["setup"]["batch_size"]
+    n_epochs = config["setup"]["num_epochs"]
+    if ntrain:
+        n_train = ntrain
+    else:
+        n_train = config["setup"]["num_events_train"]
+    if ntest:
+        n_test = ntest
+    else:
+        n_test = config["setup"]["num_events_test"]
+
+    if "multi_output" not in config["setup"]:
+        config["setup"]["multi_output"] = True
+
+    if weights is None:
+        weights = config["setup"]["weights"]
+
+    return config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights
+
+
 def create_experiment_dir(prefix=None, suffix=None):
     if prefix is None:
         train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
