@@ -231,7 +231,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
     Xs = []
     ygens = []
     ycands = []
-    for fi in tqdm(val_filelist[:1], desc="Preparing validation data"):
+    for fi in tqdm(val_filelist, desc="Preparing validation data"):
         X, ygen, ycand = dataset_def.prepare_data(fi)
         Xs.append(np.concatenate(X))
         ygens.append(np.concatenate(ygen))
