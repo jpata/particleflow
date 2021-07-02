@@ -217,7 +217,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 
         model.compile()
         eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-        freeze_model(model, config, eval_dir)
+        freeze_model(model, config, train_dir)
 
 
 @main.command()
