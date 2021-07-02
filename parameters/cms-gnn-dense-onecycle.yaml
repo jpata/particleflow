@@ -29,7 +29,7 @@ dataset:
   eta_loss_coef: 0.1
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
-  energy_loss_coef: 0.1
+  energy_loss_coef: 1.0
   raw_path: ../data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: ../data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1

@@ -68,7 +68,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -192,7 +192,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     dataset_def = get_dataset_def(config)
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if maybe_global_batch_size is not None:
@@ -238,7 +238,7 @@ def find_lr(config, outdir, figname, logscale):
         global_batch_size = maybe_global_batch_size
 
     dataset_def = get_dataset_def(config)
-    X_val, _, _ = prepare_val_data(config, dataset_def)
+    X_val, _, _ = prepare_val_data(config, dataset_def, single_file=True)
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
