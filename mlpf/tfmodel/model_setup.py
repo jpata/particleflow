@@ -220,32 +220,30 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
-def compute_weights_invsqrt(X, y, w):
-    wn = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    #wn /= tf.reduce_sum(wn)
-    return X, y, wn
+def make_weight_function(config):
+    def weight_func(X,y,w):
 
-def compute_weights_none(X, y, w):
-    wn = tf.ones_like(w)
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
-    #mask the padded entries
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    return X, y, wn
+        w_none = tf.ones_like(w)
+        w_none *= tf.cast(X[:, 0]!=0, tf.float32)
 
-def compute_weights_signal_only(X, y, w):
-    #mask the no particle class
-    wn = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
+        w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
 
-    #mask the padded entries
-    wn *= tf.cast(X[:, 0]!=0, tf.float32)
-    return X, y, wn
+        weight_d = {
+            "none": w_none,
+            "signal_only": w_signal_only,
+            "inverse_sqrt": w_invsqrt
+        }
 
-weight_functions = {
-    "inverse_sqrt": compute_weights_invsqrt,
-    "none": compute_weights_none,
-    "signal_only": compute_weights_signal_only
-}
+        ret_w = {}
+        for loss_component, weight_type in config["sample_weights"].items():
+            ret_w[loss_component] = weight_d[weight_type]
+
+        return X,y,ret_w
+    return weight_func
 
 def scale_outputs(X,y,w):
     ynew = y-out_m
@@ -384,7 +382,7 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
         y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
         y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
-        np_outfile = "{}/pred_{}.npz".format(outdir, ibatch)
+        np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
         np.savez(
             np_outfile,
             X=X[nb1:nb2],
@@ -465,14 +463,18 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
 
 def configure_model_weights(model, trainable_layers):
     print("setting trainable layers: {}".format(trainable_layers))
-    if trainable_layers == "classification":
+    if (trainable_layers is None):
+        trainable_layers = "all"
+    if trainable_layers == "all":
+        model.trainable = True
+    elif trainable_layers == "classification":
         model.set_trainable_classification()
     elif trainable_layers == "regression":
         model.set_trainable_regression()
-    elif trainable_layers == "transfer":
-        model.set_trainable_transfer()
-    elif trainable_layers == "all":
-        model.trainable = True
+    else:
+        if isinstance(trainable_layers, str):
+            trainable_layers = [trainable_layers]
+        model.set_trainable_named(trainable_layers)
 
     model.compile()
     trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.trainable_weights])
@@ -483,7 +485,8 @@ def make_focal_loss(config):
     def loss(x,y):
         return tfa.losses.sigmoid_focal_crossentropy(x,y,
             alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
-            gamma=float(config["setup"].get("focal_loss_gamma", 2.0))
+            gamma=float(config["setup"].get("focal_loss_gamma", 2.0)),
+            from_logits=bool(config["setup"].get("focal_loss_from_logits", False))
         )
     return loss
 
@@ -544,13 +547,21 @@ def main(args, yaml_path, config):
         n_test = args.ntest
 
     n_epochs = config['setup']['num_epochs']
-    weight_func = weight_functions[config['setup']['sample_weights']]
+    weight_func = make_weight_function(config)
     assert(n_train + n_test <= num_events)
 
     ps = (
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, ])
+        {
+            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+        }
     )
 
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)

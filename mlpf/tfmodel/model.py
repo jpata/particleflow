@@ -126,12 +126,14 @@ class InputEncodingCMS(tf.keras.layers.Layer):
 
         #X[:, :, 0] - categorical index of the element type
         Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
-        Xpt = tf.expand_dims(tf.math.log1p(X[:, :, 1]), axis=-1)
+        #Xpt = tf.expand_dims(tf.math.log1p(X[:, :, 1]), axis=-1)
+        Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
         Xeta1 = tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1)
         Xeta2 = tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1)
         Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
         Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
-        Xe = tf.expand_dims(tf.math.log1p(X[:, :, 4]), axis=-1)
+        #Xe = tf.expand_dims(tf.math.log1p(X[:, :, 4]), axis=-1)
+        Xe = tf.expand_dims(tf.math.log(X[:, :, 4]+1.0), axis=-1)
         Xlayer = tf.expand_dims(X[:, :, 5]*10.0, axis=-1)
         Xdepth = tf.expand_dims(X[:, :, 6]*10.0, axis=-1)
 
@@ -912,7 +914,8 @@ class PFNetDense(tf.keras.Model):
             normalize_degrees=False,
             dropout=0.0,
             separate_momentum=True,
-            input_encoding="cms"
+            input_encoding="cms",
+            focal_loss_from_logits=False
         ):
         super(PFNetDense, self).__init__()
 
@@ -920,6 +923,7 @@ class PFNetDense(tf.keras.Model):
         self.num_momentum_outputs = num_momentum_outputs
         self.activation = activation
         self.separate_momentum = separate_momentum
+        self.focal_loss_from_logits = focal_loss_from_logits
 
         self.num_conv = num_conv
         self.num_gsl = num_gsl
@@ -982,7 +986,12 @@ class PFNetDense(tf.keras.Model):
         dec_output_id = tf.concat([enc] + encs_id, axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)*msk_input
-        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+
+        if self.focal_loss_from_logits:
+            out_id_softmax = out_id_logits
+        else:
+            out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+
         #pred_cls_nonzero = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
         out_charge = self.ffn_charge(dec_output_id)*msk_input
@@ -999,7 +1008,8 @@ class PFNetDense(tf.keras.Model):
 
         if self.multi_output:
             ret = {
-                "cls": out_id_softmax, "charge": out_charge,
+                "cls": out_id_softmax,
+                "charge": out_charge,
                 "pt": pred_momentum[:, :, 0:1],
                 "eta": pred_momentum[:, :, 1:2],
                 "sin_phi": pred_momentum[:, :, 2:3],
@@ -1031,15 +1041,14 @@ class PFNetDense(tf.keras.Model):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
 
-    def set_trainable_transfer(self):
+    def set_trainable_named(self, layer_names):
         self.trainable = True
-        for layer in self.layers:
-            layer.trainable = True
 
-        self.ffn_enc_id.trainable = False
-        self.ffn_enc_reg.trainable = False
-        for cg in self.cg_id + self.cg_reg:
-            cg.trainable = False
+        for layer in self.layers:
+            layer.trainable = False
+
+        for layer in layer_names:
+            self.get_layer(layer).trainable = True
 
 class DummyNet(tf.keras.Model):
     def __init__(self,
