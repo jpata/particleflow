@@ -527,7 +527,7 @@ def main(args, yaml_path, config):
             print("Output directory exists: {}".format(outdir), file=sys.stderr)
             sys.exit(1)
     else:
-        outdir = os.path.dirname(weights)
+        outdir = str(Path(weights).parent.parent)
 
     try:
         gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
