@@ -23,8 +23,8 @@ python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action data
 python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action train
 
 #Generate the pred.npz file of predictions
-python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action eval --weights ./experiments/test-*/weights-01-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action eval --weights ./experiments/test-*/weights/weights-01-*.hdf5
 
 #Generate the timing file
-python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action time --weights ./experiments/test-*/weights-01-*.hdf5
+python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action time --weights ./experiments/test-*/weights/weights-01-*.hdf5
 
