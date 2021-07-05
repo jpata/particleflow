@@ -174,8 +174,9 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("-e", "--evaluation_dir", help="force creation of new experiment dir", type=click.Path())
+@click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
 def evaluate(config, train_dir, weights, evaluation_dir):
+    """Evaluate the trained model in train_dir"""
     config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
     # Switch off multi-output for the evaluation for backwards compatibility
     config["setup"]["multi_output"] = False
@@ -230,6 +231,8 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 @click.option("-n", "--figname", help="name of saved figure", type=click.Path(), default="lr_finder.jpg")
 @click.option("-l", "--logscale", help="use log scale on y-axis in figure", default=False, is_flag=True)
 def find_lr(config, outdir, figname, logscale):
+    """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
+    which an appropriate LR-range can be determined"""
     config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
     ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
 
