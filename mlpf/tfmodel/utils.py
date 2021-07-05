@@ -10,6 +10,7 @@ from tqdm import tqdm
 import re
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -64,6 +65,24 @@ def get_best_checkpoint(train_dir):
     checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
     # Return the checkpoint with smallest loss
     return str(checkpoint_list[0])
+
+
+def delete_all_but_best_checkpoint(train_dir, dry_run):
+    checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
+    # Don't remove the checkpoint with smallest loss
+    if len(checkpoint_list) == 1:
+        raise UserWarning("There is only one checkpoint. No deletion was made.")
+    elif len(checkpoint_list) == 0:
+        raise UserWarning("Couldn't find ant checkpoints. No deletion was made.")
+    else:
+        # Sort the checkpoints according to the loss in their filenames
+        checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
+        best_ckpt = checkpoint_list.pop(0)
+        for ckpt in checkpoint_list:
+            if not dry_run:
+                ckpt.unlink()
+
+        print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
 def get_strategy(global_batch_size):
