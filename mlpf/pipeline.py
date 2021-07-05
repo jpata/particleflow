@@ -42,10 +42,12 @@ from tfmodel.utils import (
     get_loss_dict,
     parse_config,
     get_best_checkpoint,
+    delete_all_but_best_checkpoint,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.lr_finder import LRFinder
+
 
 @click.group()
 @click.help_option("-h", "--help")
@@ -62,9 +64,10 @@ def main():
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 def train(config, weights, ntrain, ntest, recreate, prefix):
-    """Train a model defined by config
-    """
-    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(config, ntrain, ntest, weights)
+    """Train a model defined by config"""
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+        config, ntrain, ntest, weights
+    )
 
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
@@ -285,6 +288,15 @@ def find_lr(config, outdir, figname, logscale):
         )
 
         lr_finder.plot(save_dir=outdir, figname=figname, log_scale=logscale)
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-t", "--train_dir", help="training directory", type=click.Path())
+@click.option("-d", "--dry_run", help="do not delete anything", is_flag=True, default=False)
+def delete_all_but_best_ckpt(train_dir, dry_run):
+    """Delete all checkpoint weights in <train_dir>/weights/ except the one with lowest loss in its filename."""
+    delete_all_but_best_checkpoint(train_dir, dry_run)
 
 
 if __name__ == "__main__":
