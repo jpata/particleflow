@@ -10,7 +10,6 @@ import tensorflow_datasets as tfds
 from numpy.lib.recfunctions import append_fields
 
 
-# TODO(cms_pf): Markdown description  that will appear on the catalog page.
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
@@ -73,14 +72,8 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
 
     def _generate_examples(self, path):
         """Yields examples."""
-        # TODO(cms_pf): Yields (key, example) tuples from the dataset
         for fi in path.glob("*.pkl.bz2"):
             X, ygen, ycand = self.prepare_data_cms(str(fi))
-            #   yield str(fi), {
-            #       'X': X,
-            #       'ygen': ygen,
-            #       'ycand': ycand,
-            #   }
             for ii in range(X[0].shape[0]):
                 x = [X[0][ii]]
                 yg = [ygen[0][ii]]
@@ -89,9 +82,6 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
                     "X": x,
                     "ygen": yg,
                     "ycand": yc,
-                    # 'X': np.expand_dims(X[ii], 0),
-                    # 'ygen': np.expand_dims(ygen[ii], 0),
-                    # 'ycand': np.expand_dims(ycand[ii], 0),
                 }
 
     def prepare_data_cms(self, fn):
