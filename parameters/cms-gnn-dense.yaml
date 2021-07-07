@@ -41,7 +41,7 @@ tensorflow:
 setup:
   train: yes
   weights:
-  weights_config:
+  weights_config: classification
   lr: 2e-5
   batch_size: 5
   num_events_train: 80000
@@ -75,6 +75,7 @@ parameters:
   dropout: 0.2
   separate_momentum: yes
   input_encoding: cms
+  debug: no
 
 timing:
   num_ev: 100

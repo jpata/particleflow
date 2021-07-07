@@ -893,7 +893,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         x_enc = reverse_lsh(bins_split, x_binned)
 
-        return x_enc
+        return {"enc": x_enc, "dist": x_dist, "bins": bins_split, "dm": dm}
 
 class PFNetDense(tf.keras.Model):
     def __init__(self,
@@ -915,7 +915,8 @@ class PFNetDense(tf.keras.Model):
             dropout=0.0,
             separate_momentum=True,
             input_encoding="cms",
-            focal_loss_from_logits=False
+            focal_loss_from_logits=False,
+            debug=False
         ):
         super(PFNetDense, self).__init__()
 
@@ -924,6 +925,7 @@ class PFNetDense(tf.keras.Model):
         self.activation = activation
         self.separate_momentum = separate_momentum
         self.focal_loss_from_logits = focal_loss_from_logits
+        self.debug = debug
 
         self.num_conv = num_conv
         self.num_gsl = num_gsl
@@ -973,14 +975,22 @@ class PFNetDense(tf.keras.Model):
         enc = self.enc(X)
         enc_id = self.activation(self.ffn_enc_id(enc))
         encs_id = []
+
+        debugging_data = {}
         for cg in self.cg_id:
-            enc_id = cg(enc_id, msk, training)
+            enc_id_all = cg(enc_id, msk, training)
+            enc_id = enc_id_all["enc"]
+            if self.debug:
+                debugging_data[cg.name] = enc_id_all
             encs_id.append(enc_id)
 
         enc_reg = self.activation(self.ffn_enc_reg(enc))
         encs_reg = []
         for cg in self.cg_reg:
-            enc_reg = cg(enc_reg, msk, training)
+            enc_reg_all = cg(enc_reg, msk, training)
+            enc_reg = enc_reg_all["enc"]
+            if self.debug:
+                debugging_data[cg.name] = enc_reg_all
             encs_reg.append(enc_reg)
 
         dec_output_id = tf.concat([enc] + encs_id, axis=-1)
@@ -992,12 +1002,9 @@ class PFNetDense(tf.keras.Model):
         else:
             out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
 
-        #pred_cls_nonzero = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
-
         out_charge = self.ffn_charge(dec_output_id)*msk_input
         dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
        
-
         if self.separate_momentum:
             pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
             pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
@@ -1016,6 +1023,9 @@ class PFNetDense(tf.keras.Model):
                 "cos_phi": pred_momentum[:, :, 3:4],
                 "energy": pred_momentum[:, :, 4:5],
             }
+            if self.debug:
+                for k in debugging_data.keys():
+                    ret[k] = debugging_data[k]
             return ret
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
