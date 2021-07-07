@@ -42,16 +42,16 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-5
+  lr: 2e-5
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
   num_val_files: 100
   dtype: float32
-  trainable: all
+  trainable: classification
   classification_loss_type: sigmoid_focal_crossentropy
-  focal_loss_alpha: 0
+  focal_loss_alpha: 0.25
   focal_loss_gamma: 3.0
   focal_loss_from_logits: False
 
