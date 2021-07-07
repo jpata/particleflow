@@ -78,6 +78,7 @@ parameters:
   dropout: 0.2
   separate_momentum: yes
   input_encoding: cms
+  debug: no
 
 timing:
   num_ev: 100

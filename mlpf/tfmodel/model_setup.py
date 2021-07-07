@@ -320,7 +320,8 @@ def make_gnn_dense(config, dtype):
         "distance_dim",
         "dropout",
         "separate_momentum",
-        "input_encoding"
+        "input_encoding",
+        "debug"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}
