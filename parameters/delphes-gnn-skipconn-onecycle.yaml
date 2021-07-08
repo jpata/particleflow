@@ -71,6 +71,11 @@ timing:
   num_ev: 100
   num_iter: 3
 
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes
+
 onecycle:
   mom_min: 0.85
   mom_max: 0.95
