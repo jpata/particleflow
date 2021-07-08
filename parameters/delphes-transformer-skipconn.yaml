@@ -50,3 +50,8 @@ parameters:
   support: 32
   skip_connection: yes
   dropout: 0.2
+
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes

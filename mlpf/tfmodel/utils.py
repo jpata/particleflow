@@ -127,10 +127,12 @@ def get_lr_schedule(config, lr, steps):
     elif schedule == "exponentialdecay":
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             lr,
-            decay_steps=steps,
-            decay_rate=0.99,
-            staircase=True,
+            decay_steps=config["exponentialdecay"]["decay_steps"],
+            decay_rate=config["exponentialdecay"]["decay_rate"],
+            staircase=config["exponentialdecay"]["staircase"],
         )
+    else:
+        raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
     return lr_schedule, callbacks
 
 
