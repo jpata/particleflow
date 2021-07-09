@@ -283,7 +283,8 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     elem_branches = [
         "typ", "pt", "eta", "phi", "e",
         "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits"
+        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits",
+        "px", "py", "pz", "deltap", "sigmadeltap"
     ]
     target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
