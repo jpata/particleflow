@@ -36,10 +36,18 @@ setup:
   num_epochs: 300
   num_val_files: -1
   dtype: float16
-  sample_weights: none
   trainable: all
   multi_output: no
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+
+sample_weights:
+  cls: none
+  charge: none
+  pt: none
+  eta: none
+  sin_phi: none
+  cos_phi: none
+  energy: none
 
 parameters:
   model: transformer

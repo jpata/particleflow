@@ -44,17 +44,25 @@ setup:
   train: yes
   weights:
   weights_config: all
-  lr: 1e-4
+  lr: 3e-4
   batch_size: 32
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 400
   num_val_files: 100
   dtype: float32
-  sample_weights: inverse_sqrt
   trainable: all
   classification_loss_type: categorical_cross_entropy  # categorical_cross_entropy, sigmoid_focal_crossentropy
   lr_schedule: onecycle  # exponentialdecay, onecycle
+
+sample_weights:
+  cls: inverse_sqrt
+  charge: signal_only
+  pt: signal_only
+  eta: signal_only
+  sin_phi: signal_only
+  cos_phi: signal_only
+  energy: signal_only
 
 parameters:
   model: gnn_dense
@@ -68,6 +76,9 @@ parameters:
   normalize_degrees: yes
   distance_dim: 128
   dropout: 0.0
+  separate_momentum: yes
+  input_encoding: cms
+  debug: no
 
 timing:
   num_ev: 100

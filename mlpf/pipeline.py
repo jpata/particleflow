@@ -30,7 +30,7 @@ from tfmodel.utils import (
     get_lr_schedule,
     create_experiment_dir,
     get_strategy,
-    get_weights_func,
+    make_weight_function,
     load_config,
     compute_weights_invsqrt,
     compute_weights_none,
