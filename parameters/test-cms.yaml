@@ -36,11 +36,19 @@ setup:
   num_epochs: 1
   num_val_files: 1
   dtype: float32
-  sample_weights: none
   trainable: all
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
+sample_weights:
+  cls: none
+  charge: signal_only
+  pt: signal_only
+  eta: signal_only
+  sin_phi: signal_only
+  cos_phi: signal_only
+  energy: signal_only
+  
 parameters:
   model: gnn
   bin_size: 64

@@ -10,7 +10,7 @@ from .fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 1e-7
+regularizer_weight = 1e-8
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -63,8 +63,6 @@ def sparse_dense_matmult_batch(sp_a, b):
     ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
     return tf.cast(ret, dtype) 
 
-#FIXME: currently this needs to know the batch_size in advance
-#need to understand better how to do scatter_nd across the batch
 @tf.function
 def reverse_lsh(bins_split, points_binned_enc):
     # batch_dim = points_binned_enc.shape[0]
@@ -79,15 +77,6 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
     
-    # def func(ibatch):
-    #     return tf.scatter_nd(
-    #         tf.expand_dims(bins_split_flat[ibatch], -1),
-    #         points_binned_enc_flat[ibatch],
-    #         shape=(n_points, n_features)
-    #     )
-
-    # expanded = tf.map_fn(func, tf.range(batch_dim), fn_output_signature=tf.float32)
-
     batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
     bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
 
@@ -116,6 +105,51 @@ class InputEncoding(tf.keras.layers.Layer):
         #X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
+
+"""
+For the CMS dataset, precompute additional features:
+- log of pt and energy
+- sinh, cosh of eta
+- sin, cos of phi angles
+- scale layer and depth values (small integers) to a larger dynamic range
+"""
+class InputEncodingCMS(tf.keras.layers.Layer):
+    def __init__(self, num_input_classes):
+        super(InputEncodingCMS, self).__init__()
+        self.num_input_classes = num_input_classes
+
+    """
+        X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
+    """        
+    @tf.function
+    def call(self, X):
+
+        #X[:, :, 0] - categorical index of the element type
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
+        #Xpt = tf.expand_dims(tf.math.log1p(X[:, :, 1]), axis=-1)
+        Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
+        Xeta1 = tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1)
+        Xeta2 = tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1)
+        Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
+        Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
+        #Xe = tf.expand_dims(tf.math.log1p(X[:, :, 4]), axis=-1)
+        Xe = tf.expand_dims(tf.math.log(X[:, :, 4]+1.0), axis=-1)
+        Xlayer = tf.expand_dims(X[:, :, 5]*10.0, axis=-1)
+        Xdepth = tf.expand_dims(X[:, :, 6]*10.0, axis=-1)
+
+        Xphi_ecal1 = tf.expand_dims(tf.sin(X[:, :, 10]), axis=-1)
+        Xphi_ecal2 = tf.expand_dims(tf.cos(X[:, :, 10]), axis=-1)
+        Xphi_hcal1 = tf.expand_dims(tf.sin(X[:, :, 12]), axis=-1)
+        Xphi_hcal2 = tf.expand_dims(tf.cos(X[:, :, 12]), axis=-1)
+
+        return tf.concat([
+            Xid, Xpt,
+            Xeta1, Xeta2,
+            Xphi1, Xphi2,
+            Xe, Xlayer, Xdepth,
+            Xphi_ecal1, Xphi_ecal2, Xphi_hcal1, Xphi_hcal2,
+            X], axis=-1
+        )
 
 #https://arxiv.org/pdf/2004.04635.pdf
 #https://github.com/gcucurull/jax-ghnet/blob/master/models.py 
@@ -394,7 +428,7 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         #n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
 
-        #put each input item into a bin defined by the softmax output across the LSH embedding
+        #put each input item into a bin defined by the argmax output across the LSH embedding
         mul = tf.linalg.matmul(x_dist, self.codebook_random_rotations[:, :n_bins//2])
         cmul = tf.concat([mul, -mul], axis=-1)
         bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
@@ -404,7 +438,12 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
 
         dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
         dm = tf.exp(-self.dist_mult*dm)
+        
+        #set the distance matrix to 0 for masked elements
         dm *= msk_f_binned
+        shp = tf.shape(msk_f_binned)
+        dm *= tf.reshape(msk_f_binned, (shp[0], shp[1], shp[3], shp[2]))
+
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
         return bins_split, x_features_binned, dm, msk_f_binned
@@ -854,7 +893,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         x_enc = reverse_lsh(bins_split, x_binned)
 
-        return x_enc
+        return {"enc": x_enc, "dist": x_dist, "bins": bins_split, "dm": dm}
 
 class PFNetDense(tf.keras.Model):
     def __init__(self,
@@ -873,22 +912,32 @@ class PFNetDense(tf.keras.Model):
             num_conv=2,
             num_gsl=1,
             normalize_degrees=False,
-            dropout=0.0
+            dropout=0.0,
+            separate_momentum=True,
+            input_encoding="cms",
+            focal_loss_from_logits=False,
+            debug=False
         ):
         super(PFNetDense, self).__init__()
 
         self.multi_output = multi_output
         self.num_momentum_outputs = num_momentum_outputs
         self.activation = activation
+        self.separate_momentum = separate_momentum
+        self.focal_loss_from_logits = focal_loss_from_logits
+        self.debug = debug
 
         self.num_conv = num_conv
         self.num_gsl = num_gsl
 
-        self.enc = InputEncoding(num_input_classes)
+        if input_encoding == "cms":
+            self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "default":
+            self.enc = InputEncoding(num_input_classes)
 
         dff = hidden_dim
-        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation)
-        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation)
+        self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_id")
+        self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_reg")
 
         kwargs_cg = {
             "output_dim": dff,
@@ -907,7 +956,16 @@ class PFNetDense(tf.keras.Model):
 
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+        
+        if self.separate_momentum:
+            self.ffn_momentum = [
+                point_wise_feed_forward_network(
+                    1, dff, name="ffn_momentum{}".format(imomentum),
+                    dtype=tf.dtypes.float32, num_layers=3, activation=activation
+                ) for imomentum in range(num_momentum_outputs)
+            ]
+        else:
+            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
 
     def call(self, inputs, training=False):
         X = inputs
@@ -917,37 +975,57 @@ class PFNetDense(tf.keras.Model):
         enc = self.enc(X)
         enc_id = self.activation(self.ffn_enc_id(enc))
         encs_id = []
+
+        debugging_data = {}
         for cg in self.cg_id:
-            enc_id = cg(enc_id, msk, training)
+            enc_id_all = cg(enc_id, msk, training)
+            enc_id = enc_id_all["enc"]
+            if self.debug:
+                debugging_data[cg.name] = enc_id_all
             encs_id.append(enc_id)
 
         enc_reg = self.activation(self.ffn_enc_reg(enc))
         encs_reg = []
         for cg in self.cg_reg:
-            enc_reg = cg(enc_reg, msk, training)
+            enc_reg_all = cg(enc_reg, msk, training)
+            enc_reg = enc_reg_all["enc"]
+            if self.debug:
+                debugging_data[cg.name] = enc_reg_all
             encs_reg.append(enc_reg)
 
         dec_output_id = tf.concat([enc] + encs_id, axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)*msk_input
-        out_charge = self.ffn_charge(dec_output_id)*msk_input
 
+        if self.focal_loss_from_logits:
+            out_id_softmax = out_id_logits
+        else:
+            out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+
+        out_charge = self.ffn_charge(dec_output_id)*msk_input
         dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
        
-        pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+        if self.separate_momentum:
+            pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
+            pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
+        else:
+            pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
-        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
         if self.multi_output:
             ret = {
-                "cls": out_id_softmax, "charge": out_charge,
+                "cls": out_id_softmax,
+                "charge": out_charge,
                 "pt": pred_momentum[:, :, 0:1],
                 "eta": pred_momentum[:, :, 1:2],
                 "sin_phi": pred_momentum[:, :, 2:3],
                 "cos_phi": pred_momentum[:, :, 3:4],
                 "energy": pred_momentum[:, :, 4:5],
             }
+            if self.debug:
+                for k in debugging_data.keys():
+                    ret[k] = debugging_data[k]
             return ret
         else:
             return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
@@ -973,15 +1051,14 @@ class PFNetDense(tf.keras.Model):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
 
-    def set_trainable_transfer(self):
+    def set_trainable_named(self, layer_names):
         self.trainable = True
-        for layer in self.layers:
-            layer.trainable = True
 
-        self.ffn_enc_id.trainable = False
-        self.ffn_enc_reg.trainable = False
-        for cg in self.cg_id + self.cg_reg:
-            cg.trainable = False
+        for layer in self.layers:
+            layer.trainable = False
+
+        for layer in layer_names:
+            self.get_layer(layer).trainable = True
 
 class DummyNet(tf.keras.Model):
     def __init__(self,
