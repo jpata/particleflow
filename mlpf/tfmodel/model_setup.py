@@ -26,7 +26,7 @@ from tqdm import tqdm
 from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
-from tfmodel.utils import get_lr_schedule, get_weights_func, targets_multi_output
+from tfmodel.utils import get_lr_schedule, make_weight_function, targets_multi_output
 
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
@@ -231,31 +231,6 @@ def get_rundir(base='experiments'):
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
 
-def make_weight_function(config):
-    def weight_func(X,y,w):
-
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
-        w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        w_none = tf.ones_like(w)
-        w_none *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
-        w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        weight_d = {
-            "none": w_none,
-            "signal_only": w_signal_only,
-            "inverse_sqrt": w_invsqrt
-        }
-
-        ret_w = {}
-        for loss_component, weight_type in config["sample_weights"].items():
-            ret_w[loss_component] = weight_d[weight_type]
-
-        return X,y,ret_w
-    return weight_func
-
 
 def scale_outputs(X,y,w):
     ynew = y-out_m
@@ -385,7 +360,12 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
 
         y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
-        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        if type(y_pred) is dict:
+            y_pred_rest = np.concatenate([y_pred["charge"], y_pred["pt"], y_pred["eta"], y_pred["sin_phi"], y_pred["cos_phi"], y_pred["energy"]], axis=-1)
+            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred_rest], axis=-1)
+        else:
+            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
         np.savez(
             np_outfile,

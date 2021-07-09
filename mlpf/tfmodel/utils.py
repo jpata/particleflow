@@ -149,14 +149,30 @@ def compute_weights_none(X, y, w):
     return X, y, wn
 
 
-def get_weights_func(config):
-    sampling = config["setup"]["sample_weights"]
-    if sampling == "inverse_sqrt":
-        return compute_weights_invsqrt
-    elif sampling == "none":
-        return compute_weights_none
-    else:
-        raise ValueError("Only supported weight samplings are 'inverse_sqrt' and 'none'.")
+def make_weight_function(config):
+    def weight_func(X,y,w):
+
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        w_none = tf.ones_like(w)
+        w_none *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
+        w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        weight_d = {
+            "none": w_none,
+            "signal_only": w_signal_only,
+            "inverse_sqrt": w_invsqrt
+        }
+
+        ret_w = {}
+        for loss_component, weight_type in config["sample_weights"].items():
+            ret_w[loss_component] = weight_d[weight_type]
+
+        return X,y,ret_w
+    return weight_func
 
 
 def targets_multi_output(num_output_classes):
@@ -211,18 +227,22 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
         num_events += 1
     print("dataset loaded, len={}".format(num_events))
 
-    weight_func = get_weights_func(config)
+    weight_func = make_weight_function(config)
     assert n_train + n_test <= num_events
 
     # Padded shapes
     ps = (
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        tf.TensorShape(
-            [
-                dataset_def.padded_num_elem_size,
-            ]
-        ),
+        {
+            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+        }
     )
 
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
