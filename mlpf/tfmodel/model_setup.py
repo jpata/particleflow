@@ -29,6 +29,8 @@ from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_weights_func, targets_multi_output
 
 
+from tensorflow.keras.metrics import Recall, CategoricalAccuracy
+
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
     plt.imshow(cm, cmap="Blues")
@@ -86,6 +88,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
             json.dump(logs, fi)
 
         ypred = self.model(self.X, training=False)
+        #ypred["cls"] = np.clip(ypred["cls"], 0.5, 1.0)
+        
         ypred_id = np.argmax(ypred["cls"], axis=-1)
 
         ibatch = 0
@@ -178,6 +182,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
         plt.close("all")
 
+        np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
+
 def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
     tb = CustomTensorBoard(
@@ -224,6 +230,32 @@ def get_rundir(base='experiments'):
 
     logdir = 'run_%02d' % run_number
     return '{}/{}'.format(base, logdir)
+
+def make_weight_function(config):
+    def weight_func(X,y,w):
+
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        w_none = tf.ones_like(w)
+        w_none *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
+        w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
+
+        weight_d = {
+            "none": w_none,
+            "signal_only": w_signal_only,
+            "inverse_sqrt": w_invsqrt
+        }
+
+        ret_w = {}
+        for loss_component, weight_type in config["sample_weights"].items():
+            ret_w[loss_component] = weight_d[weight_type]
+
+        return X,y,ret_w
+    return weight_func
+
 
 def scale_outputs(X,y,w):
     ynew = y-out_m
@@ -286,7 +318,10 @@ def make_gnn_dense(config, dtype):
         "num_gsl",
         "normalize_degrees",
         "distance_dim",
-        "dropout"
+        "dropout",
+        "separate_momentum",
+        "input_encoding",
+        "debug"
     ]
 
     kwargs = {par: config['parameters'][par] for par in parameters}
@@ -350,13 +385,8 @@ def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
 
         y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
 
-        if type(y_pred) is dict:
-            y_pred_rest = np.concatenate([y_pred["charge"], y_pred["pt"], y_pred["eta"], y_pred["sin_phi"], y_pred["cos_phi"], y_pred["energy"]], axis=-1)
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred_rest], axis=-1)
-        else:
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
-
-        np_outfile = "{}/pred_{}.npz".format(outdir, ibatch)
+        y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
         np.savez(
             np_outfile,
             X=X[nb1:nb2],
@@ -396,10 +426,26 @@ class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
         _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
         _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
         sample_weights = None
+
         if self.use_weights:
             sample_weights = _y_true*tf.reduce_sum(_y_true, axis=0)
             sample_weights = 1.0/sample_weights[sample_weights!=0]
+
         super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, sample_weights)
+
+class SingleClassRecall(Recall):
+    def __init__(self, icls, **kwargs):
+        super(SingleClassRecall, self).__init__(**kwargs)
+        self.icls = icls
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        #flatten the batch dimension
+        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0]*tf.shape(y_true)[1], tf.shape(y_true)[2]))
+        _y_pred = tf.argmax(tf.reshape(y_pred, (tf.shape(y_pred)[0]*tf.shape(y_pred)[1], tf.shape(y_pred)[2])), axis=-1)
+        super(SingleClassRecall, self).update_state(
+            _y_true[:, self.icls],
+            tf.cast(_y_pred==self.icls, tf.float32)
+        )
 
 class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, use_weights=False, **kwargs):
@@ -421,19 +467,32 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
 
 def configure_model_weights(model, trainable_layers):
     print("setting trainable layers: {}".format(trainable_layers))
-    if trainable_layers == "classification":
+    if (trainable_layers is None):
+        trainable_layers = "all"
+    if trainable_layers == "all":
+        model.trainable = True
+    elif trainable_layers == "classification":
         model.set_trainable_classification()
     elif trainable_layers == "regression":
         model.set_trainable_regression()
-    elif trainable_layers == "transfer":
-        model.set_trainable_transfer()
-    elif trainable_layers == "all":
-        model.trainable = True
+    else:
+        if isinstance(trainable_layers, str):
+            trainable_layers = [trainable_layers]
+        model.set_trainable_named(trainable_layers)
 
     model.compile()
     trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.trainable_weights])
     non_trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.non_trainable_weights])
     print("trainable={} non_trainable={}".format(trainable_count, non_trainable_count))
+
+def make_focal_loss(config):
+    def loss(x,y):
+        return tfa.losses.sigmoid_focal_crossentropy(x,y,
+            alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
+            gamma=float(config["setup"].get("focal_loss_gamma", 2.0)),
+            from_logits=bool(config["setup"].get("focal_loss_from_logits", False))
+        )
+    return loss
 
 def main(args, yaml_path, config):
     #tf.debugging.enable_check_numerics()
@@ -448,13 +507,21 @@ def main(args, yaml_path, config):
     from tfmodel.data import Dataset
     cds = config["dataset"]
 
+    raw_path = cds.get("raw_path", None)
+    if args.raw_path:
+        raw_path = args.raw_path
+
+    processed_path = cds.get("processed_path", None)
+    if args.processed_path:
+        processed_path = args.processed_path
+
     dataset_def = Dataset(
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
+        raw_path=raw_path,
         raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
+        processed_path=processed_path,
         validation_file_path=cds["validation_file_path"],
         schema=cds["schema"]
     )
@@ -492,13 +559,21 @@ def main(args, yaml_path, config):
         n_test = args.ntest
 
     n_epochs = config['setup']['num_epochs']
-    weight_func = get_weights_func(config)
+    weight_func = make_weight_function(config)
     assert(n_train + n_test <= num_events)
 
     ps = (
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
         tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, ])
+        {
+            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
+        }
     )
 
     ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
@@ -612,7 +687,7 @@ def main(args, yaml_path, config):
             if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
                 cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
             elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-                cls_loss = tfa.losses.sigmoid_focal_crossentropy
+                cls_loss = make_focal_loss(config)
             else:
                 raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
             
@@ -641,6 +716,11 @@ def main(args, yaml_path, config):
                     "cls": [
                         FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
                         FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                    ] + [
+                        SingleClassRecall(
+                            icls,
+                            name="rec_cls{}".format(icls),
+                            dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
                     ]
                 }
             )
