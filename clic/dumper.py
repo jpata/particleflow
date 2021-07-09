@@ -20,25 +20,37 @@ from hephysics.particle import LParticle
 import math
 import json
 import bz2
+import sys
 
-save_calohits = True
+perfile = 10
 
 def genParticleToDict(par):
     mom = par.getMomentum()
-    parent_pdgid = 0
+    parent_pdgid0 = 0
+    parent_idx0 = -1
+    parent_pdgid1 = 0
+    parent_idx1 = -1
+
     if len(par.getParents()) > 0:
-        parent_pdgid = par.getParents()[0].getPDG()
- 
+        parent_pdgid0 = par.getParents()[0].getPDG()
+        parent_idx0 = genparticle_dict[par.getParents()[0]]
+    if len(par.getParents()) > 1:
+        parent_pdgid1 = par.getParents()[1].getPDG()
+        parent_idx1 = genparticle_dict[par.getParents()[1]]
+
     vec = {
         "pdgid": par.getPDG(),
         "status": par.getGeneratorStatus(),
         "mass": par.getMass(),
         "charge": par.getCharge(),
-        "pdgid_parent0": parent_pdgid,
         "px": mom[0],
         "py": mom[1],
         "pz": mom[2],
-        "energy": par.getEnergy()
+        "energy": par.getEnergy(),
+        "pdgid_parent0": parent_pdgid0,
+        "idx_parent0": parent_idx0,
+        "pdgid_parent1": parent_pdgid1,
+        "idx_parent1": parent_idx1
     }
     return vec
 
@@ -146,7 +158,7 @@ def caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim):
     return vec
 
 if __name__ == "__main__":
-    infile = "/home/joosep/Downloads/pythia6_ttbar_0001_pandora.slcio"
+    infile = sys.argv[1]
 
     factory = LCFactory.getInstance()
     reader = factory.createLCReader()
@@ -154,6 +166,7 @@ if __name__ == "__main__":
     event_data = []
     
     nEvent = 0
+    ioutfile = 0
     while True:
         evt = reader.readNextEvent()
         if (evt == None):
@@ -214,9 +227,12 @@ if __name__ == "__main__":
     
         genparticles = []
         genparticle_dict = {}
-        for i in range(nMc): # loop over all particles 
+        for i in range(nMc):
             par=col.getElementAt(i)
             genparticle_dict[par] = i
+
+        for i in range(nMc):
+            par=col.getElementAt(i)
             vec = genParticleToDict(par)
             genparticles.append(vec)
     
@@ -311,11 +327,14 @@ if __name__ == "__main__":
         }
  
         event_data.append(event)
+        if len(event_data) >= perfile:
+            ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
+            json.dump(event_data, ofi, indent=2, sort_keys=True)
+            ofi.close()
+            event_data = []
+            ioutfile += 1
         nEvent += 1
    
     #save the event data to a file 
-    ofi = bz2.BZ2File(infile.replace(".slcio", ".json.bz2"), "w")
-    json.dump(event_data, ofi, indent=2, sort_keys=True)
-    ofi.close()
     
     reader.close() # close the file
