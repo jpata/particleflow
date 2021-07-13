@@ -72,7 +72,11 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
 
     def _generate_examples(self, path):
         """Yields examples."""
-        for fi in path.glob("*.pkl.bz2"):
+        if len(list(path.glob("*.pkl.bz2"))) == 0:
+            files = path.glob("*.pkl")
+        else:
+            files = path.glob("*.pkl.bz2")
+        for fi in files:
             X, ygen, ycand = self.prepare_data_cms(str(fi))
             for ii in range(X[0].shape[0]):
                 x = [X[0][ii]]
