@@ -34,7 +34,7 @@ echo "Cloning hep_tfds."
 git clone https://github.com/erwulff/hep_tfds.git
 echo "Installing hep_tfds."
 cd hep_tfds
-python3 setup.py install
+sudo python3 setup.py install
 cd ..
 
 #Run a simple training on a few events
