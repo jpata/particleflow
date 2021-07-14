@@ -16,6 +16,7 @@ from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
 
 from tfmodel.data import Dataset
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 from tfmodel.model_setup import (
     make_model,
     configure_model_weights,
@@ -43,6 +44,7 @@ from tfmodel.utils import (
     parse_config,
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
+    get_heptfds_dataset,
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -65,13 +67,17 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 def train(config, weights, ntrain, ntest, recreate, prefix):
     """Train a model defined by config"""
+    config_file = config
     config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
         config, ntrain, ntest, weights
     )
 
     dataset_def = get_dataset_def(config)
-    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
+
+    ds_train, ds_test = get_heptfds_dataset(config)
+    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
+    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -101,7 +107,6 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         model = make_model(config, model_dtype)
 
         # Run model once to build the layers
-        print(X_val.shape)
         model(tf.cast(X_val[:1], model_dtype))
 
         initial_epoch = 0
@@ -136,7 +141,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
             outdir,
             X_val[: config["setup"]["batch_size"]],
             ycand_val[: config["setup"]["batch_size"]],
-            dataset_transform,
+            targets_multi_output(config['dataset']['num_output_classes']),
             config["dataset"]["num_output_classes"],
         )
         callbacks.append(optim_callbacks)
@@ -158,15 +163,14 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
         print("Training done.")
 
-        print("Starting evaluation...")
-        eval_dir = Path(outdir) / "evaluation"
-        eval_dir.mkdir()
-        eval_dir = str(eval_dir)
-        # TODO: change to use the evaluate() function below instead of eval_model()
-        eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-        print("Evaluation done.")
-
-        freeze_model(model, config, outdir)
+    print("Starting evaluation...")
+    eval_dir = Path(outdir) / "evaluation"
+    eval_dir.mkdir()
+    eval_dir = str(eval_dir)
+    # eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
+    create_pred_files(config_file, outdir)
+    print("Evaluation done.")
+    freeze_model(model, config, outdir)
 
 
 @main.command()
@@ -175,7 +179,10 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-def evaluate(config, train_dir, weights, evaluation_dir):
+def evaluate(config, train_dir, weights=None, evaluation_dir=None):
+    create_pred_files(config, train_dir, weights, evaluation_dir)
+
+def create_pred_files(config, train_dir, weights=None, evaluation_dir=None):
     """Evaluate the trained model in train_dir"""
     config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
     # Switch off multi-output for the evaluation for backwards compatibility
@@ -206,7 +213,6 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model = make_model(config, model_dtype)
 
         # Evaluate model once to build the layers
-        print(X_val.shape)
         model(tf.cast(X_val[:1], model_dtype))
 
         if weights:
@@ -234,7 +240,7 @@ def find_lr(config, outdir, figname, logscale):
     """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
     which an appropriate LR-range can be determined"""
     config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
-    ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
+    ds_train, _ = get_heptfds_dataset(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
@@ -284,7 +290,7 @@ def find_lr(config, outdir, figname, logscale):
         callbacks = [lr_finder]
 
         model.fit(
-            ds_train_r,
+            ds_train,
             epochs=max_steps,
             callbacks=callbacks,
             steps_per_epoch=1,
@@ -300,6 +306,34 @@ def find_lr(config, outdir, figname, logscale):
 def delete_all_but_best_ckpt(train_dir, dry_run):
     """Delete all checkpoint weights in <train_dir>/weights/ except the one with lowest loss in its filename."""
     delete_all_but_best_checkpoint(train_dir, dry_run)
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("--ntrain", default=None, help="override the number of training events", type=int)
+@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+def debug_data(config, ntrain, ntest):
+    """Train a model defined by config"""
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+        config, ntrain, ntest, weights=None,
+    )
+
+    dataset_def = get_dataset_def(config)
+    ds_train, ds_test, dataset_transform = get_train_val_datasets(config, global_batch_size=1, n_train=n_train, n_test=n_test)
+
+    # cand_counts = np.zeros(8)
+    # for data_item in tqdm(ds_train, desc="Counting"):
+    #     import pdb; pdb.set_trace()
+    #     cand_vals, cand_count = np.unique(np.argmax(data_item[1]['cls'], axis=2), return_counts=True)
+    #     cand_counts[cand_vals.astype("int32")] += cand_count
+    # print("cand_counts: ", cand_counts)
+
+    dsf = CMSDatasetFactory(config)
+    ds_train, _ = dsf.get_dataset(split="train")
+    ds_test, _ = dsf.get_dataset(split="test")
+    for data_item in tqdm(ds_train, desc="Counting"):
+        import pdb; pdb.set_trace()
 
 
 if __name__ == "__main__":
