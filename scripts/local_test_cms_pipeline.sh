@@ -34,6 +34,17 @@ rm -Rf experiments/test-*
 rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
 python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
 
+echo "Cloning hep_tfds."
+git clone https://github.com/erwulff/hep_tfds.git
+echo "Installing hep_tfds."
+cd hep_tfds
+python3 setup.py install
+echo "Building TFRecords files."
+tfds build heptfds/cms_pf --manual_dir ../data/TTbar_14TeV_TuneCUETP8M1_cfi --overwrite --max_examples_per_split 10
+cd ..
+rm -rf hep_tfds
+echo "Removed hep_tfds repo."
+
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/test-cms.yaml -p test-cms-
 

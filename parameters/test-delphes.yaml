@@ -74,3 +74,7 @@ exponentialdecay:
   decay_steps: 10000
   decay_rate: 0.99
   staircase: yes
+
+delphes_pf:
+  version: 1.0.0
+  data_dir:

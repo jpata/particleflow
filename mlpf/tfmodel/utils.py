@@ -14,6 +14,7 @@ import tensorflow_addons as tfa
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 
 def load_config(config_file_path):
@@ -255,10 +256,7 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
     else:
         dataset_transform = None
 
-    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
-
-    return ds_train_r, ds_test_r, dataset_transform
+    return ds_train, ds_test, dataset_transform
 
 
 def prepare_val_data(config, dataset_def, single_file=False):
@@ -284,6 +282,21 @@ def prepare_val_data(config, dataset_def, single_file=False):
     ycand_val = np.concatenate(ycands)
 
     return X_val, ygen_val, ycand_val
+
+
+def get_heptfds_dataset(config):
+    cds = config["dataset"]
+
+    if cds['schema'] == "cms":
+        dsf = CMSDatasetFactory(config)
+    elif cds['schema'] == "delphes":
+        dsf = DelphesDatasetFactory(config)
+    else:
+        raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
+
+    ds_train, _ = dsf.get_dataset("train")
+    ds_test, _ = dsf.get_dataset("test")
+    return ds_train, ds_test
 
 
 def set_config_loss(config, trainable):
