@@ -18,10 +18,10 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 0.001
-  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
+  raw_path: local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl
+  processed_path: local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr/*.tfrecords
   num_files_per_chunk: 5
-  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
+  validation_file_path: local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl
 
 tensorflow:
   eager: no
