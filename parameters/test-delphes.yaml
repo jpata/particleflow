@@ -17,10 +17,10 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 0.001
-  raw_path: data/pythia8_ttbar/*.pkl.bz2
-  processed_path: data/pythia8_ttbar/tfr/*.tfrecords
+  raw_path: local_test_data/pythia8_ttbar/*.pkl.bz2
+  processed_path: local_test_data/pythia8_ttbar/tfr/*.tfrecords
   num_files_per_chunk: 5
-  validation_file_path: data/pythia8_ttbar/val/*.pkl.bz2
+  validation_file_path: local_test_data/pythia8_ttbar/val/*.pkl.bz2
 
 tensorflow:
   eager: no
