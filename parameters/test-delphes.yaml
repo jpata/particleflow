@@ -77,4 +77,4 @@ exponentialdecay:
 
 delphes_pf:
   version: 1.0.0
-  data_dir: ../local_test_data/
+  data_dir: local_test_data/
