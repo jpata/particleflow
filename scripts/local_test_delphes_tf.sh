@@ -15,6 +15,15 @@ cd ../..
 mkdir -p experiments
 rm -Rf experiments/test-*
 
+echo "Cloning hep_tfds."
+git clone https://github.com/erwulff/hep_tfds.git
+echo "Installing hep_tfds."
+cd hep_tfds
+python3 setup.py install
+cd ..
+rm -rf hep_tfds
+echo "Removed hep_tfds repo."
+
 #Run a simple training on a few events
 rm -Rf local_test_data/pythia8_ttbar/tfr
 python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action data

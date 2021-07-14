@@ -16,12 +16,21 @@ cd ../../..
 #Create the ntuples
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-for file in `\ls -1 data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
+for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
 	python3 mlpf/data/postprocessing2.py \
 	  --input $file \
 	  --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
 	  --save-normalized-table --events-per-file 5
 done
+
+echo "Cloning hep_tfds."
+git clone https://github.com/erwulff/hep_tfds.git
+echo "Installing hep_tfds."
+cd hep_tfds
+python3 setup.py install
+cd ..
+rm -rf hep_tfds
+echo "Removed hep_tfds repo."
 
 #Set aside some data for validation
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/val

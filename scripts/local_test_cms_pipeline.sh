@@ -30,15 +30,18 @@ mv local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl local_test_
 mkdir -p experiments
 rm -Rf experiments/test-*
 
-#Run a simple training on a few events
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
-
 echo "Cloning hep_tfds."
 git clone https://github.com/erwulff/hep_tfds.git
 echo "Installing hep_tfds."
 cd hep_tfds
 python3 setup.py install
+cd ..
+
+#Run a simple training on a few events
+rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
+python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
+
+cd hep_tfds
 echo "Building TFRecords files."
 tfds build heptfds/cms_pf --manual_dir ../local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 cd ..
