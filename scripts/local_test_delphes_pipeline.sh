@@ -40,7 +40,7 @@ cd hep_tfds
 echo "Building TFRecords files."
 tfds build heptfds/delphes_pf --overwrite --data_dir ../local_test_data/
 cd ../
-rm -rf hep_tfds
+sudo rm -rf hep_tfds
 echo "Removed hep_tfds repo."
 
 #Run a simple training on a few events

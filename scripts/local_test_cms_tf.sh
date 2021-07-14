@@ -29,7 +29,7 @@ echo "Installing hep_tfds."
 cd hep_tfds
 sudo python3 setup.py install
 cd ..
-rm -rf hep_tfds
+sudo rm -rf hep_tfds
 echo "Removed hep_tfds repo."
 
 #Set aside some data for validation

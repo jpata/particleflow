@@ -45,7 +45,7 @@ cd hep_tfds
 echo "Building TFRecords files."
 tfds build heptfds/cms_pf --manual_dir ../local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 cd ..
-rm -rf hep_tfds
+sudo rm -rf hep_tfds
 echo "Removed hep_tfds repo."
 
 #Run a simple training on a few events
