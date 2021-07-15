@@ -36,7 +36,7 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    Ask jpata for the data and place it in <your_dir>. Then build the dataset using 
+    Ask jpata for the data and place it in <your_dir>. Then build the dataset using
     `tfds build <path_to_heptfds>/heptfds/cms_pf --manual_dir <your_dir>`. Alternatively,
     load the dataset using tfds.load() and give the argument
     `download_and_prepare_kwargs={"download_config": download_config}` where `download_config`
@@ -52,9 +52,9 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(1, 6400, 15), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(1, 6400, 7), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(1, 6400, 7), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(6400, 15), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
                 }
             ),
             # If there's a common (input, target) tuple from the
@@ -79,9 +79,9 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
         for fi in files:
             X, ygen, ycand = self.prepare_data_cms(str(fi))
             for ii in range(X[0].shape[0]):
-                x = [X[0][ii]]
-                yg = [ygen[0][ii]]
-                yc = [ycand[0][ii]]
+                x = X[0][ii]
+                yg = ygen[0][ii]
+                yc = ycand[0][ii]
                 yield str(fi) + "_" + str(ii), {
                     "X": x,
                     "ygen": yg,
