@@ -95,3 +95,8 @@ onecycle:
   warmup_ratio: 0.3
   div_factor: 25.0
   final_div: 100000.0
+
+cms_pf:
+  version: 1.0.0
+  data_dir:
+  manual_dir:

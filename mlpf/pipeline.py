@@ -75,9 +75,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     dataset_def = get_dataset_def(config)
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
 
-    ds_train, ds_test = get_heptfds_dataset(config)
-    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+    ds_train, ds_test = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -147,8 +145,8 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         callbacks.append(optim_callbacks)
 
         fit_result = model.fit(
-            ds_train_r,
-            validation_data=ds_test_r,
+            ds_train.repeat(),
+            validation_data=ds_test.repeat(),
             epochs=initial_epoch + n_epochs,
             callbacks=callbacks,
             steps_per_epoch=n_train // global_batch_size,
