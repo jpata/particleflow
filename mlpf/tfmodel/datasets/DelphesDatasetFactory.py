@@ -19,12 +19,6 @@ class DelphesDatasetFactory(BaseDatasetFactory):
             shuffle_files=True,
             download_and_prepare_kwargs={"download_config": download_config},
         )
-
-        # weight_func = make_weight_function(self.cfg)
-        # dataset = dataset.map(weight_func)
         print("INFO: sample_weights setting has no effect. Not yet implemented for DelphesDatasetFactory.")
-
-        if self.cfg["setup"]["multi_output"]:
-            dataset = dataset.map(self.get_map_to_supervised())
 
         return dataset, dataset_info

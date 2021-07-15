@@ -284,8 +284,11 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
-def get_heptfds_dataset(config):
+def get_heptfds_dataset(config, global_batch_size=None, n_train=None, n_test=None):
     cds = config["dataset"]
+
+    if global_batch_size is None:
+        global_batch_size = config['setup']['batch_size']
 
     if cds['schema'] == "cms":
         dsf = CMSDatasetFactory(config)
@@ -296,6 +299,17 @@ def get_heptfds_dataset(config):
 
     ds_train, _ = dsf.get_dataset("train")
     ds_test, _ = dsf.get_dataset("test")
+    ds_train = ds_train.batch(global_batch_size)
+    ds_test = ds_test.batch(global_batch_size)
+
+    ds_train = ds_train.map(dsf.get_map_to_supervised())
+    ds_test = ds_test.map(dsf.get_map_to_supervised())
+
+    if n_train is not None:
+        ds_train = ds_train.take(n_train)
+    if n_test is not None:
+        ds_test = ds_test.take(n_test)
+
     return ds_train, ds_test
 
 
