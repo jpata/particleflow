@@ -14,6 +14,7 @@ from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
+import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.model_setup import (
@@ -47,6 +48,8 @@ from tfmodel.utils import (
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.lr_finder import LRFinder
+from tfmodel.callbacks import CustomTensorBoard
+from tfmodel import hypertuning
 
 
 @click.group()
@@ -102,7 +105,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
         # Run model once to build the layers
         print(X_val.shape)
-        model(tf.cast(X_val[:1], model_dtype))
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
         if weights:
@@ -110,11 +113,11 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
-        model(tf.cast(X_val[:1], model_dtype))
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         config = set_config_loss(config, config["setup"]["trainable"])
         configure_model_weights(model, config["setup"]["trainable"])
-        model(tf.cast(X_val[:1], model_dtype))
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
@@ -300,6 +303,53 @@ def find_lr(config, outdir, figname, logscale):
 def delete_all_but_best_ckpt(train_dir, dry_run):
     """Delete all checkpoint weights in <train_dir>/weights/ except the one with lowest loss in its filename."""
     delete_all_but_best_checkpoint(train_dir, dry_run)
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-o", "--outdir", help="output dir", type=click.Path())
+@click.option("--ntrain", default=None, help="override the number of training events", type=int)
+@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+@click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
+def hypertune(config, outdir, ntrain, ntest, recreate):
+    config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
+
+    ds_train_r, ds_test_r, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+
+    model_builder = hypertuning.get_model_builder(config)
+
+    tb = CustomTensorBoard(
+            log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
+            update_freq=1,
+        )
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
+
+    tuner = kt.Hyperband(
+        model_builder,
+        objective="val_loss",
+        max_epochs=n_epochs,
+        factor=3,
+        hyperband_iterations=3,
+        directory=outdir + "/tb",
+        project_name="mlpf",
+        overwrite=recreate,
+        executions_per_trial=1,
+    )
+
+    tuner.search(
+        ds_train_r,
+        validation_data=ds_test_r,
+        steps_per_epoch=n_train // global_batch_size,
+        validation_steps=n_test // global_batch_size,
+        #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
+        callbacks=[tb],
+    )
+
+    tuner.results_summary()
+    for trial in tuner.oracle.get_best_trials(num_trials=10):
+        print(trial.hyperparameters.values, trial.score)
 
 
 if __name__ == "__main__":
