@@ -16,7 +16,6 @@ import uuid
 import matplotlib
 import matplotlib.pyplot as plt
 import sklearn
-import kerastuner as kt
 from argparse import Namespace
 import time
 import json
