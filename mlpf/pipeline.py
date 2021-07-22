@@ -317,6 +317,10 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
     ds_train_r, ds_test_r, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test)
 
+    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    if maybe_global_batch_size is not None:
+        global_batch_size = maybe_global_batch_size
+
     model_builder = hypertuning.get_model_builder(config)
 
     tb = CustomTensorBoard(
@@ -336,6 +340,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         project_name="mlpf",
         overwrite=recreate,
         executions_per_trial=1,
+        distribution_strategy=strategy,
     )
 
     tuner.search(
