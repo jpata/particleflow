@@ -7,8 +7,8 @@ import torch_geometric.utils
 from torch_geometric.data import Dataset, Data, Batch
 import itertools
 from glob import glob
+import numba
 from numpy.lib.recfunctions import append_fields
-import bz2
 
 import pickle
 import scipy
@@ -16,6 +16,8 @@ import scipy.sparse
 import math
 import multiprocessing
 
+import args
+from args import parse_args
 # assumes pkl files exist in /test_tmp_delphes/data/pythia8_ttbar/raw
 # they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
@@ -53,8 +55,7 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        raw_list = list(glob(osp.join(self.raw_dir, '*.pkl')))
-        raw_list += list(glob(osp.join(self.raw_dir, '*.pkl.bz2')))
+        raw_list = glob(osp.join(self.raw_dir, '*.pkl'))
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
         return sorted([l.replace(self.raw_dir, '.') for l in raw_list])
 
@@ -81,13 +82,8 @@ class PFGraphDataset(Dataset):
         pass
 
     def process_single_file(self, raw_file_name):
-        if raw_file_name.endswith(".pkl"):
-            with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-                data = pickle.load(fi, encoding='iso-8859-1')
-        elif raw_file_name.endswith(".pkl.bz2"):
-            data = pickle.load(bz2.BZ2File(osp.join(self.raw_dir, raw_file_name), "rb"), encoding='iso-8859-1')
-        else:
-            raise Exception("Unknown file format")
+        with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
+            data = pickle.load(fi, encoding='iso-8859-1')
 
         x=[]
         ygen=[]
@@ -153,21 +149,13 @@ class PFGraphDataset(Dataset):
         return self.get(idx)
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, help="dataset path", required=True)
-    parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
-    parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
-    parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
-    args = parser.parse_args()
+
+    args = parse_args()
 
     pfgraphdataset = PFGraphDataset(root=args.dataset)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
-    
-    if not os.path.isdir(pfgraphdataset._processed_dir):
-        os.makedirs(pfgraphdataset._processed_dir)
 
     pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
     #pfgraphdataset.process(args.num_files_merge)
