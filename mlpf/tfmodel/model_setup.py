@@ -209,7 +209,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     callbacks += [cp_callback]
 
     history_path = Path(outdir) / "history"
-    history_path.mkdir()
+    history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
     cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
     cb.set_model(model)
