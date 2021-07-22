@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 import click
 from tqdm import tqdm
+import shutil
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -65,6 +66,7 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 def train(config, weights, ntrain, ntest, recreate, prefix):
     """Train a model defined by config"""
+    config_file_path = config
     config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
         config, ntrain, ntest, weights
     )
@@ -77,6 +79,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
         outdir = str(Path(weights).parent)
+    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
@@ -177,6 +180,9 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 @click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
 def evaluate(config, train_dir, weights, evaluation_dir):
     """Evaluate the trained model in train_dir"""
+    if config is None:
+        config = Path(train_dir) / "config.yaml"
+        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
     # Switch off multi-output for the evaluation for backwards compatibility
     config["setup"]["multi_output"] = False
