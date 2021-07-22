@@ -1,4 +1,4 @@
-#!/bin/bash
+# !/bin/bash
 set -e
 
 rm -Rf test_tmp_delphes
@@ -10,32 +10,44 @@ mkdir -p data/pythia8_ttbar
 mkdir -p data/pythia8_ttbar/raw
 mkdir -p data/pythia8_ttbar/processed
 
-cd data/pythia8_ttbar/raw
+mkdir -p data/pythia8_qcd
+mkdir -p data/pythia8_qcd/raw
+mkdir -p data/pythia8_qcd/processed
 
-#download some pickle data files (for this test we download 3 pkl files and allocate 2 for train and 1 for valid)
+# download 2 files for training/validation
+cd data/pythia8_ttbar/raw
+echo Downloading the training/validation data files..
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_0.pkl.bz2
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_1.pkl.bz2
-wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_2.pkl.bz2
-
+bzip2 -d *
 cd ../../..
 
-# # if you have the data in place and want to avoid downloading it you can comment all of the above and uncomment the next line
-# cd test_tmp_delphes
+# download 1 file for testing
+cd data/pythia8_qcd/raw
+echo Downloading the testing data files..
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
+bzip2 -d *
+cd ../../..
 
 #generate pytorch data files from pkl files
-python3 ../mlpf/pytorch/graph_data_delphes.py --dataset data/pythia8_ttbar \
+echo Processing the training/validation data files..
+python3 ../mlpf/pytorch_delphes/graph_data_delphes.py --dataset data/pythia8_ttbar \
   --processed_dir data/pythia8_ttbar/processed --num-files-merge 1 --num-proc 1
 
+#generate pytorch data files from pkl files
+echo Processing the testing data files..
+python3 ../mlpf/pytorch_delphes/graph_data_delphes.py --dataset data/pythia8_qcd/ \
+  --processed_dir data/pythia8_qcd/processed --num-files-merge 1 --num-proc 1
+
 # before training a model, first get rid of any previous models stored
-rm -Rf experiments/PFNet*
+rm -Rf experiments/*
+
+cd ../mlpf/pytorch_delphes/
 
 #run the pytorch training
-COMET_API_KEY="bla" python3 ../mlpf/pytorch/train_end2end_delphes.py \
-  --dataset data/pythia8_ttbar --space_dim 2 --n_train 1 \
-  --n_val 1 --model PFNet7 --convlayer gravnet-radius --convlayer2 "none" \
-  --lr 0.0001 --hidden_dim 32 --n_epochs 3 --l1 1.0 --l2 0.001 --target gen \
-  --batch_size 1 --dropout 0.2 --disable_comet
-
-# predict on some test data and make plots
-python3 ../mlpf/pytorch/eval_end2end_delphes.py --dataset data/pythia8_ttbar \
-  --path experiments/PFNet* --model PFNet7 --start 1 --stop 2 --epoch 1 --target gen
+echo Begining the training..
+python3 training.py \
+  --n_epochs=10 --n_train=1 --n_valid=1 --n_test=1 --batch_size=4 \
+  --dataset='../../test_tmp_delphes/data/pythia8_ttbar' \
+  --dataset_qcd='../../test_tmp_delphes/data/pythia8_qcd' \
+  --outpath='../../test_tmp_delphes/experiments'
