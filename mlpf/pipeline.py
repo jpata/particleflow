@@ -209,9 +209,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         print(X_val.shape)
         model(tf.cast(X_val[:1], model_dtype))
 
+        # need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
         if weights:
-            # need to load the weights in the same trainable configuration as the model was set up
-            configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
         else:
             weights = get_best_checkpoint(train_dir)
