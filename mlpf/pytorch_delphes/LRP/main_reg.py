@@ -351,7 +351,7 @@ if __name__ == "__main__":
                     plt.xlabel("\nposition of node is row # {pos} from the top \n class prediction: {R} \n where prob = [null, chhadron, nhadron, photon, electron, muon]".format(R=[round(num,2) for num in probability.detach().tolist()], pos=((R_cat_feat_msk[:,-1] == pos).nonzero(as_tuple=True)[0].item()+1)))
                     plt.imshow(torch.abs(R_cat_feat_msk[:,:12]).detach().cpu().numpy(), interpolation="nearest", cmap='copper', aspect='auto')
                     plt.colorbar()
-                    fig.set_size_inches(10, 10)
+                    fig.set_size_inches(12, 12)
                     plt.savefig(outpath + f'/class{str(pid)}'+f'/p4_elem{str(p4_elem)}'+f'/sample{str(node_i)}.jpg')
                     plt.close(fig)
 
@@ -454,7 +454,7 @@ if __name__ == "__main__":
                     plt.xlabel("\nposition of node is row # {pos} from the top \n class prediction: {R} \n where prob = [null, chhadron, nhadron, photon, electron, muon]".format(R=[round(num,2) for num in probability.detach().tolist()], pos=((R_cat_feat_msk[:,-1] == pos).nonzero(as_tuple=True)[0].item()+1)))
                     plt.imshow(torch.abs(R_cat_feat_msk[:,:12]).detach().cpu().numpy(), interpolation="nearest", cmap='copper', aspect='auto')
                     plt.colorbar()
-                    fig.set_size_inches(10, 10)
+                    fig.set_size_inches(12, 12)
                     plt.savefig(outpath + f'/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                     plt.close(fig)
 
