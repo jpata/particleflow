@@ -181,23 +181,25 @@ def make_plots(model, test_loader, outpath, target, device, epoch, which_data):
     torch.save(conf_matrix_cand, outpath + '/conf_matrix_cand' + str(epoch) + '.pt')
 
     # making all the other plots
-    sample_title_qcd = "QCD, 14 TeV, PU200"
-    sample_title_ttbar = "$t\\bar{t}$, 14 TeV, PU200"
+    if 'test' in which_data:
+        sample = "QCD, 14 TeV, PU200"
+    else:
+        sample = "$t\\bar{t}$, 14 TeV, PU200"
 
     # make distribution plots
     plot_distributions_pid(1, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for chhadrons
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
     plot_distributions_pid(2, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for nhadrons
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
     plot_distributions_pid(3, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for photons
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
     plot_distributions_pid(4, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for electrons
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
     plot_distributions_pid(5, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for muons
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
 
     plot_distributions_all(gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for all together
-                target, epoch, outpath)
+                target, epoch, outpath, legend_title=sample+"\n")
 
     # make pt, eta plots to visualize dataset
     ax, _ = plot_pt_eta(ygen)
@@ -235,106 +237,106 @@ def make_plots(model, test_loader, outpath, target, device, epoch, which_data):
     plt.close(fig)
 
     # make efficiency and fake rate plots for charged hadrons
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "pt", np.linspace(0, 3, 61), outpath+"/efficiency_plots/eff_fake_pid1_pt.png", both=True, legend_title=sample_title_qcd+"\n")
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "eta", np.linspace(-3, 3, 61), outpath+"/efficiency_plots/eff_fake_pid1_eta.png", both=True, legend_title=sample_title_qcd+"\n")
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "energy", np.linspace(0, 50, 75), outpath+"/efficiency_plots/eff_fake_pid1_energy.png", both=True, legend_title=sample_title_qcd+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "pt", np.linspace(0, 3, 61), outpath+"/efficiency_plots/eff_fake_pid1_pt.png", both=True, legend_title=sample+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "eta", np.linspace(-3, 3, 61), outpath+"/efficiency_plots/eff_fake_pid1_eta.png", both=True, legend_title=sample+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 1, "energy", np.linspace(0, 50, 75), outpath+"/efficiency_plots/eff_fake_pid1_energy.png", both=True, legend_title=sample+"\n")
 
     # make efficiency and fake rate plots for neutral hadrons
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "pt", np.linspace(0, 3, 61), outpath+"/efficiency_plots/eff_fake_pid2_pt.png", both=True, legend_title=sample_title_qcd+"\n")
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "eta", np.linspace(-3, 3, 61), outpath+"/efficiency_plots/eff_fake_pid2_eta.png", both=True, legend_title=sample_title_qcd+"\n")
-    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "energy", np.linspace(0, 50, 75), outpath+"/efficiency_plots/eff_fake_pid2_energy.png", both=True, legend_title=sample_title_qcd+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "pt", np.linspace(0, 3, 61), outpath+"/efficiency_plots/eff_fake_pid2_pt.png", both=True, legend_title=sample+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "eta", np.linspace(-3, 3, 61), outpath+"/efficiency_plots/eff_fake_pid2_eta.png", both=True, legend_title=sample+"\n")
+    ax, _ = draw_efficiency_fakerate(ygen, ypred, ycand, 2, "energy", np.linspace(0, 50, 75), outpath+"/efficiency_plots/eff_fake_pid2_energy.png", both=True, legend_title=sample+"\n")
 
     # make resolution plots for chhadrons: pid=1
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    res_chhad_pt = plot_reso(ygen, ypred, ycand, 1, "pt", 2, ax=ax1, legend_title=sample_title_qcd+"\n")
+    res_chhad_pt = plot_reso(ygen, ypred, ycand, 1, "pt", 2, ax=ax1, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid1_pt.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    res_chhad_eta = plot_reso(ygen, ypred, ycand, 1, "eta", 0.2, ax=ax2, legend_title=sample_title_qcd+"\n")
+    res_chhad_eta = plot_reso(ygen, ypred, ycand, 1, "eta", 0.2, ax=ax2, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid1_eta.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    res_chhad_E = plot_reso(ygen, ypred, ycand, 1, "energy", 0.2, ax=ax3, legend_title=sample_title_qcd+"\n")
+    res_chhad_E = plot_reso(ygen, ypred, ycand, 1, "energy", 0.2, ax=ax3, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid1_energy.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for nhadrons: pid=2
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    res_nhad_pt = plot_reso(ygen, ypred, ycand, 2, "pt", 2, ax=ax1, legend_title=sample_title_qcd+"\n")
+    res_nhad_pt = plot_reso(ygen, ypred, ycand, 2, "pt", 2, ax=ax1, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid2_pt.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    res_nhad_eta = plot_reso(ygen, ypred, ycand, 2, "eta", 0.2, ax=ax2, legend_title=sample_title_qcd+"\n")
+    res_nhad_eta = plot_reso(ygen, ypred, ycand, 2, "eta", 0.2, ax=ax2, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid2_eta.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    res_nhad_E = plot_reso(ygen, ypred, ycand, 2, "energy", 0.2, ax=ax3, legend_title=sample_title_qcd+"\n")
+    res_nhad_E = plot_reso(ygen, ypred, ycand, 2, "energy", 0.2, ax=ax3, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid2_energy.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for photons: pid=3
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    res_photon_pt = plot_reso(ygen, ypred, ycand, 3, "pt", 2, ax=ax1, legend_title=sample_title_qcd+"\n")
+    res_photon_pt = plot_reso(ygen, ypred, ycand, 3, "pt", 2, ax=ax1, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid3_pt.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    res_photon_eta = plot_reso(ygen, ypred, ycand, 3, "eta", 0.2, ax=ax2, legend_title=sample_title_qcd+"\n")
+    res_photon_eta = plot_reso(ygen, ypred, ycand, 3, "eta", 0.2, ax=ax2, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid3_eta.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    res_photon_E = plot_reso(ygen, ypred, ycand, 3, "energy", 0.2, ax=ax3, legend_title=sample_title_qcd+"\n")
+    res_photon_E = plot_reso(ygen, ypred, ycand, 3, "energy", 0.2, ax=ax3, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid3_energy.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for electrons: pid=4
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    res_electron_pt = plot_reso(ygen, ypred, ycand, 4, "pt", 2, ax=ax1, legend_title=sample_title_qcd+"\n")
+    res_electron_pt = plot_reso(ygen, ypred, ycand, 4, "pt", 2, ax=ax1, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid4_pt.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    res_electron_eta = plot_reso(ygen, ypred, ycand, 4, "eta", 0.2, ax=ax2, legend_title=sample_title_qcd+"\n")
+    res_electron_eta = plot_reso(ygen, ypred, ycand, 4, "eta", 0.2, ax=ax2, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid4_eta.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    res_electron_E = plot_reso(ygen, ypred, ycand, 4, "energy", 0.2, ax=ax3, legend_title=sample_title_qcd+"\n")
+    res_electron_E = plot_reso(ygen, ypred, ycand, 4, "energy", 0.2, ax=ax3, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid4_energy.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for muons: pid=5
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    res_muon_pt = plot_reso(ygen, ypred, ycand, 5, "pt", 2, ax=ax1, legend_title=sample_title_qcd+"\n")
+    res_muon_pt = plot_reso(ygen, ypred, ycand, 5, "pt", 2, ax=ax1, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid5_pt.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    res_muon_eta = plot_reso(ygen, ypred, ycand, 5, "eta", 0.2, ax=ax2, legend_title=sample_title_qcd+"\n")
+    res_muon_eta = plot_reso(ygen, ypred, ycand, 5, "eta", 0.2, ax=ax2, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid5_eta.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    res_muon_E = plot_reso(ygen, ypred, ycand, 5, "energy", 0.2, ax=ax3, legend_title=sample_title_qcd+"\n")
+    res_muon_E = plot_reso(ygen, ypred, ycand, 5, "energy", 0.2, ax=ax3, legend_title=sample+"\n")
     plt.savefig(outpath+"/resolution_plots/res_pid5_energy.png", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)

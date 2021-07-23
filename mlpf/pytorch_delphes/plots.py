@@ -166,7 +166,7 @@ def plot_particles(fname, true_id, true_p4, pred_id, pred_p4, pid=1):
 
     return fig
 
-def plot_distribution(val_x, val_y, var_name, rng, target, fname):
+def plot_distribution(pid, val_x, val_y, var_name, rng, target, fname, legend_title=""):
     plt.style.use(mplhep.style.CMS)
 
     fig = plt.figure(figsize=(10,10))
@@ -178,15 +178,19 @@ def plot_distribution(val_x, val_y, var_name, rng, target, fname):
 
     plt.hist(val_y, bins=rng, density=True, histtype="step", lw=2, label="MLPF");
     plt.xlabel(var_name)
-    plt.legend(loc="best", frameon=False)
-    plt.ylim(0,1.5)
 
+    if pid!=-1:
+        plt.legend(frameon=False, title=legend_title+pid_names[pid])
+    else:
+        plt.legend(frameon=False, title=legend_title)
+
+    plt.ylim(0,1.5)
     plt.savefig(fname + '.png')
     plt.close(fig)
 
     return fig
 
-def plot_distributions_pid(pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath):
+def plot_distributions_pid(pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""):
     plt.style.use("default")
 
     ch_true = true_p4[true_id==pid, 0].flatten().detach().cpu().numpy()
@@ -207,14 +211,14 @@ def plot_distributions_pid(pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_
     e_true = true_p4[true_id==pid, 5].flatten().detach().cpu().numpy()
     e_pred = pred_p4[pred_id==pid, 5].flatten().detach().cpu().numpy()
 
-    figure = plot_distribution(ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_charge_distribution')
-    figure = plot_distribution(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_pt_distribution')
-    figure = plot_distribution(e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_energy_distribution')
-    figure = plot_distribution(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_eta_distribution')
-    figure = plot_distribution(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_sphi_distribution')
-    figure = plot_distribution(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_cphi_distribution')
+    figure = plot_distribution(pid, ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_charge_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_pt_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_energy_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_eta_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_sphi_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/' + pid_names[pid] + '_cphi_distribution', legend_title=legend_title)
 
-def plot_distributions_all(true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath):
+def plot_distributions_all(true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""):
     plt.style.use("default")
 
     msk = (pred_id!=0) & (true_id!=0)
@@ -237,12 +241,12 @@ def plot_distributions_all(true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, t
     e_true = true_p4[msk, 5].flatten().detach().cpu().numpy()
     e_pred = pred_p4[msk, 5].flatten().detach().cpu().numpy()
 
-    figure = plot_distribution(ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/all_charge_distribution')
-    figure = plot_distribution(pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/all_pt_distribution')
-    figure = plot_distribution(e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname = outpath+'/distribution_plots/all_energy_distribution')
-    figure = plot_distribution(eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname = outpath+'/distribution_plots/all_eta_distribution')
-    figure = plot_distribution(sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/all_sphi_distribution')
-    figure = plot_distribution(cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/all_cphi_distribution')
+    figure = plot_distribution(-1, ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/all_charge_distribution', legend_title=legend_title)
+    figure = plot_distribution(-1, pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname = outpath+'/distribution_plots/all_pt_distribution', legend_title=legend_title)
+    figure = plot_distribution(-1, e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname = outpath+'/distribution_plots/all_energy_distribution', legend_title=legend_title)
+    figure = plot_distribution(-1, eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname = outpath+'/distribution_plots/all_eta_distribution', legend_title=legend_title)
+    figure = plot_distribution(-1, sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/all_sphi_distribution', legend_title=legend_title)
+    figure = plot_distribution(-1, cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname = outpath+'/distribution_plots/all_cphi_distribution', legend_title=legend_title)
 
 def midpoints(x):
     return x[:-1] + np.diff(x)/2
