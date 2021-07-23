@@ -192,7 +192,7 @@ class LRP_reg:
             print("- Adjacency matrix is correctly computed")
 
         # # the following saves a version of the R-scores before the message passing
-        # torch.save(big_list, outpath + '/R_score_layer_before_msg_passing.pt')
+        # torch.save(big_list, outpath + '/LRP/R_score_layer_before_msg_passing.pt')
 
         # modify the big tensor based on message passing rule
         for node_i in tqdm(range(len(big_list))):
@@ -220,7 +220,7 @@ class LRP_reg:
         print('Total number of layers (including activation layers):', start_index)
 
         # store the R-scores for the output layer (they are basically the model predictions)
-        torch.save(to_explain["pred_p4"].detach(), outpath + f'/R_score_layer{start_index+1}.pt')
+        torch.save(to_explain["pred_p4"].detach(), outpath + f'/LRP/R_score_layer{start_index+1}.pt')
 
         ### loop over each single layer
         big_list = []
@@ -254,8 +254,8 @@ class LRP_reg:
             print(f"Explaining layer {output_layer_index+1-index}/{output_layer_index-1}: {layer} - Skip connection")
             input_relevance, pid_relevance, embedding_relevance = self.eps_rule(layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True, skip_connection=True)
 
-            torch.save(input_relevance, outpath + f'/input_relevance.pt')
-            torch.save(embedding_relevance, outpath + f'/embedding_relevance.pt')
+            torch.save(input_relevance, outpath + f'/LRP/input_relevance.pt')
+            torch.save(embedding_relevance, outpath + f'/LRP/embedding_relevance.pt')
 
             return pid_relevance, big_list
 
@@ -265,7 +265,7 @@ class LRP_reg:
             R = self.eps_rule(layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True)
 
             # add the embedding_relevance computed in the nn3.0 skip connection
-            embedding_relevance = torch.load(outpath + f'/embedding_relevance.pt', map_location=torch.device('cpu'))
+            embedding_relevance = torch.load(outpath + f'/LRP/embedding_relevance.pt', map_location=torch.device('cpu'))
 
             for i in range(len(R)):
                 R[i] = R[i] + embedding_relevance[i]
@@ -277,7 +277,7 @@ class LRP_reg:
             print(f"Explaining layer {output_layer_index+1-index}/{output_layer_index-1}: {layer}")
 
             # add the input_relevance computed in the nn3.0 skip connection
-            input_relevance = torch.load(outpath + f'/input_relevance.pt', map_location=torch.device('cpu'))
+            input_relevance = torch.load(outpath + f'/LRP/input_relevance.pt', map_location=torch.device('cpu'))
 
             for node_i in tqdm(range(len(big_list))):
                 big_list[node_i] = self.eps_rule(layer, input, big_list[node_i], index, output_layer_bool, activation_layer=False, print_statement=False)
