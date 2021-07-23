@@ -51,6 +51,7 @@ setup:
   sample_weights: none
   trainable: all
   classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: gnn
@@ -73,3 +74,8 @@ parameters:
 timing:
   num_ev: 100
   num_iter: 3
+
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes

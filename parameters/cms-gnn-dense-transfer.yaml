@@ -51,6 +51,7 @@ setup:
   sample_weights: inverse_sqrt
   trainable: transfer
   classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 parameters:
   model: gnn_dense
@@ -68,3 +69,8 @@ parameters:
 timing:
   num_ev: 100
   num_iter: 3
+
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes
