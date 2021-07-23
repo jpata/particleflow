@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # 'LRP_outpath': '../../../prp/models/LRP/', 'optimizer': 'adam', 'lr': 0.001, 'alpha': 1, 'dropout': 0,
     # 'space_dim': 4, 'propagate_dimensions': 22,'nearest': 16, 'overwrite': True,
     # 'LRP_load_epoch': 9, 'LRP_load_model': 'LRP_reg_PFNet7_gen_ntrain_1_nepochs_10_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
-    # 'explain': True, 'make_heatmaps_clf': True,'make_heatmaps_reg': True,
+    # 'explain': False, 'make_heatmaps_clf': True,'make_heatmaps_reg': True,
     # 'clf': True, 'reg': True})
 
     # define the dataset (assumes the data exists as .pt files in "processed")
@@ -323,7 +323,7 @@ if __name__ == "__main__":
                                 l.append('track')
                         return l
 
-                    node_types = get_type(R_cat_feat[:,12])
+                    node_types = get_type(R_cat_feat_msk[:,12])
 
                     fig, ax = plt.subplots()
                     fig.tight_layout()
@@ -426,7 +426,7 @@ if __name__ == "__main__":
                                 l.append('track')
                         return l
 
-                    node_types = get_type(R_cat_feat[:,12])
+                    node_types = get_type(R_cat_feat_msk[:,12])
 
                     fig, ax = plt.subplots()
                     fig.tight_layout()
