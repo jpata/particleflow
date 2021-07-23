@@ -13,34 +13,40 @@ dataset:
   classification_loss_coef: 1.0
   momentum_loss_coef: 1.0
   charge_loss_coef: 1.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 0.001
   momentum_loss_coefs:
     - 1.0
     - 1.0
     - 1.0
     - 1.0
     - 0.001
-  raw_path: data/pythia8_ttbar/raw/*.pkl.bz2
-  processed_path: data/pythia8_ttbar/tfr/*.tfrecords
+  raw_path: ../data/mlpf_zenodo/pythia8_ttbar/raw/*.pkl.bz2
+  processed_path: ../data/mlpf_zenodo/pythia8_ttbar/tfr/*.tfrecords
   num_files_per_chunk: 5
-  validation_file_path: data/pythia8_qcd/val/*.pkl.bz2
+  validation_file_path: ../data/mlpf_zenodo/pythia8_qcd/val/*.pkl.bz2
 
 tensorflow:
   eager: no
 
 setup:
   train: yes
-  weights: 
-  lr: 1e-6
-  batch_size: 5
-  num_events_train: 100
-  num_events_test: 100
-  num_epochs: 400
+  weights:
+  weights_config: all
+  lr: 1e-5
+  batch_size: 16
+  num_events_train: 40000
+  num_events_test: 5000
+  num_epochs: 250
   num_val_files: -1
   dtype: float32
   trainable: all
-  multi_output: no
+  multi_output: yes
   classification_loss_type: categorical_cross_entropy
-  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  lr_schedule: onecycle  # exponentialdecay, onecycle
 
 sample_weights:
   cls: none
@@ -77,3 +83,10 @@ exponentialdecay:
   decay_steps: 10000
   decay_rate: 0.99
   staircase: yes
+
+onecycle:
+  mom_min: 0.85
+  mom_max: 0.95
+  warmup_ratio: 0.3
+  div_factor: 25.0
+  final_div: 100000.0
