@@ -371,8 +371,8 @@ if __name__ == "__main__":
 
         # make directories to hold the heatmaps
         for i in range(6):
-            if not osp.isdir(outpath + f'/clf_class{str(i)}'):
-                os.makedirs(outpath + f'/clfclass{str(i)}')
+            if not osp.isdir(outpath + f'/class{str(i)}'):
+                os.makedirs(outpath + f'/class{str(i)}')
             for j in range(6):
                 if not osp.isdir(outpath + f'/class{str(i)}'+f'/pid{str(j)}'):
                     os.makedirs(outpath + f'/class{str(i)}'+f'/pid{str(j)}')
