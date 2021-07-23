@@ -130,15 +130,17 @@ def make_heatmaps(big_list, to_explain, task):
 
     # make directories to hold the heatmaps
     for i in range(6):
-        if not osp.isdir(outpath + f'/class{str(i)}'):
-            os.makedirs(outpath + f'/class{str(i)}')
+        if not osp.isdir(outpath + '/LRP'):
+            os.makedirs(outpath + '/LRP')
+        if not osp.isdir(outpath + f'/LRP/class{str(i)}'):
+            os.makedirs(outpath + f'/LRP/class{str(i)}')
         for j in range(6):
             if task=='regression':
-                if not osp.isdir(outpath + f'/class{str(i)}'+f'/p4_elem{str(j)}'):
-                    os.makedirs(outpath + f'/class{str(i)}'+f'/p4_elem{str(j)}')
+                if not osp.isdir(outpath + f'/LRP/class{str(i)}'+f'/p4_elem{str(j)}'):
+                    os.makedirs(outpath + f'/LRP/class{str(i)}'+f'/p4_elem{str(j)}')
             elif task=='classification':
-                if not osp.isdir(outpath + f'/class{str(i)}'+f'/pid{str(j)}'):
-                    os.makedirs(outpath + f'/class{str(i)}'+f'/pid{str(j)}')
+                if not osp.isdir(outpath + f'/LRP/class{str(i)}'+f'/pid{str(j)}'):
+                    os.makedirs(outpath + f'/LRP/class{str(i)}'+f'/pid{str(j)}')
 
     # attempt to break down big_list onto 6 smaller lists, 1 for each pid
     list0, list1, list2, list3, list4, list5 = [], [], [], [], [], []
@@ -231,9 +233,9 @@ def make_heatmaps(big_list, to_explain, task):
                 plt.colorbar()
                 fig.set_size_inches(12, 12)
                 if task=='regression':
-                    plt.savefig(outpath + f'/class{str(pid)}'+f'/p4_elem{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
+                    plt.savefig(outpath + f'/LRP/class{str(pid)}'+f'/p4_elem{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                 elif task=='classification':
-                    plt.savefig(outpath + f'/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
+                    plt.savefig(outpath + f'/LRP/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                 plt.close(fig)
 
 if __name__ == "__main__":
@@ -341,6 +343,9 @@ if __name__ == "__main__":
             else:
                 pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4, edge_index, edge_weight, after_message, before_message = model.model(X)
 
+            if not osp.isdir(outpath + '/LRP'):
+                os.makedirs(outpath + '/LRP')
+
             if args.LRP_reg:
                 print('Explaining the p4 predictions:')
                 to_explain_reg = {"A": activation, "inputs": dict(x=X.x,batch=X.batch),
@@ -352,8 +357,8 @@ if __name__ == "__main__":
                 model.set_dest(to_explain_reg["A"])
 
                 big_list_reg = explainer_reg.explain(to_explain_reg)
-                torch.save(big_list_reg, outpath + f'/big_list_reg.pt')
-                torch.save(to_explain_reg, outpath + f'/to_explain_reg.pt')
+                torch.save(big_list_reg, outpath + '/LRP/big_list_reg.pt')
+                torch.save(to_explain_reg, outpath + '/LRP/to_explain_reg.pt')
 
             if args.LRP_clf:
                 print('Explaining the pid predictions:')
@@ -366,22 +371,23 @@ if __name__ == "__main__":
                 model.set_dest(to_explain_clf["A"])
 
                 big_list_clf = explainer_clf.explain(to_explain_clf)
-                torch.save(big_list_clf, outpath + f'/big_list_clf.pt')
-                torch.save(to_explain_clf, outpath + f'/to_explain_clf.pt')
+
+                torch.save(big_list_clf, outpath + '/LRP/big_list_clf.pt')
+                torch.save(to_explain_clf, outpath + '/LRP/to_explain_clf.pt')
 
             break # explain only one single event
 
     if args.make_heatmaps_reg:
         # load the necessary R-scores
-        big_list_reg = torch.load(outpath + f'/big_list_reg.pt', map_location=device)
-        to_explain_reg = torch.load(outpath + f'/to_explain_reg.pt', map_location=device)
+        big_list_reg = torch.load(outpath + '/LRP/big_list_reg.pt', map_location=device)
+        to_explain_reg = torch.load(outpath + '/LRP/to_explain_reg.pt', map_location=device)
 
         make_heatmaps(big_list_reg, to_explain_reg, 'regression')
 
     if args.make_heatmaps_clf:
         # load the necessary R-scores
-        big_list_clf = torch.load(outpath + f'/big_list_clf.pt', map_location=device)
-        to_explain_clf = torch.load(outpath + f'/to_explain_clf.pt', map_location=device)
+        big_list_clf = torch.load(outpath + '/LRP/big_list_clf.pt', map_location=device)
+        to_explain_clf = torch.load(outpath + '/LRP/to_explain_clf.pt', map_location=device)
 
         make_heatmaps(big_list_clf, to_explain_clf, 'classification')
 

@@ -173,7 +173,7 @@ class LRP_clf:
             print("- Adjacency matrix is correctly computed")
 
         # # the following saves a version of the R-scores before the message passing
-        # torch.save(big_list, outpath + '/R_score_layer_before_msg_passing.pt')
+        # torch.save(big_list, outpath + '/LRP/R_score_layer_before_msg_passing.pt')
 
         # modify the big tensor based on message passing rule
         for node_i in tqdm(range(len(big_list))):
@@ -195,7 +195,7 @@ class LRP_clf:
         print('Total number of layers (including activation layers):', start_index)
 
         # store the R-scores for the output layer (they are basically the model predictions)
-        torch.save(to_explain["pred_id"].detach(), outpath + f'/R_score_layer{start_index+1}.pt')
+        torch.save(to_explain["pred_id"].detach(), outpath + f'/LRP/R_score_layer{start_index+1}.pt')
 
         ### loop over each single layer
         big_list = []
