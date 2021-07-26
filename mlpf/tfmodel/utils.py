@@ -11,6 +11,7 @@ import re
 
 import tensorflow as tf
 import tensorflow_addons as tfa
+import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -153,6 +154,44 @@ def get_optimizer(config, lr_schedule=None):
         return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
     else:
         raise ValueError("Only 'adam' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
+
+def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
+    if cfg_hypertune["algorithm"] == "random":
+        print("Keras Tuner: Using RandomSearch")
+        cfg_rand = cfg_hypertune["random"]
+        return kt.RandomSearch(
+            model_builder,
+            objective=cfg_rand["objective"],
+            max_trials=cfg_rand["max_trials"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "bayesian":
+        print("Keras Tuner: Using BayesianOptimization")
+        cfg_bayes = cfg_hypertune["bayesian"]
+        return kt.BayesianOptimization(
+            model_builder,
+            objective=cfg_bayes["objective"],
+            max_trials=cfg_bayes["max_trials"],
+            num_initial_points=cfg_bayes["num_initial_points"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "hyperband":
+        print("Keras Tuner: Using Hyperband")
+        cfg_hb = cfg_hypertune["hyperband"]
+        return kt.Hyperband(
+            model_builder,
+            objective=cfg_hb["objective"],
+            max_epochs=cfg_hb["max_epochs"],
+            factor=cfg_hb["factor"],
+            hyperband_iterations=cfg_hb["iterations"],
+            directory=outdir + "/tb",
+            project_name="mlpf",
+            overwrite=recreate,
+            executions_per_trial=cfg_hb["executions_per_trial"],
+            distribution_strategy=strategy,
+        )
 
 
 def compute_weights_invsqrt(X, y, w):
