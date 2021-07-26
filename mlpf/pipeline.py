@@ -320,13 +320,18 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 def hypertune(config, outdir, ntrain, ntest, recreate):
     config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
 
+    # Override number of epochs with value from Hyperband config
+    cfg_hb = config["hypertune"]["hyperband"]
+    n_epochs = cfg_hb["max_epochs"]
+
     ds_train_r, ds_test_r, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test)
 
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
+    total_steps = n_epochs * n_train // global_batch_size
 
-    model_builder = hypertuning.get_model_builder(config)
+    model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
 
     tb = CustomTensorBoard(
             log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
@@ -337,24 +342,25 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
     tuner = kt.Hyperband(
         model_builder,
-        objective="val_loss",
-        max_epochs=n_epochs,
-        factor=3,
-        hyperband_iterations=3,
+        objective=cfg_hb["objective"],
+        max_epochs=cfg_hb["max_epochs"],
+        factor=cfg_hb["factor"],
+        hyperband_iterations=cfg_hb["iterations"],
         directory=outdir + "/tb",
         project_name="mlpf",
         overwrite=recreate,
-        executions_per_trial=1,
+        executions_per_trial=cfg_hb["executions_per_trial"],
         distribution_strategy=strategy,
     )
 
     tuner.search(
         ds_train_r,
+        epochs=n_epochs,
         validation_data=ds_test_r,
         steps_per_epoch=n_train // global_batch_size,
         validation_steps=n_test // global_batch_size,
         #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
-        callbacks=[tb],
+        callbacks=[tb] + optim_callbacks,
     )
 
     tuner.results_summary()
