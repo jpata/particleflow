@@ -41,15 +41,15 @@ tensorflow:
 setup:
   train: yes
   weights:
-  weights_config: classification
-  lr: 2e-5
+  weights_config:
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
   num_val_files: 100
   dtype: float32
-  trainable: classification
+  trainable: all
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
