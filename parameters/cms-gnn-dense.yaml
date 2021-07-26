@@ -99,8 +99,16 @@ exponentialdecay:
   staircase: yes
 
 hypertune:
+  algorithm: hyperband  # random, bayesian, hyperband
+  random:
+    objective: val_loss
+    max_trials: 1000
+  bayesian:
+    objective: val_loss
+    max_trials: 1000
+    num_initial_points: 2
   hyperband:
-    objective: "val_loss"
+    objective: val_loss
     max_epochs: 500
     factor: 2
     iterations: 1
