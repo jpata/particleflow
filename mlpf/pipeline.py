@@ -30,6 +30,7 @@ from tfmodel.model_setup import (
 
 from tfmodel.utils import (
     get_lr_schedule,
+    get_optimizer,
     create_experiment_dir,
     get_strategy,
     make_weight_function,
@@ -47,7 +48,6 @@ from tfmodel.utils import (
     delete_all_but_best_checkpoint,
 )
 
-from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.lr_finder import LRFinder
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
@@ -90,11 +90,10 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
     total_steps = n_epochs * n_train // global_batch_size
-    lr = float(config["setup"]["lr"])
 
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, lr=lr, steps=total_steps)
-        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+        opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
             model_dtype = tf.dtypes.float16

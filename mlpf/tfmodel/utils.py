@@ -102,7 +102,8 @@ def get_strategy(global_batch_size):
     return strategy, global_batch_size
 
 
-def get_lr_schedule(config, lr, steps):
+def get_lr_schedule(config, steps):
+    lr = float(config["setup"]["lr"])
     callbacks = []
     schedule = config["setup"]["lr_schedule"]
     if schedule == "onecycle":
@@ -134,6 +135,24 @@ def get_lr_schedule(config, lr, steps):
     else:
         raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
     return lr_schedule, callbacks
+
+
+def get_optimizer(config, lr_schedule=None):
+    if lr_schedule is None:
+        lr = float(config["setup"]["lr"])
+    else:
+        lr = lr_schedule
+    if config["setup"]["optimizer"] == "adam":
+        cfg_adam = config["optimizer"]["adam"]
+        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+    if config["setup"]["optimizer"] == "adamw":
+        cfg_adamw = config["optimizer"]["adamw"]
+        return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
+    elif config["setup"]["optimizer"] == "sgd":
+        cfg_sgd = config["optimizer"]["sgd"]
+        return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+    else:
+        raise ValueError("Only 'adam' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
 
 
 def compute_weights_invsqrt(X, y, w):

@@ -39,6 +39,17 @@ setup:
   trainable: all
   multi_output: no
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  optimizer: adam  # adam, adamw, sgd
+
+optimizer:
+  adam:
+    amsgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
 
 sample_weights:
   cls: none

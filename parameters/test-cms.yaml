@@ -38,7 +38,18 @@ setup:
   dtype: float32
   trainable: all
   classification_loss_type: categorical_cross_entropy
-  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  lr_schedule: exponentialdecay
+  optimizer: adam
+
+optimizer:
+  adam:
+    amsgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
 
 sample_weights:
   cls: none

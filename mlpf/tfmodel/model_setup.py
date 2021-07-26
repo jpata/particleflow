@@ -25,7 +25,7 @@ from tqdm import tqdm
 from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
-from tfmodel.utils import get_lr_schedule, make_weight_function, targets_multi_output
+from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
 
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
@@ -620,11 +620,10 @@ def main(args, yaml_path, config):
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
 
-    lr = float(config['setup']['lr'])
     with strategy.scope():
         total_steps = n_epochs * n_train // global_batch_size
-        lr_schedule, optim_callbacks = get_lr_schedule(config, lr, steps=total_steps)
-        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+        opt = get_optimizer(config, lr_schedule)
         if config['setup']['dtype'] == 'float16':
             model_dtype = tf.dtypes.float16
             from tensorflow.keras import mixed_precision

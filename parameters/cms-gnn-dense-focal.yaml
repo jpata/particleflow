@@ -55,6 +55,17 @@ setup:
   focal_loss_gamma: 3.0
   focal_loss_from_logits: False
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+    optimizer: adam  # adam, adamw, sgd
+
+optimizer:
+  adam:
+    amsgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
 
 sample_weights:
   cls: none
