@@ -52,6 +52,17 @@ setup:
   trainable: all
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+    optimizer: adam  # adam, adamw, sgd
+
+optimizer:
+  adam:
+    amsgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
 
 parameters:
   model: gnn_dense
