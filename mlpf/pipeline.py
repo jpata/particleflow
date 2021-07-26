@@ -46,6 +46,7 @@ from tfmodel.utils import (
     parse_config,
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
+    get_tuner,
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -320,9 +321,9 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 def hypertune(config, outdir, ntrain, ntest, recreate):
     config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
 
-    # Override number of epochs with value from Hyperband config
-    cfg_hb = config["hypertune"]["hyperband"]
-    n_epochs = cfg_hb["max_epochs"]
+    # Override number of epochs with max_epochs from Hyperband config if specified
+    if config["hypertune"]["algorithm"] == "hyperband":
+        n_epochs = config["hypertune"]["hyperband"]["max_epochs"]
 
     ds_train_r, ds_test_r, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test)
 
@@ -340,18 +341,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
     tb.__class__.__name__ = "TensorBoard"
 
-    tuner = kt.Hyperband(
-        model_builder,
-        objective=cfg_hb["objective"],
-        max_epochs=cfg_hb["max_epochs"],
-        factor=cfg_hb["factor"],
-        hyperband_iterations=cfg_hb["iterations"],
-        directory=outdir + "/tb",
-        project_name="mlpf",
-        overwrite=recreate,
-        executions_per_trial=cfg_hb["executions_per_trial"],
-        distribution_strategy=strategy,
-    )
+    tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
 
     tuner.search(
         ds_train_r,
@@ -362,6 +352,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
         callbacks=[tb] + optim_callbacks,
     )
+    print("Hyperparamter search complete.")
 
     tuner.results_summary()
     for trial in tuner.oracle.get_best_trials(num_trials=10):
