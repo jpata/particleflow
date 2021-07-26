@@ -7,6 +7,7 @@ from tfmodel.model import PFNetDense
 
 from tfmodel.utils import (
     get_lr_schedule,
+    get_optimizer,
     load_config,
     set_config_loss,
     get_loss_dict,
@@ -14,8 +15,8 @@ from tfmodel.utils import (
 )
 
 
-def get_model_builder(config):
-
+def get_model_builder(config, total_steps):
+    _, optim_callbacks = get_lr_schedule(config, steps=total_steps)
     def model_builder(hp):
         config["parameters"]["hidden_dim"] = hp.Choice("hidden_dim", values=[256])
         config["parameters"]["distance_dim"] = hp.Choice("distance_dim", values=[128])
@@ -24,15 +25,16 @@ def get_model_builder(config):
         config["parameters"]["dropout"] = hp.Choice("dropout", values=[0.2])
         config["parameters"]["bin_size"] = hp.Choice("bin_size", values=[640])
 
-        config["setup"]["lr"] = hp.Choice("lr", values=[1e-4])
-        config["setup"]["batch_size"] = hp.Choice("batch_size", values=[32])
+        config["setup"]["lr"] = hp.Choice("lr", values=[1e-4, 3e-4])
+        config["setup"]["lr_schedule"] = hp.Choice("lr_schedule", values=["exponentialdecay"])
         config["setup"]["optimizer"] = hp.Choice("optimizer", values=["adam"])
 
 
         model = make_model(config, dtype="float32")
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
-        opt = tf.keras.optimizers.Adam(learning_rate=config["setup"]["lr"])
+        lr_schedule, _ = get_lr_schedule(config, steps=total_steps)
+        opt = get_optimizer(config, lr_schedule)
 
         loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
@@ -49,4 +51,4 @@ def get_model_builder(config):
         )
         return model
 
-    return model_builder
+    return model_builder, optim_callbacks
