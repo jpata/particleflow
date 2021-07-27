@@ -3,7 +3,7 @@ import sys, os
 import os.path as osp
 import pickle as pkl
 import _pickle as cPickle
-import math, time, numba, tqdm
+import math, time, tqdm
 import numpy as np
 import pandas as pd
 import sklearn

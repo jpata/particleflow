@@ -5,7 +5,7 @@ sys.path.insert(1, '../../mlpf/plotting/')
 
 import os.path as osp
 import pickle as pkl
-import math, time, numba, tqdm
+import math, time, tqdm
 import numpy as np
 import pandas as pd
 import sklearn
