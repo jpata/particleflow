@@ -99,5 +99,3 @@ class PFNet7(nn.Module):
             pred_p4 = torch.zeros_like(data.ycand)
 
         return pred_ids, pred_p4, data.ygen_id, data.ygen, data.ycand_id, data.ycand
-
-# # -------------------------------------------------------------------------------------

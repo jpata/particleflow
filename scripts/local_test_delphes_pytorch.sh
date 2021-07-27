@@ -45,8 +45,8 @@ rm -Rf experiments/*
 cd ../mlpf/pytorch_delphes/
 
 #run the pytorch training
-echo Begining the training..
-python3 training.py \
+echo Beginning the training..
+python3 pipeline.py \
   --n_epochs=10 --n_train=1 --n_valid=1 --n_test=1 --batch_size=4 \
   --dataset='../../test_tmp_delphes/data/pythia8_ttbar' \
   --dataset_qcd='../../test_tmp_delphes/data/pythia8_qcd' \
