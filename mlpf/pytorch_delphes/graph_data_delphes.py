@@ -5,10 +5,7 @@ import torch
 import torch_geometric
 import torch_geometric.utils
 from torch_geometric.data import Dataset, Data, Batch
-import itertools
 from glob import glob
-import numba
-from numpy.lib.recfunctions import append_fields
 
 import pickle
 import scipy
