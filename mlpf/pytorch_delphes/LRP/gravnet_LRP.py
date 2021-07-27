@@ -14,9 +14,11 @@ except ImportError:
 
 # copied it from pytorch_geometric source code
 # ADDED: retrieve edge_index, retrieve edge_weight
-# ADDED: retrieve before and after message MessagePassing
 # CHANGED: used reduce='sum' instead of reduce='mean' in the message passing
 # REMOVED: skip connection
+
+# ADDED: retrieve before and after message MessagePassing
+
 class GravNetConv(MessagePassing):
     r"""The GravNet operator from the `"Learning Representations of Irregular
     Particle-detector Geometry with Distance-weighted Graph
