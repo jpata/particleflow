@@ -19,15 +19,6 @@ from torch.utils.data import random_split
 from gravnet import GravNetConv
 from torch_geometric.nn import GraphConv
 
-use_gpu = torch.cuda.device_count()>0
-multi_gpu = torch.cuda.device_count()>1
-
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 #Model with gravnet clustering
 class PFNet7(nn.Module):
     def __init__(self,
