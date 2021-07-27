@@ -34,12 +34,6 @@ plt.style.use(hep.style.ROOT)
 use_gpu = torch.cuda.device_count()>0
 multi_gpu = torch.cuda.device_count()>1
 
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 from plot_utils import plot_confusion_matrix
 from plots import plot_regression, plot_distributions_pid, plot_distributions_all, plot_pt_eta, plot_num_particles_pid, draw_efficiency_fakerate, get_eff, get_fake, plot_reso
 

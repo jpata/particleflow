@@ -19,16 +19,6 @@ from torch.utils.data import random_split
 from gravnet import GravNetConv
 from torch_geometric.nn import GraphConv
 
-import torch
-use_gpu = torch.cuda.device_count()>0
-multi_gpu = torch.cuda.device_count()>1
-
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 #Model with gravnet clustering
 class PFNet7(nn.Module):
     def __init__(self,
@@ -111,19 +101,3 @@ class PFNet7(nn.Module):
         return pred_ids, pred_p4, data.ygen_id, data.ygen, data.ycand_id, data.ycand
 
 # # -------------------------------------------------------------------------------------
-# # uncomment to test a forward pass
-# from graph_data_delphes import PFGraphDataset
-# from data_preprocessing import data_to_loader_ttbar
-# from data_preprocessing import data_to_loader_qcd
-#
-# full_dataset = PFGraphDataset('../../../test_tmp_delphes/data/pythia8_ttbar')
-#
-# train_loader, valid_loader = data_to_loader_ttbar(full_dataset, n_train=2, n_valid=1, batch_size=2)
-#
-# model = PFNet7()
-# model.to(device)
-#
-# for batch in train_loader:
-#     X = batch.to(device)
-#     pred_ids, pred_p4, gen_ids, gen_p4, cand_ids, cand_p4 = model(X)
-#     break
