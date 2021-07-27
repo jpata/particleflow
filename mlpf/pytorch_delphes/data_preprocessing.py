@@ -4,6 +4,8 @@ from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 
 # if not multigpu we have to pass batches that are stacked as "batch.type() = Batch" (not list) so that pytorch can access attributes like ygen_id through batch.ygen_id
 # if multigpu we have to pass list of "Data" elements.. then behind the scene, pytorch DP will convert the list to appropriate Batches to fit on the gpus available so that batch.ygen_id works out of the box
+use_gpu = torch.cuda.device_count()>0
+multi_gpu = torch.cuda.device_count()>1
 
 # define a function that casts the ttbar dataset into a dataloader for efficient NN training
 def data_to_loader_ttbar(full_dataset, n_train, n_valid, batch_size):
