@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 from tqdm import tqdm
 import shutil
+from functools import partial
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -52,6 +53,12 @@ from tfmodel.utils import (
 from tfmodel.lr_finder import LRFinder
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
+
+from ray import tune
+from ray.tune.integration.keras import TuneReportCheckpointCallback
+from ray.tune.schedulers import AsyncHyperBandScheduler
+from ray.tune.integration.tensorflow import DistributedTrainableCreator
+from ray.tune.logger import TBXLoggerCallback
 
 
 @click.group()
@@ -358,6 +365,167 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     for trial in tuner.oracle.get_best_trials(num_trials=10):
         print(trial.hyperparameters.values, trial.score)
 
+
+def set_raytune_search_parameters(search_space, config):
+    config["parameters"]["hidden_dim"] = search_space["hidden_dim"]
+    config["parameters"]["distance_dim"] = search_space["distance_dim"]
+    config["parameters"]["num_conv"] = search_space["num_conv"]
+    config["parameters"]["num_gsl"] = search_space["num_gsl"]
+    config["parameters"]["dropout"] = search_space["dropout"]
+    config["parameters"]["bin_size"] = search_space["bin_size"]
+    config["parameters"]["clip_value_low"] = search_space["clip_value_low"]
+    config["parameters"]["normalize_degrees"] = search_space["normalize_degrees"]
+
+    config["setup"]["lr"] = search_space["lr"]
+    return config
+
+
+def build_model_and_train(config, checkpoint_dir=None, full_config=None):
+        full_config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(full_config)
+
+        if config is not None:
+            full_config = set_raytune_search_parameters(search_space=config, config=full_config)
+
+        ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(full_config, global_batch_size, n_train, n_test)
+
+        strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+        if maybe_global_batch_size is not None:
+            global_batch_size = maybe_global_batch_size
+        total_steps = n_epochs * n_train // global_batch_size
+
+        with strategy.scope():
+            lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=total_steps)
+            opt = get_optimizer(full_config, lr_schedule)
+
+            model = make_model(full_config, dtype=tf.dtypes.float32)
+
+            # Run model once to build the layers
+            model.build((1, full_config["dataset"]["padded_num_elem_size"], full_config["dataset"]["num_input_features"]))
+
+            full_config = set_config_loss(full_config, full_config["setup"]["trainable"])
+            configure_model_weights(model, full_config["setup"]["trainable"])
+            model.build((1, full_config["dataset"]["padded_num_elem_size"], full_config["dataset"]["num_input_features"]))
+
+            loss_dict, loss_weights = get_loss_dict(full_config)
+            model.compile(
+                loss=loss_dict,
+                optimizer=opt,
+                sample_weight_mode="temporal",
+                loss_weights=loss_weights,
+                metrics={
+                    "cls": [
+                        FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                        FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                    ]
+                },
+            )
+            model.summary()
+
+            # TODO: Use the prepare_callback() function, possibly change its behaviour first
+            callbacks = []
+            tb = CustomTensorBoard(
+                log_dir=tune.get_trial_dir() + "/tensorboard_logs",
+                histogram_freq=0, write_graph=False, write_images=False,
+                update_freq='batch',
+                #profile_batch=(10,90),
+                profile_batch=0,
+            )
+            callbacks += [tb]
+            terminate_cb = tf.keras.callbacks.TerminateOnNaN()
+            callbacks.append(terminate_cb)
+            callbacks.append(optim_callbacks)  # Will be empty if using expdecay
+            callbacks.append(TuneReportCheckpointCallback(
+                metrics=[
+                    "adam_beta_1",
+                    'charge_loss',
+                    "cls_acc_unweighted",
+                    "cls_loss",
+                    "cos_phi_loss",
+                    "energy_loss",
+                    "eta_loss",
+                    "learning_rate",
+                    "loss",
+                    "pt_loss",
+                    "sin_phi_loss",
+                    "val_charge_loss",
+                    "val_cls_acc_unweighted",
+                    "val_cls_acc_weighted",
+                    "val_cls_loss",
+                    "val_cos_phi_loss",
+                    "val_energy_loss",
+                    "val_eta_loss",
+                    "val_loss",
+                    "val_pt_loss",
+                    "val_sin_phi_loss",
+                    ],
+                ),
+            )
+
+            fit_result = model.fit(
+                ds_train_r,
+                validation_data=ds_test_r,
+                epochs=n_epochs,
+                callbacks=callbacks,
+                steps_per_epoch=n_train // global_batch_size,
+                validation_steps=n_test // global_batch_size,
+            )
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-n", "--name", help="experiment name", type=str, default="test_exp")
+def raytune(config, name):
+    config_file_path = config
+
+    search_space = {
+        "lr": tune.grid_search([1e-4]),
+
+        "hidden_dim": tune.grid_search([256]),
+        "distance_dim": tune.grid_search([128]),
+        "num_conv": tune.grid_search([2, 3]),
+        "num_gsl": tune.grid_search([2]),
+        "dropout": tune.grid_search([0.0, 0.1]),
+        "bin_size": tune.grid_search([640]),
+        "clip_value_low": tune.grid_search([0.0]),
+        "normalize_degrees": tune.grid_search([True]),
+    }
+
+    sched = AsyncHyperBandScheduler(
+        metric="val_loss",
+        mode="min",
+        time_attr="training_iteration",
+        max_t=550,
+        grace_period=20,
+        reduction_factor=3,
+        brackets=1,
+    )
+
+    distributed_trainable = DistributedTrainableCreator(
+        partial(build_model_and_train, full_config=config_file_path),
+        num_workers=1,  # Number of hosts that each trial is expected to use.
+        num_cpus_per_worker=32,
+        num_gpus_per_worker=4,
+        num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
+    )
+
+    analysis = tune.run(
+        distributed_trainable,
+        config=search_space,
+        name=name,
+        scheduler=sched,
+        # metric="val_loss",
+        # mode="min",
+        stop={"training_iteration": 32},
+        num_samples=1,
+        # resources_per_trial={
+        #     "cpu": 16,
+        #     "gpu": 4
+        # },
+        local_dir="./ray_results",
+        callbacks=[TBXLoggerCallback()]
+    )
+    print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
 
 if __name__ == "__main__":
     main()
