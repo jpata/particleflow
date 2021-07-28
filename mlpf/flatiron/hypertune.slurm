@@ -55,7 +55,7 @@ export ip_head
 echo "IP Head: $ip_head"
 
 echo "Starting HEAD at $head_node"
-srun --nodes=1 --ntasks=1 -w "$head_node" mlpf/hypertune_scripts/run_chief.sh "chief" $head_node_ip $port "/mnt/ceph/users/ewulff/hypertune_out_${SLURM_JOB_ID}" &> logs_slurm/chief_${SLURM_JOB_ID} &
+srun --nodes=1 --ntasks=1 -w "$head_node" mlpf/hypertune_scripts/run_chief.sh "chief" $head_node_ip $port $1 "/mnt/ceph/users/ewulff/hypertunes/hypertune_out${2}_${SLURM_JOB_ID}" &> logs_slurm/chief_${SLURM_JOB_ID} &
 sleep 5
 
 # number of nodes other than the head node
@@ -66,7 +66,7 @@ for ((i = 1; i <= worker_num; i++)); do
     echo "Starting WORKER $i at $node_i"
     tunerID="tuner$i"
     srun --nodes=1 --ntasks=1 -w "$node_i" \
-        mlpf/hypertune_scripts/run_tuner.sh $tunerID $head_node_ip $port "/mnt/ceph/users/ewulff/hypertune_out_${SLURM_JOB_ID}" &> logs_slurm/tuner_${SLURM_JOB_ID}_${i} &
+        mlpf/hypertune_scripts/run_tuner.sh $tunerID $head_node_ip $port $1 "/mnt/ceph/users/ewulff/hypertunes/hypertune_out${2}_${SLURM_JOB_ID}" &> logs_slurm/tuner_${SLURM_JOB_ID}_${i} &
     sleep 1
 done
 wait # keep the wait statement, it is important
