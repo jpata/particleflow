@@ -13,5 +13,5 @@ echo $KERASTUNER_ORACLE_PORT
 
 nvidia-smi
 echo 'Starting tuner.'
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py hypertune -c parameters/cms-gnn-dense-short.yaml -o $4
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py hypertune -c $4 -o $5
 echo 'Tuner done.'

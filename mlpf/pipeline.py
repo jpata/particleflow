@@ -319,6 +319,7 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
 def hypertune(config, outdir, ntrain, ntest, recreate):
+    config_file_path = config
     config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
 
     # Override number of epochs with max_epochs from Hyperband config if specified
@@ -335,13 +336,16 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
 
     tb = CustomTensorBoard(
-            log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
+            log_dir=outdir + "/tensorboard_logs", histogram_freq=0, write_graph=False, write_images=False,
             update_freq=1,
         )
     # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
     tb.__class__.__name__ = "TensorBoard"
 
     tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
+    tuner.search_space_summary()
+
+    callbacks = [tb] + optim_callbacks + [tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss')]
 
     tuner.search(
         ds_train_r,
@@ -350,9 +354,10 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         steps_per_epoch=n_train // global_batch_size,
         validation_steps=n_test // global_batch_size,
         #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
-        callbacks=[tb] + optim_callbacks,
+        callbacks=callbacks,
     )
     print("Hyperparamter search complete.")
+    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     tuner.results_summary()
     for trial in tuner.oracle.get_best_trials(num_trials=10):
