@@ -36,6 +36,23 @@ def pairwise_gaussian_dist(A, B):
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
 
+def pairwise_learnable_dist(A, B, ffn):
+    shp = tf.shape(A)
+
+    #stack node feature vectors of src[i], dst[j] into a matrix res[i,j] = (src[i], dst[j])
+    a, b, c, d = tf.meshgrid(tf.range(shp[0]), tf.range(shp[1]), tf.range(shp[2]), tf.range(shp[2]), indexing="ij")
+    inds1 = tf.stack([a,b,c], axis=-1)
+    inds2 = tf.stack([a,b,d], axis=-1)
+    res = tf.concat([
+        tf.gather_nd(A, inds1),
+        tf.gather_nd(B, inds2)], axis=-1
+    ) #(batch, bin, elem, elem, feat)
+
+    #run a feedforward net on (src, dst) -> 1
+    res_transformed = tf.squeeze(ffn(res), axis=-1)
+
+    return res_transformed
+
 def pairwise_sigmoid_dist(A, B):
     return tf.nn.sigmoid(tf.matmul(A, tf.transpose(B, perm=[0,2,1])))
 
@@ -400,15 +417,24 @@ class SparseHashedNNDistance(tf.keras.layers.Layer):
 
         return bins_split, sparse_distance_matrix
 
-class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
+class GraphBuilderDense(tf.keras.layers.Layer):
     def __init__(self, clip_value_low=0.0, distance_dim=128, max_num_bins=200, bin_size=128, dist_mult=0.1, **kwargs):
-        super(ExponentialLSHDistanceDense, self).__init__(**kwargs)
         self.dist_mult = dist_mult
         self.distance_dim = distance_dim
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.clip_value_low = clip_value_low
-        
+
+        self.kernel = kwargs.pop("kernel")
+
+        if self.kernel == "learnable":
+            self.ffn_dist = point_wise_feed_forward_network(1, 32, num_layers=2, activation="elu")
+        elif self.kernel == "gaussian":
+            pass
+
+        super(GraphBuilderDense, self).__init__(**kwargs)
+
+
     def build(self, input_shape):
         #(n_batch, n_points, n_features)
     
@@ -436,9 +462,12 @@ class ExponentialLSHDistanceDense(tf.keras.layers.Layer):
         x_features_binned = tf.gather(x_features, bins_split, batch_dims=1)
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
-        dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
-        dm = tf.exp(-self.dist_mult*dm)
-        
+        if self.kernel == "learnable":
+            dm = pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_dist)
+        elif self.kernel == "gaussian":
+            dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
+            dm = tf.exp(-self.dist_mult*dm)
+
         #set the distance matrix to 0 for masked elements
         dm *= msk_f_binned
         shp = tf.shape(msk_f_binned)
@@ -861,12 +890,13 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.num_conv = kwargs.pop("num_conv")
         self.normalize_degrees = kwargs.pop("normalize_degrees")
         self.dropout = kwargs.pop("dropout")
+        self.kernel = kwargs.pop("kernel")
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
         self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim)
-        self.dist = ExponentialLSHDistanceDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult)
+        self.dist = GraphBuilderDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult, kernel=self.kernel)
         self.convs = [GHConvDense(
             activation=tf.keras.activations.elu,
             output_dim=self.output_dim,
@@ -916,6 +946,7 @@ class PFNetDense(tf.keras.Model):
             separate_momentum=True,
             input_encoding="cms",
             focal_loss_from_logits=False,
+            graph_kernel="gaussian",
             debug=False
         ):
         super(PFNetDense, self).__init__()
@@ -949,7 +980,8 @@ class PFNetDense(tf.keras.Model):
             "clip_value_low": clip_value_low,
             "num_conv": num_conv,
             "normalize_degrees": normalize_degrees,
-            "dropout": dropout
+            "dropout": dropout,
+            "kernel": graph_kernel
         }
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
