@@ -463,10 +463,11 @@ class GraphBuilderDense(tf.keras.layers.Layer):
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         if self.kernel == "learnable":
-            dm = pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_dist)
+            dm = tf.keras.activations.relu(pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_dist))
         elif self.kernel == "gaussian":
             dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
-            dm = tf.exp(-self.dist_mult*dm)
+        
+        dm = tf.exp(-self.dist_mult*dm)
 
         #set the distance matrix to 0 for masked elements
         dm *= msk_f_binned
