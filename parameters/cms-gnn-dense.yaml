@@ -76,6 +76,7 @@ parameters:
   dropout: 0.2
   separate_momentum: yes
   input_encoding: cms
+  graph_kernel: gaussian #gaussian, learnable
   debug: no
 
 timing:
