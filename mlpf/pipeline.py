@@ -23,6 +23,7 @@ from tfmodel.model_setup import (
     LearningRateLoggingCallback,
     prepare_callbacks,
     FlattenedCategoricalAccuracy,
+    SingleClassRecall,
     eval_model,
     freeze_model,
 )
@@ -129,6 +130,11 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
                 "cls": [
                     FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
                     FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                ] + [
+                    SingleClassRecall(
+                        icls,
+                        name="rec_cls{}".format(icls),
+                        dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
                 ]
             },
         )

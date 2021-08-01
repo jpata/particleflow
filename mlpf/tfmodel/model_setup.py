@@ -61,8 +61,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
         super(CustomCallback, self).__init__()
         self.X = X
+
         self.y = y
-        self.dataset_transform = dataset_transform
+
+        #transform the prediction target from an array into a dictionary for easier access
+        self.ytrue = dataset_transform(self.X, self.y, None)[1]
+        self.ytrue_id = np.argmax(self.ytrue["cls"], axis=-1)
+
         self.outpath = outpath
         self.num_output_classes = num_output_classes
 
@@ -81,107 +86,131 @@ class CustomCallback(tf.keras.callbacks.Callback):
             11: "gray"
         }
 
-    def on_epoch_end(self, epoch, logs=None):
+        self.reg_bins = {
+            "pt": np.linspace(0, 50, 100),
+            "eta": np.linspace(-5, 5, 100),
+            "sin_phi": np.linspace(-1,1,100),
+            "cos_phi": np.linspace(-1,1,100),
+            "energy": np.linspace(0,100,100),
+        }
 
-        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-            json.dump(logs, fi)
+    def plot_cm(self, outpath, ypred_id, msk):
 
-        ypred = self.model(self.X, training=False)
-        #ypred["cls"] = np.clip(ypred["cls"], 0.5, 1.0)
-        
-        ypred_id = np.argmax(ypred["cls"], axis=-1)
-
-        ibatch = 0
-       
-        msk = self.X[:, :, 0] != 0
-        # cm = sklearn.metrics.confusion_matrix(
-        #     self.y[msk][:, 0].astype(np.int64).flatten(),
-        #     ypred_id[msk].flatten(), labels=list(range(self.num_output_classes))
-        # )
-        # figure = plot_confusion_matrix(cm)
-        # plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        # plt.close("all")
+        ytrue_id_flat = self.ytrue_id[msk].astype(np.int64).flatten()
+        ypred_id_flat = ypred_id[msk].flatten()
 
         cm = sklearn.metrics.confusion_matrix(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten(), labels=list(range(self.num_output_classes)), normalize="true"
+            ytrue_id_flat,
+            ypred_id_flat, labels=list(range(self.num_output_classes)), normalize="true"
         )
         figure = plot_confusion_matrix(cm)
 
         acc = sklearn.metrics.accuracy_score(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten()
+            ytrue_id_flat,
+            ypred_id_flat
         )
         balanced_acc = sklearn.metrics.balanced_accuracy_score(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten()
+            ytrue_id_flat,
+            ypred_id_flat
         )
         plt.title("acc={:.3f} bacc={:.3f}".format(acc, balanced_acc))
-        plt.savefig("{}/cm_normed_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.savefig(str(outpath / "cm_normed.pdf"), bbox_inches="tight")
         plt.close("all")
 
-        # for icls in range(self.num_output_classes):
-        #     fig = plt.figure(figsize=(4,4))
-        #     msk = self.y[:, :, 0] == icls
-        #     msk = msk.flatten()
-        #     b = np.linspace(0,1,21)
-        #     ids = ypred["cls"][:, :, icls].numpy().flatten()
-        #     plt.hist(ids[msk], bins=b, density=True, histtype="step", lw=2)
-        #     plt.hist(ids[~msk], bins=b, density=True, histtype="step", lw=2)
-        #     plt.savefig("{}/cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
-        # for icls in range(self.num_output_classes):
-        #     n_pred = np.sum(self.y[:, :, 0]==icls, axis=1)
-        #     n_true = np.sum(ypred_id==icls, axis=1)
-        #     figure = plot_num_particle(n_pred, n_true, icls)
-        #     plt.savefig("{}/num_cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
+    def plot_event_visualization(self, outpath, ypred, ypred_id, msk, ievent=0):
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
 
+        #Plot the input PFElements
         plt.axes(ax1)
-        msk = self.X[ibatch, :, 0] != 0
-        eta = self.X[ibatch][msk][:, 2]
-        phi = self.X[ibatch][msk][:, 3]
-        energy = self.X[ibatch][msk][:, 4]
-        typ = self.X[ibatch][msk][:, 0]
+        msk = self.X[ievent, :, 0] != 0
+        eta = self.X[ievent][msk][:, 2]
+        phi = self.X[ievent][msk][:, 3]
+        energy = self.X[ievent][msk][:, 4]
+        typ = self.X[ievent][msk][:, 0]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in typ], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.axes(ax3)
         #Plot the predicted particles
-        msk = ypred_id[ibatch] != 0
-        eta = ypred["eta"][ibatch][msk]
-        sphi = ypred["sin_phi"][ibatch][msk]
-        cphi = ypred["cos_phi"][ibatch][msk]
+        plt.axes(ax3)
+        msk = ypred_id[ievent] != 0
+        eta = ypred["eta"][ievent][msk]
+        sphi = ypred["sin_phi"][ievent][msk]
+        cphi = ypred["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = ypred["energy"][ibatch][msk]
-        pdgid = ypred_id[ibatch][msk]
+        energy = ypred["energy"][ievent][msk]
+        pdgid = ypred_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
-
-        # Xconcat = np.concatenate([self.X[ibatch], ypred["cls"][ibatch]], axis=-1)
-        # np.savez(self.outpath + "/event_{}.npz".format(epoch), Xconcat[Xconcat[:, 0]!=0])
 
         #Plot the target particles
         plt.axes(ax2)
-        y = self.dataset_transform(self.X, self.y, None)[1]
-        y_id = np.argmax(y["cls"], axis=-1)
-        msk = y_id[ibatch] != 0
-        eta = y["eta"][ibatch][msk]
-        sphi = y["sin_phi"][ibatch][msk]
-        cphi = y["cos_phi"][ibatch][msk]
+        
+        msk = self.ytrue_id[ievent] != 0
+        eta = self.ytrue["eta"][ievent][msk]
+        sphi = self.ytrue["sin_phi"][ievent][msk]
+        cphi = self.ytrue["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = y["energy"][ibatch][msk]
-        pdgid = y_id[ibatch][msk]
+        energy = self.ytrue["energy"][ievent][msk]
+        pdgid = self.ytrue_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        plt.savefig(str(outpath / "event_iev{}.pdf".format(ievent)), bbox_inches="tight")
         plt.close("all")
 
-        np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
+    def plot_reg_distribution(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
+        vals_pred = ypred[reg_variable].numpy()[msk][ypred_id[msk]==icls].flatten()
+        vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]==icls].flatten()
+
+        bins = self.reg_bins[reg_variable]
+        plt.hist(vals_true, bins=bins, histtype="step", lw=2, label="true")
+        plt.hist(vals_pred, bins=bins, histtype="step", lw=2, label="predicted")
+
+        if reg_variable in ["pt", "energy"]:
+            plt.yscale("log")
+            plt.ylim(bottom=1e-2)
+
+        plt.xlabel(reg_variable)
+        plt.ylabel("Number of particles")
+        plt.legend(loc="best")
+        plt.title("Regression output, cls {}".format(icls))
+        plt.savefig(str(outpath / "{}_cls{}.pdf".format(reg_variable, icls)), bbox_inches="tight")
+        plt.close("all")
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        #save the training logs (losses) for this epoch
+        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+            json.dump(logs, fi)
+
+        cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
+        cp_dir.mkdir(parents=True, exist_ok=True)
+
+        #run the model inference on the small validation dataset
+        ypred = self.model(self.X, training=False)
+
+        #choose the class with the highest probability as the prediction
+        #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
+        ypred_id = np.argmax(ypred["cls"], axis=-1)
+       
+        #exclude padded elements from the plotting
+        msk = self.X[:, :, 0] != 0
+
+        self.plot_cm(cp_dir, ypred_id, msk)
+        for ievent in range(min(5, self.X.shape[0])):
+            self.plot_event_visualization(cp_dir, ypred, ypred_id, msk, ievent=ievent)
+
+        for icls in range(1, self.num_output_classes):
+            cp_dir_cls = cp_dir / "cls_{}".format(icls)
+            cp_dir_cls.mkdir(parents=True, exist_ok=True)
+            for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
+                self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
+
+        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
 def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
     callbacks = []
