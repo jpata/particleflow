@@ -324,6 +324,7 @@ def make_gnn_dense(config, dtype):
         "dropout",
         "separate_momentum",
         "input_encoding",
+        "graph_kernel",
         "debug"
     ]
 
