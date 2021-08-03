@@ -156,7 +156,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
             validation_steps=n_test // global_batch_size,
             initial_epoch=initial_epoch,
         )
-        history_path = Path(outdir) / "history"
+        history_path = Path(callbacks[0].log_dir) / "history"
         history_path = str(history_path)
         with open("{}/history.json".format(history_path), "w") as fi:
             json.dump(fit_result.history, fi)
