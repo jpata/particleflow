@@ -422,19 +422,9 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
             )
             model.summary()
 
-            # TODO: Use the prepare_callback() function, possibly change its behaviour first
-            callbacks = []
-            tb = CustomTensorBoard(
-                log_dir=tune.get_trial_dir() + "/tensorboard_logs",
-                histogram_freq=0, write_graph=False, write_images=False,
-                update_freq='batch',
-                #profile_batch=(10,90),
-                profile_batch=0,
-            )
-            callbacks += [tb]
-            terminate_cb = tf.keras.callbacks.TerminateOnNaN()
-            callbacks.append(terminate_cb)
-            callbacks.append(optim_callbacks)  # Will be empty if using expdecay
+            callbacks = prepare_callbacks(full_config["callbacks"], tune.get_trial_dir())
+            callbacks.append(optim_callbacks)
+
             callbacks.append(TuneReportCheckpointCallback(
                 metrics=[
                     "adam_beta_1",
@@ -476,8 +466,12 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-n", "--name", help="experiment name", type=str, default="test_exp")
-def raytune(config, name):
-    ray.init(address='auto')
+@click.option("-l", "--local", help="run locally", is_flag=True)
+@click.option("--cpus", help="number of cpus per worker", type=int, default=1)
+@click.option("--gpus", help="number of gpus per worker", type=int, default=0)
+def raytune(config, name, local, cpus, gpus):
+    if not local:
+        ray.init(address='auto')
     config_file_path = config
 
     search_space = {
@@ -506,8 +500,8 @@ def raytune(config, name):
     distributed_trainable = DistributedTrainableCreator(
         partial(build_model_and_train, full_config=config_file_path),
         num_workers=1,  # Number of hosts that each trial is expected to use.
-        num_cpus_per_worker=32,
-        num_gpus_per_worker=4,
+        num_cpus_per_worker=cpus,
+        num_gpus_per_worker=gpus,
         num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
     )
 
