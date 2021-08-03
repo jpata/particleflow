@@ -48,7 +48,8 @@ class CustomTensorBoard(TensorBoard):
             history_path.mkdir(parents=True, exist_ok=True)
             history_path = str(history_path)
             with open("{}/history_{}.json".format(history_path, epoch), "w") as fi:
-                json.dump(logs, fi)
+                converted_logs = {k: float(v) for k, v in logs.items()}
+                json.dump(converted_logs, fi)
         super().on_epoch_end(epoch, logs)
 
     def on_train_batch_end(self, batch, logs):
