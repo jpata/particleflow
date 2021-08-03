@@ -107,6 +107,13 @@ onecycle:
   div_factor: 25.0
   final_div: 100000.0
 
+callbacks:
+  checkpoint:
+    save_weights_only: yes
+    monitor: "val_loss"
+    save_best_only: no
+  draw_events: no
+
 hypertune:
   algorithm: hyperband  # random, bayesian, hyperband
   random:
