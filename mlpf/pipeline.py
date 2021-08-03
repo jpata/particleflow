@@ -138,7 +138,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         model.summary()
 
         callbacks = prepare_callbacks(
-            model,
+            config["callbacks"],
             outdir,
             X_val[: config["setup"]["batch_size"]],
             ycand_val[: config["setup"]["batch_size"]],
@@ -335,17 +335,12 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
 
-    tb = CustomTensorBoard(
-            log_dir=outdir + "/tensorboard_logs", histogram_freq=0, write_graph=False, write_images=False,
-            update_freq=1,
-        )
-    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
-    tb.__class__.__name__ = "TensorBoard"
+    callbacks = prepare_callbacks(config["callbacks"], outdir)
+    callbacks.append(optim_callbacks)
+    callbacks.append(tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss'))
 
     tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
     tuner.search_space_summary()
-
-    callbacks = [tb] + optim_callbacks + [tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss')]
 
     tuner.search(
         ds_train_r,

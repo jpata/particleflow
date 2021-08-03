@@ -57,6 +57,7 @@ def plot_to_image(figure):
     
     return image
 
+
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
         super(CustomCallback, self).__init__()
@@ -82,9 +83,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
     def on_epoch_end(self, epoch, logs=None):
-
-        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-            json.dump(logs, fi)
 
         ypred = self.model(self.X, training=False)
         #ypred["cls"] = np.clip(ypred["cls"], 0.5, 1.0)
@@ -183,15 +181,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
+def prepare_callbacks(callbacks_cfg, outdir, X_val=None, y_val=None, dataset_transform=None, num_output_classes=None):
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,90),
         profile_batch=0,
+        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
     )
-    tb.set_model(model)
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
     callbacks += [tb]
 
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
@@ -201,19 +201,19 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     cp_dir.mkdir(parents=True, exist_ok=True)
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
-        save_weights_only=True,
-        verbose=0
+        save_weights_only=callbacks_cfg["checkpoint"]["save_weights_only"],
+        verbose=0,
+        monitor=callbacks_cfg["checkpoint"]["monitor"],
+        save_best_only=callbacks_cfg["checkpoint"]["save_best_only"],
     )
-    cp_callback.set_model(model)
     callbacks += [cp_callback]
 
-    history_path = Path(outdir) / "history"
-    history_path.mkdir(parents=True, exist_ok=True)
-    history_path = str(history_path)
-    cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
-    cb.set_model(model)
-
-    callbacks += [cb]
+    if callbacks_cfg["draw_events"]:
+        history_path = Path(outdir) / "history"
+        history_path.mkdir(parents=True, exist_ok=True)
+        history_path = str(history_path)
+        cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
+        callbacks += [cb]
 
     return callbacks
 
@@ -707,7 +707,8 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    model, outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
+                    config["callbacks"],
+                    outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
                     dataset_transform, config["dataset"]["num_output_classes"]
                 )
                 callbacks.append(optim_callbacks)

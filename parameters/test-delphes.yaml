@@ -85,3 +85,10 @@ exponentialdecay:
   decay_steps: 10000
   decay_rate: 0.99
   staircase: yes
+
+callbacks:
+  checkpoint:
+    save_weights_only: yes
+    monitor: "val_loss"
+    save_best_only: no
+  draw_events: no
