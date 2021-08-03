@@ -54,6 +54,7 @@ from tfmodel.lr_finder import LRFinder
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
 
+import ray
 from ray import tune
 from ray.tune.integration.keras import TuneReportCheckpointCallback
 from ray.tune.schedulers import AsyncHyperBandScheduler
@@ -476,6 +477,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-n", "--name", help="experiment name", type=str, default="test_exp")
 def raytune(config, name):
+    ray.init(address='auto')
     config_file_path = config
 
     search_space = {
@@ -523,9 +525,13 @@ def raytune(config, name):
         #     "gpu": 4
         # },
         local_dir="./ray_results",
-        callbacks=[TBXLoggerCallback()]
+        callbacks=[TBXLoggerCallback()],
+        log_to_file=True,
     )
     print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
+
+    ray.shutdown()
+
 
 if __name__ == "__main__":
     main()
