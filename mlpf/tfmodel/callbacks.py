@@ -44,7 +44,10 @@ class CustomTensorBoard(TensorBoard):
         logs = logs or {}
         logs.update(self._collect_learning_rate(logs))
         if self.dump_history:
-            with open("{}/history_{}.json".format(self.log_dir, epoch), "w") as fi:
+            history_path = Path(self.log_dir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            history_path = str(history_path)
+            with open("{}/history_{}.json".format(history_path, epoch), "w") as fi:
                 json.dump(logs, fi)
         super().on_epoch_end(epoch, logs)
 

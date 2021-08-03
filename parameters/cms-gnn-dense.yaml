@@ -104,6 +104,8 @@ callbacks:
     monitor: "val_loss"
     save_best_only: no
   draw_events: no
+  tensorboard:
+    dump_history: yes
 
 hypertune:
   algorithm: hyperband  # random, bayesian, hyperband
