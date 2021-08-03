@@ -106,6 +106,7 @@ callbacks:
   draw_events: no
   tensorboard:
     dump_history: yes
+    hist_freq: 1
 
 hypertune:
   algorithm: hyperband  # random, bayesian, hyperband

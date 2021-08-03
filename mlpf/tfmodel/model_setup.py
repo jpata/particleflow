@@ -182,9 +182,10 @@ class CustomCallback(tf.keras.callbacks.Callback):
         np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
 
 def prepare_callbacks(callbacks_cfg, outdir, X_val=None, y_val=None, dataset_transform=None, num_output_classes=None):
+    # This should return a list with the CustomTensorBoard callback as the first element
     callbacks = []
     tb = CustomTensorBoard(
-        log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
+        log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,90),
         profile_batch=0,
@@ -718,7 +719,7 @@ def main(args, yaml_path, config):
                     steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
                     initial_epoch=initial_epoch
                 )
-                history_path = Path(outdir) / "history"
+                history_path = Path(callbacks[0].log_dir) / "history"
                 history_path = str(history_path)
                 with open("{}/history.json".format(history_path), "w") as fi:
                     json.dump(fit_result.history, fi)
