@@ -18,16 +18,16 @@ from tfmodel.utils import (
 def get_model_builder(config, total_steps):
     _, optim_callbacks = get_lr_schedule(config, steps=total_steps)
     def model_builder(hp):
-        config["parameters"]["hidden_dim"] = hp.Choice("hidden_dim", values=[256])
-        config["parameters"]["distance_dim"] = hp.Choice("distance_dim", values=[128])
+        # config["parameters"]["hidden_dim"] = hp.Choice("hidden_dim", values=[256])
+        # config["parameters"]["distance_dim"] = hp.Choice("distance_dim", values=[128])
         config["parameters"]["num_conv"] = hp.Choice("num_conv", [2, 3])
         config["parameters"]["num_gsl"] = hp.Choice("num_gsl", [2, 3])
-        config["parameters"]["dropout"] = hp.Choice("dropout", values=[0.2])
-        config["parameters"]["bin_size"] = hp.Choice("bin_size", values=[640])
+        # config["parameters"]["dropout"] = hp.Choice("dropout", values=[0.2])
+        # config["parameters"]["bin_size"] = hp.Choice("bin_size", values=[640])
 
         config["setup"]["lr"] = hp.Choice("lr", values=[1e-4, 3e-4])
-        config["setup"]["lr_schedule"] = hp.Choice("lr_schedule", values=["exponentialdecay"])
-        config["setup"]["optimizer"] = hp.Choice("optimizer", values=["adam"])
+        # config["setup"]["lr_schedule"] = hp.Choice("lr_schedule", values=["exponentialdecay"])
+        # config["setup"]["optimizer"] = hp.Choice("optimizer", values=["adam"])
 
 
         model = make_model(config, dtype="float32")
