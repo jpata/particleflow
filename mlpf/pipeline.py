@@ -368,6 +368,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
 
 def set_raytune_search_parameters(search_space, config):
+    config["parameters"]["layernorm"] = search_space["layernorm"]
     config["parameters"]["hidden_dim"] = search_space["hidden_dim"]
     config["parameters"]["distance_dim"] = search_space["distance_dim"]
     config["parameters"]["num_conv"] = search_space["num_conv"]
@@ -378,6 +379,8 @@ def set_raytune_search_parameters(search_space, config):
     config["parameters"]["normalize_degrees"] = search_space["normalize_degrees"]
 
     config["setup"]["lr"] = search_space["lr"]
+
+    config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
     return config
 
 
@@ -476,16 +479,20 @@ def raytune(config, name, local, cpus, gpus):
     config_file_path = config
 
     search_space = {
-        "lr": tune.grid_search([1e-4]),
+        # Optimizer parameters
+        "lr": tune.grid_search(cfg["raytune"]["parameters"]["lr"]),
+        "expdecay_decay_steps": tune.grid_search(cfg["raytune"]["parameters"]["expdecay_decay_steps"]),
 
-        "hidden_dim": tune.grid_search([256]),
-        "distance_dim": tune.grid_search([128]),
-        "num_conv": tune.grid_search([2, 3]),
-        "num_gsl": tune.grid_search([2]),
-        "dropout": tune.grid_search([0.0, 0.1]),
-        "bin_size": tune.grid_search([640]),
-        "clip_value_low": tune.grid_search([0.0]),
-        "normalize_degrees": tune.grid_search([True]),
+        # Model parameters
+        "layernorm": tune.grid_search(cfg["raytune"]["parameters"]["layernorm"]),
+        "hidden_dim": tune.grid_search(cfg["raytune"]["parameters"]["hidden_dim"]),
+        "distance_dim": tune.grid_search(cfg["raytune"]["parameters"]["distance_dim"]),
+        "num_conv": tune.grid_search(cfg["raytune"]["parameters"]["num_conv"]),
+        "num_gsl": tune.grid_search(cfg["raytune"]["parameters"]["num_gsl"]),
+        "dropout": tune.grid_search(cfg["raytune"]["parameters"]["dropout"]),
+        "bin_size": tune.grid_search(cfg["raytune"]["parameters"]["bin_size"]),
+        "clip_value_low": tune.grid_search(cfg["raytune"]["parameters"]["clip_value_low"]),
+        "normalize_degrees": tune.grid_search(cfg["raytune"]["parameters"]["normalize_degrees"]),
     }
 
     sched = get_raytune_schedule(cfg["raytune"])

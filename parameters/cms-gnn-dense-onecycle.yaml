@@ -139,7 +139,9 @@ raytune:
   parameters:
     # optimizer parameters
     lr: [1e-4]
+    expdecay_decay_steps: [10000]
     # model parameters
+    layernorm: [False]
     hidden_dim: [256]
     distance_dim: [128, 256]
     num_conv: [2, 3, 4]
