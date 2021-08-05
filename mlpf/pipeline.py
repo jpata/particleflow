@@ -48,6 +48,7 @@ from tfmodel.utils import (
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
     get_tuner,
+    get_raytune_schedule,
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -57,7 +58,6 @@ from tfmodel import hypertuning
 import ray
 from ray import tune
 from ray.tune.integration.keras import TuneReportCheckpointCallback
-from ray.tune.schedulers import AsyncHyperBandScheduler
 from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 
@@ -470,6 +470,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
 @click.option("--cpus", help="number of cpus per worker", type=int, default=1)
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
 def raytune(config, name, local, cpus, gpus):
+    cfg = load_config(config)
     if not local:
         ray.init(address='auto')
     config_file_path = config
@@ -487,15 +488,7 @@ def raytune(config, name, local, cpus, gpus):
         "normalize_degrees": tune.grid_search([True]),
     }
 
-    sched = AsyncHyperBandScheduler(
-        metric="val_loss",
-        mode="min",
-        time_attr="training_iteration",
-        max_t=550,
-        grace_period=20,
-        reduction_factor=3,
-        brackets=1,
-    )
+    sched = get_raytune_schedule(cfg["raytune"])
 
     distributed_trainable = DistributedTrainableCreator(
         partial(build_model_and_train, full_config=config_file_path),
@@ -512,13 +505,13 @@ def raytune(config, name, local, cpus, gpus):
         scheduler=sched,
         # metric="val_loss",
         # mode="min",
-        stop={"training_iteration": 32},
+        # stop={"training_iteration": 32},
         num_samples=1,
         # resources_per_trial={
         #     "cpu": 16,
         #     "gpu": 4
         # },
-        local_dir="./ray_results",
+        local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
     )
