@@ -132,3 +132,28 @@ hypertune:
     factor: 2
     iterations: 1
     executions_per_trial: 1
+
+raytune:
+  local_dir:
+  sched: "asha"
+  parameters:
+    # optimizer parameters
+    lr: [1e-4]
+    # model parameters
+    hidden_dim: [256]
+    distance_dim: [128, 256]
+    num_conv: [2, 3, 4]
+    num_gsl: [2, 3, 4]
+    dropout: [0.0, 0.1]
+    bin_size: [640]
+    clip_value_low: [0.0]
+    normalize_degrees: [True]
+  # Tune schedule specific parameters
+  asha:
+    max_t: 10
+    reduction_factor: 3
+    brackets: 1
+    grace_period: 5
+  hyperband:
+    max_t: 10
+    reduction_factor: 3

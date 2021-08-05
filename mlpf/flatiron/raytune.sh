@@ -62,5 +62,5 @@ done
 ##############################################################################################
 
 #### call your code below
-python3 mlpf/pipeline.py raytune -c $1 -n $2
+python3 mlpf/pipeline.py raytune -c $1 -n $2 --cpus "${SLURM_CPUS_PER_TASK}" --gpus "${SLURM_GPUS_PER_TASK}"
 exit
