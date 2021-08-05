@@ -139,6 +139,7 @@ raytune:
   parameters:
     # optimizer parameters
     lr: [1e-4]
+    batch_size: [32]
     expdecay_decay_steps: [10000]
     # model parameters
     layernorm: [False]

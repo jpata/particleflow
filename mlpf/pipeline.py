@@ -379,6 +379,7 @@ def set_raytune_search_parameters(search_space, config):
     config["parameters"]["normalize_degrees"] = search_space["normalize_degrees"]
 
     config["setup"]["lr"] = search_space["lr"]
+    config["setup"]["batch_size"] = search_space["batch_size"]
 
     config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
     return config
@@ -481,6 +482,7 @@ def raytune(config, name, local, cpus, gpus):
     search_space = {
         # Optimizer parameters
         "lr": tune.grid_search(cfg["raytune"]["parameters"]["lr"]),
+        "batch_size": tune.grid_search(cfg["raytune"]["parameters"]["batch_size"]),
         "expdecay_decay_steps": tune.grid_search(cfg["raytune"]["parameters"]["expdecay_decay_steps"]),
 
         # Model parameters
