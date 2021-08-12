@@ -47,7 +47,7 @@ setup:
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
-  num_val_files: 100
+  num_val_files: 10
   dtype: float32
   trainable: all
   classification_loss_type: categorical_cross_entropy
@@ -73,10 +73,12 @@ parameters:
   num_gsl: 2
   normalize_degrees: yes
   distance_dim: 8
-  dropout: 0.2
+  dropout: 0.0
   separate_momentum: yes
   input_encoding: cms
   graph_kernel: learnable #gaussian, learnable
+  skip_connection: yes
+  regression_use_classification: yes
   debug: no
 
 timing:

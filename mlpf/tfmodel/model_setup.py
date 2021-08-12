@@ -61,7 +61,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
         super(CustomCallback, self).__init__()
         self.X = X
-
         self.y = y
 
         #transform the prediction target from an array into a dictionary for easier access
@@ -163,7 +162,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.close("all")
 
     def plot_reg_distribution(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
-        vals_pred = ypred[reg_variable].numpy()[msk][ypred_id[msk]==icls].flatten()
+        vals_pred = ypred[reg_variable][msk][ypred_id[msk]==icls].flatten()
         vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]==icls].flatten()
 
         bins = self.reg_bins[reg_variable]
@@ -181,6 +180,23 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig(str(outpath / "{}_cls{}.pdf".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
+    def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
+        sel = (ypred_id[msk]==icls) & (self.ytrue_id[msk]==icls)
+        vals_pred = ypred[reg_variable][msk][sel].flatten()
+        vals_true = self.ytrue[reg_variable][msk][sel].flatten()
+
+        plt.scatter(vals_pred, vals_true, marker=".")
+        if len(vals_true) > 0:
+            minval = np.min(vals_true)
+            maxval = np.max(vals_true)
+            plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
+
+        plt.xlabel("predicted")
+        plt.ylabel("true")
+        plt.title(reg_variable)
+        plt.savefig(str(outpath / "{}_cls{}_corr.pdf".format(reg_variable, icls)), bbox_inches="tight")
+        plt.close("all")
+
     def on_epoch_end(self, epoch, logs=None):
 
         #save the training logs (losses) for this epoch
@@ -191,7 +207,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         cp_dir.mkdir(parents=True, exist_ok=True)
 
         #run the model inference on the small validation dataset
-        ypred = self.model(self.X, training=False)
+        ypred = self.model.predict(self.X, batch_size=1)
 
         #choose the class with the highest probability as the prediction
         #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
@@ -209,6 +225,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
+                self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
@@ -325,6 +342,8 @@ def make_gnn_dense(config, dtype):
         "separate_momentum",
         "input_encoding",
         "graph_kernel",
+        "skip_connection",
+        "regression_use_classification",
         "debug"
     ]
 
@@ -738,7 +757,7 @@ def main(args, yaml_path, config):
             if args.action=="train":
                 #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
                 callbacks = prepare_callbacks(
-                    model, outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
+                    model, outdir, X_val, ycand_val,
                     dataset_transform, config["dataset"]["num_output_classes"]
                 )
                 callbacks.append(optim_callbacks)
