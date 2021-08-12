@@ -143,8 +143,8 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         callbacks = prepare_callbacks(
             model,
             outdir,
-            X_val[: config["setup"]["batch_size"]],
-            ycand_val[: config["setup"]["batch_size"]],
+            X_val,
+            ycand_val,
             dataset_transform,
             config["dataset"]["num_output_classes"],
         )

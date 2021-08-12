@@ -43,11 +43,11 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 5
+  batch_size: 1
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
-  num_val_files: 100
+  num_val_files: 10
   dtype: float32
   trainable: all
   classification_loss_type: categorical_cross_entropy
@@ -66,17 +66,19 @@ parameters:
   model: gnn_dense
   activation: elu
   layernorm: no
-  hidden_dim: 256
-  bin_size: 640
-  clip_value_low: 0.01
-  num_conv: 2
-  num_gsl: 2
+  hidden_dim: 512
+  bin_size: 3200
+  clip_value_low: 0.00
+  num_conv: 3
+  num_gsl: 1
   normalize_degrees: yes
-  distance_dim: 128
-  dropout: 0.2
+  distance_dim: 512
+  dropout: 0.0
   separate_momentum: yes
   input_encoding: cms
   graph_kernel: gaussian #gaussian, learnable
+  skip_connection: yes
+  regression_use_classification: yes
   debug: no
 
 timing:

@@ -63,6 +63,9 @@ parameters:
   dropout: 0.0
   separate_momentum: yes
   input_encoding: cms
+  graph_kernel: gaussian #gaussian, learnable
+  skip_connection: yes
+  regression_use_classification: yes
   debug: no
 
 timing:

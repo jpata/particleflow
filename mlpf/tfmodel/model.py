@@ -10,7 +10,7 @@ from .fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 1e-8
+regularizer_weight = 0.0
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -651,11 +651,11 @@ class PFNet(tf.keras.Model):
             ret = {
                 "cls": out_id_softmax,
                 "charge": out_charge,
-                "pt": pred_momentum[:, :, 0:1],
+                "pt": tf.exp(tf.clip_by_value(pred_momentum[:, :, 0:1], -4, 4)),
                 "eta": pred_momentum[:, :, 1:2],
                 "sin_phi": pred_momentum[:, :, 2:3],
                 "cos_phi": pred_momentum[:, :, 3:4],
-                "energy": pred_momentum[:, :, 4:5]
+                "energy": tf.exp(tf.clip_by_value(pred_momentum[:, :, 4:5], -5, 6))
             }
             if self.return_matrix:
                 ret["dm"] = dm
@@ -948,6 +948,8 @@ class PFNetDense(tf.keras.Model):
             input_encoding="cms",
             focal_loss_from_logits=False,
             graph_kernel="gaussian",
+            skip_connection=False,
+            regression_use_classification=True,
             debug=False
         ):
         super(PFNetDense, self).__init__()
@@ -958,6 +960,9 @@ class PFNetDense(tf.keras.Model):
         self.separate_momentum = separate_momentum
         self.focal_loss_from_logits = focal_loss_from_logits
         self.debug = debug
+
+        self.skip_connection = skip_connection
+        self.regression_use_classification = regression_use_classification
 
         self.num_conv = num_conv
         self.num_gsl = num_gsl
@@ -1026,7 +1031,16 @@ class PFNetDense(tf.keras.Model):
                 debugging_data[cg.name] = enc_reg_all
             encs_reg.append(enc_reg)
 
-        dec_output_id = tf.concat([enc] + encs_id, axis=-1)
+        dec_input_cls = []
+        if self.skip_connection:
+            dec_input_cls.append(enc)
+        dec_input_cls += encs_id
+
+        graph_sum = tf.reduce_sum(encs_id[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
+        graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
+        dec_input_cls.append(graph_sum)
+
+        dec_output_id = tf.concat(dec_input_cls, axis=-1)
 
         out_id_logits = self.ffn_id(dec_output_id)*msk_input
 
@@ -1036,8 +1050,20 @@ class PFNetDense(tf.keras.Model):
             out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
 
         out_charge = self.ffn_charge(dec_output_id)*msk_input
-        dec_output_reg = tf.concat([enc, tf.cast(out_id_logits, X.dtype)] + encs_reg, axis=-1)
-       
+
+        dec_input_reg = []
+        if self.skip_connection:
+            dec_input_reg.append(enc)
+        if self.regression_use_classification:
+            dec_input_reg.append(tf.cast(out_id_logits, X.dtype))
+        dec_input_reg += encs_reg
+
+        graph_sum = tf.reduce_sum(encs_reg[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
+        graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
+        dec_input_reg.append(graph_sum)
+
+        dec_output_reg = tf.concat(dec_input_reg, axis=-1)
+
         if self.separate_momentum:
             pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
             pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
@@ -1050,11 +1076,11 @@ class PFNetDense(tf.keras.Model):
             ret = {
                 "cls": out_id_softmax,
                 "charge": out_charge,
-                "pt": pred_momentum[:, :, 0:1],
-                "eta": pred_momentum[:, :, 1:2],
+                "pt": X[:, :, 1:2] + pred_momentum[:, :, 0:1],
+                "eta": X[:, :, 2:3] + pred_momentum[:, :, 1:2],
                 "sin_phi": pred_momentum[:, :, 2:3],
                 "cos_phi": pred_momentum[:, :, 3:4],
-                "energy": pred_momentum[:, :, 4:5],
+                "energy": X[:, :, 4:5] + pred_momentum[:, :, 4:5],
             }
             if self.debug:
                 for k in debugging_data.keys():
