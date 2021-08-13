@@ -1076,11 +1076,11 @@ class PFNetDense(tf.keras.Model):
             ret = {
                 "cls": out_id_softmax,
                 "charge": out_charge,
-                "pt": X[:, :, 1:2] + pred_momentum[:, :, 0:1],
-                "eta": X[:, :, 2:3] + pred_momentum[:, :, 1:2],
+                "pt": pred_momentum[:, :, 0:1],
+                "eta": pred_momentum[:, :, 1:2],
                 "sin_phi": pred_momentum[:, :, 2:3],
                 "cos_phi": pred_momentum[:, :, 3:4],
-                "energy": X[:, :, 4:5] + pred_momentum[:, :, 4:5],
+                "energy": pred_momentum[:, :, 4:5],
             }
             if self.debug:
                 for k in debugging_data.keys():
