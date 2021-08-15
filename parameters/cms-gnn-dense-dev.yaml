@@ -42,7 +42,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 5e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
@@ -68,11 +68,11 @@ parameters:
   layernorm: no
   hidden_dim: 256
   bin_size: 40
-  clip_value_low: 0.0
+  clip_value_low: 0.00
   num_conv: 2
   num_gsl: 2
   normalize_degrees: yes
-  distance_dim: 8
+  distance_dim: 16
   dropout: 0.0
   separate_momentum: yes
   input_encoding: cms
