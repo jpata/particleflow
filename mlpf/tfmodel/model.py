@@ -10,7 +10,7 @@ from .fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 0.0
+regularizer_weight = 1e-9
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
