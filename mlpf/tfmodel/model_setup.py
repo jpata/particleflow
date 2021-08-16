@@ -58,10 +58,11 @@ def plot_to_image(figure):
     return image
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
+    def __init__(self, outpath, X, y, dataset_transform, num_output_classes, freq=1):
         super(CustomCallback, self).__init__()
         self.X = X
         self.y = y
+        self.freq = freq
 
         #transform the prediction target from an array into a dictionary for easier access
         self.ytrue = dataset_transform(self.X, self.y, None)[1]
@@ -198,6 +199,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.close("all")
 
     def on_epoch_end(self, epoch, logs=None):
+
+        if epoch%self.freq!=0:
+            return
 
         #save the training logs (losses) for this epoch
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
