@@ -23,7 +23,7 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 10.0
+  classification_loss_coef: 0.01
   charge_loss_coef: 0.1
   pt_loss_coef: 1.0
   eta_loss_coef: 0.1
@@ -34,6 +34,8 @@ dataset:
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
+  energy_loss: MeanSquaredLogarithmicError
+  pt_loss: MeanSquaredLogarithmicError
 
 tensorflow:
   eager: no
@@ -42,11 +44,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 5e-4
-  batch_size: 5
+  lr: 1e-5
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 500
+  num_epochs: 50
   num_val_files: 10
   dtype: float32
   trainable: all
@@ -65,8 +67,8 @@ sample_weights:
 parameters:
   model: gnn_dense
   activation: elu
-  layernorm: no
-  hidden_dim: 256
+  layernorm: yes
+  hidden_dim: 512
   bin_size: 40
   clip_value_low: 0.00
   num_conv: 2

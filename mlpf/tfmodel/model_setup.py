@@ -159,12 +159,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.savefig(str(outpath / "event_iev{}.pdf".format(ievent)), bbox_inches="tight")
+        plt.savefig(str(outpath / "event_iev{}.png".format(ievent)), bbox_inches="tight")
         plt.close("all")
 
     def plot_reg_distribution(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
-        vals_pred = ypred[reg_variable][msk][ypred_id[msk]==icls].flatten()
-        vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]==icls].flatten()
+
+        if icls==0:
+            vals_pred = ypred[reg_variable][msk][ypred_id[msk]!=icls].flatten()
+            vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]!=icls].flatten()
+        else:
+            vals_pred = ypred[reg_variable][msk][ypred_id[msk]==icls].flatten()
+            vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]==icls].flatten()
 
         bins = self.reg_bins[reg_variable]
         plt.hist(vals_true, bins=bins, histtype="step", lw=2, label="true")
@@ -178,15 +183,20 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.ylabel("Number of particles")
         plt.legend(loc="best")
         plt.title("Regression output, cls {}".format(icls))
-        plt.savefig(str(outpath / "{}_cls{}.pdf".format(reg_variable, icls)), bbox_inches="tight")
+        plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
     def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
-        sel = (ypred_id[msk]==icls) & (self.ytrue_id[msk]==icls)
+
+        if icls==0:
+            sel = self.ytrue_id[msk]!=icls
+        else:
+            sel = (ypred_id[msk]==icls) & (self.ytrue_id[msk]==icls)
+
         vals_pred = ypred[reg_variable][msk][sel].flatten()
         vals_true = self.ytrue[reg_variable][msk][sel].flatten()
 
-        plt.scatter(vals_pred, vals_true, marker=".")
+        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8)
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -195,7 +205,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlabel("predicted")
         plt.ylabel("true")
         plt.title(reg_variable)
-        plt.savefig(str(outpath / "{}_cls{}_corr.pdf".format(reg_variable, icls)), bbox_inches="tight")
+        plt.savefig(str(outpath / "{}_cls{}_corr.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
     def on_epoch_end(self, epoch, logs=None):
@@ -224,7 +234,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         for ievent in range(min(5, self.X.shape[0])):
             self.plot_event_visualization(cp_dir, ypred, ypred_id, msk, ievent=ievent)
 
-        for icls in range(1, self.num_output_classes):
+        for icls in range(self.num_output_classes):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
