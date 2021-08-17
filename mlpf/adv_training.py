@@ -69,7 +69,7 @@ def main(config):
 
     x = np.random.randn(1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"])
     ypred = concat_pf(model_pf(x))
-    model_pf.load_weights("./experiments/cms-gnn-dense-dev_20210814_123346.gpu0.local/weights/weights-65-198.290390.hdf5")
+    model_pf.load_weights("./experiments/cms-gnn-dense-dev_20210814_123346.gpu0.local/weights/weights-100-195.351807.hdf5")
 
     model_disc = make_disc_model(config, ypred.shape[-1])
 
@@ -108,8 +108,8 @@ def main(config):
         tf.TensorShape([dataset_def.padded_num_elem_size, ])
     )
 
-    n_train = 500
-    n_test = 500
+    n_train = 10000
+    n_test = 1000
     batch_size = 4
 
     ds_train = dataset.take(n_train).padded_batch(batch_size, padded_shapes=ps)
@@ -137,7 +137,7 @@ def main(config):
     m1.summary()
 
     #The discriminator model (adversarial) is optimized to distinguish between the true target and MLPF-reconstructed events
-    optimizer2 = tf.keras.optimizers.Adam(lr=1e-6)
+    optimizer2 = tf.keras.optimizers.Adam(lr=1e-4)
     model_pf.trainable = False
     model_disc.trainable = True
     m2.compile(loss=loss, optimizer=optimizer2)

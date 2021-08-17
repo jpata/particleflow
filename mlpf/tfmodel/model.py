@@ -992,21 +992,23 @@ class PFNetDense(tf.keras.Model):
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
-        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=4, activation=activation)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=2, activation=activation)
         
         if self.separate_momentum:
             self.ffn_momentum = [
                 point_wise_feed_forward_network(
                     1, dff, name="ffn_momentum{}".format(imomentum),
-                    dtype=tf.dtypes.float32, num_layers=3, activation=activation
+                    dtype=tf.dtypes.float32, num_layers=4, activation=activation
                 ) for imomentum in range(num_momentum_outputs)
             ]
         else:
-            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=3, activation=activation)
+            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=4, activation=activation)
 
     def call(self, inputs, training=False):
         X = inputs
+
+        #mask padded elements
         msk = X[:, :, 0] != 0
         msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
@@ -1015,6 +1017,8 @@ class PFNetDense(tf.keras.Model):
         encs_id = []
 
         debugging_data = {}
+
+        #encode the elements for classification (id)
         for cg in self.cg_id:
             enc_id_all = cg(enc_id, msk, training)
             enc_id = enc_id_all["enc"]
@@ -1022,6 +1026,7 @@ class PFNetDense(tf.keras.Model):
                 debugging_data[cg.name] = enc_id_all
             encs_id.append(enc_id)
 
+        #encode the elements for regression
         enc_reg = self.activation(self.ffn_enc_reg(enc))
         encs_reg = []
         for cg in self.cg_reg:
@@ -1040,7 +1045,7 @@ class PFNetDense(tf.keras.Model):
         graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
         dec_input_cls.append(graph_sum)
 
-        dec_output_id = tf.concat(dec_input_cls, axis=-1)
+        dec_output_id = tf.concat(dec_input_cls, axis=-1)*msk_input
 
         out_id_logits = self.ffn_id(dec_output_id)*msk_input
 
@@ -1062,7 +1067,7 @@ class PFNetDense(tf.keras.Model):
         graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
         dec_input_reg.append(graph_sum)
 
-        dec_output_reg = tf.concat(dec_input_reg, axis=-1)
+        dec_output_reg = tf.concat(dec_input_reg, axis=-1)*msk_input
 
         if self.separate_momentum:
             pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
@@ -1072,22 +1077,23 @@ class PFNetDense(tf.keras.Model):
 
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
+        ret = {
+            "cls": out_id_softmax,
+            "charge": out_charge,
+            "pt": tf.exp(tf.clip_by_value(pred_momentum[:, :, 0:1], -6, 8)),
+            "eta": pred_momentum[:, :, 1:2],
+            "sin_phi": pred_momentum[:, :, 2:3],
+            "cos_phi": pred_momentum[:, :, 3:4],
+            "energy": tf.exp(tf.clip_by_value(pred_momentum[:, :, 4:5], -6, 8)),
+        }
+        if self.debug:
+            for k in debugging_data.keys():
+                ret[k] = debugging_data[k]
+
         if self.multi_output:
-            ret = {
-                "cls": out_id_softmax,
-                "charge": out_charge,
-                "pt": pred_momentum[:, :, 0:1],
-                "eta": pred_momentum[:, :, 1:2],
-                "sin_phi": pred_momentum[:, :, 2:3],
-                "cos_phi": pred_momentum[:, :, 3:4],
-                "energy": pred_momentum[:, :, 4:5],
-            }
-            if self.debug:
-                for k in debugging_data.keys():
-                    ret[k] = debugging_data[k]
             return ret
         else:
-            return tf.concat([out_id_softmax, out_charge, pred_momentum], axis=-1)
+            return tf.concat([ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1)
 
     def set_trainable_classification(self):
         self.trainable = True
