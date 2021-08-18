@@ -72,6 +72,12 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         config, ntrain, ntest, weights
     )
 
+    # Decide tf.distribute.strategy depending on number of available GPUs
+    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
+    if maybe_global_batch_size is not None:
+        global_batch_size = maybe_global_batch_size
+
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
@@ -82,11 +88,6 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         outdir = str(Path(weights).parent)
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
-    # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    # If using more than 1 GPU, we scale the batch size by the number of GPUs
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
     total_steps = n_epochs * n_train // global_batch_size
     lr = float(config["setup"]["lr"])
 
@@ -150,32 +151,32 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         )
         callbacks.append(optim_callbacks)
 
-        fit_result = model.fit(
-            ds_train_r,
-            validation_data=ds_test_r,
-            epochs=initial_epoch + n_epochs,
-            callbacks=callbacks,
-            steps_per_epoch=n_train // global_batch_size,
-            validation_steps=n_test // global_batch_size,
-            initial_epoch=initial_epoch,
-        )
-        history_path = Path(outdir) / "history"
-        history_path = str(history_path)
-        with open("{}/history.json".format(history_path), "w") as fi:
-            json.dump(fit_result.history, fi)
-        model.save(outdir + "/model_full", save_format="tf")
+    fit_result = model.fit(
+        ds_train_r,
+        validation_data=ds_test_r,
+        epochs=initial_epoch + n_epochs,
+        callbacks=callbacks,
+        steps_per_epoch=n_train // global_batch_size,
+        validation_steps=n_test // global_batch_size,
+        initial_epoch=initial_epoch,
+    )
+    history_path = Path(outdir) / "history"
+    history_path = str(history_path)
+    with open("{}/history.json".format(history_path), "w") as fi:
+        json.dump(fit_result.history, fi)
+    model.save(outdir + "/model_full", save_format="tf")
 
-        print("Training done.")
+    print("Training done.")
 
-        print("Starting evaluation...")
-        eval_dir = Path(outdir) / "evaluation"
-        eval_dir.mkdir()
-        eval_dir = str(eval_dir)
-        # TODO: change to use the evaluate() function below instead of eval_model()
-        eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-        print("Evaluation done.")
+    print("Starting evaluation...")
+    eval_dir = Path(outdir) / "evaluation"
+    eval_dir.mkdir()
+    eval_dir = str(eval_dir)
+    # TODO: change to use the evaluate() function below instead of eval_model()
+    eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
+    print("Evaluation done.")
 
-        freeze_model(model, config, outdir)
+    freeze_model(model, config, outdir)
 
 
 @main.command()

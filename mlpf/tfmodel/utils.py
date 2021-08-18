@@ -311,16 +311,24 @@ def get_class_loss(config):
     return cls_loss
 
 
+def get_loss_from_params(input_dict):
+    input_dict = input_dict.copy()
+    loss_type = input_dict.pop("type")
+    loss_cls = getattr(tf.keras.losses, loss_type)
+    return loss_cls(**input_dict)
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
+
+    default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-        "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-        "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-        "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-        "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-        "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
+        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
