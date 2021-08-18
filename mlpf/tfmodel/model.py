@@ -10,7 +10,7 @@ from .fast_attention import Attention, SelfAttention
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
-regularizer_weight = 1e-9
+regularizer_weight = 0.0
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -976,6 +976,8 @@ class PFNetDense(tf.keras.Model):
         self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_id")
         self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_reg")
 
+        self.momentum_mult = self.add_weight(shape=(num_momentum_outputs, ), initializer=tf.keras.initializers.Ones(), name="momentum_multiplication")
+
         kwargs_cg = {
             "output_dim": dff,
             "max_num_bins": max_num_bins,
@@ -1074,6 +1076,8 @@ class PFNetDense(tf.keras.Model):
             pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
         else:
             pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+
+        pred_momentum = self.momentum_mult*pred_momentum
 
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
