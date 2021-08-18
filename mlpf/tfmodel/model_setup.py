@@ -91,7 +91,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             "eta": np.linspace(-5, 5, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": np.linspace(0,100,100),
+            "energy": np.linspace(0,1000,100),
         }
 
     def plot_cm(self, outpath, ypred_id, msk):

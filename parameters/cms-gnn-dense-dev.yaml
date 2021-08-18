@@ -23,19 +23,19 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 0.01
-  charge_loss_coef: 0.1
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
   pt_loss_coef: 1.0
-  eta_loss_coef: 0.1
+  eta_loss_coef: 1.0
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
-  energy_loss_coef: 0.01
+  energy_loss_coef: 1.0
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
-  energy_loss: MeanSquaredLogarithmicError
-  pt_loss: MeanSquaredLogarithmicError
+  energy_loss: Huber
+  pt_loss: Huber
 
 tensorflow:
   eager: no
@@ -44,11 +44,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-5
+  lr: 1e-3
   batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 50
+  num_epochs: 100
   num_val_files: 10
   dtype: float32
   trainable: all
@@ -65,17 +65,17 @@ sample_weights:
   energy: signal_only
 
 parameters:
-  model: gnn_dense
+  model: gnn_dense  
   activation: elu
   layernorm: yes
-  hidden_dim: 512
+  hidden_dim: 128
   bin_size: 40
-  clip_value_low: 0.00
+  clip_value_low: 0.0
   num_conv: 2
-  num_gsl: 2
+  num_gsl: 5
   normalize_degrees: yes
   distance_dim: 16
-  dropout: 0.0
+  dropout: 0.1
   separate_momentum: yes
   input_encoding: cms
   graph_kernel: learnable #gaussian, learnable
