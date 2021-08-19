@@ -69,6 +69,11 @@ parameters:
   hidden_dim: 512
   bin_size: 3200
   clip_value_low: 0.00
+  conv_config:
+    type: GHConvDense
+    output_dim: 128
+    activation: elu
+    normalize_degrees: yes
   num_conv: 3
   num_gsl: 1
   normalize_degrees: yes
