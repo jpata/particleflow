@@ -1,4 +1,4 @@
-from .model import PFNet, Transformer, DummyNet, PFNetDense
+from .model import DummyNet, PFNetDense
 
 import tensorflow as tf
 import tensorflow_probability
@@ -186,7 +186,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
-    def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
+    def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable, log=False):
 
         if icls==0:
             sel = self.ytrue_id[msk]!=icls
@@ -196,16 +196,24 @@ class CustomCallback(tf.keras.callbacks.Callback):
         vals_pred = ypred[reg_variable][msk][sel].flatten()
         vals_true = self.ytrue[reg_variable][msk][sel].flatten()
 
+        s = ""
+        if log:
+            vals_pred = np.log(vals_pred)
+            vals_true = np.log(vals_true)
+            s = "_log"
+
         plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8)
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
             plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
+            plt.xlim(minval, maxval)
+            plt.ylim(minval, maxval)
 
         plt.xlabel("predicted")
         plt.ylabel("true")
         plt.title(reg_variable)
-        plt.savefig(str(outpath / "{}_cls{}_corr.png".format(reg_variable, icls)), bbox_inches="tight")
+        plt.savefig(str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s)), bbox_inches="tight")
         plt.close("all")
 
     def on_epoch_end(self, epoch, logs=None):
@@ -240,6 +248,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
                 self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
+            self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
@@ -309,38 +318,6 @@ def make_model(config, dtype):
         return make_gnn_dense(config, dtype)
     raise KeyError("Unknown model type {}".format(model))
 
-def make_gnn(config, dtype):
-    activation = getattr(tf.nn, config['parameters']['activation'])
-
-    parameters = [
-        'bin_size',
-        'num_convs_id',
-        'num_convs_reg',
-        'num_hidden_id_enc',
-        'num_hidden_id_dec',
-        'num_hidden_reg_enc',
-        'num_hidden_reg_dec',
-        'num_neighbors',
-        'hidden_dim_id',
-        'hidden_dim_reg',
-        'dist_mult',
-        'distance_dim',
-        'dropout',
-        'skip_connection'
-    ]
-    kwargs = {par: config['parameters'][par] for par in parameters}
-
-    model = PFNet(
-        multi_output=config["setup"]["multi_output"],
-        num_input_classes=config["dataset"]["num_input_classes"],
-        num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        activation=activation,
-        **kwargs
-    )
-
-    return model
-
 def make_gnn_dense(config, dtype):
 
     parameters = [
@@ -358,6 +335,7 @@ def make_gnn_dense(config, dtype):
         "graph_kernel",
         "skip_connection",
         "regression_use_classification",
+        "conv_config",
         "debug"
     ]
 
@@ -371,22 +349,6 @@ def make_gnn_dense(config, dtype):
         **kwargs
     )
 
-    return model
-
-def make_transformer(config, dtype):
-    parameters = [
-        'num_layers', 'd_model', 'num_heads', 'dff', 'support', 'dropout'
-    ]
-    kwargs = {par: config['parameters'][par] for par in parameters}
-
-    model = Transformer(
-        multi_output=config["setup"]["multi_output"],
-        num_input_classes=config["dataset"]["num_input_classes"],
-        num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        dtype=dtype,
-        **kwargs
-    )
     return model
 
 def make_dense(config, dtype):

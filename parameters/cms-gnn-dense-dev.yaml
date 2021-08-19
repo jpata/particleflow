@@ -49,10 +49,10 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 2
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 10
   num_val_files: 10
   dtype: float32
   trainable: all
@@ -71,12 +71,18 @@ sample_weights:
 parameters:
   model: gnn_dense  
   activation: elu
-  layernorm: yes
-  hidden_dim: 128
+  layernorm: no
+  hidden_dim: 256
   bin_size: 40
   clip_value_low: 0.0
-  num_conv: 2
-  num_gsl: 5
+  num_conv: 1
+  conv_config:
+    type: MPNNNodeFunction
+    output_dim: 128
+    hidden_dim: 128
+    num_layers: 2
+    activation: elu
+  num_gsl: 3
   normalize_degrees: yes
   distance_dim: 16
   dropout: 0.1

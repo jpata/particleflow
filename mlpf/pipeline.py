@@ -141,15 +141,15 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         )
         model.summary()
 
-        callbacks = prepare_callbacks(
-            model,
-            outdir,
-            X_val,
-            ycand_val,
-            dataset_transform,
-            config["dataset"]["num_output_classes"],
-        )
-        callbacks.append(optim_callbacks)
+    callbacks = prepare_callbacks(
+        model,
+        outdir,
+        X_val,
+        ycand_val,
+        dataset_transform,
+        config["dataset"]["num_output_classes"],
+    )
+    callbacks.append(optim_callbacks)
 
     fit_result = model.fit(
         ds_train_r,
@@ -160,6 +160,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
         validation_steps=n_test // global_batch_size,
         initial_epoch=initial_epoch,
     )
+
     history_path = Path(outdir) / "history"
     history_path = str(history_path)
     with open("{}/history.json".format(history_path), "w") as fi:
@@ -178,6 +179,93 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
 
     freeze_model(model, config, outdir)
 
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option("--ntrain", default=None, help="override the number of training events", type=int)
+@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+@click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
+@click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
+def train_reg(config, weights, ntrain, ntest, recreate, prefix):
+    config_file_path = config
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+        config, ntrain, ntest, weights
+    )
+
+    if recreate or (weights is None):
+        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+    else:
+        outdir = str(Path(weights).parent)
+    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+
+    total_steps = n_epochs * n_train // global_batch_size
+    lr = float(config["setup"]["lr"])
+
+    dataset_def = get_dataset_def(config)
+    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=False)
+    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
+
+    opt = tf.keras.optimizers.Adam(learning_rate=lr)
+
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
+
+    model = make_model(config, model_dtype)
+    model(tf.cast(X_val[:1], model_dtype))
+
+    initial_epoch = 0
+    if weights:
+        # We need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        model.load_weights(weights, by_name=True)
+        initial_epoch = int(weights.split("/")[-1].split("-")[1])
+    model(tf.cast(X_val[:1], model_dtype))
+
+    callbacks = prepare_callbacks(
+            model,
+            outdir,
+            X_val,
+            ycand_val,
+            dataset_transform,
+            config["dataset"]["num_output_classes"],
+        )
+
+    configure_model_weights(model, "regression")
+    for epoch in range(initial_epoch, initial_epoch+n_epochs):
+
+        loss_vals = []
+        for step, (xb, yb, wb) in tqdm(enumerate(ds_train_r)):
+            with tf.GradientTape() as tape:
+                res = model(xb, training=True)
+
+                cls_true = tf.argmax(yb["cls"], axis=-1)
+                cls_pred = tf.argmax(res["cls"], axis=-1)
+                msk_x = xb[:, :, 0]!=0
+                msk_correct = msk_x & (cls_true==cls_pred) & (cls_true==3)
+
+                msk_correct_f = tf.expand_dims(tf.cast(msk_correct, tf.float32), axis=-1)
+
+                loss_value = tf.keras.losses.mean_squared_error(tf.math.log(yb["energy"]*msk_correct_f + 1.0), tf.math.log(res["energy"]*msk_correct_f + 1.0))
+                #loss_value = loss_value + tf.keras.losses.huber(yb["pt"]*msk_correct_f, res["pt"]*msk_correct_f, delta=5.0)
+                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["eta"]*msk_correct_f, res["eta"]*msk_correct_f)
+                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["sin_phi"]*msk_correct_f, res["sin_phi"]*msk_correct_f)
+                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["cos_phi"]*msk_correct_f, res["cos_phi"]*msk_correct_f)
+                loss_value = tf.reduce_mean(loss_value)
+                loss_vals.append(loss_value.numpy())
+                #import pdb;pdb.set_trace()
+
+            grads = tape.gradient(loss_value, model.trainable_weights)
+            opt.apply_gradients(zip(grads, model.trainable_weights))
+
+        print(epoch, np.mean(loss_vals))
+        callbacks[-1].on_epoch_end(epoch, logs={})
 
 @main.command()
 @click.help_option("-h", "--help")
