@@ -253,14 +253,21 @@ class MPNNNodeFunction(tf.keras.layers.Layer):
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
+        self.aggregation_direction = kwargs.pop("aggregation_direction")
+
+        if self.aggregation_direction == "dst":
+            self.agg_dim = -2
+        elif self.aggregation_direction == "src":
+            self.agg_dim = -3
 
         self.ffn = point_wise_feed_forward_network(self.output_dim, self.hidden_dim, num_layers=self.num_layers, activation=self.activation)
         super(MPNNNodeFunction, self).__init__(*args, **kwargs)
 
     def call(self, inputs):
         x, adj, msk = inputs
-        avg_message = tf.reduce_mean(adj, axis=-2)
-        x2 = tf.concat([x, avg_message], axis=-1)*msk
+        avg_message = tf.reduce_mean(adj, axis=self.agg_dim)
+        max_message = tf.reduce_max(adj, axis=self.agg_dim)
+        x2 = tf.concat([x, avg_message, max_message], axis=-1)*msk
         return self.ffn(x2)
 
 def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32, name=None):
