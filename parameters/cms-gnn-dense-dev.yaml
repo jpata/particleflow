@@ -73,15 +73,16 @@ parameters:
   activation: elu
   layernorm: no
   hidden_dim: 256
-  bin_size: 40
+  bin_size: 32
   clip_value_low: 0.0
   num_conv: 1
   conv_config:
     type: MPNNNodeFunction
-    output_dim: 128
+    output_dim: 256
     hidden_dim: 128
     num_layers: 2
     activation: elu
+    aggregation_direction: dst
   num_gsl: 3
   normalize_degrees: yes
   distance_dim: 16

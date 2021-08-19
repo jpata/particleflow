@@ -43,7 +43,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 1
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 500
@@ -66,19 +66,19 @@ parameters:
   model: gnn_dense
   activation: elu
   layernorm: no
-  hidden_dim: 512
-  bin_size: 3200
-  clip_value_low: 0.00
+  hidden_dim: 256
+  bin_size: 640
+  clip_value_low: 0.01
   conv_config:
     type: GHConvDense
     output_dim: 128
     activation: elu
     normalize_degrees: yes
-  num_conv: 3
-  num_gsl: 1
+  num_conv: 2
+  num_gsl: 2
   normalize_degrees: yes
-  distance_dim: 512
-  dropout: 0.0
+  distance_dim: 128
+  dropout: 0.2
   separate_momentum: yes
   input_encoding: cms
   graph_kernel: gaussian #gaussian, learnable
