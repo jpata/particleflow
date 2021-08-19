@@ -209,7 +209,7 @@ def get_dataset_def(config):
     )
 
 
-def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=True):
     dataset_def = get_dataset_def(config)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
@@ -255,11 +255,12 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
     else:
         dataset_transform = None
 
-    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
-
-    return ds_train_r, ds_test_r, dataset_transform
-
+    if repeat:
+        ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
+        ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+        return ds_train_r, ds_test_r, dataset_transform
+    else:
+        return ds_train, ds_test, dataset_transform
 
 def prepare_val_data(config, dataset_def, single_file=False):
     if single_file:
