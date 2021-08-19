@@ -26,9 +26,9 @@ dataset:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
-  eta_loss_coef: 1.0
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
+  eta_loss_coef: 100.0
+  sin_phi_loss_coef: 100.0
+  cos_phi_loss_coef: 100.0
   energy_loss_coef: 0.1
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
@@ -48,14 +48,14 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
-  batch_size: 5
+  lr: 5e-4
+  batch_size: 10
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 10
   num_val_files: 10
   dtype: float32
-  trainable: all
+  trainable: classification
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
@@ -71,20 +71,19 @@ sample_weights:
 parameters:
   model: gnn_dense  
   activation: elu
-  layernorm: no
+  layernorm: yes
   hidden_dim: 256
   bin_size: 32
   clip_value_low: 0.0
-  num_conv: 1
   conv_config:
     type: MPNNNodeFunction
-    output_dim: 256
+    output_dim: 128
     hidden_dim: 128
-    num_layers: 2
+    num_layers: 3
     activation: elu
     aggregation_direction: dst
-  num_gsl: 3
-  normalize_degrees: yes
+  num_conv: 1
+  num_gsl: 2
   distance_dim: 16
   dropout: 0.1
   separate_momentum: yes
