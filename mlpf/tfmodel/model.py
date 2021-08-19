@@ -270,14 +270,20 @@ class MPNNNodeFunction(tf.keras.layers.Layer):
         x2 = tf.concat([x, avg_message, max_message], axis=-1)*msk
         return self.ffn(x2)
 
-def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32, name=None):
+def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32, name=None, dim_decrease=False):
     bias_regularizer =  tf.keras.regularizers.L1(regularizer_weight)
     kernel_regularizer = tf.keras.regularizers.L1(regularizer_weight)
-    return tf.keras.Sequential(
-        [tf.keras.layers.Dense(dff, activation=activation, bias_regularizer=bias_regularizer, kernel_regularizer=kernel_regularizer) for i in range(num_layers)] +
-        [tf.keras.layers.Dense(d_model, dtype=dtype)],
-        name=name
-    )
+
+    layers = []
+    for ilayer in range(num_layers):
+        layers.append(tf.keras.layers.Dense(
+            dff, activation=activation, bias_regularizer=bias_regularizer,
+            kernel_regularizer=kernel_regularizer))
+        if dim_decrease:
+            dff = dff // 2
+
+    layers.append(tf.keras.layers.Dense(d_model, dtype=dtype))
+    return tf.keras.Sequential(layers, name=name)
 
 def get_conv_layer(config_dict):
     config_dict = config_dict.copy()
@@ -787,8 +793,6 @@ class PFNetDense(tf.keras.Model):
         self.ffn_enc_id = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_id")
         self.ffn_enc_reg = point_wise_feed_forward_network(dff, dff, activation=activation, name="ffn_enc_reg")
 
-        self.momentum_mult = self.add_weight(shape=(num_momentum_outputs, ), initializer=tf.keras.initializers.Ones(), name="momentum_multiplication")
-
         kwargs_cg = {
             "output_dim": dff,
             "max_num_bins": max_num_bins,
@@ -806,18 +810,18 @@ class PFNetDense(tf.keras.Model):
         self.cg_id = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
         self.cg_reg = [CombinedGraphLayer(**kwargs_cg) for i in range(num_gsl)]
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=4, activation=activation)
-        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=2, activation=activation)
+        self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True)
+        self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=2, activation=activation, dim_decrease=True)
         
         if self.separate_momentum:
             self.ffn_momentum = [
                 point_wise_feed_forward_network(
                     1, dff, name="ffn_momentum{}".format(imomentum),
-                    dtype=tf.dtypes.float32, num_layers=4, activation=activation
+                    dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True
                 ) for imomentum in range(num_momentum_outputs)
             ]
         else:
-            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=4, activation=activation)
+            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True)
 
     def call(self, inputs, training=False):
         X = inputs
@@ -893,18 +897,20 @@ class PFNetDense(tf.keras.Model):
         else:
             pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
 
-        pred_momentum = self.momentum_mult*pred_momentum
-
         out_charge = tf.clip_by_value(out_charge, -2, 2)
+
+        pred_eta = X[:, :, 2:3]*(1.0 + pred_momentum[:, :, 1:2]/100.0)
+        pred_energy = X[:, :, 4:5]*(1.0 + pred_momentum[:, :, 4:5])
+        pred_pt = pred_momentum[:, :, 0:1] * pred_energy
 
         ret = {
             "cls": out_id_softmax,
             "charge": out_charge,
-            "pt": tf.exp(tf.clip_by_value(pred_momentum[:, :, 0:1], -6, 8)),
-            "eta": pred_momentum[:, :, 1:2],
-            "sin_phi": pred_momentum[:, :, 2:3],
-            "cos_phi": pred_momentum[:, :, 3:4],
-            "energy": tf.exp(tf.clip_by_value(pred_momentum[:, :, 4:5], -6, 8)),
+            "pt": pred_pt,
+            "eta": pred_eta,
+            "sin_phi": tf.math.sin(X[:, :, 3:4])*(1.0 + pred_momentum[:, :, 2:3]/100.0),
+            "cos_phi": tf.math.cos(X[:, :, 3:4])*(1.0 + pred_momentum[:, :, 3:4]/100.0),
+            "energy": pred_energy,
         }
         if self.debug:
             for k in debugging_data.keys():
