@@ -207,7 +207,7 @@ class GHConv(tf.keras.layers.Layer):
 
 class GHConvDense(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
-        self.activation = kwargs.pop("activation")
+        self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.output_dim = kwargs.pop("output_dim")
         self.normalize_degrees = kwargs.pop("normalize_degrees", True)
 
@@ -224,6 +224,9 @@ class GHConvDense(tf.keras.layers.Layer):
     #@tf.function
     def call(self, inputs):
         x, adj, msk = inputs
+
+        adj = tf.squeeze(adj)
+        
         #compute the normalization of the adjacency matrix
         if self.normalize_degrees:
             in_degrees = tf.clip_by_value(tf.reduce_sum(tf.abs(adj), axis=-1), 0, 1000)
@@ -249,7 +252,7 @@ class MPNNNodeFunction(tf.keras.layers.Layer):
         self.output_dim = kwargs.pop("output_dim")
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
-        self.activation = kwargs.pop("activation")
+        self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
 
         self.ffn = point_wise_feed_forward_network(self.output_dim, self.hidden_dim, num_layers=self.num_layers, activation=self.activation)
         super(MPNNNodeFunction, self).__init__(*args, **kwargs)
@@ -468,7 +471,7 @@ class GraphBuilderDense(tf.keras.layers.Layer):
             dm = pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_dist)
             dm = tf.keras.activations.elu(dm)
         elif self.kernel == "gaussian":
-            dm = pairwise_gaussian_dist(x_dist_binned, x_dist_binned)
+            dm = tf.expand_dims(pairwise_gaussian_dist(x_dist_binned, x_dist_binned), axis=-1)
             dm = tf.exp(-self.dist_mult*dm)
             dm = tf.clip_by_value(dm, self.clip_value_low, 1)
 
@@ -677,7 +680,7 @@ class PFNet(tf.keras.Model):
         self.gnn_reg.trainable = True
         self.layer_momentum.trainable = True
 
-        
+
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
     
