@@ -206,9 +206,10 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
-            plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
-            plt.xlim(minval, maxval)
-            plt.ylim(minval, maxval)
+            if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
+                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
+                plt.xlim(minval, maxval)
+                plt.ylim(minval, maxval)
 
         plt.xlabel("predicted")
         plt.ylabel("true")
