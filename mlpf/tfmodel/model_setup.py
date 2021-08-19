@@ -359,7 +359,6 @@ def make_gnn_dense(config, dtype):
         "clip_value_low",
         "num_conv",
         "num_gsl",
-        "normalize_degrees",
         "distance_dim",
         "dropout",
         "separate_momentum",
