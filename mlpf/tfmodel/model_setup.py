@@ -1,4 +1,4 @@
-from .model import DummyNet, PFNetDense
+from .model import DummyNet, PFNet, PFNetDense
 
 import tensorflow as tf
 import tensorflow_probability
