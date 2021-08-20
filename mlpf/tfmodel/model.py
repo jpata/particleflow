@@ -446,7 +446,7 @@ class GraphBuilderDense(tf.keras.layers.Layer):
         self.kernel = kwargs.pop("kernel")
 
         if self.kernel == "learnable":
-            self.ffn_dist = point_wise_feed_forward_network(32, 32, num_layers=2, activation="elu")
+            self.ffn_node_pair = point_wise_feed_forward_network(32, 32, num_layers=2, activation="elu")
         elif self.kernel == "gaussian":
             pass
 
@@ -481,7 +481,7 @@ class GraphBuilderDense(tf.keras.layers.Layer):
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         if self.kernel == "learnable":
-            dm = pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_dist)
+            dm = pairwise_learnable_dist(x_dist_binned, x_dist_binned, self.ffn_node_pair)
             dm = tf.keras.activations.elu(dm)
         elif self.kernel == "gaussian":
             dm = tf.expand_dims(pairwise_gaussian_dist(x_dist_binned, x_dist_binned), axis=-1)
@@ -715,7 +715,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
-        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.distance_dim)
+        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, 128, num_layers=2, activation="elu")
         self.dist = GraphBuilderDense(clip_value_low=self.clip_value_low, distance_dim=self.distance_dim, max_num_bins=self.max_num_bins , bin_size=self.bin_size, dist_mult=self.dist_mult, kernel=self.kernel)
         self.convs = [
             get_conv_layer(self.conv_config) for iconv in range(self.num_conv)
@@ -731,6 +731,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         if self.do_layernorm:
             x = self.layernorm(x)
 
+        #compute node features for graph building
         x_dist = self.ffn_dist(x)
         bins_split, x_binned, dm, msk_binned = self.dist(x_dist, x, msk)
         for conv in self.convs:
@@ -859,9 +860,9 @@ class PFNetDense(tf.keras.Model):
             dec_input_cls.append(enc)
         dec_input_cls += encs_id
 
-        graph_sum = tf.reduce_sum(encs_id[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
-        graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
-        dec_input_cls.append(graph_sum)
+        # graph_sum = tf.reduce_sum(encs_id[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
+        # graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
+        # dec_input_cls.append(graph_sum)
 
         dec_output_id = tf.concat(dec_input_cls, axis=-1)*msk_input
         if self.debug:
@@ -880,12 +881,12 @@ class PFNetDense(tf.keras.Model):
         if self.skip_connection:
             dec_input_reg.append(enc)
         if self.regression_use_classification:
-            dec_input_reg.append(tf.cast(out_id_logits, X.dtype))
+            dec_input_reg.append(tf.cast(tf.stop_gradient(out_id_logits), X.dtype))
         dec_input_reg += encs_reg
 
-        graph_sum = tf.reduce_sum(encs_reg[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
-        graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
-        dec_input_reg.append(graph_sum)
+        # graph_sum = tf.reduce_sum(encs_reg[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
+        # graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
+        # dec_input_reg.append(graph_sum)
 
         dec_output_reg = tf.concat(dec_input_reg, axis=-1)*msk_input
         if self.debug:
@@ -893,25 +894,28 @@ class PFNetDense(tf.keras.Model):
 
         if self.separate_momentum:
             pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
-            pred_momentum = tf.concat(pred_momentum, axis=-1)*msk_input
+            pred_momentum = tf.concat(pred_momentum, axis=-1)
         else:
-            pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
+            pred_momentum = self.ffn_momentum(dec_output_reg)
 
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
-        pred_eta = X[:, :, 2:3]*(1.0 + pred_momentum[:, :, 1:2]/100.0)
+        pred_eta = X[:, :, 2:3] + pred_momentum[:, :, 1:2]/100.0
+        pred_sin_phi = tf.math.sin(X[:, :, 3:4]) + pred_momentum[:, :, 2:3]/100.0
+        pred_cos_phi = tf.math.cos(X[:, :, 3:4]) + pred_momentum[:, :, 3:4]/100.0
         pred_energy = X[:, :, 4:5]*(1.0 + pred_momentum[:, :, 4:5])
-        pred_pt = pred_momentum[:, :, 0:1] * pred_energy
+        pred_pt = pred_momentum[:, :, 0:1] * tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
 
         ret = {
             "cls": out_id_softmax,
-            "charge": out_charge,
-            "pt": pred_pt,
-            "eta": pred_eta,
-            "sin_phi": tf.math.sin(X[:, :, 3:4])*(1.0 + pred_momentum[:, :, 2:3]/100.0),
-            "cos_phi": tf.math.cos(X[:, :, 3:4])*(1.0 + pred_momentum[:, :, 3:4]/100.0),
-            "energy": pred_energy,
+            "charge": out_charge*msk_input,
+            "pt": pred_pt*msk_input,
+            "eta": pred_eta*msk_input,
+            "sin_phi": pred_sin_phi*msk_input,
+            "cos_phi": pred_cos_phi*msk_input,
+            "energy": pred_energy*msk_input,
         }
+
         if self.debug:
             for k in debugging_data.keys():
                 ret[k] = debugging_data[k]

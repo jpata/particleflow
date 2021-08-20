@@ -190,7 +190,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
     def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable, log=False):
 
         if icls==0:
-            sel = self.ytrue_id[msk]!=icls
+            sel = (self.ytrue_id[msk]!=0) & (ypred_id[msk]!=0)
         else:
             sel = (ypred_id[msk]==icls) & (self.ytrue_id[msk]==icls)
 
@@ -209,8 +209,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
             maxval = np.max(vals_true)
             if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
                 plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
-                plt.xlim(0.9*minval, 1.1*maxval)
-                plt.ylim(0.9*minval, 1.1*maxval)
+                plt.xlim(minval, maxval)
+                plt.ylim(minval, maxval)
 
         plt.xlabel("predicted")
         plt.ylabel("true")

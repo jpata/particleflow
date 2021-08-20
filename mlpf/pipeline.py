@@ -248,15 +248,15 @@ def train_reg(config, weights, ntrain, ntest, recreate, prefix):
                 cls_true = tf.argmax(yb["cls"], axis=-1)
                 cls_pred = tf.argmax(res["cls"], axis=-1)
                 msk_x = xb[:, :, 0]!=0
-                msk_correct = msk_x & (cls_true==cls_pred) & (cls_true==3)
+                msk_correct = msk_x & (cls_true==cls_pred)
 
                 msk_correct_f = tf.expand_dims(tf.cast(msk_correct, tf.float32), axis=-1)
 
-                loss_value = tf.keras.losses.mean_squared_error(tf.math.log(yb["energy"]*msk_correct_f + 1.0), tf.math.log(res["energy"]*msk_correct_f + 1.0))
-                #loss_value = loss_value + tf.keras.losses.huber(yb["pt"]*msk_correct_f, res["pt"]*msk_correct_f, delta=5.0)
-                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["eta"]*msk_correct_f, res["eta"]*msk_correct_f)
-                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["sin_phi"]*msk_correct_f, res["sin_phi"]*msk_correct_f)
-                #loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["cos_phi"]*msk_correct_f, res["cos_phi"]*msk_correct_f)
+                loss_value = tf.keras.losses.huber(yb["energy"]*msk_correct_f, res["energy"]*msk_correct_f, delta=10.0)
+                loss_value = loss_value + tf.keras.losses.huber(yb["pt"]*msk_correct_f, res["pt"]*msk_correct_f, delta=5.0)
+                loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["eta"]*msk_correct_f, res["eta"]*msk_correct_f)
+                loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["sin_phi"]*msk_correct_f, res["sin_phi"]*msk_correct_f)
+                loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["cos_phi"]*msk_correct_f, res["cos_phi"]*msk_correct_f)
                 loss_value = tf.reduce_mean(loss_value)
                 loss_vals.append(loss_value.numpy())
                 #import pdb;pdb.set_trace()
