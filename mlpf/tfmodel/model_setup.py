@@ -197,13 +197,20 @@ class CustomCallback(tf.keras.callbacks.Callback):
         vals_pred = ypred[reg_variable][msk][sel].flatten()
         vals_true = self.ytrue[reg_variable][msk][sel].flatten()
 
+        #manually as in configuration, later can propagate
+        delta = 0.1
+        if reg_variable == "energy" or reg_variable == "pt":
+            delta = 1.0
+        hub = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
+        hub_loss = hub(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
+
         s = ""
         if log:
             vals_pred = np.log(vals_pred)
             vals_true = np.log(vals_true)
             s = "_log"
 
-        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8)
+        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(1.0+hub_loss))
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -214,7 +221,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         plt.xlabel("predicted")
         plt.ylabel("true")
-        plt.title(reg_variable)
+        plt.title("{}, HL={:.4f}".format(reg_variable, np.sum(hub_loss)))
         plt.savefig(str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s)), bbox_inches="tight")
         plt.close("all")
 
@@ -361,7 +368,6 @@ def make_gnn_dense(config, dtype):
         "num_gsl",
         "distance_dim",
         "dropout",
-        "separate_momentum",
         "input_encoding",
         "graph_kernel",
         "skip_connection",

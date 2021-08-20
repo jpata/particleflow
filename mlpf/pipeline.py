@@ -259,7 +259,6 @@ def train_reg(config, weights, ntrain, ntest, recreate, prefix):
                 loss_value = loss_value + tf.keras.losses.mean_squared_error(yb["cos_phi"]*msk_correct_f, res["cos_phi"]*msk_correct_f)
                 loss_value = tf.reduce_mean(loss_value)
                 loss_vals.append(loss_value.numpy())
-                #import pdb;pdb.set_trace()
 
             grads = tape.gradient(loss_value, model.trainable_weights)
             opt.apply_gradients(zip(grads, model.trainable_weights))

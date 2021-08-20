@@ -29,17 +29,26 @@ dataset:
   eta_loss_coef: 100.0
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
-  energy_loss_coef: 0.1
+  energy_loss_coef: 1.0
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
   energy_loss:
     type: Huber
-    delta: 10.0
+    delta: 1.0
   pt_loss:
     type: Huber
-    delta: 10.0
+    delta: 1.0
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
 
 tensorflow:
   eager: no
@@ -71,13 +80,13 @@ sample_weights:
 parameters:
   model: gnn_dense  
   activation: elu
-  layernorm: yes
+  layernorm: no
   hidden_dim: 256
   bin_size: 32
   clip_value_low: 0.0
   conv_config:
     type: MPNNNodeFunction
-    output_dim: 128
+    output_dim: 256
     hidden_dim: 128
     num_layers: 3
     activation: elu
@@ -86,7 +95,6 @@ parameters:
   num_gsl: 3
   distance_dim: 16
   dropout: 0.0
-  separate_momentum: yes
   input_encoding: cms
   graph_kernel: learnable #gaussian, learnable
   skip_connection: yes

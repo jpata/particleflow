@@ -5,8 +5,6 @@
 
 import tensorflow as tf
 
-from .fast_attention import Attention, SelfAttention
-
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 
@@ -268,7 +266,7 @@ class MPNNNodeFunction(tf.keras.layers.Layer):
         avg_message = tf.reduce_mean(adj, axis=self.agg_dim)
         max_message = tf.reduce_max(adj, axis=self.agg_dim)
         x2 = tf.concat([x, avg_message, max_message], axis=-1)*msk
-        return self.ffn(x2)
+        return self.activation(self.ffn(x2))
 
 def point_wise_feed_forward_network(d_model, dff, num_layers=1, activation='elu', dtype=tf.dtypes.float32, name=None, dim_decrease=False):
     bias_regularizer =  tf.keras.regularizers.L1(regularizer_weight)
@@ -814,15 +812,22 @@ class PFNetDense(tf.keras.Model):
         self.ffn_id = point_wise_feed_forward_network(num_output_classes, dff, name="ffn_cls", dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True)
         self.ffn_charge = point_wise_feed_forward_network(1, dff, name="ffn_charge", dtype=tf.dtypes.float32, num_layers=2, activation=activation, dim_decrease=True)
         
-        if self.separate_momentum:
-            self.ffn_momentum = [
-                point_wise_feed_forward_network(
-                    1, dff, name="ffn_momentum{}".format(imomentum),
-                    dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True
-                ) for imomentum in range(num_momentum_outputs)
-            ]
-        else:
-            self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, dff, name="ffn_momentum", dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True)
+        self.ffn_pt = point_wise_feed_forward_network(
+            2, dff, name="ffn_pt",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+        )
+        self.ffn_eta = point_wise_feed_forward_network(
+            2, dff, name="ffn_eta",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+        )
+        self.ffn_phi = point_wise_feed_forward_network(
+            4, dff, name="ffn_phi",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+        )
+        self.ffn_energy = point_wise_feed_forward_network(
+            2, dff, name="ffn_energy",
+            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True
+        )
 
     def call(self, inputs, training=False):
         X = inputs
@@ -860,10 +865,6 @@ class PFNetDense(tf.keras.Model):
             dec_input_cls.append(enc)
         dec_input_cls += encs_id
 
-        # graph_sum = tf.reduce_sum(encs_id[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
-        # graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
-        # dec_input_cls.append(graph_sum)
-
         dec_output_id = tf.concat(dec_input_cls, axis=-1)*msk_input
         if self.debug:
             debugging_data["dec_output_id"] = dec_output_id
@@ -881,30 +882,37 @@ class PFNetDense(tf.keras.Model):
         if self.skip_connection:
             dec_input_reg.append(enc)
         if self.regression_use_classification:
-            dec_input_reg.append(tf.cast(tf.stop_gradient(out_id_logits), X.dtype))
+            dec_input_reg.append(tf.cast(out_id_logits, X.dtype))
         dec_input_reg += encs_reg
-
-        # graph_sum = tf.reduce_sum(encs_reg[-1], axis=-2)/tf.cast(tf.shape(X)[1], X.dtype)
-        # graph_sum = tf.tile(tf.expand_dims(graph_sum, 1), [1, tf.shape(X)[1], 1])
-        # dec_input_reg.append(graph_sum)
 
         dec_output_reg = tf.concat(dec_input_reg, axis=-1)*msk_input
         if self.debug:
             debugging_data["dec_output_reg"] = dec_output_reg
 
-        if self.separate_momentum:
-            pred_momentum = [ffn(dec_output_reg) for ffn in self.ffn_momentum]
-            pred_momentum = tf.concat(pred_momentum, axis=-1)
-        else:
-            pred_momentum = self.ffn_momentum(dec_output_reg)
-
         out_charge = tf.clip_by_value(out_charge, -2, 2)
 
-        pred_eta = X[:, :, 2:3] + pred_momentum[:, :, 1:2]/100.0
-        pred_sin_phi = tf.math.sin(X[:, :, 3:4]) + pred_momentum[:, :, 2:3]/100.0
-        pred_cos_phi = tf.math.cos(X[:, :, 3:4]) + pred_momentum[:, :, 3:4]/100.0
-        pred_energy = X[:, :, 4:5]*(1.0 + pred_momentum[:, :, 4:5])
-        pred_pt = pred_momentum[:, :, 0:1] * tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+        orig_pt = X[:, :, 1:2]
+        orig_eta = X[:, :, 2:3]
+        orig_sin_phi = tf.math.sin(X[:, :, 3:4])
+        orig_cos_phi = tf.math.cos(X[:, :, 3:4])
+        orig_energy = X[:, :, 4:5]
+
+        pred_eta_corr = self.ffn_eta(dec_output_reg)
+        pred_phi_corr = self.ffn_phi(dec_output_reg)
+        pred_energy_corr = self.ffn_energy(dec_output_reg)
+        pred_pt_corr = self.ffn_pt(dec_output_reg)
+
+        eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
+        sin_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
+        cos_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
+        energy_sigmoid = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+        pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
+        
+        pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
+        pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
+        pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
+        pred_energy = orig_energy*energy_sigmoid + tf.exp(tf.clip_by_value((1.0 - energy_sigmoid)*pred_energy_corr[:, :, 1:2], -8, 8))
+        pred_pt = orig_pt*pt_sigmoid + tf.exp(tf.clip_by_value((1.0 - pt_sigmoid)*pred_pt_corr[:, :, 1:2], -8, 8))
 
         ret = {
             "cls": out_id_softmax,
@@ -954,6 +962,37 @@ class PFNetDense(tf.keras.Model):
 
         for layer in layer_names:
             self.get_layer(layer).trainable = True
+
+    # def train_step(self, data):
+    #     # Unpack the data. Its structure depends on your model and
+    #     # on what you pass to `fit()`.
+    #     x, y, sample_weights = data
+
+    #     with tf.GradientTape() as tape:
+    #         y_pred = self(x, training=True)  # Forward pass
+    #         # Compute the loss value
+    #         # (the loss function is configured in `compile()`)
+    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+
+    #     ya = {k: v.numpy() for k, v in y.items()}
+    #     yb = {k: v.numpy() for k, v in y_pred.items()}
+    #     sw = {k: v.numpy() for k, v in sample_weights.items()}
+
+    #     np.savez("ytrue.npz", **ya)
+    #     np.savez("ypred.npz", **yb)
+    #     np.savez("x.npz", x=x)
+    #     np.savez("sample_weights.npz", **sample_weights)
+
+    #     # Compute gradients
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+    #     # Update weights
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     # Update metrics (includes the metric that tracks the loss)
+    #     self.compiled_metrics.update_state(y, y_pred)
+    #     # Return a dict mapping metric names to current value
+    #     return {m.name: m.result() for m in self.metrics}
+
 
 class DummyNet(tf.keras.Model):
     def __init__(self,
