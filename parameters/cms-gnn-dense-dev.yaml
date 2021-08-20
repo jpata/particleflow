@@ -48,14 +48,14 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 5e-4
-  batch_size: 10
+  lr: 1e-4
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 10
+  num_epochs: 100
   num_val_files: 10
   dtype: float32
-  trainable: classification
+  trainable:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
@@ -83,9 +83,9 @@ parameters:
     activation: elu
     aggregation_direction: dst
   num_conv: 1
-  num_gsl: 2
+  num_gsl: 3
   distance_dim: 16
-  dropout: 0.1
+  dropout: 0.0
   separate_momentum: yes
   input_encoding: cms
   graph_kernel: learnable #gaussian, learnable
