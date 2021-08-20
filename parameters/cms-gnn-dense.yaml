@@ -79,7 +79,6 @@ parameters:
   normalize_degrees: yes
   distance_dim: 128
   dropout: 0.2
-  separate_momentum: yes
   input_encoding: cms
   graph_kernel: gaussian #gaussian, learnable
   skip_connection: yes
