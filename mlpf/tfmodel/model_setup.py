@@ -59,11 +59,13 @@ def plot_to_image(figure):
     return image
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, X, y, dataset_transform, num_output_classes, freq=1):
+    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1):
         super(CustomCallback, self).__init__()
         self.X = X
         self.y = y
-        self.freq = freq
+        self.plot_freq = plot_freq
+
+        self.dataset_def = dataset_def
 
         #transform the prediction target from an array into a dictionary for easier access
         self.ytrue = dataset_transform(self.X, self.y, None)[1]
@@ -120,14 +122,16 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def plot_event_visualization(self, outpath, ypred, ypred_id, msk, ievent=0):
 
+        X_eta, X_phi, X_energy = self.dataset_def.get_X_eta_phi_energy(self.X)
+
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
 
         #Plot the input PFElements
         plt.axes(ax1)
         msk = self.X[ievent, :, 0] != 0
-        eta = self.X[ievent][msk][:, 2]
-        phi = self.X[ievent][msk][:, 3]
-        energy = self.X[ievent][msk][:, 4]
+        eta = X_eta[ievent][msk]
+        phi = X_phi[ievent][msk]
+        energy = X_energy[ievent][msk]
         typ = self.X[ievent][msk][:, 0]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in typ], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
@@ -227,7 +231,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
 
-        if epoch%self.freq!=0:
+        if epoch%self.plot_freq!=0:
             return
 
         #save the training logs (losses) for this epoch
@@ -237,7 +241,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
         cp_dir.mkdir(parents=True, exist_ok=True)
 
-        #run the model inference on the small validation dataset
+        #run the model inference on the validation dataset
         ypred = self.model.predict(self.X, batch_size=1)
 
         #choose the class with the highest probability as the prediction
@@ -261,7 +265,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
+def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes, dataset_def, plot_freq=1):
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
@@ -288,7 +292,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
-    cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
+    cb = CustomCallback(dataset_def, history_path, X_val, y_val, dataset_transform, num_output_classes, plot_freq=plot_freq)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -330,8 +334,8 @@ def make_gnn(config, dtype):
 
     parameters = [
         'bin_size',
-        'num_convs_id',
-        'num_convs_reg',
+        'num_node_messagess_id',
+        'num_node_messagess_reg',
         'num_hidden_id_enc',
         'num_hidden_id_dec',
         'num_hidden_reg_enc',
@@ -363,16 +367,15 @@ def make_gnn_dense(config, dtype):
         "layernorm",
         "hidden_dim",
         "bin_size",
-        "clip_value_low",
-        "num_conv",
-        "num_gsl",
+        "num_node_messages",
+        "num_graph_layers",
         "distance_dim",
         "dropout",
         "input_encoding",
         "graph_kernel",
         "skip_connection",
         "regression_use_classification",
-        "conv_config",
+        "node_message",
         "debug"
     ]
 
@@ -382,7 +385,7 @@ def make_gnn_dense(config, dtype):
         multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
+        schema=config["dataset"]["schema"],
         **kwargs
     )
 
@@ -392,7 +395,6 @@ def make_dense(config, dtype):
     model = DummyNet(
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
     )
     return model
 
@@ -534,285 +536,3 @@ def make_focal_loss(config):
             from_logits=bool(config["setup"].get("focal_loss_from_logits", False))
         )
     return loss
-
-def main(args, yaml_path, config):
-    #tf.debugging.enable_check_numerics()
-
-    #Switch off multi-output for the evaluation for backwards compatibility
-    multi_output = True
-    if args.action == "eval":
-        multi_output = False
-
-    tf.config.run_functions_eagerly(config['tensorflow']['eager'])
-
-    from tfmodel.data import Dataset
-    cds = config["dataset"]
-
-    raw_path = cds.get("raw_path", None)
-    if args.raw_path:
-        raw_path = args.raw_path
-
-    processed_path = cds.get("processed_path", None)
-    if args.processed_path:
-        processed_path = args.processed_path
-
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=raw_path,
-        raw_files=cds.get("raw_files", None),
-        processed_path=processed_path,
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"]
-    )
-
-    if args.action == "data":
-        dataset_def.process(
-            config["dataset"]["num_files_per_chunk"]
-        )
-        return
-
-    global_batch_size = config['setup']['batch_size']
-    config['setup']['multi_output'] = multi_output
-
-    model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8] + "." + platform.node()
-    print("model_name=", model_name)
-
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
-
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-    num_events = 0
-    for i in dataset:
-        num_events += 1
-    print("dataset loaded, len={}".format(num_events))
-
-    n_train = config['setup']['num_events_train']
-    n_test = config['setup']['num_events_test']
-
-    if args.ntrain:
-        n_train = args.ntrain
-    if args.ntest:
-        n_test = args.ntest
-
-    n_epochs = config['setup']['num_epochs']
-    weight_func = make_weight_function(config)
-    assert(n_train + n_test <= num_events)
-
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        {
-            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-        }
-    )
-
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-    dataset_transform = None
-    if multi_output:
-        dataset_transform = targets_multi_output(config['dataset']['num_output_classes'])
-        ds_train = ds_train.map(dataset_transform)
-        ds_test = ds_test.map(dataset_transform)
-
-    ds_train_r = ds_train.repeat(n_epochs)
-    ds_test_r = ds_test.repeat(n_epochs)
-
-    #small test dataset used in the callback for making monitoring plots
-    #X_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: x).as_numpy_iterator()))
-    #y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
-
-    weights = config['setup']['weights']
-    if args.weights:
-        weights = args.weights
-
-    if args.recreate or (weights is None):
-        outdir = 'experiments/{}'.format(model_name)
-        if os.path.isdir(outdir):
-            print("Output directory exists: {}".format(outdir), file=sys.stderr)
-            sys.exit(1)
-    else:
-        outdir = str(Path(weights).parent.parent)
-
-    try:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
-        num_gpus = len(gpus)
-        print("num_gpus=", num_gpus)
-        if num_gpus > 1:
-            strategy = tf.distribute.MirroredStrategy()
-            global_batch_size = num_gpus * global_batch_size
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    except Exception as e:
-        print("fallback to CPU", e)
-        strategy = tf.distribute.OneDeviceStrategy("cpu")
-        num_gpus = 0
-    
-    Xs = []
-    ygens = []
-    ycands = []
-    #for faster loading        
-    if args.action == "train":
-        val_filelist = dataset_def.val_filelist[:1]
-    else:
-        val_filelist = dataset_def.val_filelist
-        if config['setup']['num_val_files']>0:
-            val_filelist = val_filelist[:config['setup']['num_val_files']]
-
-    for fi in val_filelist:
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-
-    assert(len(Xs) > 0)
-    X_val = np.concatenate(Xs)
-    ygen_val = np.concatenate(ygens)
-    ycand_val = np.concatenate(ycands)
-
-    lr = float(config['setup']['lr'])
-    with strategy.scope():
-        total_steps = n_epochs * n_train // global_batch_size
-        lr_schedule, optim_callbacks = get_lr_schedule(config, lr, steps=total_steps)
-        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        if config['setup']['dtype'] == 'float16':
-            model_dtype = tf.dtypes.float16
-            from tensorflow.keras import mixed_precision
-            policy = mixed_precision.Policy('mixed_float16')
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
-
-        if args.action=="train" or args.action=="eval":
-            model = make_model(config, model_dtype)
-
-            #Evaluate model once to build the layers
-            print(X_val.shape)
-            model(tf.cast(X_val[:1], model_dtype))
-
-            initial_epoch = 0
-            if weights:
-                #need to load the weights in the same trainable configuration as the model was set up
-                configure_model_weights(model, config["setup"].get("weights_config", "all"))
-                model.load_weights(weights, by_name=True)
-                initial_epoch = int(weights.split("/")[-1].split("-")[1])
-            model(tf.cast(X_val[:1], model_dtype))
-
-            if config["setup"]["trainable"] == "classification":
-                config["dataset"]["pt_loss_coef"] = 0.0
-                config["dataset"]["eta_loss_coef"] = 0.0
-                config["dataset"]["sin_phi_loss_coef"] = 0.0
-                config["dataset"]["cos_phi_loss_coef"] = 0.0
-                config["dataset"]["energy_loss_coef"] = 0.0
-            elif config["setup"]["trainable"] == "regression":
-                config["dataset"]["classification_loss_coef"] = 0.0
-                config["dataset"]["charge_loss_coef"] = 0.0
-
-            #now set the desirable layers as trainable for the optimization
-            configure_model_weights(model, config["setup"]["trainable"])
-            model(tf.cast(X_val[:1], model_dtype))
-
-            if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-                cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
-            elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-                cls_loss = make_focal_loss(config)
-            else:
-                raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
-            
-            model.compile(
-                loss={
-                    "cls": cls_loss,
-                    "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-                    "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-                    "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-                    "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-                    "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-                    "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
-                },
-                optimizer=opt,
-                sample_weight_mode='temporal',
-                loss_weights={
-                    "cls": config["dataset"]["classification_loss_coef"],
-                    "charge": config["dataset"]["charge_loss_coef"],
-                    "pt": config["dataset"]["pt_loss_coef"],
-                    "eta": config["dataset"]["eta_loss_coef"],
-                    "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-                    "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-                    "energy": config["dataset"]["energy_loss_coef"],
-                },
-                metrics={
-                    "cls": [
-                        FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                        FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                    ] + [
-                        SingleClassRecall(
-                            icls,
-                            name="rec_cls{}".format(icls),
-                            dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
-                    ]
-                }
-            )
-            model.summary()
-            
-            if args.action=="train":
-                #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-                callbacks = prepare_callbacks(
-                    model, outdir, X_val, ycand_val,
-                    dataset_transform, config["dataset"]["num_output_classes"]
-                )
-                callbacks.append(optim_callbacks)
-
-                fit_result = model.fit(
-                    ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
-                    steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
-                    initial_epoch=initial_epoch
-                )
-                history_path = Path(outdir) / "history"
-                history_path = str(history_path)
-                with open("{}/history.json".format(history_path), "w") as fi:
-                    json.dump(fit_result.history, fi)
-                model.save(outdir + "/model_full", save_format="tf")
-            
-            if args.action=="eval":
-                eval_model(X_val, ygen_val, ycand_val, model, config, outdir, global_batch_size)
-                freeze_model(model, config, outdir)
-
-        if args.action=="time":
-            synthetic_timing_data = []
-            for iteration in range(config["timing"]["num_iter"]):
-                numev = config["timing"]["num_ev"]
-                for evsize in [128*10, 128*20, 128*30, 128*40, 128*50, 128*60, 128*70, 128*80, 128*90, 128*100]:
-                    for batch_size in [1,2,3,4]:
-                        x = np.random.randn(batch_size, evsize, config["dataset"]["num_input_features"]).astype(np.float32)
-
-                        model = make_model(config, model_dtype)
-                        model(x)
-
-                        if weights:
-                            model.load_weights(weights)
-
-                        t0 = time.time()
-                        for i in range(numev//batch_size):
-                            model(x)
-                        t1 = time.time()
-                        dt = t1 - t0
-
-                        time_per_event = 1000.0*(dt / numev)
-                        synthetic_timing_data.append(
-                                [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
-                        print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
-            with open("{}/synthetic_timing.json".format(outdir), "w") as fi:
-                json.dump(synthetic_timing_data, fi)
