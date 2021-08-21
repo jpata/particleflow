@@ -32,7 +32,7 @@ rm -Rf experiments/test-*
 
 #Run a simple training on a few events
 rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
+python3 mlpf/pipeline.py data -c parameters/test-cms.yaml
 
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/test-cms.yaml -p test-cms-
@@ -40,7 +40,5 @@ python3 mlpf/pipeline.py train -c parameters/test-cms.yaml -p test-cms-
 #Generate the pred.npz file of predictions
 python3 mlpf/pipeline.py evaluate -c parameters/test-cms.yaml -t ./experiments/test-cms-*
 
+#Load the model
 python3 scripts/test_load_tfmodel.py ./experiments/test-cms-*/model_frozen/frozen_graph.pb
-
-python3 mlpf/pipeline.py train -c parameters/test-cms-v2.yaml -p test-cms-v2-
-python3 mlpf/pipeline.py evaluate -c parameters/test-cms-v2.yaml -t ./experiments/test-cms-v2-*

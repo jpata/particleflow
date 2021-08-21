@@ -56,6 +56,7 @@ def create_experiment_dir(prefix=None, suffix=None):
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
+    print("Creating experiment dir {}".format(train_dir))
     return str(train_dir)
 
 

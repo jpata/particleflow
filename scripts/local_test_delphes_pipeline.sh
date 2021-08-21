@@ -17,7 +17,7 @@ rm -Rf experiments/test-*
 
 #Run a simple training on a few events
 rm -Rf data/pythia8_ttbar/tfr
-python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action data
+python3 mlpf/pipeline.py data -c parameters/test-delphes.yaml
 
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/test-delphes.yaml -p test-delphes-

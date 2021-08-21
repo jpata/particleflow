@@ -23,17 +23,32 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 5.0
-  charge_loss_coef: 0.1
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
   pt_loss_coef: 1.0
-  eta_loss_coef: 0.1
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
-  energy_loss_coef: 0.01
+  eta_loss_coef: 100.0
+  sin_phi_loss_coef: 100.0
+  cos_phi_loss_coef: 100.0
+  energy_loss_coef: 1.0
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
+  energy_loss:
+    type: Huber
+    delta: 1.0
+  pt_loss:
+    type: Huber
+    delta: 1.0
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
 
 tensorflow:
   eager: no
@@ -42,22 +57,19 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 2e-5
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 500
-  num_val_files: 100
+  num_epochs: 10
+  num_val_files: 10
   dtype: float32
-  trainable: classification
-  classification_loss_type: sigmoid_focal_crossentropy
-  focal_loss_alpha: 0.25
-  focal_loss_gamma: 3.0
-  focal_loss_from_logits: False
+  trainable:
+  classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 sample_weights:
-  cls: none
+  cls: inverse_sqrt
   charge: signal_only
   pt: signal_only
   eta: signal_only
@@ -67,18 +79,26 @@ sample_weights:
 
 parameters:
   model: gnn_dense
+  input_encoding: cms
   activation: elu
   layernorm: no
   hidden_dim: 256
   bin_size: 640
-  clip_value_low: 0.01
-  num_conv: 2
-  num_gsl: 2
-  normalize_degrees: yes
   distance_dim: 128
-  dropout: 0.2
-  separate_momentum: yes
-  input_encoding: cms
+  dropout: 0.0
+  graph_kernel:
+    type: NodePairGaussianKernel
+    dist_mult: 0.1
+    clip_value_low: 0.1
+  num_graph_layers: 2
+  node_message:
+    type: GHConvDense
+    output_dim: 128
+    activation: elu
+    normalize_degrees: yes
+  num_node_messages: 2
+  skip_connection: yes
+  regression_use_classification: yes
   debug: no
 
 timing:
