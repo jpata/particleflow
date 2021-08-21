@@ -196,16 +196,6 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
 
     print("Training done.")
 
-    print("Starting evaluation...")
-    eval_dir = Path(outdir) / "evaluation"
-    eval_dir.mkdir()
-    eval_dir = str(eval_dir)
-    # TODO: change to use the evaluate() function below instead of eval_model()
-    eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-    print("Evaluation done.")
-
-    freeze_model(model, config, outdir)
-
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -213,7 +203,8 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-def evaluate(config, train_dir, weights, evaluation_dir):
+@click.option("-v", "--validation_files", help="optionally override validation file path", type=click.Path(), default=None)
+def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
@@ -237,32 +228,31 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     dataset_def = get_dataset_def(config)
+    
+    if not (validation_files is None):
+        dataset_def.val_filelist = glob.glob(str(validation_files))
+
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
+    model = make_model(config, model_dtype)
 
-    with strategy.scope():
-        model = make_model(config, model_dtype)
+    # Evaluate model once to build the layers
+    print(X_val.shape)
+    model(tf.cast(X_val[:1], model_dtype))
 
-        # Evaluate model once to build the layers
-        print(X_val.shape)
-        model(tf.cast(X_val[:1], model_dtype))
+    # need to load the weights in the same trainable configuration as the model was set up
+    configure_model_weights(model, config["setup"].get("weights_config", "all"))
+    if weights:
+        model.load_weights(weights, by_name=True)
+    else:
+        weights = get_best_checkpoint(train_dir)
+        print("Loading best weights that could be found from {}".format(weights))
+        model.load_weights(weights, by_name=True)
+    model(tf.cast(X_val[:1], model_dtype))
 
-        # need to load the weights in the same trainable configuration as the model was set up
-        configure_model_weights(model, config["setup"].get("weights_config", "all"))
-        if weights:
-            model.load_weights(weights, by_name=True)
-        else:
-            weights = get_best_checkpoint(train_dir)
-            print("Loading best weights that could be found from {}".format(weights))
-            model.load_weights(weights, by_name=True)
-        model(tf.cast(X_val[:1], model_dtype))
-
-        model.compile()
-        eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-        freeze_model(model, config, train_dir)
+    model.compile()
+    eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
+    freeze_model(model, config, train_dir)
 
 
 @main.command()
