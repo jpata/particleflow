@@ -1,4 +1,4 @@
-from .model import DummyNet, PFNet, PFNetDense
+from .model import DummyNet, PFNetDense
 
 import tensorflow as tf
 import tensorflow_probability
@@ -321,45 +321,13 @@ def scale_outputs(X,y,w):
 
 def make_model(config, dtype):
     model = config['parameters']['model']
-    if model == 'gnn':
-        return make_gnn(config, dtype)
-    elif model == 'dense':
+
+    if model == 'dense':
         return make_dense(config, dtype)
     elif model == 'gnn_dense':
         return make_gnn_dense(config, dtype)
+
     raise KeyError("Unknown model type {}".format(model))
-
-def make_gnn(config, dtype):
-    activation = getattr(tf.nn, config['parameters']['activation'])
-
-    parameters = [
-        'bin_size',
-        'num_node_messagess_id',
-        'num_node_messagess_reg',
-        'num_hidden_id_enc',
-        'num_hidden_id_dec',
-        'num_hidden_reg_enc',
-        'num_hidden_reg_dec',
-        'num_neighbors',
-        'hidden_dim_id',
-        'hidden_dim_reg',
-        'dist_mult',
-        'distance_dim',
-        'dropout',
-        'skip_connection'
-    ]
-    kwargs = {par: config['parameters'][par] for par in parameters}
-
-    model = PFNet(
-        multi_output=config["setup"]["multi_output"],
-        num_input_classes=config["dataset"]["num_input_classes"],
-        num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        activation=activation,
-        **kwargs
-    )
-
-    return model
 
 def make_gnn_dense(config, dtype):
 
