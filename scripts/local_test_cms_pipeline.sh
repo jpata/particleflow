@@ -6,7 +6,7 @@ rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi
 mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
-#Only CMS-internal use is permitted by CMS rules
+#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_1.root
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_2.root
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_3.root

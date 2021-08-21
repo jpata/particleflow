@@ -16,7 +16,7 @@
 Short instructions with a single test file in [notebooks/delphes-tf-mlpf-quickstart.ipynb](notebooks/delphes-tf-mlpf-quickstart.ipynb).
 
 Long instructions for reproducing the full training from scratch in [README_delphes.md](README_delphes.md).
-The plots can be generated using the notebook [delphes/resolution_checks.ipynb](delphes/resolution_checks.ipynb).
+The plots can be generated using the notebook [delphes/delphes_model_analysis.ipynb](delphes/delphes_model_analysis.ipynb).
 
 ### Delphes dataset
 The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4559324.
