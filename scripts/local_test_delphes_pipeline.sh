@@ -24,7 +24,3 @@ python3 mlpf/pipeline.py train -c parameters/test-delphes.yaml -p test-delphes-
 
 #Generate the pred.npz file of predictions
 python3 mlpf/pipeline.py evaluate -c parameters/test-delphes.yaml -t ./experiments/test-delphes-*
-
-#Generate the timing file
-python3 mlpf/launcher.py --model-spec parameters/test-delphes.yaml --action time --weights ./experiments/test-delphes-*/weights/weights-01-*.hdf5
-
