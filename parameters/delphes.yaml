@@ -7,15 +7,16 @@ dataset:
   num_output_features: 7
   #(none=0, track=1, cluster=2)
   num_input_classes: 3
+  #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5) 
   num_output_classes: 6
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
   classification_loss_coef: 1.0
-  charge_loss_coef: 0.1
+  charge_loss_coef: 1.0
   pt_loss_coef: 1.0
-  eta_loss_coef: 0.1
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
+  eta_loss_coef: 100.0
+  sin_phi_loss_coef: 100.0
+  cos_phi_loss_coef: 100.0
   energy_loss_coef: 1.0
   raw_path: data/pythia8_ttbar/raw/*.pkl.bz2
   processed_path: data/pythia8_ttbar/tfr/*.tfrecords
@@ -36,22 +37,22 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
-    
+
 tensorflow:
   eager: no
 
 setup:
   train: yes
-  weights: 
+  weights:
+  weights_config:
   lr: 1e-4
   batch_size: 5
-  num_events_train: 4000
-  num_events_test: 10000
+  num_events_train: 45000
+  num_events_test: 5000
   num_epochs: 10
-  num_val_files: 2
+  num_val_files: 5
   dtype: float32
-  trainable: all
-  multi_output: yes
+  trainable:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
@@ -70,24 +71,19 @@ parameters:
   activation: elu
   layernorm: no
   hidden_dim: 256
-  bin_size: 32
-  distance_dim: 16
+  bin_size: 640
+  distance_dim: 128
   dropout: 0.0
   graph_kernel:
-    type: NodePairTrainableKernel
-    output_dim: 32
-    hidden_dim: 32
-    num_layers: 2
-    activation: elu
-  num_graph_layers: 3
+    type: NodePairGaussianKernel
+    dist_mult: 0.1
+    clip_value_low: 0.1
+  num_graph_layers: 2
   node_message:
-    type: NodeMessageLearnable
-    output_dim: 256
-    hidden_dim: 128
-    num_layers: 3
+    type: GHConvDense
+    output_dim: 128
     activation: elu
-    aggregation_direction: dst
-  num_node_messages: 1
+  num_node_messages: 2
   skip_connection: yes
   regression_use_classification: yes
   debug: no

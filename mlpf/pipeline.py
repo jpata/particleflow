@@ -89,7 +89,7 @@ def data(config):
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
-@click.option("--plot-freq", default=1, help="Plot detailed validation every N epochs", type=str)
+@click.option("--plot-freq", default=1, help="Plot detailed validation every N epochs", type=int)
 def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
     """Train a model defined by config"""
     config_file_path = config
@@ -228,7 +228,7 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         model_dtype = tf.dtypes.float32
 
     dataset_def = get_dataset_def(config)
-    
+
     if not (validation_files is None):
         dataset_def.val_filelist = glob.glob(str(validation_files))
 
@@ -253,7 +253,6 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
     model.compile()
     eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
     freeze_model(model, config, train_dir)
-
 
 @main.command()
 @click.help_option("-h", "--help")
