@@ -50,7 +50,7 @@ sample_weights:
   
 parameters:
   model: gnn_dense
-  input_encoding: cms
+  input_encoding: default
   activation: elu
   layernorm: no
   hidden_dim: 128
