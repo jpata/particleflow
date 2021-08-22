@@ -214,12 +214,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
             vals_true = np.log(vals_true)
             s = "_log"
 
-        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(1.0+hub_loss))
+        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(2.0+hub_loss))
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
             if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
-                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--")
+                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
                 plt.xlim(minval, maxval)
                 plt.ylim(minval, maxval)
 
@@ -262,6 +262,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
                 self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
             self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
+            self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 

@@ -371,11 +371,12 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
 
 class OutputDecoding(tf.keras.layers.Layer):
-    def __init__(self, activation, hidden_dim, regression_use_classification, num_output_classes, schema, **kwargs):
+    def __init__(self, activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout, **kwargs):
         super(OutputDecoding, self).__init__(**kwargs)
 
         self.regression_use_classification = regression_use_classification
         self.schema = schema
+        self.dropout = dropout
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes, hidden_dim,
@@ -383,7 +384,8 @@ class OutputDecoding(tf.keras.layers.Layer):
             dtype=tf.dtypes.float32,
             num_layers=4,
             activation=activation,
-            dim_decrease=True
+            dim_decrease=True,
+            dropout=dropout
         )
         self.ffn_charge = point_wise_feed_forward_network(
             1, hidden_dim,
@@ -391,24 +393,29 @@ class OutputDecoding(tf.keras.layers.Layer):
             dtype=tf.dtypes.float32,
             num_layers=2,
             activation=activation,
-            dim_decrease=True
+            dim_decrease=True,
+            dropout=dropout
         )
         
         self.ffn_pt = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+            4, hidden_dim, "ffn_pt",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dropout=dropout
         )
         self.ffn_eta = point_wise_feed_forward_network(
             2, hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dropout=dropout
         )
         self.ffn_phi = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dropout=dropout
         )
         self.ffn_energy = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True
+            4, hidden_dim, "ffn_energy",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dropout=dropout
         )
 
     """
@@ -423,7 +430,7 @@ class OutputDecoding(tf.keras.layers.Layer):
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = self.ffn_charge(X_encoded_id)*msk_input
 
-        orig_pt = X_input[:, :, 1:2]
+        #orig_pt = X_input[:, :, 1:2]
         orig_eta = X_input[:, :, 2:3]
 
         #FIXME: schema 
@@ -437,7 +444,7 @@ class OutputDecoding(tf.keras.layers.Layer):
             orig_energy = X_input[:, :, 5:6]
 
         if self.regression_use_classification:
-            X_encoded_reg = tf.concat([X_encoded_reg, out_id_logits], axis=-1)
+            X_encoded_reg = tf.concat([X_encoded_reg, tf.stop_gradient(out_id_logits)], axis=-1)
 
         pred_eta_corr = self.ffn_eta(X_encoded_reg)
         pred_phi_corr = self.ffn_phi(X_encoded_reg)
@@ -453,8 +460,13 @@ class OutputDecoding(tf.keras.layers.Layer):
         pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
         pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
         pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
-        pred_energy = orig_energy*energy_sigmoid + tf.exp(tf.clip_by_value((1.0 - energy_sigmoid)*pred_energy_corr[:, :, 1:2], -8, 8))
-        pred_pt = orig_pt*pt_sigmoid + tf.exp(tf.clip_by_value((1.0 - pt_sigmoid)*pred_pt_corr[:, :, 1:2], -8, 8))
+        
+        pred_energy = (orig_energy*energy_sigmoid + (1.0 - energy_sigmoid)*(
+            pred_energy_corr[:, :, 1:2]*orig_energy*orig_energy + pred_energy_corr[:, :, 2:3]*orig_energy + pred_energy_corr[:, :, 3:4]))
+        
+        orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+        pred_pt = (orig_pt*pt_sigmoid + (1.0 - pt_sigmoid)*(
+            pred_pt_corr[:, :, 1:2]*orig_pt*orig_pt + pred_pt_corr[:, :, 2:3]*orig_pt + pred_pt_corr[:, :, 3:4]))
 
         ret = {
             "cls": out_id_softmax,
@@ -485,7 +497,13 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
-        self.ffn_dist = point_wise_feed_forward_network(self.distance_dim, self.hidden_dim, kwargs.get("name") + "_ffn_dist", num_layers=2, activation="elu", dropout=self.dropout)
+        self.ffn_dist = point_wise_feed_forward_network(
+            self.distance_dim,
+            self.hidden_dim,
+            kwargs.get("name") + "_ffn_dist",
+            num_layers=2, activation="elu",
+            dropout=self.dropout
+        )
         self.message_building_layer = MessageBuildingLayerLSH(
             distance_dim=self.distance_dim,
             max_num_bins=self.max_num_bins,
@@ -579,7 +597,7 @@ class PFNetDense(tf.keras.Model):
         self.cg_id = [CombinedGraphLayer(name="cg_id_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
         self.cg_reg = [CombinedGraphLayer(name="cg_reg_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
 
-        self.output_dec = OutputDecoding(self.activation, hidden_dim, regression_use_classification, num_output_classes, schema)
+        self.output_dec = OutputDecoding(self.activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout)
 
     def call(self, inputs, training=False):
         X = inputs
