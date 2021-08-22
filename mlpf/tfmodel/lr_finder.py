@@ -46,7 +46,7 @@ class LRFinder(Callback):
             if step == 0 or loss < self.best_loss:
                 self.best_loss = loss
 
-            if smooth_loss > 4 * self.best_loss or tf.math.is_nan(smooth_loss):
+            if smooth_loss > 100 * self.best_loss or tf.math.is_nan(smooth_loss):
                 self.model.stop_training = True
                 print("Loss reached predefined maximum... stopping")
         if step >= self.max_steps:
