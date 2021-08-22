@@ -191,7 +191,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
-    def plot_corr(self, outpath, ypred, ypred_id, msk, icls, reg_variable, log=False):
+    def plot_corr(self, epoch, outpath, ypred, ypred_id, msk, icls, reg_variable, log=False):
 
         if icls==0:
             sel = (self.ytrue_id[msk]!=0) & (ypred_id[msk]!=0)
@@ -203,13 +203,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #FIXME: propagate from configuration
         if reg_variable == "energy" or reg_variable == "pt":
-            delta = 1.0
+            loss = tf.keras.losses.MeanSquaredLogarithmicError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             delta = 0.1
-        
-        loss = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
+            loss = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
         loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
 
+        #suffix for log-transformed variable
         s = ""
         if log:
             vals_pred = np.log(vals_pred)
@@ -230,6 +230,21 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.title("{}, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
         plt.savefig(str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s)), bbox_inches="tight")
         plt.close("all")
+
+        #Also plot the residuals, as we have the true and predicted values already available here
+        plt.figure()
+        residual = vals_true - vals_pred
+        residual[np.isnan(residual)] = 0
+        residual[np.isinf(residual)] = 0
+        plt.hist(residual, bins=100)
+        plt.xlabel("true - pred")
+        plt.title("{} residual, m={:.2f} s={:.2f}".format(reg_variable, np.mean(residual), np.std(residual)))
+        plt.savefig(str(outpath / "{}_residual{}.png".format(reg_variable, s)), bbox_inches="tight")
+        plt.close("all")
+
+        # FIXME: for some reason, these don't end up on the tensorboard
+        # tf.summary.scalar('residual_{}{}_mean'.format(reg_variable, s), data=np.mean(residual), step=epoch)
+        # tf.summary.scalar('residual_{}{}_std'.format(reg_variable, s), data=np.std(residual), step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
 
@@ -262,9 +277,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
-                self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
-            self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
-            self.plot_corr(cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
+                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, variable)
+            self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
+            self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
