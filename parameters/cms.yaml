@@ -35,9 +35,11 @@ dataset:
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
   energy_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
+    delta: 1.0
   pt_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
+    delta: 1.0
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -55,7 +57,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
+  lr: 1e-4
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
