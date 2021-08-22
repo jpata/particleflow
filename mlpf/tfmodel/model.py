@@ -399,22 +399,22 @@ class OutputDecoding(tf.keras.layers.Layer):
         
         self.ffn_pt = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=False,
             dropout=dropout
         )
         self.ffn_eta = point_wise_feed_forward_network(
             2, hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
         self.ffn_phi = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
         self.ffn_energy = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=False,
             dropout=dropout
         )
 

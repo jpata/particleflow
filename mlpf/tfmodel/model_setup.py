@@ -201,12 +201,14 @@ class CustomCallback(tf.keras.callbacks.Callback):
         vals_pred = ypred[reg_variable][msk][sel].flatten()
         vals_true = self.ytrue[reg_variable][msk][sel].flatten()
 
-        #manually as in configuration, later can propagate
-        delta = 0.1
+        #FIXME: propagate from configuration
         if reg_variable == "energy" or reg_variable == "pt":
             delta = 1.0
-        hub = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
-        hub_loss = hub(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
+        else:
+            delta = 0.1
+        
+        loss = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
+        loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
 
         s = ""
         if log:
@@ -214,7 +216,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             vals_true = np.log(vals_true)
             s = "_log"
 
-        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(2.0+hub_loss))
+        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=loss_vals)
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -225,7 +227,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         plt.xlabel("predicted")
         plt.ylabel("true")
-        plt.title("{}, HL={:.4f}".format(reg_variable, np.sum(hub_loss)))
+        plt.title("{}, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
         plt.savefig(str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s)), bbox_inches="tight")
         plt.close("all")
 
