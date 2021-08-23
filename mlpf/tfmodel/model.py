@@ -399,22 +399,22 @@ class OutputDecoding(tf.keras.layers.Layer):
         
         self.ffn_pt = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=False,
+            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True,
             dropout=dropout
         )
         self.ffn_eta = point_wise_feed_forward_network(
             2, hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
         self.ffn_phi = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
         self.ffn_energy = point_wise_feed_forward_network(
             1, hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
         self.ffn_energy_sigmoid = point_wise_feed_forward_network(
@@ -429,11 +429,11 @@ class OutputDecoding(tf.keras.layers.Layer):
     X_encoded_reg: (n_batch, n_elements, n_encoded_features)
     msk_input: (n_batch, n_elements) boolean mask
     """
-    def call(self, X_input, X_encoded_id, X_encoded_reg, X_encoded_energy, msk_input):
+    def call(self, X_input, X_encoded, msk_input):
 
-        out_id_logits = self.ffn_id(X_encoded_id)*msk_input
+        out_id_logits = self.ffn_id(X_encoded)*msk_input
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
-        out_charge = self.ffn_charge(X_encoded_id)*msk_input
+        out_charge = self.ffn_charge(X_encoded)*msk_input
 
         #orig_pt = X_input[:, :, 1:2]
         orig_eta = X_input[:, :, 2:3]
@@ -449,10 +449,10 @@ class OutputDecoding(tf.keras.layers.Layer):
             orig_energy = X_input[:, :, 5:6]
 
         if self.regression_use_classification:
-            X_encoded_reg = tf.concat([X_encoded_reg, out_id_logits], axis=-1)
+            X_encoded = tf.concat([X_encoded, out_id_logits], axis=-1)
 
-        pred_eta_corr = self.ffn_eta(X_encoded_reg)
-        pred_phi_corr = self.ffn_phi(X_encoded_reg)
+        pred_eta_corr = self.ffn_eta(X_encoded)
+        pred_phi_corr = self.ffn_phi(X_encoded)
 
         eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
         pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
@@ -462,11 +462,11 @@ class OutputDecoding(tf.keras.layers.Layer):
         pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
         pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
 
-        pred_energy_corr = self.ffn_energy(X_encoded_energy)
-        energy_sigmoid = tf.keras.activations.sigmoid(self.ffn_energy_sigmoid(X_encoded_energy))
+        pred_energy_corr = self.ffn_energy(X_encoded)
+        energy_sigmoid = tf.keras.activations.sigmoid(self.ffn_energy_sigmoid(X_encoded))
         pred_energy = orig_energy*energy_sigmoid + (1.0 - energy_sigmoid)*pred_energy_corr[:, :, 0:1]
         
-        pred_pt_corr = self.ffn_pt(X_encoded_energy)
+        pred_pt_corr = self.ffn_pt(X_encoded)
         orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
         pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
         pred_pt = orig_pt*pt_sigmoid + (1.0 - pt_sigmoid)*pred_pt_corr[:, :, 1:2]
@@ -572,6 +572,7 @@ class PFNetDense(tf.keras.Model):
         self.activation = activation
         self.focal_loss_from_logits = focal_loss_from_logits
         self.debug = debug
+        self.separate_graph_layers = False
 
         self.skip_connection = skip_connection
 
@@ -583,9 +584,6 @@ class PFNetDense(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        self.ffn_enc_id = point_wise_feed_forward_network(hidden_dim, hidden_dim, "ffn_enc_id", activation=activation)
-        self.ffn_enc_reg = point_wise_feed_forward_network(hidden_dim, hidden_dim, "ffn_enc_reg", activation=activation)
-        self.ffn_enc_energy = point_wise_feed_forward_network(hidden_dim, hidden_dim, "ffn_enc_energy", activation=activation)
 
         kwargs_cg = {
             "max_num_bins": max_num_bins,
@@ -598,78 +596,41 @@ class PFNetDense(tf.keras.Model):
             "node_message": node_message,
             "hidden_dim": hidden_dim
         }
-        self.cg_id = [CombinedGraphLayer(name="cg_id_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
-        self.cg_reg = [CombinedGraphLayer(name="cg_reg_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
-        self.cg_energy = [CombinedGraphLayer(name="cg_energy_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
+
+        self.ffn_enc = point_wise_feed_forward_network(hidden_dim, hidden_dim, "ffn_enc", activation=activation)
+        self.cg = [CombinedGraphLayer(name="cg_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
 
         self.output_dec = OutputDecoding(self.activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout)
 
     def call(self, inputs, training=False):
         X = inputs
+        debugging_data = {}
 
         #mask padded elements
         msk = X[:, :, 0] != 0
         msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
-        enc = self.enc(X)
-        enc_id = self.activation(self.ffn_enc_id(enc))
-        encs_id = []
-
-        debugging_data = {}
-
         #encode the elements for classification (id)
-        for cg in self.cg_id:
-            enc_id_all = cg(enc_id, msk, training)
-            enc_id = enc_id_all["enc"]
+        enc = self.enc(X)
+
+        enc_cg = self.activation(self.ffn_enc(enc))
+        encs = []
+        for cg in self.cg:
+            enc_all = cg(enc_cg, msk, training)
+            enc_cg = enc_all["enc"]
             if self.debug:
-                debugging_data[cg.name] = enc_id_all
-            encs_id.append(enc_id)
+                debugging_data[cg.name] = enc_all
+            encs.append(enc_cg)
 
-        #encode the elements for regression
-        enc_reg = self.activation(self.ffn_enc_reg(enc))
-        encs_reg = []
-        for cg in self.cg_reg:
-            enc_reg_all = cg(enc_reg, msk, training)
-            enc_reg = enc_reg_all["enc"]
-            if self.debug:
-                debugging_data[cg.name] = enc_reg_all
-            encs_reg.append(enc_reg)
-
-        #encode the elements for energy regression
-        enc_energy = self.activation(self.ffn_enc_energy(enc))
-        encs_energy = []
-        for cg in self.cg_energy:
-            enc_energy_all = cg(enc_energy, msk, training)
-            enc_energy = enc_energy_all["enc"]
-            if self.debug:
-                debugging_data[cg.name] = enc_energy_all
-            encs_energy.append(enc_energy)
-
-        dec_input_cls = []
+        dec_input = []
         if self.skip_connection:
-            dec_input_cls.append(enc)
-        dec_input_cls += encs_id
-        dec_output_id = tf.concat(dec_input_cls, axis=-1)*msk_input
+            dec_input.append(enc)
+        dec_input += encs
+        dec_output = tf.concat(dec_input, axis=-1)*msk_input
         if self.debug:
-            debugging_data["dec_output_id"] = dec_output_id
+            debugging_data["dec_output"] = dec_output
 
-        dec_input_reg = []
-        if self.skip_connection:
-            dec_input_reg.append(enc)
-        dec_input_reg += encs_reg
-        dec_output_reg = tf.concat(dec_input_reg, axis=-1)*msk_input
-        if self.debug:
-            debugging_data["dec_output_reg"] = dec_output_reg
-
-        dec_input_energy = []
-        if self.skip_connection:
-            dec_input_energy.append(enc)
-        dec_input_energy += encs_energy
-        dec_output_energy = tf.concat(dec_input_energy, axis=-1)*msk_input
-        if self.debug:
-            debugging_data["dec_output_energy"] = dec_output_energy
-
-        ret = self.output_dec(X, dec_output_id, dec_output_reg, dec_output_energy, msk_input)
+        ret = self.output_dec(X, dec_output, msk_input)
 
         if self.debug:
             for k in debugging_data.keys():
