@@ -88,7 +88,7 @@ parameters:
     type: NodePairGaussianKernel
     dist_mult: 0.1
     clip_value_low: 0.0
-  num_graph_layers: 5
+  num_graph_layers: 6
   node_message:
     type: GHConvDense
     output_dim: 256
