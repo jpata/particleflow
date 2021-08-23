@@ -166,11 +166,16 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
         )
         model.summary()
 
+    validation_particles = None
+    if config["dataset"]["target_particles"] == "cand":
+        validation_particles = ycand_val
+    elif config["dataset"]["target_particles"] == "gen":
+        validation_particles = ycand_val
     callbacks = prepare_callbacks(
         model,
         outdir,
         X_val,
-        ycand_val,
+        validation_particles,
         dataset_transform,
         config["dataset"]["num_output_classes"],
         dataset_def,

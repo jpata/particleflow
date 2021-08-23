@@ -238,7 +238,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         residual[np.isinf(residual)] = 0
         plt.hist(residual, bins=100)
         plt.xlabel("true - pred")
-        plt.title("{} residual, m={:.2f} s={:.2f}".format(reg_variable, np.mean(residual), np.std(residual)))
+        plt.title("{} residual, m={:.4f} s={:.4f}".format(reg_variable, np.mean(residual), np.std(residual)))
         plt.savefig(str(outpath / "{}_residual{}.png".format(reg_variable, s)), bbox_inches="tight")
         plt.close("all")
 

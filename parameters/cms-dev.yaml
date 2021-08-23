@@ -56,7 +56,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 5
+  batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 50
@@ -90,12 +90,12 @@ parameters:
     hidden_dim: 32
     num_layers: 2
     activation: elu
-  num_graph_layers: 3
+  num_graph_layers: 2
   node_message:
     type: NodeMessageLearnable
-    output_dim: 256
+    output_dim: 512
     hidden_dim: 128
-    num_layers: 3
+    num_layers: 2
     activation: elu
     aggregation_direction: dst
   num_node_messages: 1
