@@ -50,5 +50,3 @@ def data_to_loader_qcd(full_dataset, n_test, batch_size):
         test_loader = DataListLoader(test_data, batch_size=batch_size, shuffle=True)
 
     return test_loader
-
-#----------------------------------------------------------------------------------------

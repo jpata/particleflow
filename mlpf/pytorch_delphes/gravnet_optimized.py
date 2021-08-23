@@ -1,4 +1,3 @@
-#BEFORE OPTIMIZATION
 from typing import Optional, Union
 from torch_geometric.typing import OptTensor, PairTensor, PairOptTensor
 import time
@@ -10,9 +9,9 @@ from torch_scatter import scatter
 from torch_geometric.nn.conv import MessagePassing
 
 try:
-    from torch_cluster import knn ###############USES OLD KNN#########################
+    from torch_cmspepr import knn_graph ###########remember to do pip intsall .###############
 except ImportError:
-    knn = None
+    knn_graph = None
 
 # copied it from pytorch_geometric source code
 # ADDED: retrieve edge_index, retrieve edge_weight
@@ -20,7 +19,7 @@ except ImportError:
 # CHANGED: used reduce='sum' instead of reduce='mean' in the message passing
 # REMOVED: skip connection
 
-class GravNetConv(MessagePassing):
+class GravNetConv_optimized(MessagePassing):
     r"""The GravNet operator from the `"Learning Representations of Irregular
     Particle-detector Geometry with Distance-weighted Graph
     Networks" <https://arxiv.org/abs/1902.07987>`_ paper, where the graph is
@@ -30,6 +29,7 @@ class GravNetConv(MessagePassing):
     A second projection of the input feature space is then propagated from the
     neighbors to each vertex using distance weights that are derived by
     applying a Gaussian function to the distances.
+    
     Args:
         in_channels (int): The number of input channels.
         out_channels (int): The number of output channels.
@@ -48,10 +48,10 @@ class GravNetConv(MessagePassing):
     def __init__(self, in_channels: int, out_channels: int,
                  space_dimensions: int, propagate_dimensions: int, k: int,
                  num_workers: int = 1, **kwargs):
-        super(GravNetConv, self).__init__(flow='target_to_source', **kwargs)
+        super(GravNetConv_optimized, self).__init__(flow='target_to_source', **kwargs)
 
-        if knn is None:
-            raise ImportError('`GravNetConv` requires `torch-cluster`.')
+        if knn_graph is None:
+            raise ImportError('`GravNetConv_optimized` requires `torch_cmspepr`.')
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -92,9 +92,7 @@ class GravNetConv(MessagePassing):
 
         s_l: Tensor = self.lin_s(x[0])
         s_r: Tensor = self.lin_s(x[1]) if is_bipartite else s_l
-
-        edge_index = knn(s_l, s_r, self.k, b[0], b[1],
-                         num_workers=self.num_workers)
+        edge_index = knn_graph(s_l, self.k, b[0])##########################CHANGED###################################
 
         edge_weight = (s_l[edge_index[1]] - s_r[edge_index[0]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread

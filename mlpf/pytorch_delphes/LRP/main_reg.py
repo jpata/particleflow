@@ -65,9 +65,6 @@ from LRP_reg_gpu import LRP_reg
 
 from model_io import model_io
 
-import networkx as nx
-from torch_geometric.utils.convert import to_networkx
-
 # NOTE: this script works by loading an already trained model
 
 #Get a unique directory name for the model
@@ -176,6 +173,8 @@ def make_heatmaps(big_list, to_explain, task):
         output_dim = output_dim_id
 
     for pid in range(output_dim_id):
+        if pid!=1:
+            continue
         for node_i in range(len(list[pid])): # iterate over the nodes in each list
             print('- making heatmap for', map_index_to_pid(pid), 'node #:', node_i+1, '/', len(list[pid]))
             for output_neuron in range(output_dim):
@@ -238,22 +237,23 @@ def make_heatmaps(big_list, to_explain, task):
                     plt.savefig(outpath + f'/LRP/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                 plt.close(fig)
 
+
 if __name__ == "__main__":
 
-    args = parse_args()
+    # args = parse_args()
 
-    # # the next part initializes some args values (to run the script not from terminal)
-    # class objectview(object):
-    #     def __init__(self, d):
-    #         self.__dict__ = d
-    #
-    # args = objectview({'n_train': 1, 'n_valid': 1, 'n_test': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':256, 'input_encoding': 12, 'encoding_dim': 64,
-    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'gen', 'LRP_dataset': '../../../test_tmp_delphes/data/pythia8_ttbar', 'LRP_dataset_qcd': '../../../test_tmp_delphes/data/pythia8_qcd',
-    # 'LRP_outpath': '../../../prp/models/LRP/', 'optimizer': 'adam', 'lr': 0.001, 'alpha': 1, 'dropout': 0,
-    # 'space_dim': 4, 'propagate_dimensions': 22,'nearest': 16, 'overwrite': True,
-    # 'LRP_load_epoch': 9, 'LRP_load_model': 'LRP_reg_PFNet7_gen_ntrain_1_nepochs_10_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
-    # 'explain': False, 'make_heatmaps_clf': True,'make_heatmaps_reg': True,
-    # 'clf': True, 'reg': True})
+    # the next part initializes some args values (to run the script not from terminal)
+    class objectview(object):
+        def __init__(self, d):
+            self.__dict__ = d
+
+    args = objectview({'n_train': 1, 'n_valid': 1, 'n_test': 2, 'n_epochs': 2, 'patience': 100, 'hidden_dim':256, 'input_encoding': 12, 'encoding_dim': 64,
+    'batch_size': 1, 'model': 'PFNet7', 'target': 'gen', 'LRP_dataset': '../../../test_tmp_delphes/data/pythia8_ttbar', 'LRP_dataset_qcd': '../../../test_tmp_delphes/data/pythia8_qcd',
+    'LRP_outpath': '../../../prp/models/LRP/', 'optimizer': 'adam', 'lr': 0.001, 'alpha': 1, 'dropout': 0,
+    'space_dim': 4, 'propagate_dimensions': 22,'nearest': 16, 'overwrite': True,
+    'LRP_load_epoch': 9, 'LRP_load_model': 'LRP_reg_PFNet7_gen_ntrain_1_nepochs_10_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
+    'explain': False, 'make_heatmaps_clf': True,'make_heatmaps_reg': False,
+    'clf': True, 'reg': False})
 
     # define the dataset (assumes the data exists as .pt files in "processed")
     print('Processing the data..')
