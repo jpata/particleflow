@@ -56,7 +56,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 5
+  batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 50
@@ -88,13 +88,13 @@ parameters:
     type: NodePairGaussianKernel
     dist_mult: 0.1
     clip_value_low: 0.0
-  num_graph_layers: 3
+  num_graph_layers: 2
   node_message:
     type: GHConvDense
-    output_dim: 128
+    output_dim: 512
     activation: elu
     normalize_degrees: yes
-  num_node_messages: 2
+  num_node_messages: 1
   skip_connection: yes
   regression_use_classification: yes
   debug: no
