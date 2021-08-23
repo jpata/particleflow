@@ -47,6 +47,7 @@ def parse_args():
     parser.add_argument("--nn0track", action=BoolArg, default=False, help="Adds an initial network that encode the tracks..")
     parser.add_argument("--nn0cluster", action=BoolArg, default=False, help="Adds an initial network that encode the clusters..")
     parser.add_argument("--title", type=str, default='', help="Appends this title to the model's name")
+    parser.add_argument("--optimized", action=BoolArg, default=False, help="Uses the optimized version of knn")
 
     # for evaluation: making predictions & making plots
     parser.add_argument("--make_predictions_train", action=BoolArg, default=False, help="make predictions on training data..")
