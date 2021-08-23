@@ -398,27 +398,25 @@ class OutputDecoding(tf.keras.layers.Layer):
         )
         
         self.ffn_pt = point_wise_feed_forward_network(
-            4, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True,
+            2, hidden_dim, "ffn_pt",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
+
         self.ffn_eta = point_wise_feed_forward_network(
             2, hidden_dim, "ffn_eta",
             dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
+
         self.ffn_phi = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_phi",
             dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
+
         self.ffn_energy = point_wise_feed_forward_network(
-            1, hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
-            dropout=dropout
-        )
-        self.ffn_energy_sigmoid = point_wise_feed_forward_network(
-            1, hidden_dim, "ffn_energy_sigmoid",
+            2, hidden_dim, "ffn_energy",
             dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
@@ -453,6 +451,8 @@ class OutputDecoding(tf.keras.layers.Layer):
 
         pred_eta_corr = self.ffn_eta(X_encoded)
         pred_phi_corr = self.ffn_phi(X_encoded)
+        pred_energy_corr = self.ffn_energy(X_encoded)
+        pred_pt_corr = self.ffn_pt(X_encoded)
 
         eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
         pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
@@ -462,14 +462,12 @@ class OutputDecoding(tf.keras.layers.Layer):
         pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
         pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
 
-        pred_energy_corr = self.ffn_energy(X_encoded)
-        energy_sigmoid = tf.keras.activations.sigmoid(self.ffn_energy_sigmoid(X_encoded))
-        pred_energy = orig_energy*energy_sigmoid + (1.0 - energy_sigmoid)*pred_energy_corr[:, :, 0:1]
+        energy_sigmoid = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+        pred_energy = orig_energy*energy_sigmoid + (1.0 - energy_sigmoid)*tf.exp(tf.clip_by_value(pred_energy_corr[:, :, 1:2], -6, 6))
         
-        pred_pt_corr = self.ffn_pt(X_encoded)
         orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
         pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
-        pred_pt = orig_pt*pt_sigmoid + (1.0 - pt_sigmoid)*pred_pt_corr[:, :, 1:2]
+        pred_pt = orig_pt*pt_sigmoid + (1.0 - pt_sigmoid)*tf.exp(tf.clip_by_value(pred_pt_corr[:, :, 1:2], -6, 6))
 
         ret = {
             "cls": out_id_softmax,
@@ -483,6 +481,14 @@ class OutputDecoding(tf.keras.layers.Layer):
 
         return ret
 
+    def set_trainable_named(self, layer_names):
+        self.trainable = True
+
+        for layer in self.layers:
+            layer.trainable = False
+
+        for layer in layer_names:
+            self.get_layer(layer).trainable = True
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -584,7 +590,6 @@ class PFNetDense(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-
         kwargs_cg = {
             "max_num_bins": max_num_bins,
             "bin_size": bin_size,
@@ -597,7 +602,6 @@ class PFNetDense(tf.keras.Model):
             "hidden_dim": hidden_dim
         }
 
-        self.ffn_enc = point_wise_feed_forward_network(hidden_dim, hidden_dim, "ffn_enc", activation=activation)
         self.cg = [CombinedGraphLayer(name="cg_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
 
         self.output_dec = OutputDecoding(self.activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout)
@@ -613,7 +617,7 @@ class PFNetDense(tf.keras.Model):
         #encode the elements for classification (id)
         enc = self.enc(X)
 
-        enc_cg = self.activation(self.ffn_enc(enc))
+        enc_cg = enc
         encs = []
         for cg in self.cg:
             enc_all = cg(enc_cg, msk, training)
@@ -641,69 +645,13 @@ class PFNetDense(tf.keras.Model):
         else:
             return tf.concat([ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1)
 
-    def set_trainable_classification(self):
-        self.trainable = True
-        for layer in self.layers:
-            layer.trainable = True
-
-        self.ffn_enc_reg.trainable = False
-        for cg in self.cg_reg:
-            cg.trainable = False
-        self.ffn_pt.trainable = False
-        self.ffn_eta.trainable = False
-        self.ffn_phi.trainable = False
-        self.ffn_energy.trainable = False
-
-    def set_trainable_regression(self):
-        self.trainable = True
-        for layer in self.layers:
-            layer.trainable = True
-
-        self.ffn_enc_id.trainable = False
-        for cg in self.cg_id:
-            cg.trainable = False
-        self.ffn_id.trainable = False
-        self.ffn_charge.trainable = False
-
     def set_trainable_named(self, layer_names):
         self.trainable = True
 
         for layer in self.layers:
             layer.trainable = False
 
-        for layer in layer_names:
-            self.get_layer(layer).trainable = True
-
-    # def train_step(self, data):
-    #     # Unpack the data. Its structure depends on your model and
-    #     # on what you pass to `fit()`.
-    #     x, y, sample_weights = data
-
-    #     with tf.GradientTape() as tape:
-    #         y_pred = self(x, training=True)  # Forward pass
-    #         # Compute the loss value
-    #         # (the loss function is configured in `compile()`)
-    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-
-    #     ya = {k: v.numpy() for k, v in y.items()}
-    #     yb = {k: v.numpy() for k, v in y_pred.items()}
-    #     sw = {k: v.numpy() for k, v in sample_weights.items()}
-
-    #     np.savez("ytrue.npz", **ya)
-    #     np.savez("ypred.npz", **yb)
-    #     np.savez("x.npz", x=x)
-    #     np.savez("sample_weights.npz", **sample_weights)
-
-    #     # Compute gradients
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-    #     # Update weights
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     # Update metrics (includes the metric that tracks the loss)
-    #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value
-    #     return {m.name: m.result() for m in self.metrics}
-
+        self.output_dec.set_trainable_named(layer_names)
 
 class DummyNet(tf.keras.Model):
     def __init__(self,

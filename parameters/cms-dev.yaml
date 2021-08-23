@@ -35,9 +35,9 @@ dataset:
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
   energy_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
   pt_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -90,10 +90,10 @@ parameters:
     hidden_dim: 32
     num_layers: 2
     activation: elu
-  num_graph_layers: 2
+  num_graph_layers: 6
   node_message:
     type: NodeMessageLearnable
-    output_dim: 512
+    output_dim: 256
     hidden_dim: 128
     num_layers: 2
     activation: elu
