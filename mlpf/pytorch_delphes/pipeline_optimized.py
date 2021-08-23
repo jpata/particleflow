@@ -152,11 +152,12 @@ def train(model, loader, epoch, optimizer, alpha, target_type, device):
         #     X.ygen_id=new_ygen_id
 
         # Forwardprop
-        if i<10:
+        if i<100:
             ti = time.time()
             pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4 = model(X)
             tf = time.time()
-            t.append(round((tf-ti),2))
+            if i!=0:
+                t.append(round((tf-ti),2))
         else:
             pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4 = model(X)
 
@@ -199,7 +200,7 @@ def train(model, loader, epoch, optimizer, alpha, target_type, device):
 
         print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), loss.detach().cpu().item(), t1-t0), end='\r', flush=True)
 
-    print("Average Inference time is: ", round((sum(t) / len(t)),2), 'min')
+    print("Average Inference time per event is: ", round((sum(t) / len(t)),2), 's')
 
     losses_1 = np.mean(losses_1)
     losses_2 = np.mean(losses_2)
