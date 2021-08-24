@@ -57,7 +57,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-3
   batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
@@ -85,7 +85,7 @@ parameters:
   hidden_dim: 256
   bin_size: 320
   distance_dim: 128
-  dropout: 0.2
+  dropout: 0.0
   graph_kernel:
     type: NodePairGaussianKernel
     dist_mult: 0.1
