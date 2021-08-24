@@ -1,4 +1,8 @@
-import comet_ml
+try:
+    import comet_ml
+except ModuleNotFoundError as e:
+    print("comet_ml not found, ignoring")
+
 import sys
 import os
 import yaml
@@ -132,6 +136,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
         experiment.set_name(outdir)
         experiment.log_code("mlpf/tfmodel/model.py")
         experiment.log_code("mlpf/tfmodel/utils.py")
+        experiment.log_code(config_file_path)
 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
