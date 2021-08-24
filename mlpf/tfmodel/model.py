@@ -432,11 +432,13 @@ class OutputDecoding(tf.keras.Model):
     X_encoded_reg: (n_batch, n_elements, n_encoded_features)
     msk_input: (n_batch, n_elements) boolean mask
     """
-    def call(self, X_input, X_encoded, msk_input):
+    def call(self, args, training=False):
 
-        out_id_logits = self.ffn_id(X_encoded)*msk_input
+        X_input, X_encoded, msk_input = args
+
+        out_id_logits = self.ffn_id(X_encoded, training)*msk_input
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
-        out_charge = self.ffn_charge(X_encoded)*msk_input
+        out_charge = self.ffn_charge(X_encoded, training)*msk_input
 
         #orig_pt = X_input[:, :, 1:2]
         orig_eta = X_input[:, :, 2:3]
@@ -454,10 +456,10 @@ class OutputDecoding(tf.keras.Model):
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, out_id_softmax], axis=-1)
 
-        pred_eta_corr = self.ffn_eta(X_encoded)*msk_input
-        pred_phi_corr = self.ffn_phi(X_encoded)*msk_input
-        pred_energy_corr = self.ffn_energy(X_encoded)*msk_input
-        pred_pt_corr = self.ffn_pt(X_encoded)*msk_input
+        pred_eta_corr = self.ffn_eta(X_encoded, training)*msk_input
+        pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input
+        pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
+        pred_pt_corr = self.ffn_pt(X_encoded, training)*msk_input
 
         eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
         pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
@@ -639,7 +641,7 @@ class PFNetDense(tf.keras.Model):
         if self.debug:
             debugging_data["dec_output"] = dec_output
 
-        ret = self.output_dec(X, dec_output, msk_input)
+        ret = self.output_dec([X, dec_output, msk_input], training)
 
         if self.debug:
             for k in debugging_data.keys():
