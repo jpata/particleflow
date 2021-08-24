@@ -59,16 +59,18 @@ def plot_to_image(figure):
     return image
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1):
+    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1, comet_experiment=None):
         super(CustomCallback, self).__init__()
         self.X = X
         self.y = y
         self.plot_freq = plot_freq
+        self.comet_experiment = comet_experiment
 
         self.dataset_def = dataset_def
 
         #transform the prediction target from an array into a dictionary for easier access
         self.ytrue = dataset_transform(self.X, self.y, None)[1]
+        self.ytrue = {k: np.array(v) for k, v in self.ytrue.items()}
         self.ytrue_id = np.argmax(self.ytrue["cls"], axis=-1)
 
         self.outpath = outpath
@@ -97,7 +99,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             "energy": np.linspace(0,1000,100),
         }
 
-    def plot_cm(self, outpath, ypred_id, msk):
+    def plot_cm(self, epoch, outpath, ypred_id, msk):
 
         ytrue_id_flat = self.ytrue_id[msk].astype(np.int64).flatten()
         ypred_id_flat = ypred_id[msk].flatten()
@@ -106,6 +108,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
             ytrue_id_flat,
             ypred_id_flat, labels=list(range(self.num_output_classes)), normalize="true"
         )
+        if self.comet_experiment:
+            self.comet_experiment.log_confusion_matrix(
+                file_name="confusion-matrix-epoch{}.json".format(epoch), matrix=cm, epoch=epoch
+            )
+
         figure = plot_confusion_matrix(cm)
 
         acc = sklearn.metrics.accuracy_score(
@@ -144,7 +151,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         sphi = ypred["sin_phi"][ievent][msk]
         cphi = ypred["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = ypred["energy"][ievent][msk]
+        energy = np.exp(np.clip(ypred["energy"][ievent][msk], -6, 6)) - 1.0
         pdgid = ypred_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
@@ -158,7 +165,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         sphi = self.ytrue["sin_phi"][ievent][msk]
         cphi = self.ytrue["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = self.ytrue["energy"][ievent][msk]
+        energy = np.exp(np.clip(self.ytrue["energy"][ievent][msk], -6, 6)) - 1.0
         pdgid = self.ytrue_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
@@ -203,7 +210,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #FIXME: propagate from configuration
         if reg_variable == "energy" or reg_variable == "pt":
-            delta = 1.0
+            delta = 0.1
         else:
             delta = 0.1
             
@@ -217,7 +224,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             vals_true = np.log(vals_true)
             s = "_log"
 
-        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=loss_vals)
+        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(2.0 +loss_vals))
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -229,7 +236,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlabel("predicted")
         plt.ylabel("true")
         plt.title("{}, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
-        plt.savefig(str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s)), bbox_inches="tight")
+        image_path = str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s))
+        plt.savefig(image_path, bbox_inches="tight")
+
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
         plt.close("all")
 
         #Also plot the residuals, as we have the true and predicted values already available here
@@ -240,12 +251,16 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.hist(residual, bins=100)
         plt.xlabel("true - pred")
         plt.title("{} residual, m={:.4f} s={:.4f}".format(reg_variable, np.mean(residual), np.std(residual)))
-        plt.savefig(str(outpath / "{}_residual{}.png".format(reg_variable, s)), bbox_inches="tight")
+
+        image_path = str(outpath / "{}{}_cls{}_residual.png".format(reg_variable, s, icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
         plt.close("all")
 
-        # FIXME: for some reason, these don't end up on the tensorboard
-        # tf.summary.scalar('residual_{}{}_mean'.format(reg_variable, s), data=np.mean(residual), step=epoch)
-        # tf.summary.scalar('residual_{}{}_std'.format(reg_variable, s), data=np.std(residual), step=epoch)
+        if self.comet_experiment:
+            self.comet_experiment.log_metric('residual_{}{}_cls{}_mean'.format(reg_variable, s, icls), np.mean(residual), step=epoch)
+            self.comet_experiment.log_metric('residual_{}{}_cls{}_std'.format(reg_variable, s, icls), np.std(residual), step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
 
@@ -269,7 +284,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         #exclude padded elements from the plotting
         msk = self.X[:, :, 0] != 0
 
-        self.plot_cm(cp_dir, ypred_id, msk)
+        self.plot_cm(epoch, cp_dir, ypred_id, msk)
         for ievent in range(min(5, self.X.shape[0])):
             self.plot_event_visualization(cp_dir, ypred, ypred_id, msk, ievent=ievent)
 
@@ -279,12 +294,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
                 self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, variable)
-            self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
-            self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
+            #self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
+            #self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes, dataset_def, plot_freq=1):
+def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes, dataset_def, plot_freq=1, comet_experiment=None):
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
@@ -311,7 +326,7 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
-    cb = CustomCallback(dataset_def, history_path, X_val, y_val, dataset_transform, num_output_classes, plot_freq=plot_freq)
+    cb = CustomCallback(dataset_def, history_path, X_val, y_val, dataset_transform, num_output_classes, plot_freq=plot_freq, comet_experiment=comet_experiment)
     cb.set_model(model)
 
     callbacks += [cb]
@@ -497,14 +512,12 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
 
 def configure_model_weights(model, trainable_layers):
     print("setting trainable layers: {}".format(trainable_layers))
+
     if (trainable_layers is None):
         trainable_layers = "all"
+
     if trainable_layers == "all":
         model.trainable = True
-    elif trainable_layers == "classification":
-        model.set_trainable_classification()
-    elif trainable_layers == "regression":
-        model.set_trainable_regression()
     else:
         if isinstance(trainable_layers, str):
             trainable_layers = [trainable_layers]
