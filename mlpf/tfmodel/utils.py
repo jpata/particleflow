@@ -89,17 +89,19 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
 
 
 def get_strategy(global_batch_size):
-    try:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
+    gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
+    if gpus[0] == -1:
+        num_gpus = 0
+    else:
         num_gpus = len(gpus)
-        print("num_gpus=", num_gpus)
-        if num_gpus > 1:
-            strategy = tf.distribute.MirroredStrategy()
-            global_batch_size = num_gpus * global_batch_size
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    except Exception as e:
-        print("fallback to CPU", e)
+    print("num_gpus=", num_gpus)
+    if num_gpus > 1:
+        strategy = tf.distribute.MirroredStrategy()
+        global_batch_size = num_gpus * global_batch_size
+    elif num_gpus == 1:
+        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    elif num_gpus == 0:
+        print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
     return strategy, global_batch_size

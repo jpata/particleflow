@@ -126,7 +126,7 @@ hypertune:
 
 raytune:
   local_dir:
-  sched: "asha"
+  sched: "asha"  # asha, hyperband
   parameters:
     # optimizer parameters
     lr: [1e-4]

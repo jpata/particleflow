@@ -6,7 +6,7 @@
 #SBATCH -p gpu
 #SBATCH --constraint=a100,sxm4
 #SBATCH --gpus-per-task=4
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=64
 
 # Job name
 #SBATCH -J raytune
@@ -48,7 +48,7 @@ export ip_head
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $node_1"
-srun --nodes=1 --ntasks=1 -w $node_1 mlpf/flatiron/start-head.sh $ip &
+srun --nodes=1 --ntasks=1 -w $node_1 mlpf/flatiron/start-head.sh $ip $SLURM_JOB_ID $2 &
 sleep 30
 
 worker_num=$(($SLURM_JOB_NUM_NODES - 1)) #number of nodes other than the head node
@@ -56,7 +56,7 @@ for ((  i=1; i<=$worker_num; i++ ))
 do
   node_i=${nodes_array[$i]}
   echo "STARTING WORKER $i at $node_i"
-  srun --nodes=1 --ntasks=1 -w $node_i mlpf/flatiron/start-worker.sh $ip_head &
+  srun --nodes=1 --ntasks=1 -w $node_i mlpf/flatiron/start-worker.sh $ip_head $SLURM_JOB_ID $i $2 &
   sleep 5
 done
 ##############################################################################################
