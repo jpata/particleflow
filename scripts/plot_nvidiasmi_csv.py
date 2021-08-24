@@ -42,8 +42,8 @@ if __name__ == "__main__":
         dfs = []
         for ii, gpu in enumerate(np.unique(df[" pci.bus_id"].values)):
             dfs.append(pd.DataFrame({
-                "GPU{}_util".format(ii): df[df[" pci.bus_id"] == " 00000000:31:00.0"][" utilization.gpu [%]"].map(lambda x: int(x.split(" ")[1])),
-                "time": df[df[" pci.bus_id"] == " 00000000:31:00.0"]["timestamp"].map(lambda x: datetime.strptime(x, "%Y/%m/%d %H:%M:%S.%f").timestamp() - start_t),
+                "GPU{}_util".format(ii): df[df[" pci.bus_id"] == gpu][" utilization.gpu [%]"].map(lambda x: int(x.split(" ")[1])),
+                "time": df[df[" pci.bus_id"] == gpu]["timestamp"].map(lambda x: datetime.strptime(x, "%Y/%m/%d %H:%M:%S.%f").timestamp() - start_t),
             }).dropna())
     
         fig, axs = plt.subplots(2, 2, figsize=(12,9), tight_layout=True)
