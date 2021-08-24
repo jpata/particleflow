@@ -36,8 +36,10 @@ dataset:
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
   energy_loss:
     type: Huber
+    delta: 0.1
   pt_loss:
     type: Huber
+    delta: 0.1
   sin_phi_loss:
     type: Huber
     delta: 0.1
