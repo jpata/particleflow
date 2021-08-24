@@ -1,3 +1,4 @@
+import comet_ml
 import sys
 import os
 import yaml
@@ -91,6 +92,22 @@ def data(config):
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=1, help="Plot detailed validation every N epochs", type=int)
 def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
+
+    try:
+        from comet_ml import Experiment
+        experiment = Experiment(
+            project_name="particleflow-tf",
+            auto_metric_logging=True,
+            auto_param_logging=True,
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=False,
+            auto_histogram_activation_logging=False,
+        )
+    except Exception as e:
+        print("Failed to initialize comet-ml dashboard")
+        experiment = None
+
+
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
@@ -111,6 +128,11 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
         outdir = str(Path(weights).parent)
+    if experiment:
+        experiment.set_name(outdir)
+        experiment.log_code("mlpf/tfmodel/model.py")
+        experiment.log_code("mlpf/tfmodel/utils.py")
+
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     total_steps = n_epochs * n_train // global_batch_size
@@ -142,7 +164,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model(tf.cast(X_val[:1], model_dtype))
 
-        config = set_config_loss(config, config["setup"]["trainable"])
+        #config = set_config_loss(config, config["setup"]["trainable"])
         configure_model_weights(model, config["setup"]["trainable"])
         model(tf.cast(X_val[:1], model_dtype))
 
@@ -179,7 +201,8 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
         dataset_transform,
         config["dataset"]["num_output_classes"],
         dataset_def,
-        plot_freq
+        plot_freq,
+        experiment
     )
     callbacks.append(optim_callbacks)
 
@@ -292,7 +315,7 @@ def find_lr(config, outdir, figname, logscale):
             model_dtype = tf.dtypes.float32
 
         model = make_model(config, model_dtype)
-        config = set_config_loss(config, config["setup"]["trainable"])
+        #config = set_config_loss(config, config["setup"]["trainable"])
 
         # Run model once to build the layers
         model(tf.cast(X_val[:1], model_dtype))
