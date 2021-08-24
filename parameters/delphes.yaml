@@ -23,9 +23,11 @@ dataset:
   num_files_per_chunk: 5
   validation_file_path: data/pythia8_qcd/val/*.pkl.bz2
   energy_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
+    delta: 0.1
   pt_loss:
-    type: MeanSquaredLogarithmicError
+    type: Huber
+    delta: 0.1
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -67,21 +69,21 @@ parameters:
   model: gnn_dense
   input_encoding: default
   activation: elu
-  layernorm: no
+  layernorm: yes
   hidden_dim: 256
-  bin_size: 640
+  bin_size: 320
   distance_dim: 128
   dropout: 0.0
   graph_kernel:
     type: NodePairGaussianKernel
     dist_mult: 0.1
-    clip_value_low: 0.1
-  num_graph_layers: 2
+    clip_value_low: 0.0
+  num_graph_layers: 6
   node_message:
     type: GHConvDense
-    output_dim: 128
+    output_dim: 256
     activation: elu
-  num_node_messages: 2
+  num_node_messages: 1
   skip_connection: yes
   regression_use_classification: yes
   debug: no
