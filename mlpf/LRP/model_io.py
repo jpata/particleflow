@@ -5,15 +5,6 @@ from torch_scatter import scatter_mean
 import numpy as np
 import json
 
-use_gpu = torch.cuda.device_count()>0
-multi_gpu = torch.cuda.device_count()>1
-
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 class model_io:
     SPECIAL_LAYERS=[
         ".nn2.0",
@@ -21,10 +12,11 @@ class model_io:
         # ".conv1.lin_p"
     ]
 
-    def __init__(self,model,
+    def __init__(self,device,model,
                 model_state_dict,
                 activation_dest, dic):
 
+        self.device=device
         self.model=model
         self.model.load_state_dict(model_state_dict)
         self.dest=activation_dest
@@ -81,7 +73,7 @@ class model_io:
         else:
             self._register_rules()
             return self._rules[layer_name]
-            
+
     """
     layer functions
     """
@@ -145,7 +137,7 @@ def copy_layer(layer):
     layer_cp=eval("nn."+layer.__repr__())
     layer_cp.load_state_dict(layer.state_dict())
 
-    return layer_cp.to(device)
+    return layer_cp.to(self.device)
 
 def copy_tensor(tensor,dtype=torch.float32):
     """
@@ -153,4 +145,4 @@ def copy_tensor(tensor,dtype=torch.float32):
     outputs the copy with specified dtype
     """
 
-    return tensor.clone().detach().requires_grad_(True).to(device)
+    return tensor.clone().detach().requires_grad_(True).to(self.device)
