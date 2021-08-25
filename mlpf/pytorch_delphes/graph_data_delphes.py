@@ -10,9 +10,6 @@ from glob import glob
 import pickle
 import multiprocessing
 
-import args
-from args import parse_args
-
 # assumes pkl files exist in /test_tmp_delphes/data/pythia8_ttbar/raw
 # they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
@@ -142,6 +139,17 @@ class PFGraphDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.get(idx)
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", type=str, default='../../../test_tmp_delphes/data/pythia8_ttbar', help="dataset path", required=False)
+    parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
+    parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
+    parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
+    args = parser.parse_args()
+    return args
+
 
 if __name__ == "__main__":
 
