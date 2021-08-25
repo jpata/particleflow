@@ -51,3 +51,12 @@ python3 pytorch_pipeline.py \
   --dataset='../test_tmp_delphes/data/pythia8_ttbar' \
   --dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
   --outpath='../test_tmp_delphes/experiments'
+echo Finished the training..
+
+echo Begining the LRP machinery..
+python3 lrp_pipeline.py \
+  --n_test=1 --batch_size=4 \
+  --lrp_dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
+  --lrp_outpath='../test_tmp_delphes/data/experiments/' \
+  --lrp_load_model='../test_tmp_delphes/data/experiments/*'
+  --lrp_load_epoch=9
