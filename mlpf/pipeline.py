@@ -125,7 +125,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq, customize
     )
 
     if customize:
-        prefix += customize
+        prefix += customize + "_"
         config = customization_functions[customize](config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
