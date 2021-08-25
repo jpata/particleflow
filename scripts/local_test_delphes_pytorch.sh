@@ -57,6 +57,6 @@ echo Begining the LRP machinery..
 python3 lrp_pipeline.py \
   --n_test=1 --batch_size=4 \
   --lrp_dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
-  --lrp_outpath='../test_tmp_delphes/data/experiments/' \
+  --lrp_outpath='../test_tmp_delphes/experiments/' \
   --lrp_load_model='PFNet7_gen_ntrain_1_nepochs_10_batch_size_4_lr_0.0001_alpha_0.0002_both__nn1_nn3'
   --lrp_load_epoch=9
