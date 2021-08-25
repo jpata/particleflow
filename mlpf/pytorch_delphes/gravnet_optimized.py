@@ -8,8 +8,11 @@ from torch.nn import Linear
 from torch_scatter import scatter
 from torch_geometric.nn.conv import MessagePassing
 
+########### (1) clone this repo:  https://github.com/mandylee900125/pytorch_cmspepr.git ###############
+########### (2) do <pip intsall .> from inside ###############
+
 try:
-    from torch_cmspepr import knn_graph ###########remember to do pip intsall .###############
+    from torch_cmspepr import knn_graph
 except ImportError:
     knn_graph = None
 
@@ -18,6 +21,7 @@ except ImportError:
 # CHANGED: self.lin -> self.lin_p
 # CHANGED: used reduce='sum' instead of reduce='mean' in the message passing
 # REMOVED: skip connection
+# REPLACED: knn with knn_graph
 
 class GravNetConv_optimized(MessagePassing):
     r"""The GravNet operator from the `"Learning Representations of Irregular
@@ -29,7 +33,7 @@ class GravNetConv_optimized(MessagePassing):
     A second projection of the input feature space is then propagated from the
     neighbors to each vertex using distance weights that are derived by
     applying a Gaussian function to the distances.
-    
+
     Args:
         in_channels (int): The number of input channels.
         out_channels (int): The number of output channels.
