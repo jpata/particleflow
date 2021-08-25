@@ -11,7 +11,7 @@ from torch_geometric.nn import EdgeConv, MessagePassing, EdgePooling, GATConv, G
 from torch_geometric.nn import TopKPooling, SAGPooling, SGConv
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 
-import LRP
+import lrp
 
 #Model with gravnet clustering
 class PFNet7(nn.Module):
@@ -38,7 +38,7 @@ class PFNet7(nn.Module):
         )
 
         # (2) CNN: Gravnet layer
-        self.conv1 = LRP.GravNetConv(input_encoding, encoding_dim, space_dim, propagate_dimensions, nearest)
+        self.conv1 = lrp.GravNetConv(input_encoding, encoding_dim, space_dim, propagate_dimensions, nearest)
 
         # (3) DNN layer: classifying PID
         self.nn2 = nn.Sequential(

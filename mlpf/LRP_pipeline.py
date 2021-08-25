@@ -39,7 +39,7 @@ import torch_geometric
 import torch.nn as nn
 
 from pytorch_delphes import PFGraphDataset, data_to_loader_ttbar, data_to_loader_qcd
-from LRP import parse_args, make_heatmaps, model_io, PFNet7, LRP_clf, LRP_reg
+from lrp import parse_args, make_heatmaps, model_io, PFNet7, lrp_clf, lrp_reg
 
 # NOTE: this script works by loading an already trained model with very specefic specs
 
@@ -54,15 +54,15 @@ if __name__ == "__main__":
     #
     # args = objectview({'n_test': 2, 'batch_size': 1,' hidden_dim':256, 'hidden_dim_nn1': 64,
     # 'input_encoding': 12, 'encoding_dim': 64, 'space_dim': 4, 'propagate_dimensions': 22,'nearest': 16,
-    # 'LRP_dataset': '../test_tmp_delphes/data/pythia8_ttbar', 'LRP_dataset_qcd': '../test_tmp_delphes/data/pythia8_qcd',
-    # 'LRP_outpath': '../test_tmp_delphes/experiments/LRP/',
-    # 'LRP_load_epoch': 9, 'LRP_load_model': 'LRP_reg_PFNet7_gen_ntrain_1_nepochs_10_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
-    # 'explain': False, 'LRP_clf': False, 'LRP_reg': False,
+    # 'lrp_dataset': '../test_tmp_delphes/data/pythia8_ttbar', 'lrp_dataset_qcd': '../test_tmp_delphes/data/pythia8_qcd',
+    # 'lrp_outpath': '../test_tmp_delphes/experiments/lrp/',
+    # 'lrp_load_epoch': 9, 'lrp_load_model': 'lrp_reg_PFNet7_gen_ntrain_1_nepochs_10_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
+    # 'explain': True, 'lrp_clf': False, 'lrp_reg': False,
     # 'make_heatmaps_clf': True,'make_heatmaps_reg': True})
 
     # define the dataset (assumes the data exists as .pt files in "processed")
     print('Processing the data..')
-    full_dataset_qcd = PFGraphDataset(args.LRP_dataset_qcd)
+    full_dataset_qcd = PFGraphDataset(args.lrp_dataset_qcd)
 
     # constructs a loader from the data to iterate over batches
     print('Constructing data loader..')
@@ -75,8 +75,8 @@ if __name__ == "__main__":
     output_dim_id = 6
     output_dim_p4 = 6
 
-    outpath = args.LRP_outpath + args.LRP_load_model
-    PATH = outpath + '/epoch_' + str(args.LRP_load_epoch) + '_weights.pth'
+    outpath = args.lrp_outpath + args.lrp_load_model
+    PATH = outpath + '/epoch_' + str(args.lrp_load_epoch) + '_weights.pth'
 
     # loading the model
     print('Loading a previously trained model..')
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     state_dict = torch.load(PATH, map_location=device)
 
     # if model was trained using DataParallel then we have to load it differently
-    if "DataParallel" in args.LRP_load_model:
+    if "DataParallel" in args.lrp_load_model:
         state_dict = torch.load(PATH, map_location=device)
         from collections import OrderedDict
         new_state_dict = OrderedDict()
@@ -127,60 +127,64 @@ if __name__ == "__main__":
 
             if i==0:
                 # code can be written better
-                # basically i run at least one forward pass to get the activations to use their shape in defining the LRP layers
+                # basically i run at least one forward pass to get the activations to use their shape in defining the lrp layers
                 pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4, edge_index, edge_weight, after_message, before_message = model(X)
                 model = model_io(device, model, state_dict, dict(), activation)
-                explainer_reg = LRP_reg(device, model)
-                explainer_clf = LRP_clf(device, model)
+                explainer_reg = lrp_reg(device, model)
+                explainer_clf = lrp_clf(device, model)
 
             else:
                 pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4, edge_index, edge_weight, after_message, before_message = model.model(X)
 
-            if not osp.isdir(outpath + '/LRP'):
-                os.makedirs(outpath + '/LRP')
+            if not osp.isdir(outpath + '/lrp'):
+                os.makedirs(outpath + '/lrp')
 
-            if args.LRP_reg:
+            if (not args.lrp_reg) & (not args.lrp_clf):
+                print('EXITING: Did not specefy wether to explain lrp_reg or lrp_clf')
+                sys.exit(0)
+
+            if args.lrp_reg:
                 print('Explaining the p4 predictions:')
                 to_explain_reg = {"A": activation, "inputs": dict(x=X.x,batch=X.batch),
                                  "gen_p4": gen_p4.detach(), "gen_id": gen_ids_one_hot.detach(),
                                  "pred_p4": pred_p4.detach(), "pred_id": pred_ids_one_hot.detach(),
                                  "edge_index": edge_index.detach(), "edge_weight": edge_weight.detach(), "after_message": after_message.detach(), "before_message": before_message.detach(),
-                                 "outpath": args.LRP_outpath, "load_model": args.LRP_load_model}
+                                 "outpath": args.lrp_outpath, "load_model": args.lrp_load_model}
 
                 model.set_dest(to_explain_reg["A"])
 
                 big_list_reg = explainer_reg.explain(to_explain_reg)
-                torch.save(big_list_reg, outpath + '/LRP/big_list_reg.pt')
-                torch.save(to_explain_reg, outpath + '/LRP/to_explain_reg.pt')
+                torch.save(big_list_reg, outpath + '/lrp/big_list_reg.pt')
+                torch.save(to_explain_reg, outpath + '/lrp/to_explain_reg.pt')
 
-            if args.LRP_clf:
+            if args.lrp_clf:
                 print('Explaining the pid predictions:')
                 to_explain_clf = {"A": activation, "inputs": dict(x=X.x,batch=X.batch),
                                  "gen_p4": gen_p4.detach(), "gen_id": gen_ids_one_hot.detach(),
                                  "pred_p4": pred_p4.detach(), "pred_id": pred_ids_one_hot.detach(),
                                  "edge_index": edge_index.detach(), "edge_weight": edge_weight.detach(), "after_message": after_message.detach(), "before_message": before_message.detach(),
-                                 "outpath": args.LRP_outpath, "load_model": args.LRP_load_model}
+                                 "outpath": args.lrp_outpath, "load_model": args.lrp_load_model}
 
                 model.set_dest(to_explain_clf["A"])
 
                 big_list_clf = explainer_clf.explain(to_explain_clf)
 
-                torch.save(big_list_clf, outpath + '/LRP/big_list_clf.pt')
-                torch.save(to_explain_clf, outpath + '/LRP/to_explain_clf.pt')
+                torch.save(big_list_clf, outpath + '/lrp/big_list_clf.pt')
+                torch.save(to_explain_clf, outpath + '/lrp/to_explain_clf.pt')
 
             break # explain only one single event
 
     if args.make_heatmaps_reg:
         # load the necessary R-scores
-        big_list_reg = torch.load(outpath + '/LRP/big_list_reg.pt', map_location=device)
-        to_explain_reg = torch.load(outpath + '/LRP/to_explain_reg.pt', map_location=device)
+        big_list_reg = torch.load(outpath + '/lrp/big_list_reg.pt', map_location=device)
+        to_explain_reg = torch.load(outpath + '/lrp/to_explain_reg.pt', map_location=device)
 
         make_heatmaps(big_list_reg, to_explain_reg, device, outpath, output_dim_id, output_dim_p4, 'regression')
 
     if args.make_heatmaps_clf:
         # load the necessary R-scores
-        big_list_clf = torch.load(outpath + '/LRP/big_list_clf.pt', map_location=device)
-        to_explain_clf = torch.load(outpath + '/LRP/to_explain_clf.pt', map_location=device)
+        big_list_clf = torch.load(outpath + '/lrp/big_list_clf.pt', map_location=device)
+        to_explain_clf = torch.load(outpath + '/lrp/to_explain_clf.pt', map_location=device)
 
         make_heatmaps(big_list_clf, to_explain_clf, device, outpath, output_dim_id, output_dim_p4, 'classification')
 

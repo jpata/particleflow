@@ -48,6 +48,6 @@ cd ../mlpf/
 echo Beginning the training..
 python3 pytorch_pipeline.py \
   --n_epochs=10 --n_train=1 --n_valid=1 --n_test=1 --batch_size=4 \
-  --dataset='../../test_tmp_delphes/data/pythia8_ttbar' \
-  --dataset_qcd='../../test_tmp_delphes/data/pythia8_qcd' \
-  --outpath='../../test_tmp_delphes/experiments'
+  --dataset='../test_tmp_delphes/data/pythia8_ttbar' \
+  --dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
+  --outpath='../test_tmp_delphes/experiments'

@@ -55,17 +55,17 @@ def make_heatmaps(big_list, to_explain, device, outpath, output_dim_id, output_d
 
     # make directories to hold the heatmaps
     for i in range(6):
-        if not osp.isdir(outpath + '/LRP'):
-            os.makedirs(outpath + '/LRP')
-        if not osp.isdir(outpath + f'/LRP/class{str(i)}'):
-            os.makedirs(outpath + f'/LRP/class{str(i)}')
+        if not osp.isdir(outpath + '/lrp'):
+            os.makedirs(outpath + '/lrp')
+        if not osp.isdir(outpath + f'/lrp/class{str(i)}'):
+            os.makedirs(outpath + f'/lrp/class{str(i)}')
         for j in range(6):
             if task=='regression':
-                if not osp.isdir(outpath + f'/LRP/class{str(i)}'+f'/p4_elem{str(j)}'):
-                    os.makedirs(outpath + f'/LRP/class{str(i)}'+f'/p4_elem{str(j)}')
+                if not osp.isdir(outpath + f'/lrp/class{str(i)}'+f'/p4_elem{str(j)}'):
+                    os.makedirs(outpath + f'/lrp/class{str(i)}'+f'/p4_elem{str(j)}')
             elif task=='classification':
-                if not osp.isdir(outpath + f'/LRP/class{str(i)}'+f'/pid{str(j)}'):
-                    os.makedirs(outpath + f'/LRP/class{str(i)}'+f'/pid{str(j)}')
+                if not osp.isdir(outpath + f'/lrp/class{str(i)}'+f'/pid{str(j)}'):
+                    os.makedirs(outpath + f'/lrp/class{str(i)}'+f'/pid{str(j)}')
 
     # attempt to break down big_list onto 6 smaller lists, 1 for each pid
     list0, list1, list2, list3, list4, list5 = [], [], [], [], [], []
@@ -160,7 +160,7 @@ def make_heatmaps(big_list, to_explain, device, outpath, output_dim_id, output_d
                 plt.colorbar()
                 fig.set_size_inches(12, 12)
                 if task=='regression':
-                    plt.savefig(outpath + f'/LRP/class{str(pid)}'+f'/p4_elem{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
+                    plt.savefig(outpath + f'/lrp/class{str(pid)}'+f'/p4_elem{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                 elif task=='classification':
-                    plt.savefig(outpath + f'/LRP/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
+                    plt.savefig(outpath + f'/lrp/class{str(pid)}'+f'/pid{str(output_neuron)}'+f'/sample{str(node_i)}.jpg')
                 plt.close(fig)

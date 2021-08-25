@@ -1,8 +1,8 @@
-from LRP.args import parse_args
-from LRP.plots import make_heatmaps
-from LRP.model_io import model_io
-from LRP.model_LRP import PFNet7
-from LRP.gravnet_LRP import GravNetConv
+from lrp.args import parse_args
+from lrp.plots import make_heatmaps
+from lrp.model_io import model_io
+from lrp.model_lrp import PFNet7
+from lrp.gravnet_lrp import GravNetConv
 
-from LRP.LRP_clf_gpu import LRP_clf
-from LRP.LRP_reg_gpu import LRP_reg
+from lrp.lrp_clf_gpu import lrp_clf
+from lrp.lrp_reg_gpu import lrp_reg
