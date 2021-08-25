@@ -10,7 +10,8 @@ from glob import glob
 import pickle
 import multiprocessing
 
-import pytorch_delphes
+import args
+from args import parse_args
 
 # assumes pkl files exist in /test_tmp_delphes/data/pythia8_ttbar/raw
 # they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
@@ -144,7 +145,7 @@ class PFGraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    args = pytorch_delphes.parse_args()
+    args = parse_args()
 
     pfgraphdataset = PFGraphDataset(root=args.dataset)
 
