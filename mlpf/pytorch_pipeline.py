@@ -1,6 +1,5 @@
 from glob import glob
 import sys, os
-
 import os.path as osp
 import pickle as pkl
 import math, time, tqdm
@@ -38,8 +37,8 @@ else:
 
 import torch_geometric
 
-import pytorch_delphes
-import plotting
+from pytorch_delphes import parse_args, PFGraphDataset, data_to_loader_ttbar, data_to_loader_qcd, PFNet7, PFNet7_opt, train_loop, make_predictions
+from plotting import make_plots
 
 #Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
@@ -64,34 +63,49 @@ def get_model_fname(dataset, model, n_train, n_epochs, lr, target_type, batch_si
         title)
     return model_fname
 
+def make_directories_for_plots(outpath, which_data):
+    if not osp.isdir(outpath+'/' + which_data + '_loader'):
+        os.makedirs(outpath+'/' + which_data + '_loader')
+    if not osp.isdir(outpath+'/' + which_data + '_loader/resolution_plots'):
+        os.makedirs(outpath+'/' + which_data + '_loader/resolution_plots')
+    if not osp.isdir(outpath+'/' + which_data + '_loader/distribution_plots'):
+        os.makedirs(outpath+'/' + which_data + '_loader/distribution_plots')
+    if not osp.isdir(outpath+'/' + which_data + '_loader/multiplicity_plots'):
+        os.makedirs(outpath+'/' + which_data + '_loader/multiplicity_plots')
+    if not osp.isdir(outpath+'/' + which_data + '_loader/efficiency_plots'):
+        os.makedirs(outpath+'/' + which_data + '_loader/efficiency_plots')
+
 
 if __name__ == "__main__":
 
-    args = pytorch_delphes.parse_args()
+    args = parse_args()
 
     # # the next part initializes some args values (to run the script not from terminal)
     # class objectview(object):
     #     def __init__(self, d):
     #         self.__dict__ = d
     #
-    # args = objectview({'train': True, 'n_train': 1, 'n_valid': 1, 'n_test': 1, 'n_epochs': 2, 'patience': 100, 'hidden_dim': 256, 'hidden_dim_nn1': 64, 'input_encoding': 12, 'encoding_dim': 64,
-    # 'batch_size': 1, 'model': 'PFNet7', 'target': 'gen', 'dataset': '../test_tmp_delphes/data/pythia8_ttbar', 'dataset_qcd': '../test_tmp_delphes/data/pythia8_qcd',
-    # 'outpath': '../prp/models/yee/', 'optimizer': 'adam', 'lr': 0.001, 'alpha': 2e-4,
-    # 'space_dim': 4, 'propagate_dimensions': 22, 'nearest': 16, 'overwrite': True,
-    # 'load': False, 'load_epoch': 1, 'load_model': 'PFNet7_gen_ntrain_1_nepochs_2_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
-    # 'classification_only': False, 'nn1': True, 'nn3': True, 'encoding_of_clusters': False, 'embedding_dim': 0, 'nn0track': False, 'nn0cluster': False, 'title': 'noembeddings',
-    # 'make_predictions_train': False, 'make_plots_train': False, 'make_predictions_valid': False, 'make_plots_valid': False, 'make_predictions_test': True, 'make_plots_test': True,
-    # 'optimized': False})
+    # args = objectview({'train': False, 'n_train': 1, 'n_valid': 1, 'n_test': 1, 'n_epochs': 5, 'batch_size': 1,
+    # 'hidden_dim': 256, 'hidden_dim_nn1': 64, 'input_encoding': 12, 'encoding_dim': 64, 'space_dim': 4, 'propagate_dimensions': 22, 'nearest': 16,
+    # 'patience': 100, 'target': 'gen', 'optimizer': 'adam', 'lr': 0.001, 'alpha': 2e-4,
+    # 'dataset': '../test_tmp_delphes/data/pythia8_ttbar', 'dataset_qcd': '../test_tmp_delphes/data/pythia8_qcd',
+    # 'outpath': '../test_tmp_delphes/experiments/yee/', 'title': 'noembeddings',
+    # 'classification_only': False, 'nn1': True, 'nn3': True,
+    # 'load': True, 'load_epoch': 14, 'load_model': 'PFNet7_opt_gen_ntrain_1_nepochs_15_batch_size_1_lr_0.001_alpha_0.0002_both_noembeddingsnoskip_nn1_nn3',
+    # 'make_predictions_train': False, 'make_plots_train': False,
+    # 'make_predictions_valid': False, 'make_plots_valid': False,
+    # 'make_predictions_test': True, 'make_plots_test': True,
+    # 'optimized': False, 'overwrite': False})
 
     # define the dataset (assumes the data exists as .pt files in "processed")
     print('Processing the data..')
-    full_dataset_ttbar = pytorch_delphes.PFGraphDataset(args.dataset)
-    full_dataset_qcd = pytorch_delphes.PFGraphDataset(args.dataset_qcd)
+    full_dataset_ttbar = PFGraphDataset(args.dataset)
+    full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
 
     # constructs a loader from the data to iterate over batches
     print('Constructing data loaders..')
-    train_loader, valid_loader = pytorch_delphes.data_to_loader_ttbar(full_dataset_ttbar, args.n_train, args.n_valid, batch_size=args.batch_size)
-    test_loader = pytorch_delphes.data_to_loader_qcd(full_dataset_qcd, args.n_test, batch_size=args.batch_size)
+    train_loader, valid_loader = data_to_loader_ttbar(full_dataset_ttbar, args.n_train, args.n_valid, batch_size=args.batch_size)
+    test_loader = data_to_loader_qcd(full_dataset_qcd, args.n_test, batch_size=args.batch_size)
 
     # element parameters
     input_dim = 12
@@ -101,30 +115,19 @@ if __name__ == "__main__":
     output_dim_p4 = 6
 
     if args.optimized:
-        model_classes = {"PFNet7": pytorch_delphes.PFNet7_opt}
+        model_class = PFNet7_opt
     else:
-        model_classes = {"PFNet7": pytorch_delphes.PFNet7}
-
-    model_class = model_classes[args.model]
-    model_kwargs = {'input_dim': input_dim,
-                    'hidden_dim': args.hidden_dim,
-                    'hidden_dim_nn1': args.hidden_dim_nn1,
-                    'input_encoding': args.input_encoding,
-                    'encoding_dim': args.encoding_dim,
-                    'output_dim_id': output_dim_id,
-                    'output_dim_p4': output_dim_p4,
-                    'space_dim': args.space_dim,
-                    'propagate_dimensions': args.propagate_dimensions,
-                    'nearest': args.nearest,
-                    'target': args.target,
-                    'nn1': args.nn1,
-                    'nn3': args.nn3}
+        model_class = PFNet7
 
     if args.load:
-            print('Loading a previously trained model..')
-            model = model_class(**model_kwargs)
             outpath = args.outpath + args.load_model
             PATH = outpath + '/epoch_' + str(args.load_epoch) + '_weights.pth'
+
+            print('Loading a previously trained model..')
+            with open(outpath + '/model_kwargs.pkl', 'rb') as f:
+                model_kwargs = pkl.load(f)
+
+            model = model_class(**model_kwargs)
 
             state_dict = torch.load(PATH, map_location=device)
 
@@ -152,6 +155,20 @@ if __name__ == "__main__":
     elif args.train:
         #instantiate the model
         print('Instantiating a model..')
+        model_kwargs = {'input_dim': input_dim,
+                        'hidden_dim': args.hidden_dim,
+                        'hidden_dim_nn1': args.hidden_dim_nn1,
+                        'input_encoding': args.input_encoding,
+                        'encoding_dim': args.encoding_dim,
+                        'output_dim_id': output_dim_id,
+                        'output_dim_p4': output_dim_p4,
+                        'space_dim': args.space_dim,
+                        'propagate_dimensions': args.propagate_dimensions,
+                        'nearest': args.nearest,
+                        'target': args.target,
+                        'nn1': args.nn1,
+                        'nn3': args.nn3}
+
         model = model_class(**model_kwargs)
 
         if multi_gpu:
@@ -162,11 +179,12 @@ if __name__ == "__main__":
         model.to(device)
 
     if args.train:
-        args.title=args.title+'noskip'
         if args.nn1:
             args.title=args.title+'_nn1'
         if args.nn3:
             args.title=args.title+'_nn3'
+        if args.load:
+            args.title=args.title+'_retrain'
 
         if args.classification_only:
             model_fname = get_model_fname(args.dataset, model, args.n_train, args.n_epochs, args.lr, args.target, args.batch_size, args.alpha, "clf", args.title)
@@ -202,69 +220,39 @@ if __name__ == "__main__":
         print(model_fname)
 
         model.train()
-        pytorch_delphes.train_loop(model, device, multi_gpu,
-                                   train_loader, valid_loader, test_loader,
-                                   args.n_epochs, args.patience, optimizer, args.alpha, args.target,
-                                   output_dim_id, args.classification_only, outpath)
+        train_loop(model, device, multi_gpu,
+                   train_loader, valid_loader, test_loader,
+                   args.n_epochs, args.patience, optimizer, args.alpha, args.target,
+                   output_dim_id, args.classification_only, outpath)
 
     model.eval()
 
     # evaluate on training data..
-    if not osp.isdir(outpath+'/train_loader'):
-        os.makedirs(outpath+'/train_loader')
-    if not osp.isdir(outpath+'/train_loader/resolution_plots'):
-        os.makedirs(outpath+'/train_loader/resolution_plots')
-    if not osp.isdir(outpath+'/train_loader/distribution_plots'):
-        os.makedirs(outpath+'/train_loader/distribution_plots')
-    if not osp.isdir(outpath+'/train_loader/multiplicity_plots'):
-        os.makedirs(outpath+'/train_loader/multiplicity_plots')
-    if not osp.isdir(outpath+'/train_loader/efficiency_plots'):
-        os.makedirs(outpath+'/train_loader/efficiency_plots')
-
+    make_directories_for_plots(outpath, 'train')
     if args.make_predictions_train:
-        pytorch_delphes.make_predictions(model, multi_gpu, train_loader, outpath+'/train_loader', args.target, device, args.n_epochs, which_data="training data")
+        make_predictions(model, multi_gpu, train_loader, outpath+'/train_loader', args.target, device, args.n_epochs, which_data="training data")
     if args.make_plots_train:
-        plotting.make_plots(model, train_loader, outpath+'/train_loader', args.target, device, args.n_epochs, which_data="training data")
+        make_plots(model, train_loader, outpath+'/train_loader', args.target, device, args.n_epochs, which_data="training data")
 
     # evaluate on validation data..
-    if not osp.isdir(outpath+'/valid_loader'):
-        os.makedirs(outpath+'/valid_loader')
-    if not osp.isdir(outpath+'/valid_loader/resolution_plots'):
-        os.makedirs(outpath+'/valid_loader/resolution_plots')
-    if not osp.isdir(outpath+'/valid_loader/distribution_plots'):
-        os.makedirs(outpath+'/valid_loader/distribution_plots')
-    if not osp.isdir(outpath+'/valid_loader/multiplicity_plots'):
-        os.makedirs(outpath+'/valid_loader/multiplicity_plots')
-    if not osp.isdir(outpath+'/valid_loader/efficiency_plots'):
-        os.makedirs(outpath+'/valid_loader/efficiency_plots')
-
+    make_directories_for_plots(outpath, 'valid')
     if args.make_predictions_valid:
-        pytorch_delphes.make_predictions(model, multi_gpu, valid_loader, outpath+'/valid_loader', args.target, device, args.n_epochs, which_data="validation data")
+        make_predictions(model, multi_gpu, valid_loader, outpath+'/valid_loader', args.target, device, args.n_epochs, which_data="validation data")
     if args.make_plots_valid:
-        plotting.make_plots(model, valid_loader, outpath+'/valid_loader', args.target, device, args.n_epochs, which_data="validation data")
+        make_plots(model, valid_loader, outpath+'/valid_loader', args.target, device, args.n_epochs, which_data="validation data")
 
     # evaluate on testing data..
-    if not osp.isdir(outpath+'/test_loader'):
-        os.makedirs(outpath+'/test_loader')
-    if not osp.isdir(outpath+'/test_loader/resolution_plots'):
-        os.makedirs(outpath+'/test_loader/resolution_plots')
-    if not osp.isdir(outpath+'/test_loader/distribution_plots'):
-        os.makedirs(outpath+'/test_loader/distribution_plots')
-    if not osp.isdir(outpath+'/test_loader/multiplicity_plots'):
-        os.makedirs(outpath+'/test_loader/multiplicity_plots')
-    if not osp.isdir(outpath+'/test_loader/efficiency_plots'):
-        os.makedirs(outpath+'/test_loader/efficiency_plots')
-
+    make_directories_for_plots(outpath, 'test')
     if args.make_predictions_test:
         if args.load:
-            pytorch_delphes.make_predictions(model, multi_gpu, test_loader, outpath+'/test_loader', args.target, device, args.load_epoch, which_data="testing data")
+            make_predictions(model, multi_gpu, test_loader, outpath+'/test_loader', args.target, device, args.load_epoch, which_data="testing data")
         else:
-            pytorch_delphes.make_predictions(model, multi_gpu, test_loader, outpath+'/test_loader', args.target, device, args.n_epochs, which_data="testing data")
+            make_predictions(model, multi_gpu, test_loader, outpath+'/test_loader', args.target, device, args.n_epochs, which_data="testing data")
     if args.make_plots_test:
         if args.load:
-            plotting.make_plots(model, test_loader, outpath+'/test_loader', args.target, device, args.load_epoch, which_data="testing data")
+            make_plots(model, test_loader, outpath+'/test_loader', args.target, device, args.load_epoch, which_data="testing data")
         else:
-            plotting.make_plots(model, test_loader, outpath+'/test_loader', args.target, device, args.n_epochs, which_data="testing data")
+            make_plots(model, test_loader, outpath+'/test_loader', args.target, device, args.n_epochs, which_data="testing data")
 
 
 ## -----------------------------------------------------------

@@ -10,14 +10,8 @@ import torch_geometric.transforms as T
 from torch_geometric.nn import EdgeConv, MessagePassing, EdgePooling, GATConv, GCNConv, JumpingKnowledge, GraphUNet, DynamicEdgeConv, DenseGCNConv
 from torch_geometric.nn import TopKPooling, SAGPooling, SGConv
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU
-from torch_scatter import scatter_mean
-from torch_geometric.nn.inits import reset
-from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
-from torch.utils.data import random_split
 
-#from torch_geometric.nn import GravNetConv         # if you want to get it from source code (won't be able to retrieve the adjacency matrix)
-from gravnet_LRP import GravNetConv
-from torch_geometric.nn import GraphConv
+import LRP
 
 #Model with gravnet clustering
 class PFNet7(nn.Module):
@@ -25,7 +19,8 @@ class PFNet7(nn.Module):
         input_dim=12, hidden_dim=256, hidden_dim_nn1=64, input_encoding=12, encoding_dim=64,
         output_dim_id=6,
         output_dim_p4=6,
-        space_dim=4, propagate_dimensions=22, nearest=16):
+        space_dim=4, propagate_dimensions=22, nearest=16,
+        target="gen", nn1=True, nn3=True):
 
         super(PFNet7, self).__init__()
 
@@ -43,7 +38,7 @@ class PFNet7(nn.Module):
         )
 
         # (2) CNN: Gravnet layer
-        self.conv1 = GravNetConv(input_encoding, encoding_dim, space_dim, propagate_dimensions, nearest)
+        self.conv1 = LRP.GravNetConv(input_encoding, encoding_dim, space_dim, propagate_dimensions, nearest)
 
         # (3) DNN layer: classifying PID
         self.nn2 = nn.Sequential(

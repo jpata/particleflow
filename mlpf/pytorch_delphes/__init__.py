@@ -4,7 +4,6 @@ from pytorch_delphes.data_preprocessing import data_to_loader_ttbar, data_to_loa
 
 from pytorch_delphes.model import PFNet7, PFNet7_opt
 from pytorch_delphes.gravnet import GravNetConv
-
 from pytorch_delphes.gravnet_optimized import GravNetConv_optimized
 
 from pytorch_delphes.training import train_loop

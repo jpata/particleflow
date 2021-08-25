@@ -4,7 +4,6 @@ from torch.nn import Sequential as Seq,Linear,ReLU,BatchNorm1d
 from torch_scatter import scatter_mean
 import numpy as np
 import json
-import model_io
 from torch_geometric.utils import to_scipy_sparse_matrix
 import scipy
 import pickle, math, time
@@ -17,22 +16,16 @@ import networkx as nx
 from torch_geometric.utils.convert import to_networkx
 from torch_geometric.utils import to_dense_adj
 
-use_gpu = torch.cuda.device_count()>0
-multi_gpu = torch.cuda.device_count()>1
-
-#define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
+import LRP
 
 class LRP_clf:
     EPSILON=1e-9
 
-    def __init__(self,model:model_io):
+    def __init__(self, device, model:LRP.model_io):
+        self.device=device
         self.model=model
 
-    def register_model(model:model_io):
+    def register_model(model:LRP.model_io):
         self.model=model
 
     """
@@ -41,24 +34,24 @@ class LRP_clf:
 
     # this rule is wrong.. it is just here because it is much quicker for experimentation and gives the correct dimensions needed for debugging (if you haven't hit the message passing step)
     @staticmethod
-    def easy_rule(layer,input,R,index,output_layer,activation_layer, print_statement):
+    def easy_rule(self, layer, input, R, index,output_layer, activation_layer, print_statement):
         EPSILON=1e-9
         # input.retain_grad()
         # z = layer.forward(input)
         # basically layer.forward does this: output=(torch.matmul(input,torch.transpose(w,0,1))+b) , assuming the following w & b are retrieved
 
         if activation_layer:
-            w = torch.eye(input.shape[1]).to(device)
+            w = torch.eye(input.shape[1]).to(self.device)
         else:
-            w = layer.weight.detach().to(device)
+            w = layer.weight.detach().to(self.device)
 
         if output_layer: # for the output layer
             T, W, r = [], [], []
 
             for i in range(R.shape[1]):
-                T.append(R[:,i].reshape(-1,1).to(device))
-                W.append(w[i,:].reshape(1,-1).to(device))
-                I = torch.ones_like(R[:,i]).reshape(-1,1).to(device)
+                T.append(R[:,i].reshape(-1,1).to(self.device))
+                W.append(w[i,:].reshape(1,-1).to(self.device))
+                I = torch.ones_like(R[:,i]).reshape(-1,1).to(self.device)
 
                 Numerator = (input*torch.matmul(T[i],W[i]))
                 Denominator = (input*torch.matmul(I,W[i])).sum(axis=1)
@@ -83,14 +76,14 @@ class LRP_clf:
 
 
     @staticmethod
-    def eps_rule(layer, input, R, index, output_layer, activation_layer, print_statement, adjacency_matrix=None, message_passing=False):
+    def eps_rule(self, layer, input, R, index, output_layer, activation_layer, print_statement, adjacency_matrix=None, message_passing=False):
 
         if activation_layer:
-            w = torch.eye(input.shape[1]).detach().to(device)
+            w = torch.eye(input.shape[1]).detach().to(self.device)
         elif message_passing: # message passing hack
-            w = adjacency_matrix.detach().to(device)
+            w = adjacency_matrix.detach().to(self.device)
         else:
-            w = layer.weight.detach().to(device)
+            w = layer.weight.detach().to(self.device)
 
         wt = torch.transpose(w,0,1)
 
@@ -112,15 +105,15 @@ class LRP_clf:
                 R_list[output_neuron] = torch.transpose(R_list[output_neuron],0,1)
 
             # rep stands for repeated/expanded
-            a_rep = input.reshape(input.shape[0],input.shape[1],1).expand(-1,-1,R_list[output_neuron].shape[1]).to(device)
-            wt_rep = Wt[output_neuron].reshape(1,Wt[output_neuron].shape[0],Wt[output_neuron].shape[1]).expand(input.shape[0],-1,-1).to(device)
+            a_rep = input.reshape(input.shape[0],input.shape[1],1).expand(-1,-1,R_list[output_neuron].shape[1]).to(self.device)
+            wt_rep = Wt[output_neuron].reshape(1,Wt[output_neuron].shape[0],Wt[output_neuron].shape[1]).expand(input.shape[0],-1,-1).to(self.device)
 
             H = a_rep*wt_rep
             deno = H.sum(axis=1).reshape(H.sum(axis=1).shape[0],1,H.sum(axis=1).shape[1]).expand(-1,input.shape[1],-1)
 
             G = H/deno
 
-            R_previous[output_neuron] = (torch.matmul(G, R_list[output_neuron].reshape(R_list[output_neuron].shape[0],R_list[output_neuron].shape[1],1).to(device)))
+            R_previous[output_neuron] = (torch.matmul(G, R_list[output_neuron].reshape(R_list[output_neuron].shape[0],R_list[output_neuron].shape[1],1).to(self.device)))
             R_previous[output_neuron] = R_previous[output_neuron].reshape(R_previous[output_neuron].shape[0], R_previous[output_neuron].shape[1]).to('cpu')
 
             if message_passing: # message passing hack
@@ -177,7 +170,7 @@ class LRP_clf:
 
         # modify the big tensor based on message passing rule
         for node_i in tqdm(range(len(big_list))):
-            big_list[node_i] = self.eps_rule(layer, torch.transpose(before_message,0,1), big_list[node_i], index, output_layer=False, activation_layer=False, print_statement=True, adjacency_matrix=A, message_passing=True)
+            big_list[node_i] = self.eps_rule(self, layer, torch.transpose(before_message,0,1), big_list[node_i], index, output_layer=False, activation_layer=False, print_statement=True, adjacency_matrix=A, message_passing=True)
             print(f'- Finished computing R-score for node {node_i+1}/{len(big_list)} for the message passing..')
         print('- Finished computing R-scores for the message passing layer')
         return big_list
@@ -241,15 +234,15 @@ class LRP_clf:
 
         if len(big_list)==0:  # if you haven't hit the message passing step yet
             if 'Linear' in str(layer):
-                R = self.eps_rule(layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True)
+                R = self.eps_rule(self, layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True)
             elif 'LeakyReLU' or 'ELU' in str(layer):
-                R = self.eps_rule(layer, input, R, index, output_layer_bool, activation_layer=True, print_statement=True)
+                R = self.eps_rule(self, layer, input, R, index, output_layer_bool, activation_layer=True, print_statement=True)
         else:
             for node_i in tqdm(range(len(big_list))):
                 if 'Linear' in str(layer):
-                    big_list[node_i] = self.eps_rule(layer, input, big_list[node_i], index, output_layer_bool, activation_layer=False, print_statement=False)
+                    big_list[node_i] = self.eps_rule(self, layer, input, big_list[node_i], index, output_layer_bool, activation_layer=False, print_statement=False)
                 elif 'LeakyReLU' or 'ELU' in str(layer):
-                    big_list[node_i] =  self.eps_rule(layer, input, big_list[node_i], index, output_layer_bool, activation_layer=True, print_statement=False)
+                    big_list[node_i] =  self.eps_rule(self, layer, input, big_list[node_i], index, output_layer_bool, activation_layer=True, print_statement=False)
         return R, big_list, output_layer_index
 
 ##-----------------------------------------------------------------------------
