@@ -92,11 +92,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(0, 50, 100),
-            "eta": np.linspace(-5, 5, 100),
+            "pt": np.linspace(-4, 8, 100),
+            "eta": np.linspace(-8, 8, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": np.linspace(0,1000,100),
+            "energy": np.linspace(-1, 10,100),
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
@@ -124,10 +124,14 @@ class CustomCallback(tf.keras.callbacks.Callback):
             ypred_id_flat
         )
         plt.title("acc={:.3f} bacc={:.3f}".format(acc, balanced_acc))
-        plt.savefig(str(outpath / "cm_normed.pdf"), bbox_inches="tight")
-        plt.close("all")
 
-    def plot_event_visualization(self, outpath, ypred, ypred_id, msk, ievent=0):
+        image_path = str(outpath / "cm_normed.png")
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+    def plot_event_visualization(self, epoch, outpath, ypred, ypred_id, msk, ievent=0):
 
         X_eta, X_phi, X_energy = self.dataset_def.get_X_eta_phi_energy(self.X)
 
@@ -171,8 +175,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.savefig(str(outpath / "event_iev{}.png".format(ievent)), bbox_inches="tight")
+        image_path = str(outpath / "event_iev{}.png".format(ievent))
+        plt.savefig(image_path, bbox_inches="tight")
         plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
 
     def plot_reg_distribution(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
 
@@ -210,7 +217,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #FIXME: propagate from configuration
         if reg_variable == "energy" or reg_variable == "pt":
-            delta = 0.1
+            delta = 1.0
         else:
             delta = 0.1
             
@@ -224,24 +231,41 @@ class CustomCallback(tf.keras.callbacks.Callback):
             vals_true = np.log(vals_true)
             s = "_log"
 
-        plt.scatter(vals_pred, vals_true, marker=".", alpha=0.8, s=(2.0 +loss_vals))
+        #save correlation histogram
+        plt.figure()
+        bins = self.reg_bins[reg_variable]
+        plt.hist2d(vals_pred, vals_true, bins=(bins, bins), cmap="Blues")
+        plt.colorbar()
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
             if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
                 plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
-                plt.xlim(minval, maxval)
-                plt.ylim(minval, maxval)
-
         plt.xlabel("predicted")
         plt.ylabel("true")
-        plt.title("{}, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
+        plt.title("{}, particle weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
         image_path = str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s))
         plt.savefig(image_path, bbox_inches="tight")
-
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
         plt.close("all")
+
+        #save loss-weighted correlation histogram
+        plt.figure()
+        plt.hist2d(vals_pred, vals_true, bins=(bins, bins), weights=loss_vals, cmap="Blues")
+        plt.colorbar()
+        if len(vals_true) > 0:
+            minval = np.min(vals_true)
+            maxval = np.max(vals_true)
+            if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
+                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
+        plt.xlabel("predicted")
+        plt.ylabel("true")
+        plt.title("{}, loss weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
+        image_path = str(outpath / "{}_cls{}_corr{}_weighted.png".format(reg_variable, icls, s))
+        plt.savefig(image_path, bbox_inches="tight")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
 
         #Also plot the residuals, as we have the true and predicted values already available here
         plt.figure()
@@ -261,6 +285,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if self.comet_experiment:
             self.comet_experiment.log_metric('residual_{}{}_cls{}_mean'.format(reg_variable, s, icls), np.mean(residual), step=epoch)
             self.comet_experiment.log_metric('residual_{}{}_cls{}_std'.format(reg_variable, s, icls), np.std(residual), step=epoch)
+            self.comet_experiment.log_metric('val_loss_{}{}_cls{}'.format(reg_variable, s, icls), np.sum(loss_vals), step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
 
@@ -286,7 +311,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         self.plot_cm(epoch, cp_dir, ypred_id, msk)
         for ievent in range(min(5, self.X.shape[0])):
-            self.plot_event_visualization(cp_dir, ypred, ypred_id, msk, ievent=ievent)
+            self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
 
         for icls in range(self.num_output_classes):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)

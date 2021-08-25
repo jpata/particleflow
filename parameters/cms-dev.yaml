@@ -36,10 +36,10 @@ dataset:
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
   energy_loss:
     type: Huber
-    delta: 0.1
+    delta: 1.0
   pt_loss:
     type: Huber
-    delta: 0.1
+    delta: 1.0
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -57,11 +57,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-5
   batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 50
+  num_epochs: 100
   num_val_files: 10
   dtype: float32
   trainable:
@@ -81,7 +81,7 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   activation: elu
-  layernorm: yes
+  layernorm: no
   hidden_dim: 256
   bin_size: 32
   distance_dim: 16

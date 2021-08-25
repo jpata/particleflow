@@ -384,7 +384,7 @@ class OutputDecoding(tf.keras.Model):
         self.dropout = dropout
 
         self.ffn_id = point_wise_feed_forward_network(
-            num_output_classes, hidden_dim,
+            num_output_classes, hidden_dim*4,
             "ffn_cls",
             dtype=tf.dtypes.float32,
             num_layers=4,
@@ -403,7 +403,7 @@ class OutputDecoding(tf.keras.Model):
         )
         
         self.ffn_pt = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_pt",
+            4, hidden_dim, "ffn_pt",
             dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
             dropout=dropout
         )
@@ -421,7 +421,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_energy",
+            4, hidden_dim*4, "ffn_energy",
             dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True,
             dropout=dropout
         )
@@ -458,8 +458,6 @@ class OutputDecoding(tf.keras.Model):
 
         pred_eta_corr = self.ffn_eta(X_encoded, training)*msk_input
         pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input
-        pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
-        pred_pt_corr = self.ffn_pt(X_encoded, training)*msk_input
 
         eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
         pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
@@ -469,12 +467,18 @@ class OutputDecoding(tf.keras.Model):
         pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
         pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
 
-        #energy_sigmoid = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
-        pred_energy = pred_energy_corr[:, :, 0:1] + pred_energy_corr[:, :, 1:2]*orig_energy
+        X_encoded = tf.concat([X_encoded, tf.stop_gradient(pred_eta)], axis=-1)
+        pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
+        pred_pt_corr = self.ffn_pt(X_encoded, training)*msk_input
+
+        energy_sigmoid1 = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+        energy_sigmoid2 = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 1:2])
+        pred_energy = orig_energy*(1.0 + energy_sigmoid1*pred_energy_corr[:, :, 2:3]) + energy_sigmoid2*pred_energy_corr[:, :, 3:4]
         
         orig_pt = tf.stop_gradient(pred_energy - tf.math.log(tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8))))
-        pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
-        pred_pt = orig_pt + pt_sigmoid*pred_pt_corr[:, :, 1:2]
+        pt_sigmoid1 = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
+        pt_sigmoid2 = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 1:2])
+        pred_pt = orig_pt*(1.0 + pt_sigmoid1*pred_pt_corr[:, :, 2:3]) + pt_sigmoid2*pred_pt_corr[:, :, 3:4]
 
         ret = {
             "cls": out_id_softmax,
