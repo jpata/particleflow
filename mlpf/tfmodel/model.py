@@ -454,7 +454,7 @@ class OutputDecoding(tf.keras.Model):
             orig_energy = X_input[:, :, 5:6]
 
         if self.regression_use_classification:
-            X_encoded = tf.concat([X_encoded, out_id_softmax], axis=-1)
+            X_encoded = tf.concat([X_encoded, tf.stop_gradient(out_id_softmax)], axis=-1)
 
         pred_eta_corr = self.ffn_eta(X_encoded, training)*msk_input
         pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input

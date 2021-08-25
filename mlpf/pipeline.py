@@ -65,9 +65,14 @@ def main():
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
-def data(config):
+@click.option("--customize", help="customization function", type=str, default=None)
+def data(config, customize):
 
     config, _, _, _, _, _, _ = parse_config(config)
+
+    if customize:
+        config = customization_functions[customize](config)
+
     cds = config["dataset"]
 
     dataset_def = Dataset(
@@ -95,7 +100,8 @@ def data(config):
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=1, help="Plot detailed validation every N epochs", type=int)
-def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
+@click.option("--customize", help="customization function", type=str, default=None)
+def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq, customize):
 
     try:
         from comet_ml import Experiment
@@ -118,6 +124,10 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
         config, ntrain, ntest, weights
     )
 
+    if customize:
+        prefix += customize
+        config = customization_functions[customize](config)
+
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
@@ -126,6 +136,10 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq):
 
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+
+    #FIXME: split up training/test and validation dataset and parameters
+    dataset_def.padded_num_elem_size = 6400
+
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
     if recreate or (weights is None):
@@ -355,6 +369,23 @@ def find_lr(config, outdir, figname, logscale):
 
         lr_finder.plot(save_dir=outdir, figname=figname, log_scale=logscale)
 
+
+def customize_gun_sample(config):
+    config["dataset"]["padded_num_elem_size"] = 640
+    config["dataset"]["processed_path"] = "data/SinglePiFlatPt0p7To10_cfi/tfr_cand/*.tfrecords"
+    config["dataset"]["raw_path"] = "data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl.bz2"
+    config["dataset"]["classification_loss_coef"] = 0.0
+    config["dataset"]["charge_loss_coef"] = 0.0
+    config["dataset"]["eta_loss_coef"] = 0.0
+    config["dataset"]["sin_phi_loss_coef"] = 0.0
+    config["dataset"]["cos_phi_loss_coef"] = 0.0
+    config["setup"]["trainable"] = "ffn_energy"
+    config["setup"]["batch_size"] = 10*config["setup"]["batch_size"]
+    return config
+
+customization_functions = {
+    "gun_sample": customize_gun_sample
+}
 
 @main.command()
 @click.help_option("-h", "--help")
