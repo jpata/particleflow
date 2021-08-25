@@ -16,20 +16,20 @@ import networkx as nx
 from torch_geometric.utils.convert import to_networkx
 from torch_geometric.utils import to_dense_adj
 
-import LRP
+import lrp
 
-class LRP_reg:
+class lrp_reg:
     EPSILON=1e-9
 
-    def __init__(self, device, model:LRP.model_io):
+    def __init__(self, device, model:lrp.model_io):
         self.device=device
         self.model=model
 
-    def register_model(model:LRP.model_io):
+    def register_model(model:lrp.model_io):
         self.model=model
 
     """
-    LRP rules
+    lrp rules
     """
 
     # this rule is wrong.. it is just here because it is much quicker for experimentation and gives the correct dimensions needed for debugging (if you haven't hit the message passing step)
@@ -185,7 +185,7 @@ class LRP_reg:
             print("- Adjacency matrix is correctly computed")
 
         # # the following saves a version of the R-scores before the message passing
-        # torch.save(big_list, outpath + '/LRP/R_score_layer_before_msg_passing.pt')
+        # torch.save(big_list, outpath + '/lrp/R_score_layer_before_msg_passing.pt')
 
         # modify the big tensor based on message passing rule
         for node_i in tqdm(range(len(big_list))):
@@ -212,7 +212,7 @@ class LRP_reg:
         print('Total number of layers (including activation layers):', start_index)
 
         # store the R-scores for the output layer (they are basically the model predictions)
-        torch.save(to_explain["pred_p4"].detach(), outpath + f'/LRP/R_score_layer{start_index+1}.pt')
+        torch.save(to_explain["pred_p4"].detach(), outpath + f'/lrp/R_score_layer{start_index+1}.pt')
 
         ### loop over each single layer
         big_list = []
@@ -225,7 +225,7 @@ class LRP_reg:
         return big_list      # returns the heatmaps for layer0 (i.e. input features)
 
     def explain_single_layer(self, R, to_explain, big_list, outpath, output_layer_index, index=None, name=None):
-        # preparing variables required for computing LRP
+        # preparing variables required for computing lrp
         layer = self.model.get_layer(index=index,name=name)
 
         if name is None:
@@ -246,8 +246,8 @@ class LRP_reg:
             print(f"Explaining layer {output_layer_index+1-index}/{output_layer_index-1}: {layer} - Skip connection")
             input_relevance, pid_relevance, embedding_relevance = self.eps_rule(self, layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True, skip_connection=True)
 
-            torch.save(input_relevance, outpath + f'/LRP/input_relevance.pt')
-            torch.save(embedding_relevance, outpath + f'/LRP/embedding_relevance.pt')
+            torch.save(input_relevance, outpath + f'/lrp/input_relevance.pt')
+            torch.save(embedding_relevance, outpath + f'/lrp/embedding_relevance.pt')
 
             return pid_relevance, big_list
 
@@ -257,7 +257,7 @@ class LRP_reg:
             R = self.eps_rule(self, layer, input, R, index, output_layer_bool, activation_layer=False, print_statement=True)
 
             # add the embedding_relevance computed in the nn3.0 skip connection
-            embedding_relevance = torch.load(outpath + f'/LRP/embedding_relevance.pt', map_location=torch.self.device('cpu'))
+            embedding_relevance = torch.load(outpath + f'/lrp/embedding_relevance.pt', map_location=torch.self.device('cpu'))
 
             for i in range(len(R)):
                 R[i] = R[i] + embedding_relevance[i]
@@ -269,7 +269,7 @@ class LRP_reg:
             print(f"Explaining layer {output_layer_index+1-index}/{output_layer_index-1}: {layer}")
 
             # add the input_relevance computed in the nn3.0 skip connection
-            input_relevance = torch.load(outpath + f'/LRP/input_relevance.pt', map_location=torch.self.device('cpu'))
+            input_relevance = torch.load(outpath + f'/lrp/input_relevance.pt', map_location=torch.self.device('cpu'))
 
             for node_i in tqdm(range(len(big_list))):
                 big_list[node_i] = self.eps_rule(self, layer, input, big_list[node_i], index, output_layer_bool, activation_layer=False, print_statement=False)

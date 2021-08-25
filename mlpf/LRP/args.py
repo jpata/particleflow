@@ -4,11 +4,11 @@ from math import inf
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--LRP_dataset_qcd", type=str, default='../test_tmp_delphes/data/pythia8_qcd', help="dataset path", required=True)
-    parser.add_argument("--LRP_outpath", type=str, default = '../test_tmp_delphes/experiments/LRP/', help="Output folder for the LRP relevance scores and heatmaps", required=True)
+    parser.add_argument("--lrp_dataset_qcd", type=str, default='../test_tmp_delphes/data/pythia8_qcd', help="dataset path", required=True)
+    parser.add_argument("--lrp_outpath", type=str, default = '../test_tmp_delphes/experiments/lrp/', help="Output folder for the lrp relevance scores and heatmaps", required=True)
 
     # usual specs
-    parser.add_argument("--n_test", type=int, default=2, help="number of data files to use for testing LRP.. each file contains 100 events")
+    parser.add_argument("--n_test", type=int, default=2, help="number of data files to use for testing lrp.. each file contains 100 events")
     parser.add_argument("--batch_size", type=int, default=1, help="Number of .pt files to load in parallel")
 
     parser.add_argument("--hidden_dim", type=int, default=256, help="hidden dimension")
@@ -19,13 +19,13 @@ def parse_args():
     parser.add_argument("--propagate_dimensions", type=int, default=22, help="The number of features to be propagated between the vertices")
     parser.add_argument("--nearest", type=int, default=16, help="k nearest neighbors in gravnet layer")
 
-    # extras for LRP
+    # extras for lrp
     parser.add_argument("--explain", action=BoolArg, default=True, help="General setup mode: if True then you want to explain.. if False then you will load an already explained model (already made R-scores)..")
-    parser.add_argument("--LRP_reg", action=BoolArg, default=True, help="Works only if --explain is True.. Runs LRP for interpreting the regression part..")
-    parser.add_argument("--LRP_clf", action=BoolArg, default=True, help="Works only if --explain is True.. Runs LRP for interpreting the classification part..")
+    parser.add_argument("--lrp_reg", action=BoolArg, default=True, help="Works only if --explain is True.. Runs lrp for interpreting the regression part..")
+    parser.add_argument("--lrp_clf", action=BoolArg, default=True, help="Works only if --explain is True.. Runs lrp for interpreting the classification part..")
 
-    parser.add_argument("--LRP_load_model", type=str, default="/PFNet7_cand_ntrain_2", help="Loads the model to explain (or only make_heatmaps)", required=False)
-    parser.add_argument("--LRP_load_epoch", type=int, default=0, help="Loads the epoch after which to explain (or only make_heatmaps)")
+    parser.add_argument("--lrp_load_model", type=str, default="/PFNet7_cand_ntrain_2", help="Loads the model to explain (or only make_heatmaps)", required=False)
+    parser.add_argument("--lrp_load_epoch", type=int, default=0, help="Loads the epoch after which to explain (or only make_heatmaps)")
 
     parser.add_argument("--make_heatmaps_reg", action=BoolArg, default=True, help="Constructs heatmaps for the regressed p4 (must run with explain=True or else you load a pre-explained model with explain=False)..")
     parser.add_argument("--make_heatmaps_clf", action=BoolArg, default=True, help="Constructs heatmaps for the classified pid (must run with explain=True or else you load a pre-explained model with explain=False)..")
