@@ -42,11 +42,11 @@ python3 ../mlpf/pytorch_delphes/graph_data_delphes.py --dataset data/pythia8_qcd
 # before training a model, first get rid of any previous models stored
 rm -Rf experiments/*
 
-cd ../mlpf/pytorch_delphes/
+cd ../mlpf/
 
 #run the pytorch training
 echo Beginning the training..
-python3 pipeline.py \
+python3 pytorch_pipeline.py \
   --n_epochs=10 --n_train=1 --n_valid=1 --n_test=1 --batch_size=4 \
   --dataset='../../test_tmp_delphes/data/pythia8_ttbar' \
   --dataset_qcd='../../test_tmp_delphes/data/pythia8_qcd' \
