@@ -98,7 +98,7 @@ def train(config, weights, ntrain, ntest, recreate, prefix):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if "CPU" not in strategy.extended.worker_devices[0]:
-        nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,driver_version,pstate,pcie.link.gen.max,pcie.link.gen.current,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
+        nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
         p = subprocess.Popen(shlex.split(nvidia_smi_call))
     # If using more than 1 GPU, we scale the batch size by the number of GPUs
     if maybe_global_batch_size is not None:
