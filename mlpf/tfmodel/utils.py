@@ -153,7 +153,7 @@ def compute_weights_none(X, y, w):
 def make_weight_function(config):
     def weight_func(X,y,w):
 
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
         w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
         w_none = tf.ones_like(w)
@@ -178,16 +178,18 @@ def make_weight_function(config):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
+
+        msk = tf.expand_dims(tf.cast(y[:, :, 0]!=0, tf.float32), axis=-1)
         return (
             X,
             {
                 "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
-                "charge": y[:, :, 1:2],
-                "pt": tf.math.log(y[:, :, 2:3] + 1.0),
-                "eta": y[:, :, 3:4],
-                "sin_phi": y[:, :, 4:5],
-                "cos_phi": y[:, :, 5:6],
-                "energy": tf.math.log(y[:, :, 6:7] + 1.0),
+                "charge": y[:, :, 1:2]*msk,
+                "pt": tf.math.log(y[:, :, 2:3] + 1.0)*msk,
+                "eta": y[:, :, 3:4]*msk,
+                "sin_phi": y[:, :, 4:5]*msk,
+                "cos_phi": y[:, :, 5:6]*msk,
+                "energy": tf.math.log(y[:, :, 6:7] + 1.0)*msk,
             },
             w,
         )

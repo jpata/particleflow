@@ -92,11 +92,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(-4, 8, 100),
-            "eta": np.linspace(-8, 8, 100),
+            "pt": np.linspace(0, 5, 100),
+            "eta": np.linspace(-6, 6, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": np.linspace(-1, 10,100),
+            "energy": np.linspace(0, 7,100),
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):

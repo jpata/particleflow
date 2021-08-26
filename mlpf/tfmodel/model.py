@@ -139,16 +139,27 @@ class InputEncodingCMS(tf.keras.layers.Layer):
     @tf.function
     def call(self, X):
 
+        log_energy = tf.expand_dims(tf.math.log(X[:, :, 4]+1.0), axis=-1)
+
         #X[:, :, 0] - categorical index of the element type
         Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
         #Xpt = tf.expand_dims(tf.math.log1p(X[:, :, 1]), axis=-1)
         Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
+
+        Xpt_0p5 = tf.math.sqrt(Xpt)
+        Xpt_2 = tf.math.pow(Xpt, 2)
+
         Xeta1 = tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1)
         Xeta2 = tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1)
+        Xabs_eta = tf.expand_dims(tf.math.abs(X[:, :, 2]), axis=-1)
         Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
         Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
+
         #Xe = tf.expand_dims(tf.math.log1p(X[:, :, 4]), axis=-1)
-        Xe = tf.expand_dims(tf.math.log(X[:, :, 4]+1.0), axis=-1)
+        Xe = log_energy
+        Xe_0p5 = tf.math.sqrt(log_energy)
+        Xe_2 = tf.math.pow(log_energy, 2)
+
         Xlayer = tf.expand_dims(X[:, :, 5]*10.0, axis=-1)
         Xdepth = tf.expand_dims(X[:, :, 6]*10.0, axis=-1)
 
@@ -158,11 +169,15 @@ class InputEncodingCMS(tf.keras.layers.Layer):
         Xphi_hcal2 = tf.expand_dims(tf.cos(X[:, :, 12]), axis=-1)
 
         return tf.concat([
-            Xid, Xpt,
+            Xid,
+            Xpt, Xpt_0p5, Xpt_2,
             Xeta1, Xeta2,
+            Xabs_eta,
             Xphi1, Xphi2,
-            Xe, Xlayer, Xdepth,
-            Xphi_ecal1, Xphi_ecal2, Xphi_hcal1, Xphi_hcal2,
+            Xe, Xe_0p5, Xe_2,
+            Xlayer, Xdepth,
+            Xphi_ecal1, Xphi_ecal2,
+            Xphi_hcal1, Xphi_hcal2,
             X], axis=-1
         )
 
@@ -374,7 +389,6 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
         return bins_split, x_features_binned, dm, msk_f_binned
 
-
 class OutputDecoding(tf.keras.Model):
     def __init__(self, activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout, **kwargs):
         super(OutputDecoding, self).__init__(**kwargs)
@@ -403,26 +417,26 @@ class OutputDecoding(tf.keras.Model):
         )
         
         self.ffn_pt = point_wise_feed_forward_network(
-            4, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            2, hidden_dim, "ffn_pt",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
 
         self.ffn_eta = point_wise_feed_forward_network(
             2, hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
 
         self.ffn_phi = point_wise_feed_forward_network(
             4, hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=True,
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            4, hidden_dim*4, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=4, activation=activation, dim_decrease=True,
+            2, hidden_dim*4, "ffn_energy",
+            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
             dropout=dropout
         )
 
@@ -443,15 +457,16 @@ class OutputDecoding(tf.keras.Model):
         #orig_pt = X_input[:, :, 1:2]
         orig_eta = X_input[:, :, 2:3]
 
-        #FIXME: schema 
+        #FIXME: better schema propagation 
+        #skip connection from raw input values
         if self.schema == "cms":
-            orig_sin_phi = tf.math.sin(X_input[:, :, 3:4])
-            orig_cos_phi = tf.math.cos(X_input[:, :, 3:4])
-            orig_energy = X_input[:, :, 4:5]
+            orig_sin_phi = tf.math.sin(X_input[:, :, 3:4])*msk_input
+            orig_cos_phi = tf.math.cos(X_input[:, :, 3:4])*msk_input
+            orig_log_energy = tf.math.log(X_input[:, :, 4:5] + 1.0)*msk_input
         elif self.schema == "delphes":
-            orig_sin_phi = X_input[:, :, 3:4]
-            orig_cos_phi = X_input[:, :, 4:5]
-            orig_energy = X_input[:, :, 5:6]
+            orig_sin_phi = X_input[:, :, 3:4]*msk_input
+            orig_cos_phi = X_input[:, :, 4:5]*msk_input
+            orig_log_energy = tf.math.log(X_input[:, :, 5:6] + 1.0)*msk_input
 
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, tf.stop_gradient(out_id_softmax)], axis=-1)
@@ -460,34 +475,41 @@ class OutputDecoding(tf.keras.Model):
         pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input
 
         eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
-        pred_eta = orig_eta*eta_sigmoid + (1.0 - eta_sigmoid)*pred_eta_corr[:, :, 1:2]
+        pred_eta = orig_eta + eta_sigmoid*pred_eta_corr[:, :, 1:2]
 
         sin_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
         cos_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
-        pred_sin_phi = orig_sin_phi*sin_phi_sigmoid + (1.0 - sin_phi_sigmoid)*pred_phi_corr[:, :, 1:2]
-        pred_cos_phi = orig_cos_phi*cos_phi_sigmoid + (1.0 - cos_phi_sigmoid)*pred_phi_corr[:, :, 3:4]
+        pred_sin_phi = orig_sin_phi + sin_phi_sigmoid*pred_phi_corr[:, :, 1:2]
+        pred_cos_phi = orig_cos_phi + cos_phi_sigmoid*pred_phi_corr[:, :, 3:4]
 
         X_encoded = tf.concat([X_encoded, tf.stop_gradient(pred_eta)], axis=-1)
         pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
         pred_pt_corr = self.ffn_pt(X_encoded, training)*msk_input
 
-        energy_sigmoid1 = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
-        energy_sigmoid2 = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 1:2])
-        pred_energy = orig_energy*(1.0 + energy_sigmoid1*pred_energy_corr[:, :, 2:3]) + energy_sigmoid2*pred_energy_corr[:, :, 3:4]
-        
-        orig_pt = tf.stop_gradient(pred_energy - tf.math.log(tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8))))
-        pt_sigmoid1 = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
-        pt_sigmoid2 = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 1:2])
-        pred_pt = orig_pt*(1.0 + pt_sigmoid1*pred_pt_corr[:, :, 2:3]) + pt_sigmoid2*pred_pt_corr[:, :, 3:4]
+        energy_sigmoid = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+
+        #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
+        #pred_log_energy = orig_log_energy*energy_sigmoid + (1.0 - energy_sigmoid)*pred_energy_corr[:, :, 1:2]
+        pred_log_energy = orig_log_energy+ energy_sigmoid*pred_energy_corr[:, :, 1:2]
+        pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
+
+        #compute pt=E/cosh(eta)
+        orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+        orig_log_pt = tf.math.log(orig_pt + 1.0)
+
+        pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
+        pred_log_pt = orig_log_pt + pt_sigmoid*pred_pt_corr[:, :, 1:2]
+
+        msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
         ret = {
             "cls": out_id_softmax,
-            "charge": out_charge*msk_input,
-            "pt": pred_pt*msk_input,
-            "eta": pred_eta*msk_input,
-            "sin_phi": pred_sin_phi*msk_input,
-            "cos_phi": pred_cos_phi*msk_input,
-            "energy": pred_energy*msk_input,
+            "charge": out_charge*msk_input*msk_output,
+            "pt": pred_log_pt*msk_input*msk_output,
+            "eta": pred_eta*msk_input*msk_output,
+            "sin_phi": pred_sin_phi*msk_input*msk_output,
+            "cos_phi": pred_cos_phi*msk_input*msk_output,
+            "energy": pred_log_energy*msk_input*msk_output,
         }
 
         return ret
@@ -539,10 +561,10 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
         super(CombinedGraphLayer, self).__init__(*args, **kwargs)
 
-    def call(self, x, msk, training):
+    def call(self, x, msk, training=False):
 
         if self.do_layernorm:
-            x = self.layernorm(x)
+            x = self.layernorm(x, training=training)
 
         #compute node features for graph building
         x_dist = self.ffn_dist(x)
@@ -663,6 +685,38 @@ class PFNetDense(tf.keras.Model):
             layer.trainable = False
 
         self.output_dec.set_trainable_named(layer_names)
+
+    ##for eager mode debugging
+    # def train_step(self, data):
+    #     # Unpack the data. Its structure depends on your model and
+    #     # on what you pass to `fit()`.
+    #     x, y, sample_weights = data
+
+    #     with tf.GradientTape() as tape:
+    #         y_pred = self(x, training=True)  # Forward pass
+    #         # Compute the loss value
+    #         # (the loss function is configured in `compile()`)
+    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #         import pdb;pdb.set_trace()
+
+    #     ya = {k: v.numpy() for k, v in y.items()}
+    #     yb = {k: v.numpy() for k, v in y_pred.items()}
+    #     sw = {k: v.numpy() for k, v in sample_weights.items()}
+
+    #     np.savez("ytrue.npz", **ya)
+    #     np.savez("ypred.npz", **yb)
+    #     np.savez("x.npz", x=x)
+    #     np.savez("sample_weights.npz", **sample_weights)
+
+    #     # Compute gradients
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+    #     # Update weights
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     # Update metrics (includes the metric that tracks the loss)
+    #     self.compiled_metrics.update_state(y, y_pred)
+    #     # Return a dict mapping metric names to current value
+    #     return {m.name: m.result() for m in self.metrics}
 
 class DummyNet(tf.keras.Model):
     def __init__(self,
