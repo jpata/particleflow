@@ -81,7 +81,7 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   activation: gelu
-  layernorm: no
+  layernorm: yes
   hidden_dim: 256
   bin_size: 32
   distance_dim: 8
