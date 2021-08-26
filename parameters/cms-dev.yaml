@@ -25,11 +25,11 @@ dataset:
   num_momentum_outputs: 5
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
+  pt_loss_coef: 100.0
   eta_loss_coef: 100.0
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
-  energy_loss_coef: 1.0
+  energy_loss_coef: 100.0
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
@@ -57,7 +57,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-5
+  lr: 1e-3
   batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
@@ -80,25 +80,25 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  activation: elu
+  activation: gelu
   layernorm: no
   hidden_dim: 256
   bin_size: 32
-  distance_dim: 16
+  distance_dim: 8
   dropout: 0.0
   graph_kernel:
     type: NodePairTrainableKernel
     output_dim: 8
     hidden_dim: 32
     num_layers: 2
-    activation: elu
-  num_graph_layers: 6
+    activation: gelu
+  num_graph_layers: 3
   node_message:
     type: NodeMessageLearnable
     output_dim: 256
     hidden_dim: 128
     num_layers: 2
-    activation: elu
+    activation: gelu
     aggregation_direction: dst
   num_node_messages: 1
   skip_connection: yes
