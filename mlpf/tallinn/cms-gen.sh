@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 1
+#SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 
 IMG=/home/software/singularity/base.simg:latest
