@@ -36,7 +36,7 @@ python3 mlpf/pipeline.py data -c parameters/cms.yaml
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5
 
-ls ./experiments/cms-*/weights/
+ls ./experiments/cms_*/weights/
 
 #Generate the pred.npz file of predictions
 python3 mlpf/pipeline.py evaluate -c parameters/cms.yaml -t ./experiments/cms_*
