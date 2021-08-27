@@ -36,8 +36,10 @@ python3 mlpf/pipeline.py data -c parameters/cms.yaml
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5
 
+ls ./experiments/cms-*/weights/
+
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate -c parameters/cms.yaml -t ./experiments/cms-*
+python3 mlpf/pipeline.py evaluate -c parameters/cms.yaml -t ./experiments/cms_*
 
 #Load the model
-python3 scripts/test_load_tfmodel.py ./experiments/cms-*/model_frozen/frozen_graph.pb
+python3 scripts/test_load_tfmodel.py ./experiments/cms_*/model_frozen/frozen_graph.pb

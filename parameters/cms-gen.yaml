@@ -30,10 +30,10 @@ dataset:
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
-  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_gen/*.tfrecords
   num_files_per_chunk: 1
-  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
     type: Huber
     delta: 1.0
