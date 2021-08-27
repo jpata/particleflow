@@ -17,8 +17,8 @@ python3 mlpf/pipeline.py data -c parameters/delphes.yaml
 CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/delphes.yaml
 
 #Run the validation to produce the predictions file
-python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes-* -v "data/pythia8_qcd/val/*.pkl.bz2" -e evaluate_qcd
-python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes-* -v "data/pythia8_ttbar/val/*.pkl.bz2" -e evaluate_ttbar
+python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes_* -v "data/pythia8_qcd/val/*.pkl.bz2" -e evaluate_qcd
+python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes_* -v "data/pythia8_ttbar/val/*.pkl.bz2" -e evaluate_ttbar
 ```
 
 ## Recipe for generation
