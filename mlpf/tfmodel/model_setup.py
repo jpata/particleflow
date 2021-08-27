@@ -401,8 +401,8 @@ def make_gnn_dense(config, dtype):
         "input_encoding",
         "graph_kernel",
         "skip_connection",
-        "regression_use_classification",
         "node_message",
+        "output_decoding",
         "debug"
     ]
 
