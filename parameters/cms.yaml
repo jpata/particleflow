@@ -61,7 +61,7 @@ setup:
   batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 40
   num_val_files: 10
   dtype: float32
   trainable:
