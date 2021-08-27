@@ -149,8 +149,8 @@ class InputEncodingCMS(tf.keras.layers.Layer):
         Xpt_0p5 = tf.math.sqrt(Xpt)
         Xpt_2 = tf.math.pow(Xpt, 2)
 
-        Xeta1 = tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1)
-        Xeta2 = tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1)
+        Xeta1 = tf.clip_by_value(tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1), -10, 10)
+        Xeta2 = tf.clip_by_value(tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1), -10, 10)
         Xabs_eta = tf.expand_dims(tf.math.abs(X[:, :, 2]), axis=-1)
         Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
         Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
@@ -159,6 +159,8 @@ class InputEncodingCMS(tf.keras.layers.Layer):
         Xe = log_energy
         Xe_0p5 = tf.math.sqrt(log_energy)
         Xe_2 = tf.math.pow(log_energy, 2)
+
+        Xe_transverse = log_energy - tf.math.log(Xeta2)
 
         Xlayer = tf.expand_dims(X[:, :, 5]*10.0, axis=-1)
         Xdepth = tf.expand_dims(X[:, :, 6]*10.0, axis=-1)
@@ -175,6 +177,7 @@ class InputEncodingCMS(tf.keras.layers.Layer):
             Xabs_eta,
             Xphi1, Xphi2,
             Xe, Xe_0p5, Xe_2,
+            Xe_transverse,
             Xlayer, Xdepth,
             Xphi_ecal1, Xphi_ecal2,
             Xphi_hcal1, Xphi_hcal2,
@@ -424,8 +427,9 @@ class OutputDecoding(tf.keras.Model):
         energy_num_layers=3,
 
         layernorm=False,
-
+        mask_reg_cls0=True,
         **kwargs):
+
         super(OutputDecoding, self).__init__(**kwargs)
 
         self.regression_use_classification = regression_use_classification
@@ -437,9 +441,11 @@ class OutputDecoding(tf.keras.Model):
         self.phi_skip_gate = phi_skip_gate
         self.energy_skip_gate = energy_skip_gate
 
+        self.mask_reg_cls0 = mask_reg_cls0
+
         self.do_layernorm = layernorm
         if self.do_layernorm:
-            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1)
+            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, name="output_layernorm")
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes, id_hidden_dim,
@@ -484,6 +490,11 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout
         )
 
+        # self.classwise_energy_means = self.add_weight(shape=(num_output_classes, ), name="classwise_energy_means",
+        #     initializer=tf.keras.initializers.RandomNormal(mean=0, stddev=0.01), trainable=True)
+        # self.classwise_energy_stds = self.add_weight(shape=(num_output_classes, ), name="classwise_energy_stds",
+        #     initializer=tf.keras.initializers.RandomNormal(mean=1, stddev=0.01), trainable=True)
+
     """
     X_input: (n_batch, n_elements, n_input_features) raw node input features
     X_encoded: (n_batch, n_elements, n_encoded_features) encoded/transformed node features
@@ -497,7 +508,9 @@ class OutputDecoding(tf.keras.Model):
             X_encoded = self.layernorm(X_encoded)
 
         out_id_logits = self.ffn_id(X_encoded, training)*msk_input
+
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
+        out_id_hard_softmax = tf.clip_by_value(tf.stop_gradient(tf.nn.softmax(10*out_id_logits)), 0, 1)
         out_charge = self.ffn_charge(X_encoded, training)*msk_input
 
         orig_eta = X_input[:, :, 2:3]
@@ -514,26 +527,25 @@ class OutputDecoding(tf.keras.Model):
             orig_log_energy = tf.math.log(X_input[:, :, 5:6] + 1.0)*msk_input
 
         if self.regression_use_classification:
-            X_encoded = tf.concat([X_encoded, tf.stop_gradient(out_id_softmax)], axis=-1)
+            X_encoded = tf.concat([X_encoded, tf.stop_gradient(out_id_logits)], axis=-1)
 
         pred_eta_corr = self.ffn_eta(X_encoded, training)*msk_input
         pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input
 
         if self.eta_skip_gate:
             eta_gate = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
+            pred_eta = orig_eta + eta_gate*pred_eta_corr[:, :, 1:2]
         else:
-            eta_gate = 1.0
-        pred_eta = orig_eta + eta_gate*pred_eta_corr[:, :, 1:2]
-
+            pred_eta = orig_eta*pred_eta_corr[:, :, 0:1] + eta_gate*pred_eta_corr[:, :, 1:2]
+        
         if self.phi_skip_gate:
             sin_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
             cos_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
+            pred_sin_phi = orig_sin_phi + sin_phi_gate*pred_phi_corr[:, :, 1:2]
+            pred_cos_phi = orig_cos_phi + cos_phi_gate*pred_phi_corr[:, :, 3:4]
         else:
-            sin_phi_gate = 1.0
-            cos_phi_gate = 1.0
-
-        pred_sin_phi = orig_sin_phi + sin_phi_gate*pred_phi_corr[:, :, 1:2]
-        pred_cos_phi = orig_cos_phi + cos_phi_gate*pred_phi_corr[:, :, 3:4]
+            pred_sin_phi = orig_sin_phi*pred_phi_corr[:, :, 0:1] + sin_phi_gate*pred_phi_corr[:, :, 1:2]
+            pred_cos_phi = orig_cos_phi*pred_phi_corr[:, :, 2:3] + cos_phi_gate*pred_phi_corr[:, :, 3:4]
 
         X_encoded = tf.concat([X_encoded, tf.stop_gradient(pred_eta)], axis=-1)
         pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
@@ -541,11 +553,14 @@ class OutputDecoding(tf.keras.Model):
 
         if self.energy_skip_gate:
             energy_gate = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+            pred_log_energy = orig_log_energy + energy_gate*pred_energy_corr[:, :, 1:2]
         else:
-            energy_gate = 1.0
+            pred_log_energy = orig_log_energy*pred_energy_corr[:, :, 0:1] + pred_energy_corr[:, :, 1:2]
+
+        # pred_log_energy = pred_log_energy - tf.reduce_sum(out_id_hard_softmax*self.classwise_energy_means, axis=-1, keepdims=True)
+        # pred_log_energy = pred_log_energy / tf.reduce_sum(out_id_hard_softmax*self.classwise_energy_stds, axis=-1, keepdims=True)
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
-        pred_log_energy = orig_log_energy + energy_gate*pred_energy_corr[:, :, 1:2]
         pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
 
         #compute pt=E/cosh(eta)
@@ -554,20 +569,27 @@ class OutputDecoding(tf.keras.Model):
 
         if self.pt_skip_gate:
             pt_gate = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
+            pred_log_pt = orig_log_pt + pt_gate*pred_pt_corr[:, :, 1:2]
         else:
-            pt_gate = 1.0
-        pred_log_pt = orig_log_pt + pt_gate*pred_pt_corr[:, :, 1:2]
-
-        msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
+            pred_log_pt = orig_log_pt*pred_pt_corr[:, :, 0:1] + pt_gate*pred_pt_corr[:, :, 1:2]
+        
+        if self.mask_reg_cls0:
+            msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
+            out_charge = out_charge*msk_output
+            pred_log_pt = pred_log_pt*msk_output
+            pred_eta = pred_eta*msk_output
+            pred_sin_phi = pred_sin_phi*msk_output
+            pred_cos_phi = pred_cos_phi*msk_output
+            pred_log_energy = pred_log_energy*msk_output
 
         ret = {
             "cls": out_id_softmax,
-            "charge": out_charge*msk_input*msk_output,
-            "pt": pred_log_pt*msk_input*msk_output,
-            "eta": pred_eta*msk_input*msk_output,
-            "sin_phi": pred_sin_phi*msk_input*msk_output,
-            "cos_phi": pred_cos_phi*msk_input*msk_output,
-            "energy": pred_log_energy*msk_input*msk_output,
+            "charge": out_charge*msk_input,
+            "pt": pred_log_pt*msk_input,
+            "eta": pred_eta*msk_input,
+            "sin_phi": pred_sin_phi*msk_input,
+            "cos_phi": pred_cos_phi*msk_input,
+            "energy": pred_log_energy*msk_input,
         }
 
         return ret
@@ -578,8 +600,14 @@ class OutputDecoding(tf.keras.Model):
         for layer in self.layers:
             layer.trainable = False
 
+        layer_names = [l.name for l in self.layers]
         for layer in layer_names:
-            self.get_layer(layer).trainable = True
+            if layer in layer_names:
+                #it's a layer
+                self.get_layer(layer).trainable = True
+            else:
+                #it's a weight
+                getattr(self, layer).trainable = True
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -595,7 +623,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.hidden_dim = kwargs.pop("hidden_dim")
 
         if self.do_layernorm:
-            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6)
+            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6, name=kwargs.get("name")+"_layernorm")
 
         self.ffn_dist = point_wise_feed_forward_network(
             self.distance_dim,
