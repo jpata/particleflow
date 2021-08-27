@@ -97,11 +97,12 @@ def data(config, customize):
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
+@click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=1, help="Plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
-def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq, customize):
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
 
     try:
         from comet_ml import Experiment
@@ -123,6 +124,8 @@ def train(config, weights, ntrain, ntest, recreate, prefix, plot_freq, customize
     config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
         config, ntrain, ntest, weights
     )
+    if nepochs:
+        n_epochs = nepochs
 
     if customize:
         prefix += customize + "_"

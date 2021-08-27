@@ -101,6 +101,37 @@ parameters:
     activation: gelu
     aggregation_direction: dst
   num_node_messages: 1
+  output_decoding:
+    activation: gelu
+    regression_use_classification: yes
+    dropout: 0.0
+
+    pt_skip_gate: yes
+    eta_skip_gate: yes
+    phi_skip_gate: yes
+    energy_skip_gate: no
+
+    id_dim_decrease: yes
+    charge_dim_decrease: yes
+    pt_dim_decrease: no
+    eta_dim_decrease: no
+    phi_dim_decrease: no
+    energy_dim_decrease: no
+
+    id_hidden_dim: 1024
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 1024
+
+    id_num_layers: 4
+    charge_num_layers: 2
+    pt_num_layers: 3
+    eta_num_layers: 3
+    phi_num_layers: 3
+    energy_num_layers: 4
+    layernorm: yes
   skip_connection: yes
   regression_use_classification: yes
   debug: no

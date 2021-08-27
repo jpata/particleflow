@@ -390,71 +390,116 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         return bins_split, x_features_binned, dm, msk_f_binned
 
 class OutputDecoding(tf.keras.Model):
-    def __init__(self, activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout, **kwargs):
+    def __init__(self,
+        activation="elu",
+        regression_use_classification=True,
+        num_output_classes=8,
+        schema="cms",
+        dropout=0.0,
+
+        pt_skip_gate=True,
+        eta_skip_gate=True,
+        phi_skip_gate=True,
+        energy_skip_gate=True,
+
+        id_dim_decrease=True,
+        charge_dim_decrease=True,
+        pt_dim_decrease=False,
+        eta_dim_decrease=False,
+        phi_dim_decrease=False,
+        energy_dim_decrease=False,
+
+        id_hidden_dim=128,
+        charge_hidden_dim=128,
+        pt_hidden_dim=128,
+        eta_hidden_dim=128,
+        phi_hidden_dim=128,
+        energy_hidden_dim=128,
+
+        id_num_layers=4,
+        charge_num_layers=2,
+        pt_num_layers=3,
+        eta_num_layers=3,
+        phi_num_layers=3,
+        energy_num_layers=3,
+
+        layernorm=False,
+
+        **kwargs):
         super(OutputDecoding, self).__init__(**kwargs)
 
         self.regression_use_classification = regression_use_classification
         self.schema = schema
         self.dropout = dropout
 
+        self.pt_skip_gate = pt_skip_gate
+        self.eta_skip_gate = eta_skip_gate
+        self.phi_skip_gate = phi_skip_gate
+        self.energy_skip_gate = energy_skip_gate
+
+        self.do_layernorm = layernorm
+        if self.do_layernorm:
+            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1)
+
         self.ffn_id = point_wise_feed_forward_network(
-            num_output_classes, hidden_dim*4,
+            num_output_classes, id_hidden_dim,
             "ffn_cls",
             dtype=tf.dtypes.float32,
-            num_layers=4,
+            num_layers=id_num_layers,
             activation=activation,
-            dim_decrease=True,
+            dim_decrease=id_dim_decrease,
             dropout=dropout
         )
         self.ffn_charge = point_wise_feed_forward_network(
-            1, hidden_dim,
+            1, charge_hidden_dim,
             "ffn_charge",
             dtype=tf.dtypes.float32,
-            num_layers=2,
+            num_layers=charge_num_layers,
             activation=activation,
-            dim_decrease=True,
+            dim_decrease=charge_dim_decrease,
             dropout=dropout
         )
         
         self.ffn_pt = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            2, pt_hidden_dim, "ffn_pt",
+            dtype=tf.dtypes.float32, num_layers=pt_num_layers, activation=activation, dim_decrease=pt_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_eta = point_wise_feed_forward_network(
-            2, hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            2, eta_hidden_dim, "ffn_eta",
+            dtype=tf.dtypes.float32, num_layers=eta_num_layers, activation=activation, dim_decrease=eta_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_phi = point_wise_feed_forward_network(
-            4, hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            4, phi_hidden_dim, "ffn_phi",
+            dtype=tf.dtypes.float32, num_layers=phi_num_layers, activation=activation, dim_decrease=phi_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            2, hidden_dim*4, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=3, activation=activation, dim_decrease=False,
+            2, energy_hidden_dim, "ffn_energy",
+            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
             dropout=dropout
         )
 
     """
-    X_input: (n_batch, n_elements, n_input_features)
-    X_encoded_id: (n_batch, n_elements, n_encoded_features)
-    X_encoded_reg: (n_batch, n_elements, n_encoded_features)
-    msk_input: (n_batch, n_elements) boolean mask
+    X_input: (n_batch, n_elements, n_input_features) raw node input features
+    X_encoded: (n_batch, n_elements, n_encoded_features) encoded/transformed node features
+    msk_input: (n_batch, n_elements) boolean mask of active nodes
     """
     def call(self, args, training=False):
 
         X_input, X_encoded, msk_input = args
 
+        if self.do_layernorm:
+            X_encoded = self.layernorm(X_encoded)
+
         out_id_logits = self.ffn_id(X_encoded, training)*msk_input
         out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits), 0, 1)
         out_charge = self.ffn_charge(X_encoded, training)*msk_input
 
-        #orig_pt = X_input[:, :, 1:2]
         orig_eta = X_input[:, :, 2:3]
 
         #FIXME: better schema propagation 
@@ -474,31 +519,44 @@ class OutputDecoding(tf.keras.Model):
         pred_eta_corr = self.ffn_eta(X_encoded, training)*msk_input
         pred_phi_corr = self.ffn_phi(X_encoded, training)*msk_input
 
-        eta_sigmoid = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
-        pred_eta = orig_eta + eta_sigmoid*pred_eta_corr[:, :, 1:2]
+        if self.eta_skip_gate:
+            eta_gate = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
+        else:
+            eta_gate = 1.0
+        pred_eta = orig_eta + eta_gate*pred_eta_corr[:, :, 1:2]
 
-        sin_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
-        cos_phi_sigmoid = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
-        pred_sin_phi = orig_sin_phi + sin_phi_sigmoid*pred_phi_corr[:, :, 1:2]
-        pred_cos_phi = orig_cos_phi + cos_phi_sigmoid*pred_phi_corr[:, :, 3:4]
+        if self.phi_skip_gate:
+            sin_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
+            cos_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
+        else:
+            sin_phi_gate = 1.0
+            cos_phi_gate = 1.0
+
+        pred_sin_phi = orig_sin_phi + sin_phi_gate*pred_phi_corr[:, :, 1:2]
+        pred_cos_phi = orig_cos_phi + cos_phi_gate*pred_phi_corr[:, :, 3:4]
 
         X_encoded = tf.concat([X_encoded, tf.stop_gradient(pred_eta)], axis=-1)
         pred_energy_corr = self.ffn_energy(X_encoded, training)*msk_input
         pred_pt_corr = self.ffn_pt(X_encoded, training)*msk_input
 
-        energy_sigmoid = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+        if self.energy_skip_gate:
+            energy_gate = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
+        else:
+            energy_gate = 1.0
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
-        #pred_log_energy = orig_log_energy*energy_sigmoid + (1.0 - energy_sigmoid)*pred_energy_corr[:, :, 1:2]
-        pred_log_energy = orig_log_energy+ energy_sigmoid*pred_energy_corr[:, :, 1:2]
+        pred_log_energy = orig_log_energy + energy_gate*pred_energy_corr[:, :, 1:2]
         pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
 
         #compute pt=E/cosh(eta)
         orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
         orig_log_pt = tf.math.log(orig_pt + 1.0)
 
-        pt_sigmoid = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
-        pred_log_pt = orig_log_pt + pt_sigmoid*pred_pt_corr[:, :, 1:2]
+        if self.pt_skip_gate:
+            pt_gate = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
+        else:
+            pt_gate = 1.0
+        pred_log_pt = orig_log_pt + pt_gate*pred_pt_corr[:, :, 1:2]
 
         msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
@@ -600,8 +658,8 @@ class PFNetDense(tf.keras.Model):
             focal_loss_from_logits=False,
             graph_kernel={"type": "NodePairGaussianKernel"},
             skip_connection=True,
-            regression_use_classification=True,
             node_message={"type": "GHConvDense", "activation": "elu", "output_dim": 128, "normalize_degrees": True},
+            output_decoding={},
             debug=False,
             schema="cms"
         ):
@@ -611,7 +669,7 @@ class PFNetDense(tf.keras.Model):
         self.activation = activation
         self.focal_loss_from_logits = focal_loss_from_logits
         self.debug = debug
-        self.separate_graph_layers = False
+        self.do_layernorm = layernorm
 
         self.skip_connection = skip_connection
 
@@ -627,8 +685,8 @@ class PFNetDense(tf.keras.Model):
             "max_num_bins": max_num_bins,
             "bin_size": bin_size,
             "distance_dim": distance_dim,
-            "layernorm": layernorm,
-            "num_node_messages": num_node_messages,
+            "layernorm": self.do_layernorm,
+            "num_node_messages": self.num_node_messages,
             "dropout": dropout,
             "kernel": graph_kernel,
             "node_message": node_message,
@@ -637,7 +695,9 @@ class PFNetDense(tf.keras.Model):
 
         self.cg = [CombinedGraphLayer(name="cg_{}".format(i), **kwargs_cg) for i in range(num_graph_layers)]
 
-        self.output_dec = OutputDecoding(self.activation, hidden_dim, regression_use_classification, num_output_classes, schema, dropout)
+        output_decoding["schema"] = schema
+        output_decoding["num_output_classes"] = num_output_classes
+        self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
         X = inputs

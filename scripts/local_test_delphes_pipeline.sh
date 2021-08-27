@@ -17,10 +17,10 @@ rm -Rf experiments/test-*
 
 #Run a simple training on a few events
 rm -Rf data/pythia8_ttbar/tfr
-python3 mlpf/pipeline.py data -c parameters/test-delphes.yaml
+python3 mlpf/pipeline.py data -c parameters/delphes.yaml
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/test-delphes.yaml -p test-delphes-
+python3 mlpf/pipeline.py train -c parameters/delphes.yaml --nepochs 2 --ntrain 5 --ntest 5
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate -c parameters/test-delphes.yaml -t ./experiments/test-delphes-*
+python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t ./experiments/delphes-*
