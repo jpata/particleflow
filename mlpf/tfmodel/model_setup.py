@@ -272,7 +272,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         residual = vals_true - vals_pred
         residual[np.isnan(residual)] = 0
         residual[np.isinf(residual)] = 0
-        plt.hist(residual, bins=100)
+        plt.hist(residual, bins=np.linspace(-2,2,100))
+        plt.yscale("log")
         plt.xlabel("true - pred")
         plt.title("{} residual, m={:.4f} s={:.4f}".format(reg_variable, np.mean(residual), np.std(residual)))
 
@@ -396,6 +397,7 @@ def make_gnn_dense(config, dtype):
         "bin_size",
         "num_node_messages",
         "num_graph_layers",
+        "num_graph_layers_energy",
         "distance_dim",
         "dropout",
         "input_encoding",

@@ -45,7 +45,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
+  lr: 1e-4
   batch_size: 4
   num_events_train: 45000
   num_events_test: 5000
@@ -79,6 +79,7 @@ parameters:
     dist_mult: 0.1
     clip_value_low: 0.0
   num_graph_layers: 5
+  num_graph_layers_energy: 1
   node_message:
     type: GHConvDense
     output_dim: 256
