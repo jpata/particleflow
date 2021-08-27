@@ -125,7 +125,7 @@ hypertune:
     executions_per_trial: 1
 
 raytune:
-  local_dir:
+  local_dir:  # Note: please specify an absolute path
   sched: "asha"  # asha, hyperband
   parameters:
     # optimizer parameters
