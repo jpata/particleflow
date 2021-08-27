@@ -28,10 +28,9 @@ mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/val
 mv data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl data/TTbar_14TeV_TuneCUETP8M1_cfi/val/
 
 mkdir -p experiments
-rm -Rf experiments/test-*
 
 #Run a simple training on a few events
-rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
+rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand
 python3 mlpf/pipeline.py data -c parameters/cms.yaml
 
 #Run a simple training on a few events
