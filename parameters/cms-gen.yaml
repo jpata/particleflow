@@ -59,8 +59,8 @@ setup:
   weights_config:
   lr: 1e-3
   batch_size: 4
-  num_events_train: 1000
-  num_events_test: 100
+  num_events_train: 80000
+  num_events_test: 9000
   num_epochs: 100
   num_val_files: 10
   dtype: float32

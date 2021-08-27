@@ -2,7 +2,7 @@ backend: tensorflow
 
 dataset:
   schema: cms
-  target_particles: cand
+  target_particles: gen
   num_input_features: 15
   num_output_features: 7
 #       NONE = 0,
@@ -31,7 +31,7 @@ dataset:
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_gen/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
@@ -60,7 +60,7 @@ setup:
   lr: 1e-3
   batch_size: 4
   num_events_train: 80000
-  num_events_test: 10000
+  num_events_test: 9000
   num_epochs: 100
   num_val_files: 10
   dtype: float32
