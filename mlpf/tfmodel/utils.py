@@ -89,7 +89,12 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
 
 
 def get_strategy(global_batch_size):
-    gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
+    if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
+        gpus = [-1]
+        print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
+            If you don't have or intend to use GPUs, this message can be ignored.")
+    else:
+        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
     if gpus[0] == -1:
         num_gpus = 0
     else:
