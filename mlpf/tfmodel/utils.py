@@ -74,7 +74,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
     if len(checkpoint_list) == 1:
         raise UserWarning("There is only one checkpoint. No deletion was made.")
     elif len(checkpoint_list) == 0:
-        raise UserWarning("Couldn't find ant checkpoints. No deletion was made.")
+        raise UserWarning("Couldn't find any checkpoints. No deletion was made.")
     else:
         # Sort the checkpoints according to the loss in their filenames
         checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
@@ -153,7 +153,7 @@ def compute_weights_none(X, y, w):
 def make_weight_function(config):
     def weight_func(X,y,w):
 
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
         w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
         w_none = tf.ones_like(w)
@@ -196,6 +196,14 @@ def targets_multi_output(num_output_classes):
 
     return func
 
+def classwise_energy_normalization(X,y,w):
+    mean_energies = tf.constant([1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.float32)
+
+    energy_sub = y["cls"]*mean_energies
+
+    import pdb;pdb.set_trace()
+
+    return X,y,w
 
 def get_dataset_def(config):
     cds = config["dataset"]
@@ -257,6 +265,9 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=Tr
         ds_test = ds_test.map(dataset_transform)
     else:
         dataset_transform = None
+
+    # ds_train = ds_train.map(classwise_energy_normalization)
+    # ds_test = ds_train.map(classwise_energy_normalization)
 
     if repeat:
         ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])

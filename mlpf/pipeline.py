@@ -50,6 +50,7 @@ from tfmodel.utils import (
     parse_config,
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
+    classwise_energy_normalization
 )
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -139,6 +140,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     dataset_def = get_dataset_def(config)
     ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+
+    # for X, y, w in ds_train_r:
+    #     classwise_energy_normalization(X,y,w)
+    #     break
 
     #FIXME: split up training/test and validation dataset and parameters
     dataset_def.padded_num_elem_size = 6400
