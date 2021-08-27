@@ -1,0 +1,111 @@
+backend: tensorflow
+
+dataset:
+  schema: cms
+  target_particles: gen
+  num_input_features: 15
+  num_output_features: 7
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
+  num_input_classes: 12
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
+  num_output_classes: 8
+  padded_num_elem_size: 6400
+  #(pt, eta, sin phi, cos phi, E)
+  num_momentum_outputs: 5
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
+  pt_loss_coef: 100.0
+  eta_loss_coef: 100.0
+  sin_phi_loss_coef: 100.0
+  cos_phi_loss_coef: 100.0
+  energy_loss_coef: 100.0
+  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl.bz2
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_gen/*.tfrecords
+  num_files_per_chunk: 1
+  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl.bz2
+  energy_loss:
+    type: Huber
+    delta: 1.0
+  pt_loss:
+    type: Huber
+    delta: 1.0
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  weights_config:
+  lr: 1e-3
+  batch_size: 4
+  num_events_train: 80000
+  num_events_test: 9000
+  num_epochs: 100
+  num_val_files: 10
+  dtype: float32
+  trainable:
+  classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+
+sample_weights:
+  cls: inverse_sqrt
+  charge: signal_only
+  pt: signal_only
+  eta: signal_only
+  sin_phi: signal_only
+  cos_phi: signal_only
+  energy: signal_only
+
+parameters:
+  model: gnn_dense
+  input_encoding: cms
+  activation: gelu
+  layernorm: yes
+  hidden_dim: 256
+  bin_size: 320
+  distance_dim: 128
+  dropout: 0.0
+  graph_kernel:
+    type: NodePairGaussianKernel
+    dist_mult: 0.1
+    clip_value_low: 0.0
+  num_graph_layers: 5
+  node_message:
+    type: GHConvDense
+    output_dim: 256
+    activation: gelu
+    normalize_degrees: yes
+  num_node_messages: 1
+  skip_connection: yes
+  regression_use_classification: yes
+  debug: no
+
+timing:
+  num_ev: 100
+  num_iter: 3
+
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes
