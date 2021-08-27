@@ -14,6 +14,7 @@ import shutil
 from functools import partial
 import shlex
 import subprocess
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -62,6 +63,7 @@ from ray import tune
 from ray.tune.integration.keras import TuneReportCheckpointCallback
 from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
+from ray.tune import Analysis
 
 
 @click.group()
@@ -474,6 +476,51 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
             )
 
 
+def get_hp_str(result):
+    def func(key):
+        if "config" in key:
+            return key.split("config/")[-1]
+    s = ""
+    for ii, hp in enumerate(list(filter(None.__ne__, [func(key) for key in result.keys()]))):
+        if ii % 6 == 0:
+            s += "\n"
+        s += "{}={}; ".format(hp, result["config/{}".format(hp)].values[0])
+    return s
+
+def plot_ray_analysis(analysis, save=False):
+    to_plot = [
+    'adam_beta_1', 'charge_loss', 'cls_acc_unweighted', 'cls_loss',
+       'cos_phi_loss', 'energy_loss', 'eta_loss', 'learning_rate', 'loss',
+       'pt_loss', 'sin_phi_loss', 'val_charge_loss',
+       'val_cls_acc_unweighted', 'val_cls_acc_weighted', 'val_cls_loss',
+       'val_cos_phi_loss', 'val_energy_loss', 'val_eta_loss', 'val_loss',
+       'val_pt_loss', 'val_sin_phi_loss',
+    ]
+
+    dfs = analysis.fetch_trial_dataframes()
+    result_df = analysis.dataframe()
+    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
+        result = result_df[result_df["logdir"] == key]
+
+        fig, axs = plt.subplots(4, 4, figsize=(12, 9), tight_layout=True)
+        for ax in axs.flat:
+            ax.label_outer()
+
+        for var, ax in zip(to_plot, axs.flat):
+            ax.plot(dfs[key].index.values, dfs[key][var], alpha=0.8)
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel(var)
+            ax.grid(alpha=0.3)
+        plt.suptitle(get_hp_str(result))
+
+        if save:
+            plt.savefig(key + "/trial_summary.jpg")
+    if not save:
+        plt.show()
+    else:
+        print("Saved plots in trial dirs.")
+
+
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
@@ -481,11 +528,19 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
 @click.option("-l", "--local", help="run locally", is_flag=True)
 @click.option("--cpus", help="number of cpus per worker", type=int, default=1)
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
-def raytune(config, name, local, cpus, gpus):
+@click.option("--tune_result_dir", help="Tune result dir", type=str, default=None)
+def raytune(config, name, local, cpus, gpus, tune_result_dir):
     cfg = load_config(config)
+    config_file_path = config
+
+    if tune_result_dir is not None:
+        os.environ["TUNE_RESULT_DIR"] = tune_result_dir
+    else:
+        trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
+        os.environ["TUNE_RESULT_DIR"] = trd
+
     if not local:
         ray.init(address='auto')
-    config_file_path = config
 
     search_space = {
         # Optimizer parameters
@@ -520,21 +575,24 @@ def raytune(config, name, local, cpus, gpus):
         config=search_space,
         name=name,
         scheduler=sched,
-        # metric="val_loss",
-        # mode="min",
-        # stop={"training_iteration": 32},
         num_samples=1,
-        # resources_per_trial={
-        #     "cpu": 16,
-        #     "gpu": 4
-        # },
         local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
     )
     print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
 
+    plot_ray_analysis(analysis, save=True)
     ray.shutdown()
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
+@click.option("-s", "--save", help="save plots in trial dirs", is_flag=True)
+def raytune_analysis(exp_dir, save):
+    analysis = Analysis(exp_dir)
+    plot_ray_analysis(analysis, save=save)
 
 
 if __name__ == "__main__":
