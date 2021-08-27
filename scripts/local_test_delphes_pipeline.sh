@@ -10,8 +10,6 @@ mv tev14_pythia8_ttbar_0_0.pkl.bz2 data/pythia8_ttbar/raw/
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
 mv tev14_pythia8_qcd_10_0.pkl.bz2 data/pythia8_qcd/val/
 
-cd ../..
-
 mkdir -p experiments
 
 #Run a simple training on a few events
