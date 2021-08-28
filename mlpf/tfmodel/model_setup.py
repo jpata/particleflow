@@ -215,13 +215,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         vals_pred = ypred[reg_variable][msk][sel].flatten()
         vals_true = self.ytrue[reg_variable][msk][sel].flatten()
 
-        #FIXME: propagate from configuration
-        if reg_variable == "energy" or reg_variable == "pt":
-            delta = 1.0
-        else:
-            delta = 0.1
-            
-        loss = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
+        loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
 
         #suffix for log-transformed variable
@@ -392,19 +386,12 @@ def make_model(config, dtype):
 def make_gnn_dense(config, dtype):
 
     parameters = [
-        "layernorm",
-        "hidden_dim",
-        "bin_size",
-        "num_node_messages",
-        "num_graph_layers",
+        "num_graph_layers_common",
         "num_graph_layers_energy",
-        "distance_dim",
-        "dropout",
         "input_encoding",
-        "graph_kernel",
         "skip_connection",
-        "node_message",
         "output_decoding",
+        "combined_graph_layer",
         "debug"
     ]
 

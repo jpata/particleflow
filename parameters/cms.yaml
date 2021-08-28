@@ -80,40 +80,42 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  activation: gelu
-  layernorm: no
-  hidden_dim: 256
-  bin_size: 320
-  distance_dim: 128
-  dropout: 0.0
-  graph_kernel:
-    type: NodePairGaussianKernel
-    dist_mult: 0.1
-    clip_value_low: 0.0
-  num_graph_layers: 3
-  num_graph_layers_energy: 3
-  node_message:
-    type: GHConvDense
-    output_dim: 256
+  combined_graph_layer:
+    bin_size: 640
+    max_num_bins: 100
+    distance_dim: 128
+    layernorm: no
+    dropout: 0.2
+    kernel:
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+    num_node_messages: 2
+    node_message:
+      type: GHConvDense
+      output_dim: 512
+      activation: gelu
+      normalize_degrees: yes
+    hidden_dim: 256
     activation: gelu
-    normalize_degrees: yes
-  num_node_messages: 1
+  num_graph_layers_common: 1
+  num_graph_layers_energy: 1
   output_decoding:
     activation: gelu
     regression_use_classification: yes
-    dropout: 0.0
+    dropout: 0.2
 
     pt_skip_gate: yes
     eta_skip_gate: yes
     phi_skip_gate: yes
-    energy_skip_gate: no
+    energy_skip_gate: yes
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
     eta_dim_decrease: yes
     phi_dim_decrease: yes
-    energy_dim_decrease: yes
+    energy_dim_decrease: no
 
     id_hidden_dim: 256
     charge_hidden_dim: 256
@@ -122,13 +124,13 @@ parameters:
     phi_hidden_dim: 256
     energy_hidden_dim: 1024
 
-    id_num_layers: 4
+    id_num_layers: 3
     charge_num_layers: 2
     pt_num_layers: 3
     eta_num_layers: 3
     phi_num_layers: 3
     energy_num_layers: 3
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: no
 
   skip_connection: yes
