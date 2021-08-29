@@ -428,6 +428,7 @@ class OutputDecoding(tf.keras.Model):
 
         layernorm=False,
         mask_reg_cls0=True,
+        classwise_split_energy=False,
         **kwargs):
 
         super(OutputDecoding, self).__init__(**kwargs)
@@ -440,6 +441,7 @@ class OutputDecoding(tf.keras.Model):
         self.eta_skip_gate = eta_skip_gate
         self.phi_skip_gate = phi_skip_gate
         self.energy_skip_gate = energy_skip_gate
+        self.classwise_split_energy = classwise_split_energy
 
         self.mask_reg_cls0 = mask_reg_cls0
 
@@ -484,17 +486,21 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout
         )
 
-        self.ffn_energy = point_wise_feed_forward_network(
-            4, energy_hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-            dropout=dropout
-        )
+        num_energy_out = 1
+        if self.energy_skip_gate:
+            num_energy_out = 2
 
-        if not self.energy_skip_gate:
-            self.classwise_energy_means = self.add_weight(shape=(num_output_classes, ), name="classwise_energy_means",
-                initializer=tf.keras.initializers.RandomNormal(mean=0, stddev=0.1), trainable=True)
-            self.classwise_energy_stds = self.add_weight(shape=(num_output_classes, ), name="classwise_energy_stds",
-                initializer=tf.keras.initializers.RandomNormal(mean=1, stddev=0.1), trainable=True)
+        if self.classwise_split_energy:
+            self.ffn_energy = [point_wise_feed_forward_network(
+                num_energy_out, energy_hidden_dim, "ffn_energy_cls{}".format(icls),
+                dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+                dropout=dropout
+            ) for icls in range(1, num_output_classes)]
+        else:
+            self.ffn_energy = point_wise_feed_forward_network(
+                num_energy_out, energy_hidden_dim, "ffn_energy",
+                dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+                dropout=dropout)
 
     """
     X_input: (n_batch, n_elements, n_input_features) raw node input features
@@ -548,21 +554,24 @@ class OutputDecoding(tf.keras.Model):
             pred_sin_phi = orig_sin_phi*pred_phi_corr[:, :, 0:1] + pred_phi_corr[:, :, 1:2]
             pred_cos_phi = orig_cos_phi*pred_phi_corr[:, :, 2:3] + pred_phi_corr[:, :, 3:4]
 
+        X_encoded_energy = tf.concat([X_encoded, X_encoded_energy], axis=-1)
         if self.regression_use_classification:
             X_encoded_energy = tf.concat([X_encoded_energy, tf.stop_gradient(out_id_logits)], axis=-1)
 
-        pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
+        if self.classwise_split_energy:
+            pred_energy_corr = tf.stack([ffn(X_encoded_energy, training=training)for ffn in self.ffn_energy], axis=-1)
+            pred_log_energy0 = tf.reduce_sum(out_id_hard_softmax[:, :, 1:]*pred_energy_corr[:, :, 0, :], axis=-1, keepdims=True)*msk_input
+        else:
+            pred_log_energy0 = self.ffn_energy(X_encoded_energy, training=training)*msk_input
+
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)*msk_input
 
         if self.energy_skip_gate:
-            energy_gate = tf.keras.activations.sigmoid(pred_energy_corr[:, :, 0:1])
-            energy_corr = energy_gate*pred_energy_corr[:, :, 1:2]
+            energy_gate = tf.keras.activations.sigmoid(pred_log_energy0)
+            energy_corr = energy_gate*pred_log_energy1
             pred_log_energy = orig_log_energy + energy_corr
         else:
-            #pred_log_energy = orig_log_energy*pred_energy_corr[:, :, 0:1] + pred_energy_corr[:, :, 1:2]
-            pred_log_energy = pred_energy_corr[:, :, 0:1] + pred_energy_corr[:, :, 1:2]*orig_log_energy + pred_energy_corr[:, :, 2:3]*orig_log_energy*orig_log_energy + pred_energy_corr[:, :, 3:4]*tf.math.sqrt(orig_log_energy)
-            pred_log_energy = pred_log_energy - tf.reduce_sum(out_id_hard_softmax*self.classwise_energy_means, axis=-1, keepdims=True)
-            pred_log_energy = pred_log_energy / tf.reduce_sum(out_id_hard_softmax*self.classwise_energy_stds, axis=-1, keepdims=True)
+            pred_log_energy = pred_log_energy0
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
         pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
@@ -598,20 +607,18 @@ class OutputDecoding(tf.keras.Model):
 
         return ret
 
-    def set_trainable_named(self, layer_names):
-        self.trainable = True
+    def set_trainable_regression(self):
+        self.ffn_id.trainable = False
+        self.ffn_charge.trainable = False
+        self.ffn_phi.trainable = True
+        self.ffn_eta.trainable = True
+        self.ffn_pt.trainable = True
 
-        for layer in self.layers:
-            layer.trainable = False
-
-        layer_names = [l.name for l in self.layers]
-        for layer in layer_names:
-            if layer in layer_names:
-                #it's a layer
-                self.get_layer(layer).trainable = True
-            else:
-                #it's a weight
-                getattr(self, layer).trainable = True
+        if self.classwise_split_energy:
+            for layer in self.ffn_energy:
+                layer.trainable = True
+        else:
+            self.ffn_energy.trainable = True
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -726,6 +733,8 @@ class PFNetDense(tf.keras.Model):
 
         enc_cg = enc
         encs = []
+        if self.skip_connection:
+            encs.append(enc)
         for cg in self.cg:
             enc_all = cg(enc_cg, msk, training)
             enc_cg = enc_all["enc"]
@@ -734,8 +743,6 @@ class PFNetDense(tf.keras.Model):
             encs.append(enc_cg)
 
         dec_input = []
-        if self.skip_connection:
-            dec_input.append(enc)
         dec_input += encs
         dec_output = tf.concat(dec_input, axis=-1)*msk_input
         if self.debug:
@@ -743,6 +750,8 @@ class PFNetDense(tf.keras.Model):
 
         enc_cg = enc
         encs_energy = []
+        if self.skip_connection:
+            encs_energy.append(enc)
         for cg in self.cg_energy:
             enc_all = cg(enc_cg, msk, training)
             enc_cg = enc_all["enc"]
@@ -801,6 +810,29 @@ class PFNetDense(tf.keras.Model):
         # Update metrics (includes the metric that tracks the loss)
         self.compiled_metrics.update_state(y, y_pred)
         # Return a dict mapping metric names to current value
+        return {m.name: m.result() for m in self.metrics}
+
+    def test_step(self, data):
+        # Unpack the data
+        x, y, sample_weights = data
+        # Compute predictions
+        y_pred = self(x, training=False)
+
+        pred_cls = tf.argmax(y_pred["cls"], axis=-1)
+        true_cls = tf.argmax(y["cls"], axis=-1)
+        msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
+        sample_weights["energy"] *= msk_loss
+        sample_weights["pt"] *= msk_loss
+        sample_weights["eta"] *= msk_loss
+        sample_weights["sin_phi"] *= msk_loss
+        sample_weights["cos_phi"] *= msk_loss
+
+        # Updates the metrics tracking the loss
+        self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+        # Update the metrics.
+        self.compiled_metrics.update_state(y, y_pred)
+        # Return a dict mapping metric names to current value.
+        # Note that it will include the loss (tracked in self.metrics).
         return {m.name: m.result() for m in self.metrics}
 
 class DummyNet(tf.keras.Model):
