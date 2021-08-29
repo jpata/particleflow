@@ -535,18 +535,18 @@ class OutputDecoding(tf.keras.Model):
 
         if self.eta_skip_gate:
             eta_gate = tf.keras.activations.sigmoid(pred_eta_corr[:, :, 0:1])
-            pred_eta = orig_eta + eta_gate*pred_eta_corr[:, :, 1:2]
+            pred_eta = orig_eta + pred_eta_corr[:, :, 1:2]
         else:
-            pred_eta = orig_eta*pred_eta_corr[:, :, 0:1] + eta_gate*pred_eta_corr[:, :, 1:2]
+            pred_eta = orig_eta*pred_eta_corr[:, :, 0:1] + pred_eta_corr[:, :, 1:2]
         
         if self.phi_skip_gate:
             sin_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 0:1])
             cos_phi_gate = tf.keras.activations.sigmoid(pred_phi_corr[:, :, 2:3])
-            pred_sin_phi = orig_sin_phi + sin_phi_gate*pred_phi_corr[:, :, 1:2]
-            pred_cos_phi = orig_cos_phi + cos_phi_gate*pred_phi_corr[:, :, 3:4]
+            pred_sin_phi = orig_sin_phi + pred_phi_corr[:, :, 1:2]
+            pred_cos_phi = orig_cos_phi + pred_phi_corr[:, :, 3:4]
         else:
-            pred_sin_phi = orig_sin_phi*pred_phi_corr[:, :, 0:1] + sin_phi_gate*pred_phi_corr[:, :, 1:2]
-            pred_cos_phi = orig_cos_phi*pred_phi_corr[:, :, 2:3] + cos_phi_gate*pred_phi_corr[:, :, 3:4]
+            pred_sin_phi = orig_sin_phi*pred_phi_corr[:, :, 0:1] + pred_phi_corr[:, :, 1:2]
+            pred_cos_phi = orig_cos_phi*pred_phi_corr[:, :, 2:3] + pred_phi_corr[:, :, 3:4]
 
         if self.regression_use_classification:
             X_encoded_energy = tf.concat([X_encoded_energy, tf.stop_gradient(out_id_logits)], axis=-1)
@@ -575,7 +575,7 @@ class OutputDecoding(tf.keras.Model):
             pt_gate = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
             pred_log_pt = orig_log_pt + pt_gate*pred_pt_corr[:, :, 1:2]
         else:
-            pred_log_pt = orig_log_pt*pred_pt_corr[:, :, 0:1] + pt_gate*pred_pt_corr[:, :, 1:2]
+            pred_log_pt = orig_log_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
         
         if self.mask_reg_cls0:
             msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
