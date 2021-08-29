@@ -196,15 +196,6 @@ def targets_multi_output(num_output_classes):
 
     return func
 
-def classwise_energy_normalization(X,y,w):
-    mean_energies = tf.constant([1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.float32)
-
-    energy_sub = y["cls"]*mean_energies
-
-    import pdb;pdb.set_trace()
-
-    return X,y,w
-
 def get_dataset_def(config):
     cds = config["dataset"]
 
