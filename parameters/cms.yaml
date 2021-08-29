@@ -24,22 +24,20 @@ dataset:
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   classification_loss_coef: 1.0
-  charge_loss_coef: 1.0
-  pt_loss_coef: 100.0
+  charge_loss_coef: 0.01
+  pt_loss_coef: 0.1
   eta_loss_coef: 100.0
-  sin_phi_loss_coef: 100.0
-  cos_phi_loss_coef: 100.0
-  energy_loss_coef: 1.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 0.1
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
   processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
-    type: Huber
-    delta: 1.0
+    type: MeanSquaredError
   pt_loss:
-    type: Huber
-    delta: 1.0
+    type: MeanSquaredError
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -51,14 +49,14 @@ dataset:
     delta: 0.1
 
 tensorflow:
-  eager: no
+  eager: yes
 
 setup:
   train: yes
   weights:
   weights_config:
   lr: 1e-4
-  batch_size: 4
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 20
@@ -81,7 +79,7 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   combined_graph_layer:
-    bin_size: 640
+    bin_size: 320
     max_num_bins: 100
     distance_dim: 128
     layernorm: no
@@ -98,16 +96,16 @@ parameters:
       normalize_degrees: yes
     hidden_dim: 256
     activation: gelu
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_common: 3
+  num_graph_layers_energy: 3
   output_decoding:
     activation: gelu
     regression_use_classification: yes
     dropout: 0.0
 
     pt_skip_gate: no
-    eta_skip_gate: no
-    phi_skip_gate: no
+    eta_skip_gate: yes
+    phi_skip_gate: yes
     energy_skip_gate: no
 
     id_dim_decrease: yes
@@ -115,23 +113,24 @@ parameters:
     pt_dim_decrease: yes
     eta_dim_decrease: yes
     phi_dim_decrease: yes
-    energy_dim_decrease: no
+    energy_dim_decrease: yes
 
     id_hidden_dim: 1024
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 1024
+    energy_hidden_dim: 512
 
     id_num_layers: 3
     charge_num_layers: 2
     pt_num_layers: 3
     eta_num_layers: 3
     phi_num_layers: 3
-    energy_num_layers: 3
+    energy_num_layers: 4
     layernorm: no
     mask_reg_cls0: no
+    classwise_split_energy: no
 
   skip_connection: yes
   debug: no

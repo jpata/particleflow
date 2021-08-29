@@ -67,7 +67,7 @@ sample_weights:
 
 parameters:
   model: gnn_dense
-  input_encoding: cms
+  input_encoding: default
   combined_graph_layer:
     bin_size: 640
     max_num_bins: 100
@@ -120,6 +120,8 @@ parameters:
     energy_num_layers: 3
     layernorm: yes
     mask_reg_cls0: yes
+    classwise_split_energy: no
+
   skip_connection: yes
   debug: no
 
