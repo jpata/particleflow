@@ -532,6 +532,19 @@ def configure_model_weights(model, trainable_layers):
 
     if trainable_layers == "all":
         model.trainable = True
+    elif trainable_layers == "regression":
+        for cg in model.cg:
+            cg.trainable = False
+        for cg in model.cg_energy:
+            cg.trainable = True
+
+        model.output_dec.ffn_id.trainable = False
+        model.output_dec.ffn_charge.trainable = False
+        model.output_dec.ffn_phi.trainable = True
+        model.output_dec.ffn_eta.trainable = True
+        model.output_dec.ffn_pt.trainable = True
+        model.output_dec.ffn_energy.trainable = True
+        model.output_dec.layernorm.trainable = False
     else:
         if isinstance(trainable_layers, str):
             trainable_layers = [trainable_layers]
