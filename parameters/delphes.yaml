@@ -96,7 +96,6 @@ parameters:
     pt_skip_gate: yes
     eta_skip_gate: yes
     phi_skip_gate: yes
-    energy_skip_gate: yes
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -119,8 +118,7 @@ parameters:
     phi_num_layers: 3
     energy_num_layers: 3
     layernorm: yes
-    mask_reg_cls0: yes
-    classwise_split_energy: no
+    mask_reg_cls0: no
 
   skip_connection: yes
   debug: no

@@ -1,7 +1,6 @@
 from .model import DummyNet, PFNetDense
 
 import tensorflow as tf
-import tensorflow_probability
 import tensorflow_addons as tfa
 import pickle
 import numpy as np
@@ -92,11 +91,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(0, 5, 100),
+            "pt": np.linspace(0, 100, 100),
             "eta": np.linspace(-6, 6, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": np.linspace(0, 7,100),
+            "energy": None,
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
@@ -155,7 +154,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         sphi = ypred["sin_phi"][ievent][msk]
         cphi = ypred["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = np.exp(np.clip(ypred["energy"][ievent][msk], -6, 6)) - 1.0
+        energy = ypred["energy"][ievent][msk]
         pdgid = ypred_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
@@ -169,7 +168,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         sphi = self.ytrue["sin_phi"][ievent][msk]
         cphi = self.ytrue["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = np.exp(np.clip(self.ytrue["energy"][ievent][msk], -6, 6)) - 1.0
+        energy = self.ytrue["energy"][ievent][msk]
         pdgid = self.ytrue_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
@@ -181,16 +180,18 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
 
-    def plot_reg_distribution(self, outpath, ypred, ypred_id, msk, icls, reg_variable):
+    def plot_reg_distribution(self, outpath, ypred, ypred_id, icls, reg_variable):
 
         if icls==0:
-            vals_pred = ypred[reg_variable][msk][ypred_id[msk]!=icls].flatten()
-            vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]!=icls].flatten()
+            vals_pred = ypred[reg_variable][ypred_id!=icls].flatten()
+            vals_true = self.ytrue[reg_variable][self.ytrue_id!=icls].flatten()
         else:
-            vals_pred = ypred[reg_variable][msk][ypred_id[msk]==icls].flatten()
-            vals_true = self.ytrue[reg_variable][msk][self.ytrue_id[msk]==icls].flatten()
+            vals_pred = ypred[reg_variable][ypred_id==icls].flatten()
+            vals_true = self.ytrue[reg_variable][self.ytrue_id==icls].flatten()
 
         bins = self.reg_bins[reg_variable]
+        if bins is None:
+            bins = 100
         plt.hist(vals_true, bins=bins, histtype="step", lw=2, label="true")
         plt.hist(vals_pred, bins=bins, histtype="step", lw=2, label="predicted")
 
@@ -205,40 +206,35 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
-    def plot_corr(self, epoch, outpath, ypred, ypred_id, msk, icls, reg_variable, log=False):
+    def plot_corr(self, epoch, outpath, ypred, ypred_id, icls, reg_variable):
 
         if icls==0:
-            sel = (self.ytrue_id[msk]!=0) & (ypred_id[msk]!=0)
+            sel = (ypred_id!=0) & (self.ytrue_id!=0)
         else:
-            sel = (ypred_id[msk]==icls) & (self.ytrue_id[msk]==icls)
+            sel = (ypred_id==icls) & (self.ytrue_id==icls)
 
-        vals_pred = ypred[reg_variable][msk][sel].flatten()
-        vals_true = self.ytrue[reg_variable][msk][sel].flatten()
+        vals_pred = ypred[reg_variable][sel].flatten()
+        vals_true = self.ytrue[reg_variable][sel].flatten()
 
         loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
 
-        #suffix for log-transformed variable
-        s = ""
-        if log:
-            vals_pred = np.log(vals_pred)
-            vals_true = np.log(vals_true)
-            s = "_log"
-
         #save correlation histogram
         plt.figure()
         bins = self.reg_bins[reg_variable]
-        plt.hist2d(vals_pred, vals_true, bins=(bins, bins), cmap="Blues")
+        if bins is None:
+            bins = 100
+        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), cmap="Blues")
         plt.colorbar()
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
             if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
                 plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
-        plt.xlabel("predicted")
-        plt.ylabel("true")
+        plt.xlabel("true")
+        plt.ylabel("predicted")
         plt.title("{}, particle weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
-        image_path = str(outpath / "{}_cls{}_corr{}.png".format(reg_variable, icls, s))
+        image_path = str(outpath / "{}_cls{}_corr.png".format(reg_variable, icls))
         plt.savefig(image_path, bbox_inches="tight")
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
@@ -246,17 +242,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #save loss-weighted correlation histogram
         plt.figure()
-        plt.hist2d(vals_pred, vals_true, bins=(bins, bins), weights=loss_vals, cmap="Blues")
+        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), weights=loss_vals, cmap="Blues")
         plt.colorbar()
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
             if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
                 plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
-        plt.xlabel("predicted")
-        plt.ylabel("true")
+        plt.xlabel("true")
+        plt.ylabel("predicted")
         plt.title("{}, loss weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
-        image_path = str(outpath / "{}_cls{}_corr{}_weighted.png".format(reg_variable, icls, s))
+        image_path = str(outpath / "{}_cls{}_corr_weighted.png".format(reg_variable, icls))
         plt.savefig(image_path, bbox_inches="tight")
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
@@ -266,21 +262,21 @@ class CustomCallback(tf.keras.callbacks.Callback):
         residual = vals_true - vals_pred
         residual[np.isnan(residual)] = 0
         residual[np.isinf(residual)] = 0
-        plt.hist(residual, bins=np.linspace(-2,2,100))
+        plt.hist(residual, bins=100)
         plt.yscale("log")
         plt.xlabel("true - pred")
         plt.title("{} residual, m={:.4f} s={:.4f}".format(reg_variable, np.mean(residual), np.std(residual)))
 
-        image_path = str(outpath / "{}{}_cls{}_residual.png".format(reg_variable, s, icls))
+        image_path = str(outpath / "{}_cls{}_residual.png".format(reg_variable, icls))
         plt.savefig(image_path, bbox_inches="tight")
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
         plt.close("all")
 
         if self.comet_experiment:
-            self.comet_experiment.log_metric('residual_{}{}_cls{}_mean'.format(reg_variable, s, icls), np.mean(residual), step=epoch)
-            self.comet_experiment.log_metric('residual_{}{}_cls{}_std'.format(reg_variable, s, icls), np.std(residual), step=epoch)
-            self.comet_experiment.log_metric('val_loss_{}{}_cls{}'.format(reg_variable, s, icls), np.sum(loss_vals), step=epoch)
+            self.comet_experiment.log_metric('residual_{}_cls{}_mean'.format(reg_variable, icls), np.mean(residual), step=epoch)
+            self.comet_experiment.log_metric('residual_{}_cls{}_std'.format(reg_variable, icls), np.std(residual), step=epoch)
+            self.comet_experiment.log_metric('val_loss_{}_cls{}'.format(reg_variable, icls), np.sum(loss_vals), step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
 
@@ -296,6 +292,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #run the model inference on the validation dataset
         ypred = self.model.predict(self.X, batch_size=1)
+        #ypred = self.model(self.X, training=False)
+        #ypred = {k: v.numpy() for k, v in ypred.items()}
 
         #choose the class with the highest probability as the prediction
         #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
@@ -312,14 +310,18 @@ class CustomCallback(tf.keras.callbacks.Callback):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
-                self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, msk, icls, variable)
-                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, variable)
-            #self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "energy", log=True)
-            #self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, msk, icls, "pt", log=True)
+                self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, icls, variable)
+                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes, dataset_def, plot_freq=1, comet_experiment=None):
+def prepare_callbacks(
+    model, outdir,
+    X_val, y_val,
+    dataset_transform,
+    num_output_classes,
+    dataset_def,
+    plot_freq=1, comet_experiment=None):
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
@@ -346,7 +348,14 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
-    cb = CustomCallback(dataset_def, history_path, X_val, y_val, dataset_transform, num_output_classes, plot_freq=plot_freq, comet_experiment=comet_experiment)
+    cb = CustomCallback(
+        dataset_def, history_path,
+        X_val, y_val,
+        dataset_transform,
+        num_output_classes,
+        plot_freq=plot_freq,
+        comet_experiment=comet_experiment
+    )
     cb.set_model(model)
 
     callbacks += [cb]
@@ -416,7 +425,7 @@ def make_dense(config, dtype):
 
 def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     import scipy
-    for ibatch in tqdm(range(X.shape[0]//global_batch_size), desc="Evaluating model"):
+    for ibatch in tqdm(range(max(1, X.shape[0]//global_batch_size)), desc="Evaluating model"):
         nb1 = ibatch*global_batch_size
         nb2 = (ibatch+1)*global_batch_size
 

@@ -190,6 +190,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         configure_model_weights(model, config["setup"]["trainable"])
         model(tf.cast(X_val[:1], model_dtype))
 
+        print("trainable weights")
+        for w in model.trainable_weights:
+            print(w.name)
+
         loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
             loss=loss_dict,
@@ -214,7 +218,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if config["dataset"]["target_particles"] == "cand":
         validation_particles = ycand_val
     elif config["dataset"]["target_particles"] == "gen":
-        validation_particles = ycand_val
+        validation_particles = ygen_val
+
     callbacks = prepare_callbacks(
         model,
         outdir,
