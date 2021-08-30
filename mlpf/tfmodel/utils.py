@@ -185,11 +185,11 @@ def targets_multi_output(num_output_classes):
             {
                 "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
                 "charge": y[:, :, 1:2]*msk,
-                "pt": tf.math.log(y[:, :, 2:3] + 1.0)*msk,
+                "pt": y[:, :, 2:3]*msk,
                 "eta": y[:, :, 3:4]*msk,
                 "sin_phi": y[:, :, 4:5]*msk,
                 "cos_phi": y[:, :, 5:6]*msk,
-                "energy": tf.math.log(y[:, :, 6:7] + 1.0)*msk,
+                "energy": y[:, :, 6:7]*msk,
             },
             w,
         )
@@ -302,6 +302,10 @@ def set_config_loss(config, trainable):
     elif trainable == "regression":
         config["dataset"]["classification_loss_coef"] = 0.0
         config["dataset"]["charge_loss_coef"] = 0.0
+        config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["eta_loss_coef"] = 0.0
+        config["dataset"]["sin_phi_loss_coef"] = 0.0
+        config["dataset"]["cos_phi_loss_coef"] = 0.0
     elif trainable == "all":
         pass
     return config

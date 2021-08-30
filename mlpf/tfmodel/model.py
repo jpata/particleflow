@@ -34,7 +34,7 @@ def pairwise_gaussian_dist(A, B):
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
     return D
 
-def pairwise_learnable_dist(A, B, ffn):
+def pairwise_learnable_dist(A, B, ffn, training=False):
     shp = tf.shape(A)
 
     #stack node feature vectors of src[i], dst[j] into a matrix res[i,j] = (src[i], dst[j])
@@ -47,7 +47,7 @@ def pairwise_learnable_dist(A, B, ffn):
     ) #(batch, bin, elem, elem, feat)
 
     #run a feedforward net on (src, dst) -> 1
-    res_transformed = ffn(res)
+    res_transformed = ffn(res, training=training)
 
     return res_transformed
 
@@ -297,7 +297,7 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, 1) message matrix
     """
-    def call(self, x_msg_binned):
+    def call(self, x_msg_binned, training=False):
         dm = tf.expand_dims(pairwise_gaussian_dist(x_msg_binned, x_msg_binned), axis=-1)
         dm = tf.exp(-self.dist_mult*dm)
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
@@ -325,8 +325,8 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, output_dim) message matrix
     """
-    def call(self, x_msg_binned):
-        dm = pairwise_learnable_dist(x_msg_binned, x_msg_binned, self.ffn_kernel)
+    def call(self, x_msg_binned, training=False):
+        dm = pairwise_learnable_dist(x_msg_binned, x_msg_binned, self.ffn_kernel, training=training)
         dm = self.activation(dm)
         return dm
 
@@ -363,7 +363,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
     x_msg: (n_batch, n_points, n_msg_features)
     x_node: (n_batch, n_points, n_node_features)
     """
-    def call(self, x_msg, x_node, msk):
+    def call(self, x_msg, x_node, msk, training=False):
         msk_f = tf.expand_dims(tf.cast(msk, x_msg.dtype), -1)
 
         shp = tf.shape(x_msg)
@@ -384,7 +384,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         #Run the node-to-node kernel (distance computation / graph building / attention)
-        dm = self.kernel(x_msg_binned)
+        dm = self.kernel(x_msg_binned, training=training)
 
         #remove the masked points row-wise and column-wise
         dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
@@ -428,7 +428,6 @@ class OutputDecoding(tf.keras.Model):
 
         layernorm=False,
         mask_reg_cls0=True,
-        classwise_split_energy=False,
         **kwargs):
 
         super(OutputDecoding, self).__init__(**kwargs)
@@ -440,8 +439,6 @@ class OutputDecoding(tf.keras.Model):
         self.pt_skip_gate = pt_skip_gate
         self.eta_skip_gate = eta_skip_gate
         self.phi_skip_gate = phi_skip_gate
-        self.energy_skip_gate = energy_skip_gate
-        self.classwise_split_energy = classwise_split_energy
 
         self.mask_reg_cls0 = mask_reg_cls0
 
@@ -486,21 +483,15 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout
         )
 
-        num_energy_out = 1
-        if self.energy_skip_gate:
-            num_energy_out = 2
+        self.ffn_energy = point_wise_feed_forward_network(
+            num_output_classes, energy_hidden_dim, "ffn_energy",
+            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+            dropout=dropout)
 
-        if self.classwise_split_energy:
-            self.ffn_energy = [point_wise_feed_forward_network(
-                num_energy_out, energy_hidden_dim, "ffn_energy_cls{}".format(icls),
-                dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-                dropout=dropout
-            ) for icls in range(1, num_output_classes)]
-        else:
-            self.ffn_energy = point_wise_feed_forward_network(
-                num_energy_out, energy_hidden_dim, "ffn_energy",
-                dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-                dropout=dropout)
+        self.ffn_energy_classwise = point_wise_feed_forward_network(
+            1, energy_hidden_dim, "ffn_energy_classwise_shift",
+            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+            dropout=dropout)
 
     """
     X_input: (n_batch, n_elements, n_input_features) raw node input features
@@ -516,8 +507,8 @@ class OutputDecoding(tf.keras.Model):
 
         out_id_logits = self.ffn_id(X_encoded, training=training)*msk_input
 
-        out_id_softmax = tf.clip_by_value(tf.nn.softmax(out_id_logits, axis=-1), 0, 1)
-        out_id_hard_softmax = tf.clip_by_value(tf.stop_gradient(tf.nn.softmax(100*out_id_logits, axis=-1)), 0, 1)
+        out_id_softmax = tf.nn.softmax(out_id_logits, axis=-1)
+        out_id_hard_softmax = tf.stop_gradient(tf.nn.softmax(100*out_id_logits, axis=-1))
         out_charge = self.ffn_charge(X_encoded, training=training)*msk_input
 
         orig_eta = X_input[:, :, 2:3]
@@ -527,11 +518,11 @@ class OutputDecoding(tf.keras.Model):
         if self.schema == "cms":
             orig_sin_phi = tf.math.sin(X_input[:, :, 3:4])*msk_input
             orig_cos_phi = tf.math.cos(X_input[:, :, 3:4])*msk_input
-            orig_log_energy = tf.math.log(X_input[:, :, 4:5] + 1.0)*msk_input
+            orig_energy = X_input[:, :, 4:5]*msk_input
         elif self.schema == "delphes":
             orig_sin_phi = X_input[:, :, 3:4]*msk_input
             orig_cos_phi = X_input[:, :, 4:5]*msk_input
-            orig_log_energy = tf.math.log(X_input[:, :, 5:6] + 1.0)*msk_input
+            orig_energy = X_input[:, :, 5:6]*msk_input
 
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, tf.stop_gradient(out_id_logits)], axis=-1)
@@ -558,51 +549,47 @@ class OutputDecoding(tf.keras.Model):
         if self.regression_use_classification:
             X_encoded_energy = tf.concat([X_encoded_energy, tf.stop_gradient(out_id_logits)], axis=-1)
 
-        if self.classwise_split_energy:
-            pred_energy_corr = tf.stack([ffn(X_encoded_energy, training=training)for ffn in self.ffn_energy], axis=-1)
-            pred_log_energy0 = tf.reduce_sum(out_id_hard_softmax[:, :, 1:]*pred_energy_corr[:, :, 0, :], axis=-1, keepdims=True)*msk_input
-        else:
-            pred_log_energy0 = self.ffn_energy(X_encoded_energy, training=training)*msk_input
+        pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
+        pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
 
-        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)*msk_input
+        pred_energy += tf.reduce_sum(
+            out_id_hard_softmax*self.ffn_energy_classwise(
+                tf.concat([orig_energy, tf.stop_gradient(out_id_logits)], axis=-1), training=training),
+            axis=-1, keepdims=True)
 
-        if self.energy_skip_gate:
-            energy_gate = tf.keras.activations.sigmoid(pred_log_energy0)
-            energy_corr = energy_gate*pred_log_energy1
-            pred_log_energy = orig_log_energy + energy_corr
-        else:
-            pred_log_energy = pred_log_energy0
+        pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 7))
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
-        pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
+        #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
 
         #compute pt=E/cosh(eta)
         orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
-        orig_log_pt = tf.math.log(orig_pt + 1.0)
+        #orig_log_pt = tf.math.log(orig_pt + 1.0)
 
+        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)*msk_input
         if self.pt_skip_gate:
             pt_gate = tf.keras.activations.sigmoid(pred_pt_corr[:, :, 0:1])
-            pred_log_pt = orig_log_pt + pt_gate*pred_pt_corr[:, :, 1:2]
+            pred_pt = orig_pt + pt_gate*pred_pt_corr[:, :, 1:2]
         else:
-            pred_log_pt = orig_log_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
+            pred_pt = orig_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
         
         if self.mask_reg_cls0:
             msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
             out_charge = out_charge*msk_output
-            pred_log_pt = pred_log_pt*msk_output
+            pred_pt = pred_pt*msk_output
             pred_eta = pred_eta*msk_output
             pred_sin_phi = pred_sin_phi*msk_output
             pred_cos_phi = pred_cos_phi*msk_output
-            pred_log_energy = pred_log_energy*msk_output
+            pred_energy = pred_energy*msk_output
 
         ret = {
             "cls": out_id_softmax,
             "charge": out_charge*msk_input,
-            "pt": pred_log_pt*msk_input,
+            "pt": pred_pt*msk_input,
             "eta": pred_eta*msk_input,
             "sin_phi": pred_sin_phi*msk_input,
             "cos_phi": pred_cos_phi*msk_input,
-            "energy": pred_log_energy*msk_input,
+            "energy": pred_energy*msk_input,
         }
 
         return ret
@@ -610,15 +597,10 @@ class OutputDecoding(tf.keras.Model):
     def set_trainable_regression(self):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
-        self.ffn_phi.trainable = True
-        self.ffn_eta.trainable = True
-        self.ffn_pt.trainable = True
-
-        if self.classwise_split_energy:
-            for layer in self.ffn_energy:
-                layer.trainable = True
-        else:
-            self.ffn_energy.trainable = True
+        self.ffn_phi.trainable = False
+        self.ffn_eta.trainable = False
+        self.ffn_pt.trainable = False
+        self.ffn_energy.trainable = True
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -736,7 +718,7 @@ class PFNetDense(tf.keras.Model):
         if self.skip_connection:
             encs.append(enc)
         for cg in self.cg:
-            enc_all = cg(enc_cg, msk, training)
+            enc_all = cg(enc_cg, msk, training=training)
             enc_cg = enc_all["enc"]
             if self.debug:
                 debugging_data[cg.name] = enc_all
@@ -753,7 +735,7 @@ class PFNetDense(tf.keras.Model):
         if self.skip_connection:
             encs_energy.append(enc)
         for cg in self.cg_energy:
-            enc_all = cg(enc_cg, msk, training)
+            enc_all = cg(enc_cg, msk, training=training)
             enc_cg = enc_all["enc"]
             if self.debug:
                 debugging_data[cg.name] = enc_all
@@ -763,7 +745,7 @@ class PFNetDense(tf.keras.Model):
         if self.debug:
             debugging_data["dec_output_energy"] = dec_output_energy
 
-        ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training)
+        ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
 
         if self.debug:
             for k in debugging_data.keys():
@@ -782,58 +764,97 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
-    def train_step(self, data):
-        # Unpack the data. Its structure depends on your model and
-        # on what you pass to `fit()`.
-        x, y, sample_weights = data
+    # def train_step(self, data):
+    #     # Unpack the data. Its structure depends on your model and
+    #     # on what you pass to `fit()`.
+    #     x, y, sample_weights = data
 
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)  # Forward pass
+    #     if not hasattr(self, "step"):
+    #         self.step = 0
 
-            #regression losses computed only for correctly classified particles
-            pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-            true_cls = tf.argmax(y["cls"], axis=-1)
-            msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
-            sample_weights["energy"] *= msk_loss
-            sample_weights["pt"] *= msk_loss
-            sample_weights["eta"] *= msk_loss
-            sample_weights["sin_phi"] *= msk_loss
-            sample_weights["cos_phi"] *= msk_loss
+    #     with tf.GradientTape() as tape:
+    #         y_pred = self(x, training=True)  # Forward pass
 
-            loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #         #regression losses computed only for correctly classified particles
+    #         pred_cls = tf.argmax(y_pred["cls"], axis=-1)
+    #         true_cls = tf.argmax(y["cls"], axis=-1)
+    #         #msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
+    #         #sample_weights["energy"] *= msk_loss
+    #         #sample_weights["pt"] *= msk_loss
+    #         #sample_weights["eta"] *= msk_loss
+    #         #sample_weights["sin_phi"] *= msk_loss
+    #         #sample_weights["cos_phi"] *= msk_loss
 
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-        # Update weights
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        # Update metrics (includes the metric that tracks the loss)
-        self.compiled_metrics.update_state(y, y_pred)
-        # Return a dict mapping metric names to current value
-        return {m.name: m.result() for m in self.metrics}
+    #         for icls in [3, ]:
+    #             msk1 = (true_cls==icls)
+    #             msk2 = (pred_cls==icls)
+    #             import matplotlib
+    #             import matplotlib.pyplot as plt
+    #             bins = np.linspace(0,6,100)
 
-    def test_step(self, data):
-        # Unpack the data
-        x, y, sample_weights = data
-        # Compute predictions
-        y_pred = self(x, training=False)
+    #             plt.figure(figsize=(4,4))
+    #             plt.scatter(
+    #                 y["energy"][msk1&msk2].numpy().flatten(),
+    #                 y_pred["energy"][msk1&msk2].numpy().flatten(),
+    #                 marker=".", alpha=0.5
+    #             )
+    #             plt.xlabel("true")
+    #             plt.ylabel("pred")
+    #             plt.plot([0,6], [0,6])
+    #             plt.savefig("train_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
+    #             plt.close("all")
 
-        pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-        true_cls = tf.argmax(y["cls"], axis=-1)
-        msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
-        sample_weights["energy"] *= msk_loss
-        sample_weights["pt"] *= msk_loss
-        sample_weights["eta"] *= msk_loss
-        sample_weights["sin_phi"] *= msk_loss
-        sample_weights["cos_phi"] *= msk_loss
+    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
-        # Updates the metrics tracking the loss
-        self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-        # Update the metrics.
-        self.compiled_metrics.update_state(y, y_pred)
-        # Return a dict mapping metric names to current value.
-        # Note that it will include the loss (tracked in self.metrics).
-        return {m.name: m.result() for m in self.metrics}
+    #     # Compute gradients
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+    #     # Update weights
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     # Update metrics (includes the metric that tracks the loss)
+    #     self.compiled_metrics.update_state(y, y_pred)
+    #     # Return a dict mapping metric names to current value
+
+    #     self.step += 1
+    #     return {m.name: m.result() for m in self.metrics}
+
+    # def test_step(self, data):
+    #     # Unpack the data
+    #     x, y, sample_weights = data
+    #     # Compute predictions
+    #     y_pred = self(x, training=False)
+
+    #     pred_cls = tf.argmax(y_pred["cls"], axis=-1)
+    #     true_cls = tf.argmax(y["cls"], axis=-1)
+
+    #     for icls in [3, ]:
+    #         msk1 = (true_cls==icls)
+    #         msk2 = (pred_cls==icls)
+    #         import matplotlib
+    #         import matplotlib.pyplot as plt
+    #         bins = np.linspace(0,6,100)
+
+    #         plt.figure(figsize=(4,4))
+    #         plt.scatter(
+    #             y["energy"][msk1&msk2].numpy().flatten(),
+    #             y_pred["energy"][msk1&msk2].numpy().flatten(),
+    #             marker=".", alpha=0.5
+    #         )
+    #         plt.xlabel("true")
+    #         plt.ylabel("pred")
+    #         plt.plot([0,6], [0,6])
+    #         plt.savefig("test_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
+    #         plt.close("all")
+
+    #     # Updates the metrics tracking the loss
+    #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #     # Update the metrics.
+    #     self.compiled_metrics.update_state(y, y_pred)
+    #     # Return a dict mapping metric names to current value.
+    #     # Note that it will include the loss (tracked in self.metrics).
+
+    #     self.step += 1
+    #     return {m.name: m.result() for m in self.metrics}
 
 class DummyNet(tf.keras.Model):
     def __init__(self,
