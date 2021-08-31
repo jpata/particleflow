@@ -790,9 +790,10 @@ class PFNetDense(tf.keras.Model):
     #             msk2 = (pred_cls==icls)
     #             import matplotlib
     #             import matplotlib.pyplot as plt
-    #             bins = np.linspace(0,6,100)
 
     #             plt.figure(figsize=(4,4))
+    #             minval = np.min(y["energy"][msk1].numpy().flatten())
+    #             maxval = np.max(y["energy"][msk1].numpy().flatten())
     #             plt.scatter(
     #                 y["energy"][msk1&msk2].numpy().flatten(),
     #                 y_pred["energy"][msk1&msk2].numpy().flatten(),
@@ -800,7 +801,7 @@ class PFNetDense(tf.keras.Model):
     #             )
     #             plt.xlabel("true")
     #             plt.ylabel("pred")
-    #             plt.plot([0,6], [0,6])
+    #             plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
     #             plt.savefig("train_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
     #             plt.close("all")
 
@@ -832,9 +833,10 @@ class PFNetDense(tf.keras.Model):
     #         msk2 = (pred_cls==icls)
     #         import matplotlib
     #         import matplotlib.pyplot as plt
-    #         bins = np.linspace(0,6,100)
 
     #         plt.figure(figsize=(4,4))
+    #         minval = np.min(y["energy"][msk1].numpy().flatten())
+    #         maxval = np.max(y["energy"][msk1].numpy().flatten())
     #         plt.scatter(
     #             y["energy"][msk1&msk2].numpy().flatten(),
     #             y_pred["energy"][msk1&msk2].numpy().flatten(),
@@ -842,9 +844,10 @@ class PFNetDense(tf.keras.Model):
     #         )
     #         plt.xlabel("true")
     #         plt.ylabel("pred")
-    #         plt.plot([0,6], [0,6])
+    #         plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
     #         plt.savefig("test_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
     #         plt.close("all")
+
 
     #     # Updates the metrics tracking the loss
     #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
