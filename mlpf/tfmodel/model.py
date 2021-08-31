@@ -557,7 +557,7 @@ class OutputDecoding(tf.keras.Model):
                 tf.concat([orig_energy, tf.stop_gradient(out_id_logits)], axis=-1), training=training),
             axis=-1, keepdims=True)
 
-        pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 7))
+        pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
         #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0

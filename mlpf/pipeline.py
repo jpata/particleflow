@@ -186,7 +186,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model(tf.cast(X_val[:1], model_dtype))
 
-        #config = set_config_loss(config, config["setup"]["trainable"])
+        config = set_config_loss(config, config["setup"]["trainable"])
         configure_model_weights(model, config["setup"]["trainable"])
         model(tf.cast(X_val[:1], model_dtype))
 
@@ -342,7 +342,7 @@ def find_lr(config, outdir, figname, logscale):
             model_dtype = tf.dtypes.float32
 
         model = make_model(config, model_dtype)
-        #config = set_config_loss(config, config["setup"]["trainable"])
+        config = set_config_loss(config, config["setup"]["trainable"])
 
         # Run model once to build the layers
         model(tf.cast(X_val[:1], model_dtype))

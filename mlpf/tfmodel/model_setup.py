@@ -280,12 +280,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
 
-        if epoch%self.plot_freq!=0:
-            return
-
         #save the training logs (losses) for this epoch
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
+
+        if epoch%self.plot_freq!=0:
+            return
 
         cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
         cp_dir.mkdir(parents=True, exist_ok=True)
