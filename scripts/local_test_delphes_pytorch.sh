@@ -14,7 +14,7 @@ mkdir -p data/pythia8_qcd
 mkdir -p data/pythia8_qcd/raw
 mkdir -p data/pythia8_qcd/processed
 
-# download 2 files for training/validation
+#download 2 files for training/validation
 cd data/pythia8_ttbar/raw
 echo Downloading the training/validation data files..
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_0.pkl.bz2
@@ -22,7 +22,7 @@ wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14
 bzip2 -d *
 cd ../../..
 
-# download 1 file for testing
+#download 1 file for testing
 cd data/pythia8_qcd/raw
 echo Downloading the testing data files..
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
@@ -39,7 +39,7 @@ echo Processing the testing data files..
 python3 ../mlpf/pytorch_delphes/graph_data_delphes.py --dataset data/pythia8_qcd/ \
   --processed_dir data/pythia8_qcd/processed --num-files-merge 1 --num-proc 1
 
-# before training a model, first get rid of any previous models stored
+#before training a model, first get rid of any previous models stored
 rm -Rf experiments/*
 
 cd ../mlpf/
@@ -53,10 +53,11 @@ python3 pytorch_pipeline.py \
   --outpath='../test_tmp_delphes/experiments'
 echo Finished the training..
 
-echo Begining the LRP machinery..
-python3 lrp_pipeline.py \
-  --n_test=1 --batch_size=4 \
-  --lrp_dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
-  --lrp_outpath='../test_tmp_delphes/experiments/' \
-  --lrp_load_model='PFNet7_gen_ntrain_1_nepochs_10_batch_size_4_lr_0.0001_alpha_0.0002_both__nn1_nn3'
-  --lrp_load_epoch=9
+# #to run lrp uncomment the next few lines (note: lrp requires huge amounts of memory ~128Gi)
+# echo Begining the LRP machinery..
+# python3 lrp_pipeline.py \
+#   --n_test=1 --batch_size=4 \
+#   --lrp_dataset_qcd='../test_tmp_delphes/data/pythia8_qcd' \
+#   --lrp_outpath='../test_tmp_delphes/experiments/' \
+#   --lrp_load_model='PFNet7_gen_ntrain_1_nepochs_10_batch_size_4_lr_0.0001_alpha_0.0002_both__nn1_nn3'
+#   --lrp_load_epoch=9
