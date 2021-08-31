@@ -615,6 +615,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.node_message = kwargs.pop("node_message")
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
+        self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation"))
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6, name=kwargs.get("name")+"_layernorm")
@@ -648,7 +649,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             x = self.layernorm(x, training=training)
 
         #compute node features for graph building
-        x_dist = self.activation(self.ffn_dist(x, training=training))
+        x_dist = self.dist_activation(self.ffn_dist(x, training=training))
 
         #x_dist = self.gaussian_noise(x_dist, training=training)
         #compute the element-to-element messages / distance matrix / graph structure
