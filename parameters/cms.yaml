@@ -84,6 +84,7 @@ parameters:
     distance_dim: 128
     layernorm: no
     dropout: 0.0
+    dist_activation: gelu
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1

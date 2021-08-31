@@ -55,8 +55,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
-  batch_size: 4
+  lr: 1e-3
+  batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
@@ -79,33 +79,30 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   combined_graph_layer:
-    bin_size: 32
-    max_num_bins: 500
-    distance_dim: 8
+    bin_size: 640
+    max_num_bins: 100
+    distance_dim: 128
     layernorm: no
-    dropout: 0.2
+    dropout: 0.0
+    dist_activation: linear
     kernel:
-      type: NodePairTrainableKernel
-      output_dim: 8
-      hidden_dim: 32
-      num_layers: 2
-      activation: gelu
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
     num_node_messages: 1
     node_message:
-      type: NodeMessageLearnable
+      type: GHConvDense
       output_dim: 128
       activation: gelu
-      hidden_dim: 128
-      num_layers: 2
-      aggregation_direction: dst
+      normalize_degrees: yes
     hidden_dim: 128
     activation: gelu
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_common: 3
+  num_graph_layers_energy: 3
   output_decoding:
     activation: gelu
     regression_use_classification: yes
-    dropout: 0.2
+    dropout: 0.0
 
     pt_skip_gate: no
     eta_skip_gate: yes
@@ -125,7 +122,7 @@ parameters:
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 2
+    id_num_layers: 3
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
