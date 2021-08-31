@@ -487,9 +487,10 @@ def get_hp_str(result):
         s += "{}={}; ".format(hp, result["config/{}".format(hp)].values[0])
     return s
 
-def plot_ray_analysis(analysis, save=False):
+def plot_ray_analysis(analysis, save=False, skip=0):
     to_plot = [
-    'adam_beta_1', 'charge_loss', 'cls_acc_unweighted', 'cls_loss',
+    #'adam_beta_1',
+       'charge_loss', 'cls_acc_unweighted', 'cls_loss',
        'cos_phi_loss', 'energy_loss', 'eta_loss', 'learning_rate', 'loss',
        'pt_loss', 'sin_phi_loss', 'val_charge_loss',
        'val_cls_acc_unweighted', 'val_cls_acc_weighted', 'val_cls_loss',
@@ -502,12 +503,10 @@ def plot_ray_analysis(analysis, save=False):
     for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
         result = result_df[result_df["logdir"] == key]
 
-        fig, axs = plt.subplots(4, 4, figsize=(12, 9), tight_layout=True)
-        for ax in axs.flat:
-            ax.label_outer()
-
+        fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
         for var, ax in zip(to_plot, axs.flat):
-            ax.plot(dfs[key].index.values, dfs[key][var], alpha=0.8)
+            # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
+            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
             ax.set_xlabel("Epoch")
             ax.set_ylabel(var)
             ax.grid(alpha=0.3)
@@ -515,6 +514,7 @@ def plot_ray_analysis(analysis, save=False):
 
         if save:
             plt.savefig(key + "/trial_summary.jpg")
+            plt.close()
     if not save:
         plt.show()
     else:
@@ -582,7 +582,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir):
     )
     print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
 
-    plot_ray_analysis(analysis, save=True)
+    plot_ray_analysis(analysis, save=True, skip=20)
     ray.shutdown()
 
 
@@ -590,9 +590,10 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir):
 @click.help_option("-h", "--help")
 @click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
 @click.option("-s", "--save", help="save plots in trial dirs", is_flag=True)
-def raytune_analysis(exp_dir, save):
-    analysis = Analysis(exp_dir)
-    plot_ray_analysis(analysis, save=save)
+@click.option("-k", "--skip", help="skip first values to avoid large losses at start of training", type=int)
+def raytune_analysis(exp_dir, save, skip):
+    analysis = Analysis(exp_dir,  default_metric="val_loss", default_mode="min")
+    plot_ray_analysis(analysis, save=save, skip=skip)
 
 
 if __name__ == "__main__":
