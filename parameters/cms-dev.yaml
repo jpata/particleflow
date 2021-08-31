@@ -24,22 +24,20 @@ dataset:
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   classification_loss_coef: 1.0
-  charge_loss_coef: 1.0
-  pt_loss_coef: 100.0
+  charge_loss_coef: 0.01
+  pt_loss_coef: 0.0001
   eta_loss_coef: 100.0
-  sin_phi_loss_coef: 100.0
-  cos_phi_loss_coef: 100.0
-  energy_loss_coef: 100.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 0.0001
   raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_gen/*.tfrecords
+  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
   num_files_per_chunk: 1
   validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
     type: Huber
-    delta: 1.0
   pt_loss:
     type: Huber
-    delta: 1.0
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -57,7 +55,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
+  lr: 1e-4
   batch_size: 4
   num_events_train: 80000
   num_events_test: 9000
@@ -80,33 +78,36 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  activation: gelu
-  layernorm: yes
-  hidden_dim: 256
-  bin_size: 32
-  distance_dim: 8
-  dropout: 0.0
-  graph_kernel:
-    type: NodePairTrainableKernel
-    output_dim: 8
-    hidden_dim: 32
-    num_layers: 2
-    activation: gelu
-  num_graph_layers: 3
-  node_message:
-    type: NodeMessageLearnable
-    output_dim: 256
+  combined_graph_layer:
+    bin_size: 32
+    max_num_bins: 500
+    distance_dim: 8
+    layernorm: no
+    dropout: 0.2
+    kernel:
+      type: NodePairTrainableKernel
+      output_dim: 8
+      hidden_dim: 32
+      num_layers: 2
+      activation: gelu
+    num_node_messages: 1
+    node_message:
+      type: NodeMessageLearnable
+      output_dim: 128
+      activation: gelu
+      hidden_dim: 128
+      num_layers: 2
+      aggregation_direction: dst
     hidden_dim: 128
-    num_layers: 2
     activation: gelu
-    aggregation_direction: dst
-  num_node_messages: 1
+  num_graph_layers_common: 2
+  num_graph_layers_energy: 2
   output_decoding:
     activation: gelu
     regression_use_classification: yes
-    dropout: 0.0
+    dropout: 0.2
 
-    pt_skip_gate: yes
+    pt_skip_gate: no
     eta_skip_gate: yes
     phi_skip_gate: yes
 
@@ -124,13 +125,13 @@ parameters:
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 4
+    id_num_layers: 2
     charge_num_layers: 2
-    pt_num_layers: 3
-    eta_num_layers: 3
-    phi_num_layers: 3
-    energy_num_layers: 3
-    layernorm: yes
+    pt_num_layers: 2
+    eta_num_layers: 2
+    phi_num_layers: 2
+    energy_num_layers: 2
+    layernorm: no
     mask_reg_cls0: no
 
   skip_connection: yes
@@ -141,6 +142,6 @@ timing:
   num_iter: 3
 
 exponentialdecay:
-  decay_steps: 10000
-  decay_rate: 0.99
+  decay_steps: 1000
+  decay_rate: 0.98
   staircase: yes
