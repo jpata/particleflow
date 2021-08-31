@@ -1,0 +1,133 @@
+backend: tensorflow
+
+dataset:
+  schema: delphes
+  target_particles: gen
+  num_input_features: 12
+  num_output_features: 7
+  #(none=0, track=1, cluster=2)
+  num_input_classes: 3
+  #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5) 
+  num_output_classes: 6
+  num_momentum_outputs: 5
+  padded_num_elem_size: 6400
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
+  pt_loss_coef: 100.0
+  eta_loss_coef: 100.0
+  sin_phi_loss_coef: 100.0
+  cos_phi_loss_coef: 100.0
+  energy_loss_coef: 100.0
+  raw_path: data/pythia8_ttbar/raw/*.pkl*
+  processed_path: data/pythia8_ttbar/tfr/*.tfrecords
+  num_files_per_chunk: 5
+  validation_file_path: data/pythia8_qcd/val/*.pkl*
+  energy_loss:
+    type: Huber
+    delta: 1.0
+  pt_loss:
+    type: Huber
+    delta: 1.0
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  weights_config:
+  lr: 1e-4
+  batch_size: 4
+  num_events_train: 45000
+  num_events_test: 5000
+  num_epochs: 10
+  num_val_files: 5
+  dtype: float32
+  trainable:
+  classification_loss_type: categorical_cross_entropy
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+
+sample_weights:
+  cls: inverse_sqrt
+  charge: signal_only
+  pt: signal_only
+  eta: signal_only
+  sin_phi: signal_only
+  cos_phi: signal_only
+  energy: signal_only
+
+parameters:
+  model: gnn_dense
+  input_encoding: default
+  combined_graph_layer:
+    bin_size: 640
+    max_num_bins: 100
+    distance_dim: 128
+    layernorm: no
+    num_node_messages: 1
+    dropout: 0.0
+    kernel:
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+    node_message:
+      type: GHConvDense
+      output_dim: 256
+      activation: gelu
+      normalize_degrees: yes
+    hidden_dim: 128
+    activation: gelu
+  num_graph_layers_common: 3
+  num_graph_layers_energy: 3
+  output_decoding:
+    activation: gelu
+    regression_use_classification: yes
+    dropout: 0.0
+
+    pt_skip_gate: yes
+    eta_skip_gate: yes
+    phi_skip_gate: yes
+
+    id_dim_decrease: yes
+    charge_dim_decrease: yes
+    pt_dim_decrease: yes
+    eta_dim_decrease: yes
+    phi_dim_decrease: yes
+    energy_dim_decrease: yes
+
+    id_hidden_dim: 256
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
+
+    id_num_layers: 4
+    charge_num_layers: 2
+    pt_num_layers: 3
+    eta_num_layers: 3
+    phi_num_layers: 3
+    energy_num_layers: 3
+    layernorm: yes
+    mask_reg_cls0: no
+
+  skip_connection: yes
+  debug: no
+
+timing:
+  num_ev: 100
+  num_iter: 3
+
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes

@@ -1,7 +1,6 @@
-from .model import PFNet, Transformer, DummyNet, PFNetDense
+from .model import DummyNet, PFNetDense
 
 import tensorflow as tf
-import tensorflow_probability
 import tensorflow_addons as tfa
 import pickle
 import numpy as np
@@ -20,6 +19,7 @@ from argparse import Namespace
 import time
 import json
 import random
+import math
 import platform
 from tqdm import tqdm
 from pathlib import Path
@@ -58,11 +58,20 @@ def plot_to_image(figure):
     return image
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, X, y, dataset_transform, num_output_classes):
+    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1, comet_experiment=None):
         super(CustomCallback, self).__init__()
         self.X = X
         self.y = y
-        self.dataset_transform = dataset_transform
+        self.plot_freq = plot_freq
+        self.comet_experiment = comet_experiment
+
+        self.dataset_def = dataset_def
+
+        #transform the prediction target from an array into a dictionary for easier access
+        self.ytrue = dataset_transform(self.X, self.y, None)[1]
+        self.ytrue = {k: np.array(v) for k, v in self.ytrue.items()}
+        self.ytrue_id = np.argmax(self.ytrue["cls"], axis=-1)
+
         self.outpath = outpath
         self.num_output_classes = num_output_classes
 
@@ -81,109 +90,238 @@ class CustomCallback(tf.keras.callbacks.Callback):
             11: "gray"
         }
 
-    def on_epoch_end(self, epoch, logs=None):
+        self.reg_bins = {
+            "pt": np.linspace(0, 100, 100),
+            "eta": np.linspace(-6, 6, 100),
+            "sin_phi": np.linspace(-1,1,100),
+            "cos_phi": np.linspace(-1,1,100),
+            "energy": None,
+        }
 
-        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-            json.dump(logs, fi)
+    def plot_cm(self, epoch, outpath, ypred_id, msk):
 
-        ypred = self.model(self.X, training=False)
-        #ypred["cls"] = np.clip(ypred["cls"], 0.5, 1.0)
-        
-        ypred_id = np.argmax(ypred["cls"], axis=-1)
-
-        ibatch = 0
-       
-        msk = self.X[:, :, 0] != 0
-        # cm = sklearn.metrics.confusion_matrix(
-        #     self.y[msk][:, 0].astype(np.int64).flatten(),
-        #     ypred_id[msk].flatten(), labels=list(range(self.num_output_classes))
-        # )
-        # figure = plot_confusion_matrix(cm)
-        # plt.savefig("{}/cm_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        # plt.close("all")
+        ytrue_id_flat = self.ytrue_id[msk].astype(np.int64).flatten()
+        ypred_id_flat = ypred_id[msk].flatten()
 
         cm = sklearn.metrics.confusion_matrix(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten(), labels=list(range(self.num_output_classes)), normalize="true"
+            ytrue_id_flat,
+            ypred_id_flat, labels=list(range(self.num_output_classes)), normalize="true"
         )
+        if self.comet_experiment:
+            self.comet_experiment.log_confusion_matrix(
+                file_name="confusion-matrix-epoch{}.json".format(epoch), matrix=cm, epoch=epoch
+            )
+
         figure = plot_confusion_matrix(cm)
 
         acc = sklearn.metrics.accuracy_score(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten()
+            ytrue_id_flat,
+            ypred_id_flat
         )
         balanced_acc = sklearn.metrics.balanced_accuracy_score(
-            self.y[msk][:, 0].astype(np.int64).flatten(),
-            ypred_id[msk].flatten()
+            ytrue_id_flat,
+            ypred_id_flat
         )
         plt.title("acc={:.3f} bacc={:.3f}".format(acc, balanced_acc))
-        plt.savefig("{}/cm_normed_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
-        plt.close("all")
 
-        # for icls in range(self.num_output_classes):
-        #     fig = plt.figure(figsize=(4,4))
-        #     msk = self.y[:, :, 0] == icls
-        #     msk = msk.flatten()
-        #     b = np.linspace(0,1,21)
-        #     ids = ypred["cls"][:, :, icls].numpy().flatten()
-        #     plt.hist(ids[msk], bins=b, density=True, histtype="step", lw=2)
-        #     plt.hist(ids[~msk], bins=b, density=True, histtype="step", lw=2)
-        #     plt.savefig("{}/cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
-        # for icls in range(self.num_output_classes):
-        #     n_pred = np.sum(self.y[:, :, 0]==icls, axis=1)
-        #     n_true = np.sum(ypred_id==icls, axis=1)
-        #     figure = plot_num_particle(n_pred, n_true, icls)
-        #     plt.savefig("{}/num_cls{}_{}.pdf".format(self.outpath, icls, epoch), bbox_inches="tight")
+        image_path = str(outpath / "cm_normed.png")
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+    def plot_event_visualization(self, epoch, outpath, ypred, ypred_id, msk, ievent=0):
+
+        X_eta, X_phi, X_energy = self.dataset_def.get_X_eta_phi_energy(self.X)
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
 
+        #Plot the input PFElements
         plt.axes(ax1)
-        msk = self.X[ibatch, :, 0] != 0
-        eta = self.X[ibatch][msk][:, 2]
-        phi = self.X[ibatch][msk][:, 3]
-        energy = self.X[ibatch][msk][:, 4]
-        typ = self.X[ibatch][msk][:, 0]
+        msk = self.X[ievent, :, 0] != 0
+        eta = X_eta[ievent][msk]
+        phi = X_phi[ievent][msk]
+        energy = X_energy[ievent][msk]
+        typ = self.X[ievent][msk][:, 0]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in typ], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.axes(ax3)
         #Plot the predicted particles
-        msk = ypred_id[ibatch] != 0
-        eta = ypred["eta"][ibatch][msk]
-        sphi = ypred["sin_phi"][ibatch][msk]
-        cphi = ypred["cos_phi"][ibatch][msk]
+        plt.axes(ax3)
+        msk = ypred_id[ievent] != 0
+        eta = ypred["eta"][ievent][msk]
+        sphi = ypred["sin_phi"][ievent][msk]
+        cphi = ypred["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = ypred["energy"][ibatch][msk]
-        pdgid = ypred_id[ibatch][msk]
+        energy = ypred["energy"][ievent][msk]
+        pdgid = ypred_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
-
-        # Xconcat = np.concatenate([self.X[ibatch], ypred["cls"][ibatch]], axis=-1)
-        # np.savez(self.outpath + "/event_{}.npz".format(epoch), Xconcat[Xconcat[:, 0]!=0])
 
         #Plot the target particles
         plt.axes(ax2)
-        y = self.dataset_transform(self.X, self.y, None)[1]
-        y_id = np.argmax(y["cls"], axis=-1)
-        msk = y_id[ibatch] != 0
-        eta = y["eta"][ibatch][msk]
-        sphi = y["sin_phi"][ibatch][msk]
-        cphi = y["cos_phi"][ibatch][msk]
+        
+        msk = self.ytrue_id[ievent] != 0
+        eta = self.ytrue["eta"][ievent][msk]
+        sphi = self.ytrue["sin_phi"][ievent][msk]
+        cphi = self.ytrue["cos_phi"][ievent][msk]
         phi = np.arctan2(sphi, cphi)
-        energy = y["energy"][ibatch][msk]
-        pdgid = y_id[ibatch][msk]
+        energy = self.ytrue["energy"][ievent][msk]
+        pdgid = self.ytrue_id[ievent][msk]
         plt.scatter(eta, phi, marker="o", s=energy, c=[self.color_map[p] for p in pdgid], alpha=0.5, linewidths=0)
         plt.xlim(-8,8)
         plt.ylim(-4,4)
 
-        plt.savefig("{}/event_{}.pdf".format(self.outpath, epoch), bbox_inches="tight")
+        image_path = str(outpath / "event_iev{}.png".format(ievent))
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+    def plot_reg_distribution(self, outpath, ypred, ypred_id, icls, reg_variable):
+
+        if icls==0:
+            vals_pred = ypred[reg_variable][ypred_id!=icls].flatten()
+            vals_true = self.ytrue[reg_variable][self.ytrue_id!=icls].flatten()
+        else:
+            vals_pred = ypred[reg_variable][ypred_id==icls].flatten()
+            vals_true = self.ytrue[reg_variable][self.ytrue_id==icls].flatten()
+
+        bins = self.reg_bins[reg_variable]
+        if bins is None:
+            bins = 100
+        plt.hist(vals_true, bins=bins, histtype="step", lw=2, label="true")
+        plt.hist(vals_pred, bins=bins, histtype="step", lw=2, label="predicted")
+
+        if reg_variable in ["pt", "energy"]:
+            plt.yscale("log")
+            plt.ylim(bottom=1e-2)
+
+        plt.xlabel(reg_variable)
+        plt.ylabel("Number of particles")
+        plt.legend(loc="best")
+        plt.title("Regression output, cls {}".format(icls))
+        plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
         plt.close("all")
 
-        np.savez("{}/pred_{}.npz".format(self.outpath, epoch), X=self.X, ytrue=self.y, **ypred)
+    def plot_corr(self, epoch, outpath, ypred, ypred_id, icls, reg_variable):
 
-def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output_classes):
+        if icls==0:
+            sel = (ypred_id!=0) & (self.ytrue_id!=0)
+        else:
+            sel = (ypred_id==icls) & (self.ytrue_id==icls)
+
+        vals_pred = ypred[reg_variable][sel].flatten()
+        vals_true = self.ytrue[reg_variable][sel].flatten()
+
+        loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+        loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
+
+        #save correlation histogram
+        plt.figure()
+        bins = self.reg_bins[reg_variable]
+        if bins is None:
+            bins = 100
+        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), cmap="Blues")
+        plt.colorbar()
+        if len(vals_true) > 0:
+            minval = np.min(vals_true)
+            maxval = np.max(vals_true)
+            if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
+                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
+        plt.xlabel("true")
+        plt.ylabel("predicted")
+        plt.title("{}, particle weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
+        image_path = str(outpath / "{}_cls{}_corr.png".format(reg_variable, icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+        plt.close("all")
+
+        #save loss-weighted correlation histogram
+        plt.figure()
+        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), weights=loss_vals, cmap="Blues")
+        plt.colorbar()
+        if len(vals_true) > 0:
+            minval = np.min(vals_true)
+            maxval = np.max(vals_true)
+            if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
+                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
+        plt.xlabel("true")
+        plt.ylabel("predicted")
+        plt.title("{}, loss weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
+        image_path = str(outpath / "{}_cls{}_corr_weighted.png".format(reg_variable, icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+        #Also plot the residuals, as we have the true and predicted values already available here
+        plt.figure()
+        residual = vals_true - vals_pred
+        residual[np.isnan(residual)] = 0
+        residual[np.isinf(residual)] = 0
+        plt.hist(residual, bins=100)
+        plt.yscale("log")
+        plt.xlabel("true - pred")
+        plt.title("{} residual, m={:.4f} s={:.4f}".format(reg_variable, np.mean(residual), np.std(residual)))
+
+        image_path = str(outpath / "{}_cls{}_residual.png".format(reg_variable, icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+        plt.close("all")
+
+        if self.comet_experiment:
+            self.comet_experiment.log_metric('residual_{}_cls{}_mean'.format(reg_variable, icls), np.mean(residual), step=epoch)
+            self.comet_experiment.log_metric('residual_{}_cls{}_std'.format(reg_variable, icls), np.std(residual), step=epoch)
+            self.comet_experiment.log_metric('val_loss_{}_cls{}'.format(reg_variable, icls), np.sum(loss_vals), step=epoch)
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        #save the training logs (losses) for this epoch
+        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+            json.dump(logs, fi)
+
+        if epoch%self.plot_freq!=0:
+            return
+
+        cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
+        cp_dir.mkdir(parents=True, exist_ok=True)
+
+        #run the model inference on the validation dataset
+        ypred = self.model.predict(self.X, batch_size=1)
+        #ypred = self.model(self.X, training=False)
+        #ypred = {k: v.numpy() for k, v in ypred.items()}
+
+        #choose the class with the highest probability as the prediction
+        #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
+        ypred_id = np.argmax(ypred["cls"], axis=-1)
+       
+        #exclude padded elements from the plotting
+        msk = self.X[:, :, 0] != 0
+
+        self.plot_cm(epoch, cp_dir, ypred_id, msk)
+        for ievent in range(min(5, self.X.shape[0])):
+            self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
+
+        for icls in range(self.num_output_classes):
+            cp_dir_cls = cp_dir / "cls_{}".format(icls)
+            cp_dir_cls.mkdir(parents=True, exist_ok=True)
+            for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
+                self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, icls, variable)
+                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+
+        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
+
+def prepare_callbacks(
+    model, outdir,
+    X_val, y_val,
+    dataset_transform,
+    num_output_classes,
+    dataset_def,
+    plot_freq=1, comet_experiment=None):
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
@@ -210,7 +348,14 @@ def prepare_callbacks(model, outdir, X_val, y_val, dataset_transform, num_output
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
-    cb = CustomCallback(history_path, X_val, y_val, dataset_transform, num_output_classes)
+    cb = CustomCallback(
+        dataset_def, history_path,
+        X_val, y_val,
+        dataset_transform,
+        num_output_classes,
+        plot_freq=plot_freq,
+        comet_experiment=comet_experiment
+    )
     cb.set_model(model)
 
     callbacks += [cb]
@@ -239,62 +384,23 @@ def scale_outputs(X,y,w):
 
 def make_model(config, dtype):
     model = config['parameters']['model']
-    if model == 'gnn':
-        return make_gnn(config, dtype)
-    elif model == 'transformer':
-        return make_transformer(config, dtype)
-    elif model == 'dense':
+
+    if model == 'dense':
         return make_dense(config, dtype)
     elif model == 'gnn_dense':
         return make_gnn_dense(config, dtype)
+
     raise KeyError("Unknown model type {}".format(model))
-
-def make_gnn(config, dtype):
-    activation = getattr(tf.nn, config['parameters']['activation'])
-
-    parameters = [
-        'bin_size',
-        'num_convs_id',
-        'num_convs_reg',
-        'num_hidden_id_enc',
-        'num_hidden_id_dec',
-        'num_hidden_reg_enc',
-        'num_hidden_reg_dec',
-        'num_neighbors',
-        'hidden_dim_id',
-        'hidden_dim_reg',
-        'dist_mult',
-        'distance_dim',
-        'dropout',
-        'skip_connection'
-    ]
-    kwargs = {par: config['parameters'][par] for par in parameters}
-
-    model = PFNet(
-        multi_output=config["setup"]["multi_output"],
-        num_input_classes=config["dataset"]["num_input_classes"],
-        num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        activation=activation,
-        **kwargs
-    )
-
-    return model
 
 def make_gnn_dense(config, dtype):
 
     parameters = [
-        "layernorm",
-        "hidden_dim",
-        "bin_size",
-        "clip_value_low",
-        "num_conv",
-        "num_gsl",
-        "normalize_degrees",
-        "distance_dim",
-        "dropout",
-        "separate_momentum",
+        "num_graph_layers_common",
+        "num_graph_layers_energy",
         "input_encoding",
+        "skip_connection",
+        "output_decoding",
+        "combined_graph_layer",
         "debug"
     ]
 
@@ -304,39 +410,22 @@ def make_gnn_dense(config, dtype):
         multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
+        schema=config["dataset"]["schema"],
         **kwargs
     )
 
-    return model
-
-def make_transformer(config, dtype):
-    parameters = [
-        'num_layers', 'd_model', 'num_heads', 'dff', 'support', 'dropout'
-    ]
-    kwargs = {par: config['parameters'][par] for par in parameters}
-
-    model = Transformer(
-        multi_output=config["setup"]["multi_output"],
-        num_input_classes=config["dataset"]["num_input_classes"],
-        num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
-        dtype=dtype,
-        **kwargs
-    )
     return model
 
 def make_dense(config, dtype):
     model = DummyNet(
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
-        num_momentum_outputs=config["dataset"]["num_momentum_outputs"],
     )
     return model
 
 def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
     import scipy
-    for ibatch in tqdm(range(X.shape[0]//global_batch_size), desc="Evaluating model"):
+    for ibatch in tqdm(range(max(1, X.shape[0]//global_batch_size)), desc="Evaluating model"):
         nb1 = ibatch*global_batch_size
         nb2 = (ibatch+1)*global_batch_size
 
@@ -446,14 +535,19 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
 
 def configure_model_weights(model, trainable_layers):
     print("setting trainable layers: {}".format(trainable_layers))
+
     if (trainable_layers is None):
         trainable_layers = "all"
+
     if trainable_layers == "all":
         model.trainable = True
-    elif trainable_layers == "classification":
-        model.set_trainable_classification()
     elif trainable_layers == "regression":
-        model.set_trainable_regression()
+        for cg in model.cg:
+            cg.trainable = False
+        for cg in model.cg_energy:
+            cg.trainable = True
+
+        model.output_dec.set_trainable_regression()
     else:
         if isinstance(trainable_layers, str):
             trainable_layers = [trainable_layers]
@@ -472,285 +566,3 @@ def make_focal_loss(config):
             from_logits=bool(config["setup"].get("focal_loss_from_logits", False))
         )
     return loss
-
-def main(args, yaml_path, config):
-    #tf.debugging.enable_check_numerics()
-
-    #Switch off multi-output for the evaluation for backwards compatibility
-    multi_output = True
-    if args.action == "eval":
-        multi_output = False
-
-    tf.config.run_functions_eagerly(config['tensorflow']['eager'])
-
-    from tfmodel.data import Dataset
-    cds = config["dataset"]
-
-    raw_path = cds.get("raw_path", None)
-    if args.raw_path:
-        raw_path = args.raw_path
-
-    processed_path = cds.get("processed_path", None)
-    if args.processed_path:
-        processed_path = args.processed_path
-
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=raw_path,
-        raw_files=cds.get("raw_files", None),
-        processed_path=processed_path,
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"]
-    )
-
-    if args.action == "data":
-        dataset_def.process(
-            config["dataset"]["num_files_per_chunk"]
-        )
-        return
-
-    global_batch_size = config['setup']['batch_size']
-    config['setup']['multi_output'] = multi_output
-
-    model_name = os.path.splitext(os.path.basename(yaml_path))[0] + "-" + str(uuid.uuid4())[:8] + "." + platform.node()
-    print("model_name=", model_name)
-
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
-
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-    num_events = 0
-    for i in dataset:
-        num_events += 1
-    print("dataset loaded, len={}".format(num_events))
-
-    n_train = config['setup']['num_events_train']
-    n_test = config['setup']['num_events_test']
-
-    if args.ntrain:
-        n_train = args.ntrain
-    if args.ntest:
-        n_test = args.ntest
-
-    n_epochs = config['setup']['num_epochs']
-    weight_func = make_weight_function(config)
-    assert(n_train + n_test <= num_events)
-
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        {
-            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-        }
-    )
-
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-    dataset_transform = None
-    if multi_output:
-        dataset_transform = targets_multi_output(config['dataset']['num_output_classes'])
-        ds_train = ds_train.map(dataset_transform)
-        ds_test = ds_test.map(dataset_transform)
-
-    ds_train_r = ds_train.repeat(n_epochs)
-    ds_test_r = ds_test.repeat(n_epochs)
-
-    #small test dataset used in the callback for making monitoring plots
-    #X_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: x).as_numpy_iterator()))
-    #y_test = np.concatenate(list(ds_test.take(100).map(lambda x,y,w: tf.concat(y, axis=-1)).as_numpy_iterator()))
-
-    weights = config['setup']['weights']
-    if args.weights:
-        weights = args.weights
-
-    if args.recreate or (weights is None):
-        outdir = 'experiments/{}'.format(model_name)
-        if os.path.isdir(outdir):
-            print("Output directory exists: {}".format(outdir), file=sys.stderr)
-            sys.exit(1)
-    else:
-        outdir = str(Path(weights).parent.parent)
-
-    try:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
-        num_gpus = len(gpus)
-        print("num_gpus=", num_gpus)
-        if num_gpus > 1:
-            strategy = tf.distribute.MirroredStrategy()
-            global_batch_size = num_gpus * global_batch_size
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    except Exception as e:
-        print("fallback to CPU", e)
-        strategy = tf.distribute.OneDeviceStrategy("cpu")
-        num_gpus = 0
-    
-    Xs = []
-    ygens = []
-    ycands = []
-    #for faster loading        
-    if args.action == "train":
-        val_filelist = dataset_def.val_filelist[:1]
-    else:
-        val_filelist = dataset_def.val_filelist
-        if config['setup']['num_val_files']>0:
-            val_filelist = val_filelist[:config['setup']['num_val_files']]
-
-    for fi in val_filelist:
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-
-    assert(len(Xs) > 0)
-    X_val = np.concatenate(Xs)
-    ygen_val = np.concatenate(ygens)
-    ycand_val = np.concatenate(ycands)
-
-    lr = float(config['setup']['lr'])
-    with strategy.scope():
-        total_steps = n_epochs * n_train // global_batch_size
-        lr_schedule, optim_callbacks = get_lr_schedule(config, lr, steps=total_steps)
-        opt = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        if config['setup']['dtype'] == 'float16':
-            model_dtype = tf.dtypes.float16
-            from tensorflow.keras import mixed_precision
-            policy = mixed_precision.Policy('mixed_float16')
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
-
-        if args.action=="train" or args.action=="eval":
-            model = make_model(config, model_dtype)
-
-            #Evaluate model once to build the layers
-            print(X_val.shape)
-            model(tf.cast(X_val[:1], model_dtype))
-
-            initial_epoch = 0
-            if weights:
-                #need to load the weights in the same trainable configuration as the model was set up
-                configure_model_weights(model, config["setup"].get("weights_config", "all"))
-                model.load_weights(weights, by_name=True)
-                initial_epoch = int(weights.split("/")[-1].split("-")[1])
-            model(tf.cast(X_val[:1], model_dtype))
-
-            if config["setup"]["trainable"] == "classification":
-                config["dataset"]["pt_loss_coef"] = 0.0
-                config["dataset"]["eta_loss_coef"] = 0.0
-                config["dataset"]["sin_phi_loss_coef"] = 0.0
-                config["dataset"]["cos_phi_loss_coef"] = 0.0
-                config["dataset"]["energy_loss_coef"] = 0.0
-            elif config["setup"]["trainable"] == "regression":
-                config["dataset"]["classification_loss_coef"] = 0.0
-                config["dataset"]["charge_loss_coef"] = 0.0
-
-            #now set the desirable layers as trainable for the optimization
-            configure_model_weights(model, config["setup"]["trainable"])
-            model(tf.cast(X_val[:1], model_dtype))
-
-            if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-                cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
-            elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-                cls_loss = make_focal_loss(config)
-            else:
-                raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
-            
-            model.compile(
-                loss={
-                    "cls": cls_loss,
-                    "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-                    "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-                    "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-                    "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-                    "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-                    "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
-                },
-                optimizer=opt,
-                sample_weight_mode='temporal',
-                loss_weights={
-                    "cls": config["dataset"]["classification_loss_coef"],
-                    "charge": config["dataset"]["charge_loss_coef"],
-                    "pt": config["dataset"]["pt_loss_coef"],
-                    "eta": config["dataset"]["eta_loss_coef"],
-                    "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-                    "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-                    "energy": config["dataset"]["energy_loss_coef"],
-                },
-                metrics={
-                    "cls": [
-                        FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                        FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                    ] + [
-                        SingleClassRecall(
-                            icls,
-                            name="rec_cls{}".format(icls),
-                            dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
-                    ]
-                }
-            )
-            model.summary()
-            
-            if args.action=="train":
-                #file_writer_cm = tf.summary.create_file_writer(outdir + '/val_extra')
-                callbacks = prepare_callbacks(
-                    model, outdir, X_val[:config['setup']['batch_size']], ycand_val[:config['setup']['batch_size']],
-                    dataset_transform, config["dataset"]["num_output_classes"]
-                )
-                callbacks.append(optim_callbacks)
-
-                fit_result = model.fit(
-                    ds_train_r, validation_data=ds_test_r, epochs=initial_epoch+n_epochs, callbacks=callbacks,
-                    steps_per_epoch=n_train//global_batch_size, validation_steps=n_test//global_batch_size,
-                    initial_epoch=initial_epoch
-                )
-                history_path = Path(outdir) / "history"
-                history_path = str(history_path)
-                with open("{}/history.json".format(history_path), "w") as fi:
-                    json.dump(fit_result.history, fi)
-                model.save(outdir + "/model_full", save_format="tf")
-            
-            if args.action=="eval":
-                eval_model(X_val, ygen_val, ycand_val, model, config, outdir, global_batch_size)
-                freeze_model(model, config, outdir)
-
-        if args.action=="time":
-            synthetic_timing_data = []
-            for iteration in range(config["timing"]["num_iter"]):
-                numev = config["timing"]["num_ev"]
-                for evsize in [128*10, 128*20, 128*30, 128*40, 128*50, 128*60, 128*70, 128*80, 128*90, 128*100]:
-                    for batch_size in [1,2,3,4]:
-                        x = np.random.randn(batch_size, evsize, config["dataset"]["num_input_features"]).astype(np.float32)
-
-                        model = make_model(config, model_dtype)
-                        model(x)
-
-                        if weights:
-                            model.load_weights(weights)
-
-                        t0 = time.time()
-                        for i in range(numev//batch_size):
-                            model(x)
-                        t1 = time.time()
-                        dt = t1 - t0
-
-                        time_per_event = 1000.0*(dt / numev)
-                        synthetic_timing_data.append(
-                                [{"iteration": iteration, "batch_size": batch_size, "event_size": evsize, "time_per_event": time_per_event}])
-                        print("Synthetic random data: batch_size={} event_size={}, time={:.2f} ms/ev".format(batch_size, evsize, time_per_event))
-            with open("{}/synthetic_timing.json".format(outdir), "w") as fi:
-                json.dump(synthetic_timing_data, fi)

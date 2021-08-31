@@ -48,14 +48,15 @@ def parse_config(config, ntrain=None, ntest=None, weights=None):
 
 def create_experiment_dir(prefix=None, suffix=None):
     if prefix is None:
-        train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     else:
-        train_dir = Path("experiments") / (prefix + datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        train_dir = Path("experiments") / (prefix + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
 
     if suffix is not None:
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
+    print("Creating experiment dir {}".format(train_dir))
     return str(train_dir)
 
 
@@ -73,7 +74,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
     if len(checkpoint_list) == 1:
         raise UserWarning("There is only one checkpoint. No deletion was made.")
     elif len(checkpoint_list) == 0:
-        raise UserWarning("Couldn't find ant checkpoints. No deletion was made.")
+        raise UserWarning("Couldn't find any checkpoints. No deletion was made.")
     else:
         # Sort the checkpoints according to the loss in their filenames
         checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
@@ -152,7 +153,7 @@ def compute_weights_none(X, y, w):
 def make_weight_function(config):
     def weight_func(X,y,w):
 
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
         w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
         w_none = tf.ones_like(w)
@@ -177,22 +178,23 @@ def make_weight_function(config):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
+
+        msk = tf.expand_dims(tf.cast(y[:, :, 0]!=0, tf.float32), axis=-1)
         return (
             X,
             {
                 "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
-                "charge": y[:, :, 1:2],
-                "pt": y[:, :, 2:3],
-                "eta": y[:, :, 3:4],
-                "sin_phi": y[:, :, 4:5],
-                "cos_phi": y[:, :, 5:6],
-                "energy": y[:, :, 6:7],
+                "charge": y[:, :, 1:2]*msk,
+                "pt": y[:, :, 2:3]*msk,
+                "eta": y[:, :, 3:4]*msk,
+                "sin_phi": y[:, :, 4:5]*msk,
+                "cos_phi": y[:, :, 5:6]*msk,
+                "energy": y[:, :, 6:7]*msk,
             },
             w,
         )
 
     return func
-
 
 def get_dataset_def(config):
     cds = config["dataset"]
@@ -209,7 +211,7 @@ def get_dataset_def(config):
     )
 
 
-def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=True):
     dataset_def = get_dataset_def(config)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
@@ -255,11 +257,15 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
     else:
         dataset_transform = None
 
-    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+    # ds_train = ds_train.map(classwise_energy_normalization)
+    # ds_test = ds_train.map(classwise_energy_normalization)
 
-    return ds_train_r, ds_test_r, dataset_transform
-
+    if repeat:
+        ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
+        ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+        return ds_train_r, ds_test_r, dataset_transform
+    else:
+        return ds_train, ds_test, dataset_transform
 
 def prepare_val_data(config, dataset_def, single_file=False):
     if single_file:
@@ -296,6 +302,10 @@ def set_config_loss(config, trainable):
     elif trainable == "regression":
         config["dataset"]["classification_loss_coef"] = 0.0
         config["dataset"]["charge_loss_coef"] = 0.0
+        config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["eta_loss_coef"] = 0.0
+        config["dataset"]["sin_phi_loss_coef"] = 0.0
+        config["dataset"]["cos_phi_loss_coef"] = 0.0
     elif trainable == "all":
         pass
     return config
@@ -311,16 +321,24 @@ def get_class_loss(config):
     return cls_loss
 
 
+def get_loss_from_params(input_dict):
+    input_dict = input_dict.copy()
+    loss_type = input_dict.pop("type")
+    loss_cls = getattr(tf.keras.losses, loss_type)
+    return loss_cls(**input_dict)
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
+
+    default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-        "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-        "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-        "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-        "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-        "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
+        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],

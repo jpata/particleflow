@@ -14,7 +14,7 @@ class LRFinder(Callback):
     paper: https://arxiv.org/pdf/1803.09820.pdf.
     """
 
-    def __init__(self, start_lr: float = 1e-7, end_lr: float = 3, max_steps: int = 200, smoothing=0.9):
+    def __init__(self, start_lr: float = 1e-7, end_lr: float = 1e-2, max_steps: int = 200, smoothing=0.9):
         super(LRFinder, self).__init__()
         self.start_lr, self.end_lr = start_lr, end_lr
         self.max_steps = max_steps
@@ -46,7 +46,7 @@ class LRFinder(Callback):
             if step == 0 or loss < self.best_loss:
                 self.best_loss = loss
 
-            if smooth_loss > 4 * self.best_loss or tf.math.is_nan(smooth_loss):
+            if smooth_loss > 100 * self.best_loss or tf.math.is_nan(smooth_loss):
                 self.model.stop_training = True
                 print("Loss reached predefined maximum... stopping")
         if step >= self.max_steps:
