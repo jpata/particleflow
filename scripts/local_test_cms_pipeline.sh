@@ -4,14 +4,13 @@ set -e
 rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi
 
 mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/root
-cd data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
-#Only CMS-internal use is permitted by CMS rules
+#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_1.root
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_2.root
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_3.root
 
-cd ../../..
+mv *.root data/TTbar_14TeV_TuneCUETP8M1_cfi/root/
 
 #Create the ntuples
 rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
@@ -28,19 +27,18 @@ mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi/val
 mv data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl data/TTbar_14TeV_TuneCUETP8M1_cfi/val/
 
 mkdir -p experiments
-rm -Rf experiments/test-*
 
 #Run a simple training on a few events
-rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr
-python3 mlpf/launcher.py --model-spec parameters/test-cms.yaml --action data
+rm -Rf data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand
+python3 mlpf/pipeline.py data -c parameters/cms.yaml
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/test-cms.yaml -p test-cms-
+python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5
+
+ls ./experiments/cms_*/weights/
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate -c parameters/test-cms.yaml -t ./experiments/test-cms-*
+python3 mlpf/pipeline.py evaluate -c parameters/cms.yaml -t ./experiments/cms_*
 
-python3 scripts/test_load_tfmodel.py ./experiments/test-cms-*/model_frozen/frozen_graph.pb
-
-python3 mlpf/pipeline.py train -c parameters/test-cms-v2.yaml -p test-cms-v2-
-python3 mlpf/pipeline.py evaluate -c parameters/test-cms-v2.yaml -t ./experiments/test-cms-v2-*
+#Load the model
+python3 scripts/test_load_tfmodel.py ./experiments/cms_*/model_frozen/frozen_graph.pb

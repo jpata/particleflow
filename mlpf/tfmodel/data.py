@@ -51,10 +51,14 @@ class Dataset:
         print("val files: {}".format(len(self.val_filelist)))
 
         self.schema = kwargs.get("schema")
+
+        #FIXME: refactor this
         if self.schema == "delphes":
             self.prepare_data = self.prepare_data_delphes
+            self.get_X_eta_phi_energy = self.get_X_eta_phi_energy_delphes
         elif self.schema == "cms":
             self.prepare_data = self.prepare_data_cms
+            self.get_X_eta_phi_energy = self.get_X_eta_phi_energy_cms
 
 #       NONE = 0,
 #       TRACK = 1,
@@ -259,3 +263,17 @@ class Dataset:
         for ichunk, files in enumerate(chunks(self.raw_filelist, num_files_per_tfr)):
             print(files)
             self.serialize_chunk(processed_path, files, ichunk)
+
+    #FIXME: schema 
+    def get_X_eta_phi_energy_delphes(self, X):
+        eta = X[:, :, 2]
+        sphi = X[:, :, 3]
+        cphi = X[:, :, 4]
+        energy = X[:, :, 5]
+        return eta, np.arctan2(sphi, cphi), energy
+
+    def get_X_eta_phi_energy_cms(self, X):
+        eta = X[:, :, 2]
+        phi = X[:, :, 3]
+        energy = X[:, :, 4]
+        return eta, phi, energy
