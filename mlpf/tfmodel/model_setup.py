@@ -25,7 +25,7 @@ from tqdm import tqdm
 from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
-from tfmodel.utils import get_lr_schedule, make_weight_function, targets_multi_output
+from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
 
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
@@ -56,6 +56,7 @@ def plot_to_image(figure):
     image = tf.expand_dims(image, 0)
     
     return image
+
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1, comet_experiment=None):
@@ -316,20 +317,22 @@ class CustomCallback(tf.keras.callbacks.Callback):
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
 
 def prepare_callbacks(
-    model, outdir,
-    X_val, y_val,
-    dataset_transform,
-    num_output_classes,
-    dataset_def,
-    plot_freq=1, comet_experiment=None):
+        callbacks_cfg, outdir,
+        X_val, y_val,
+        dataset_transform,
+        num_output_classes,
+        dataset_def,
+        comet_experiment=None):
     callbacks = []
     tb = CustomTensorBoard(
-        log_dir=outdir + "/tensorboard_logs", histogram_freq=1, write_graph=False, write_images=False,
+        log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
         update_freq='epoch',
         #profile_batch=(10,90),
         profile_batch=0,
+        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
     )
-    tb.set_model(model)
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
     callbacks += [tb]
 
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
@@ -339,10 +342,11 @@ def prepare_callbacks(
     cp_dir.mkdir(parents=True, exist_ok=True)
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
-        save_weights_only=True,
-        verbose=0
+        save_weights_only=callbacks_cfg["checkpoint"]["save_weights_only"],
+        verbose=0,
+        monitor=callbacks_cfg["checkpoint"]["monitor"],
+        save_best_only=callbacks_cfg["checkpoint"]["save_best_only"],
     )
-    cp_callback.set_model(model)
     callbacks += [cp_callback]
 
     history_path = Path(outdir) / "history"
@@ -353,10 +357,9 @@ def prepare_callbacks(
         X_val, y_val,
         dataset_transform,
         num_output_classes,
-        plot_freq=plot_freq,
+        plot_freq=callbacks_cfg["plot_freq"],
         comet_experiment=comet_experiment
     )
-    cb.set_model(model)
 
     callbacks += [cb]
 
