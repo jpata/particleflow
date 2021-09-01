@@ -601,6 +601,16 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
         self.ffn_energy.trainable = True
+        self.ffn_energy_classwise.trainable = True
+
+    def set_trainable_classification(self):
+        self.ffn_id.trainable = True
+        self.ffn_charge.trainable = True
+        self.ffn_phi.trainable = False
+        self.ffn_eta.trainable = False
+        self.ffn_pt.trainable = False
+        self.ffn_energy.trainable = False
+        self.ffn_energy_classwise.trainable = False
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -670,6 +680,10 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 
 class PFNetDense(tf.keras.Model):
     def __init__(self,
+            do_node_encoding=False,
+            hidden_dim=128,
+            dropout=0.0,
+            activation="gelu",
             multi_output=False,
             num_input_classes=8,
             num_output_classes=3,
@@ -690,6 +704,21 @@ class PFNetDense(tf.keras.Model):
         self.debug = debug
 
         self.skip_connection = skip_connection
+        
+        self.do_node_encoding = do_node_encoding
+        self.hidden_dim = hidden_dim
+        self.dropout = dropout
+        self.activation = getattr(tf.keras.activations, activation)
+
+        if self.do_node_encoding:
+            self.node_encoding = point_wise_feed_forward_network(
+                self.hidden_dim,
+                self.hidden_dim,
+                "node_encoding",
+                num_layers=2,
+                activation=self.activation,
+                dropout=self.dropout
+            )
 
         if input_encoding == "cms":
             self.enc = InputEncodingCMS(num_input_classes)
@@ -714,10 +743,13 @@ class PFNetDense(tf.keras.Model):
         #encode the elements for classification (id)
         enc = self.enc(X)
 
-        enc_cg = enc
+
         encs = []
         if self.skip_connection:
             encs.append(enc)
+        enc_cg = enc
+        if self.do_node_encoding:
+            enc_cg = self.node_encoding(enc_cg, training=training)
         for cg in self.cg:
             enc_all = cg(enc_cg, msk, training=training)
             enc_cg = enc_all["enc"]

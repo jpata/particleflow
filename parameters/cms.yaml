@@ -78,6 +78,10 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
+  do_node_encoding: no
+  hidden_dim: 128
+  dropout: 0.0
+  activation: gelu
   combined_graph_layer:
     bin_size: 160
     max_num_bins: 100

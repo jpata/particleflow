@@ -23,7 +23,7 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 0.01
   pt_loss_coef: 0.0001
   eta_loss_coef: 100.0
@@ -62,13 +62,13 @@ setup:
   num_epochs: 100
   num_val_files: 10
   dtype: float32
-  trainable:
-  classification_loss_type: categorical_cross_entropy
+  trainable: classification
+  classification_loss_type: categorical_cross_entropy #categorical_cross_entropy, sigmoid_focal_crossentropy 
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 sample_weights:
-  cls: inverse_sqrt
-  charge: signal_only
+  cls: none
+  charge: none
   pt: signal_only
   eta: signal_only
   sin_phi: signal_only
@@ -78,6 +78,10 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
+  do_node_encoding: no
+  hidden_dim: 128
+  dropout: 0.0
+  activation: gelu
   combined_graph_layer:
     bin_size: 640
     max_num_bins: 100
@@ -97,7 +101,7 @@ parameters:
       normalize_degrees: yes
     hidden_dim: 128
     activation: gelu
-  num_graph_layers_common: 3
+  num_graph_layers_common: 4
   num_graph_layers_energy: 3
   output_decoding:
     activation: gelu
@@ -108,14 +112,14 @@ parameters:
     eta_skip_gate: yes
     phi_skip_gate: yes
 
-    id_dim_decrease: yes
+    id_dim_decrease: no
     charge_dim_decrease: yes
     pt_dim_decrease: yes
     eta_dim_decrease: yes
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
+    id_hidden_dim: 512
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
