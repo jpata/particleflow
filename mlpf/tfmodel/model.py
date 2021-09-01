@@ -392,6 +392,33 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
         return bins_split, x_features_binned, dm, msk_f_binned
 
+class MessageBuildingLayerFull(tf.keras.layers.Layer):
+    def __init__(self, distance_dim=128, kernel=NodePairGaussianKernel(), **kwargs):
+        self.distance_dim = distance_dim
+        self.kernel = kernel
+
+        super(MessageBuildingLayerFull, self).__init__(**kwargs)
+    
+    """
+    x_msg: (n_batch, n_points, n_msg_features)
+    """
+    def call(self, x_msg, msk, training=False):
+        msk_f = tf.expand_dims(tf.cast(msk, x_msg.dtype), -1)
+
+        shp = tf.shape(x_msg)
+        n_batches = shp[0]
+        n_points = shp[1]
+        n_message_features = shp[2]
+
+        #Run the node-to-node kernel (distance computation / graph building / attention)
+        dm = self.kernel(x_msg, training=training)
+
+        #remove the masked points row-wise and column-wise
+        dm = tf.einsum("bijk,bi->bijk", dm, tf.squeeze(msk_f, axis=-1))
+        dm = tf.einsum("bijk,bj->bijk", dm, tf.squeeze(msk_f, axis=-1))
+
+        return dm
+
 class OutputDecoding(tf.keras.Model):
     def __init__(self,
         activation="elu",
@@ -624,6 +651,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.kernel = kwargs.pop("kernel")
         self.node_message = kwargs.pop("node_message")
         self.hidden_dim = kwargs.pop("hidden_dim")
+        self.do_lsh = kwargs.pop("do_lsh")
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation"))
 
@@ -638,12 +666,20 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             num_layers=2, activation=self.activation,
             dropout=self.dropout
         )
-        self.message_building_layer = MessageBuildingLayerLSH(
-            distance_dim=self.distance_dim,
-            max_num_bins=self.max_num_bins,
-            bin_size=self.bin_size,
-            kernel=build_kernel_from_conf(self.kernel, kwargs.get("name")+"_kernel")
-        )
+
+        if self.do_lsh:
+            self.message_building_layer = MessageBuildingLayerLSH(
+                distance_dim=self.distance_dim,
+                max_num_bins=self.max_num_bins,
+                bin_size=self.bin_size,
+                kernel=build_kernel_from_conf(self.kernel, kwargs.get("name")+"_kernel")
+            )
+        else:
+            self.message_building_layer = MessageBuildingLayerFull(
+                distance_dim=self.distance_dim,
+                kernel=build_kernel_from_conf(self.kernel, kwargs.get("name")+"_kernel")
+            )
+
         self.message_passing_layers = [
             get_message_layer(self.node_message, "{}_msg_{}".format(kwargs.get("name"), iconv)) for iconv in range(self.num_node_messages)
         ]
@@ -662,21 +698,29 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         x_dist = self.dist_activation(self.ffn_dist(x, training=training))
 
         #x_dist = self.gaussian_noise(x_dist, training=training)
+
         #compute the element-to-element messages / distance matrix / graph structure
-        bins_split, x_binned, dm, msk_binned = self.message_building_layer(x_dist, x, msk)
+        if self.do_lsh:
+            bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
+        else:
+            dm = self.message_building_layer(x_dist, msk)
+            msk_f = tf.expand_dims(tf.cast(msk, x.dtype), axis=-1)
+            bins_split = None
 
         #run the node update with message passing
         for msg in self.message_passing_layers:
-            x_binned = msg((x_binned, dm, msk_binned))
+            x = msg((x, dm, msk_f))
 
-            #x_binned = self.gaussian_noise(x_binned, training=training)
+            #x = self.gaussian_noise(x, training=training)
 
             if self.dropout_layer:
-                x_binned = self.dropout_layer(x_binned, training=training)
+                x = self.dropout_layer(x, training=training)
 
-        x_enc = reverse_lsh(bins_split, x_binned)
+        #undo the binning according to the element-to-bin indices
+        if self.do_lsh:
+            x = reverse_lsh(bins_split, x)
 
-        return {"enc": x_enc, "dist": x_dist, "bins": bins_split, "dm": dm}
+        return {"enc": x, "dist": x_dist, "bins": bins_split, "dm": dm}
 
 class PFNetDense(tf.keras.Model):
     def __init__(self,
