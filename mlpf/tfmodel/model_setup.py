@@ -21,6 +21,7 @@ import json
 import random
 import math
 import platform
+import mplhep
 from tqdm import tqdm
 from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -180,7 +181,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
 
-    def plot_reg_distribution(self, outpath, ypred, ypred_id, icls, reg_variable):
+    def plot_reg_distribution(self, epoch, outpath, ypred, ypred_id, icls, reg_variable):
 
         if icls==0:
             vals_pred = ypred[reg_variable][ypred_id!=icls].flatten()
@@ -203,8 +204,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.ylabel("Number of particles")
         plt.legend(loc="best")
         plt.title("Regression output, cls {}".format(icls))
-        plt.savefig(str(outpath / "{}_cls{}.png".format(reg_variable, icls)), bbox_inches="tight")
+        image_path = str(outpath / "{}_cls{}.png".format(reg_variable, icls))
+        plt.savefig(image_path, bbox_inches="tight")
         plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
 
     def plot_corr(self, epoch, outpath, ypred, ypred_id, icls, reg_variable):
 
@@ -219,13 +223,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
         loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
 
-        #save correlation histogram
+        #save scatterplot of raw values
         plt.figure()
         bins = self.reg_bins[reg_variable]
         if bins is None:
             bins = 100
-        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), cmap="Blues")
-        plt.colorbar()
+        plt.scatter(vals_true, vals_pred, marker=".", alpha=0.4)
+
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -278,6 +282,91 @@ class CustomCallback(tf.keras.callbacks.Callback):
             self.comet_experiment.log_metric('residual_{}_cls{}_std'.format(reg_variable, icls), np.std(residual), step=epoch)
             self.comet_experiment.log_metric('val_loss_{}_cls{}'.format(reg_variable, icls), np.sum(loss_vals), step=epoch)
 
+    def plot_elem_to_pred(self, epoch, cp_dir, msk, ypred_id):
+        X_id = self.X[msk][:, 0]
+        max_elem = int(np.max(X_id))
+        cand_id = self.ytrue_id[msk]
+        pred_id = ypred_id[msk]
+        cm1 = sklearn.metrics.confusion_matrix(X_id, cand_id, labels=range(max_elem))
+        cm2 = sklearn.metrics.confusion_matrix(X_id, pred_id, labels=range(max_elem))
+
+        plt.figure(figsize=(10,4))
+
+        ax = plt.subplot(1,2,1)
+        plt.title("Targets")
+        plt.imshow(cm1, cmap="Blues", norm=matplotlib.colors.LogNorm())
+        plt.xticks(range(12));
+        plt.yticks(range(12));
+        plt.xlabel("Particle id")
+        plt.ylabel("PFElement id")
+        plt.colorbar()
+
+        ax = plt.subplot(1,2,2)
+        plt.title("Predictions")
+        plt.imshow(cm2, cmap="Blues", norm=matplotlib.colors.LogNorm())
+        plt.xticks(range(12));
+        plt.yticks(range(12));
+        plt.xlabel("Particle id")
+        plt.ylabel("PFElement id")
+        plt.colorbar()
+
+        image_path = str(cp_dir / "elem_to_pred.png")
+        plt.savefig(image_path, bbox_inches="tight")
+
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+    def plot_eff_and_fake_rate(
+        self,
+        epoch,
+        icls,
+        msk,
+        ypred_id,
+        cp_dir,
+        ivar=4,
+        bins=np.linspace(-3,6,100),
+        xlabel="PFElement log[E/GeV]",
+        log=True
+        ):
+        
+        values = self.X[msk][:, ivar]
+        cand_id = self.ytrue_id[msk]
+        pred_id = ypred_id[msk]
+
+        if log:
+            values = np.log(values)
+            
+        hist_cand = np.histogram(values[(cand_id==icls)], bins=bins);
+        hist_cand_true = np.histogram(values[(cand_id==icls) & (pred_id==icls)], bins=bins);
+
+        hist_pred = np.histogram(values[(pred_id==icls)], bins=bins);
+        hist_pred_fake = np.histogram(values[(cand_id!=icls) & (pred_id==icls)], bins=bins);
+
+        eff = hist_cand_true[0]/hist_cand[0]
+        fake = hist_pred_fake[0]/hist_pred[0]
+
+        plt.figure(figsize=(8,8))
+        ax = plt.subplot(2,1,1)
+        mplhep.histplot(hist_cand, label="PF")
+        mplhep.histplot(hist_pred, label="MLPF")
+        plt.legend()
+        plt.xlabel(xlabel)
+        plt.ylabel("Number of particles")
+
+        ax = plt.subplot(2,1,2, sharex=ax)
+        mplhep.histplot(eff, bins=hist_cand[1], label="efficiency", color="black")
+        mplhep.histplot(fake, bins=hist_cand[1], label="fake rate", color="red")
+        plt.legend(frameon=False)
+        plt.ylim(0,1.4)
+        plt.xlabel(xlabel)
+        plt.ylabel("Fraction of particles / bin")
+
+        image_path = str(cp_dir / "eff_fake_cls{}.png".format(icls))
+        plt.savefig(image_path, bbox_inches="tight")
+
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
     def on_epoch_end(self, epoch, logs=None):
 
         #save the training logs (losses) for this epoch
@@ -302,6 +391,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         #exclude padded elements from the plotting
         msk = self.X[:, :, 0] != 0
 
+        self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
+
         self.plot_cm(epoch, cp_dir, ypred_id, msk)
         for ievent in range(min(5, self.X.shape[0])):
             self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
@@ -309,8 +400,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
         for icls in range(self.num_output_classes):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
+
+            if icls!=0:
+                self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
+
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
-                self.plot_reg_distribution(cp_dir_cls, ypred, ypred_id, icls, variable)
+                self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
                 self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
 
         np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
@@ -395,6 +490,10 @@ def make_model(config, dtype):
 def make_gnn_dense(config, dtype):
 
     parameters = [
+        "do_node_encoding",
+        "hidden_dim",
+        "dropout",
+        "activation",
         "num_graph_layers_common",
         "num_graph_layers_energy",
         "input_encoding",
@@ -548,6 +647,13 @@ def configure_model_weights(model, trainable_layers):
             cg.trainable = True
 
         model.output_dec.set_trainable_regression()
+    elif trainable_layers == "classification":
+        for cg in model.cg:
+            cg.trainable = True
+        for cg in model.cg_energy:
+            cg.trainable = False
+
+        model.output_dec.set_trainable_classification()
     else:
         if isinstance(trainable_layers, str):
             trainable_layers = [trainable_layers]
