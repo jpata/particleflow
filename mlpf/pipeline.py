@@ -671,7 +671,8 @@ def plot_ray_analysis(analysis, save=False, skip=0):
 @click.option("--cpus", help="number of cpus per worker", type=int, default=1)
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
 @click.option("--tune_result_dir", help="Tune result dir", type=str, default=None)
-def raytune(config, name, local, cpus, gpus, tune_result_dir):
+@click.option("-r", "--resume", help="resume run from local_dir", is_flag=True)
+def raytune(config, name, local, cpus, gpus, tune_result_dir, resume):
     cfg = load_config(config)
     config_file_path = config
 
@@ -723,6 +724,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir):
         local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
+        resume=resume,
     )
     print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
 
