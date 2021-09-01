@@ -324,16 +324,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
         ypred_id,
         cp_dir,
         ivar=4,
-        bins=np.linspace(-3,6,100),
-        xlabel="PFElement log[E/GeV]",
-        log=True
+        bins=np.linspace(0, 200, 100),
+        xlabel="PFElement E",
+        log_var=False,
+        do_log_y=True
         ):
         
         values = self.X[msk][:, ivar]
         cand_id = self.ytrue_id[msk]
         pred_id = ypred_id[msk]
 
-        if log:
+        if log_var:
             values = np.log(values)
             
         hist_cand = np.histogram(values[(cand_id==icls)], bins=bins);
@@ -352,12 +353,14 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.legend()
         plt.xlabel(xlabel)
         plt.ylabel("Number of particles")
+        if do_log_y:
+            ax.set_yscale("log")
 
         ax = plt.subplot(2,1,2, sharex=ax)
         mplhep.histplot(eff, bins=hist_cand[1], label="efficiency", color="black")
         mplhep.histplot(fake, bins=hist_cand[1], label="fake rate", color="red")
         plt.legend(frameon=False)
-        plt.ylim(0,1.4)
+        plt.ylim(0, 1.4)
         plt.xlabel(xlabel)
         plt.ylabel("Fraction of particles / bin")
 
@@ -503,7 +506,10 @@ def make_gnn_dense(config, dtype):
         "debug"
     ]
 
-    kwargs = {par: config['parameters'][par] for par in parameters}
+    kwargs = {}
+    for par in parameters:
+        if par in config['parameters'].keys():
+            kwargs[par] = config['parameters'][par]
 
     model = PFNetDense(
         multi_output=config["setup"]["multi_output"],
