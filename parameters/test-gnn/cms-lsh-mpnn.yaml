@@ -57,10 +57,10 @@ setup:
   weights_config:
   lr: 1e-3
   batch_size: 4
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 100
-  num_val_files: 10
+  num_events_train: 1000
+  num_events_test: 1000
+  num_epochs: 50
+  num_val_files: 20
   dtype: float32
   trainable: classification
   classification_loss_type: categorical_cross_entropy
@@ -148,6 +148,6 @@ timing:
   num_iter: 3
 
 exponentialdecay:
-  decay_steps: 2000
-  decay_rate: 0.99
+  decay_steps: 1000
+  decay_rate: 0.98
   staircase: yes
