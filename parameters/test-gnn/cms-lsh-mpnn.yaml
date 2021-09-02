@@ -102,7 +102,7 @@ parameters:
       hidden_dim: 128
       num_layers: 2
       activation: gelu
-      aggregation_direction: dst
+      aggregation_direction: src
     num_node_messages: 1
     hidden_dim: 256
     activation: gelu
