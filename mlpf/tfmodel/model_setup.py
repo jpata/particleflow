@@ -193,6 +193,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         bins = self.reg_bins[reg_variable]
         if bins is None:
             bins = 100
+
+        plt.figure()
         plt.hist(vals_true, bins=bins, histtype="step", lw=2, label="true")
         plt.hist(vals_pred, bins=bins, histtype="step", lw=2, label="predicted")
 
@@ -312,6 +314,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         image_path = str(cp_dir / "elem_to_pred.png")
         plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
 
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
@@ -366,6 +369,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         image_path = str(cp_dir / "eff_fake_cls{}.png".format(icls))
         plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
 
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
@@ -376,8 +380,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
 
-        if epoch%self.plot_freq!=0:
-            return
+        if self.plot_freq>1:
+            if (epoch+1)%self.plot_freq!=0 or epoch==0:
+                return
 
         cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
         cp_dir.mkdir(parents=True, exist_ok=True)
