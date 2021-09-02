@@ -62,7 +62,7 @@ setup:
   num_epochs: 50
   num_val_files: 20
   dtype: float32
-  trainable:
+  trainable: classification
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
