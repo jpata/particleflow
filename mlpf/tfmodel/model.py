@@ -241,7 +241,13 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
         elif self.aggregation_direction == "src":
             self.agg_dim = -3
 
-        self.ffn = point_wise_feed_forward_network(self.output_dim, self.hidden_dim, num_layers=self.num_layers, activation=self.activation, name=kwargs.get("name")+"_ffn")
+        self.ffn = point_wise_feed_forward_network(
+            self.output_dim,
+            self.hidden_dim,
+            num_layers=self.num_layers,
+            activation=self.activation,
+            name=kwargs.get("name")+"_ffn"
+        )
         super(NodeMessageLearnable, self).__init__(*args, **kwargs)
 
     def call(self, inputs):
