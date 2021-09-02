@@ -63,12 +63,12 @@ setup:
   num_val_files: 10
   dtype: float32
   trainable: classification
-  classification_loss_type: categorical_cross_entropy #categorical_cross_entropy, sigmoid_focal_crossentropy 
+  classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
 
 sample_weights:
-  cls: none
-  charge: none
+  cls: inverse_sqrt
+  charge: signal_only
   pt: signal_only
   eta: signal_only
   sin_phi: signal_only
@@ -83,27 +83,31 @@ parameters:
   dropout: 0.0
   activation: gelu
   combined_graph_layer:
-    do_lsh: no
-    bin_size: 1600
-    max_num_bins: 10
+    do_lsh: yes
+    bin_size: 32
+    max_num_bins: 500
     distance_dim: 128
     layernorm: no
     dropout: 0.0
     dist_activation: linear
     kernel:
-      type: NodePairGaussianKernel
-      dist_mult: 0.1
-      clip_value_low: 0.0
-    num_node_messages: 2
-    node_message:
-      type: GHConvDense
-      output_dim: 512
+      type: NodePairTrainableKernel
+      output_dim: 8
+      hidden_dim: 32
+      num_layers: 2
       activation: gelu
-      normalize_degrees: yes
+    node_message:
+      type: NodeMessageLearnable
+      output_dim: 256
+      hidden_dim: 128
+      num_layers: 2
+      activation: gelu
+      aggregation_direction: dst
+    num_node_messages: 1
     hidden_dim: 256
     activation: gelu
-  num_graph_layers_common: 1
-  num_graph_layers_energy: 1
+  num_graph_layers_common: 2
+  num_graph_layers_energy: 2
   output_decoding:
     activation: gelu
     regression_use_classification: yes
@@ -113,21 +117,21 @@ parameters:
     eta_skip_gate: yes
     phi_skip_gate: yes
 
-    id_dim_decrease: no
+    id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
     eta_dim_decrease: yes
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 256
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 3
+    id_num_layers: 2
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
@@ -144,6 +148,6 @@ timing:
   num_iter: 3
 
 exponentialdecay:
-  decay_steps: 1000
-  decay_rate: 0.98
+  decay_steps: 2000
+  decay_rate: 0.99
   staircase: yes
