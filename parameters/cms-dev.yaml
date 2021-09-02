@@ -56,7 +56,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 4
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
@@ -84,8 +84,8 @@ parameters:
   activation: gelu
   combined_graph_layer:
     do_lsh: yes
-    bin_size: 32
-    max_num_bins: 500
+    bin_size: 128
+    max_num_bins: 100
     distance_dim: 128
     layernorm: no
     dropout: 0.0

@@ -82,7 +82,7 @@ parameters:
     bin_size: 640
     max_num_bins: 100
     distance_dim: 128
-    layernorm: no
+    layernorm: yes
     dropout: 0.0
     dist_activation: linear
     kernel:
@@ -92,7 +92,7 @@ parameters:
     num_node_messages: 1
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 128
       activation: gelu
       normalize_degrees: yes
     hidden_dim: 128
@@ -115,7 +115,7 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
+    id_hidden_dim: 512
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
@@ -128,7 +128,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: no
 
   skip_connection: yes
@@ -139,6 +139,6 @@ timing:
   num_iter: 3
 
 exponentialdecay:
-  decay_steps: 1000
+  decay_steps: 2000
   decay_rate: 0.99
   staircase: yes
