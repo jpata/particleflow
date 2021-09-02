@@ -37,10 +37,12 @@ def pairwise_gaussian_dist(A, B):
 def pairwise_learnable_dist(A, B, ffn, training=False):
     shp = tf.shape(A)
 
+    # tf.print("shp", shp)
+    # import pdb;pdb.set_trace()
     #stack node feature vectors of src[i], dst[j] into a matrix res[i,j] = (src[i], dst[j])
-    a, b, c, d = tf.meshgrid(tf.range(shp[0]), tf.range(shp[1]), tf.range(shp[2]), tf.range(shp[2]), indexing="ij")
-    inds1 = tf.stack([a,b,c], axis=-1)
-    inds2 = tf.stack([a,b,d], axis=-1)
+    mg = tf.meshgrid(tf.range(shp[0]), tf.range(shp[1]), tf.range(shp[2]), tf.range(shp[2]), indexing="ij")
+    inds1 = tf.stack([mg[0],mg[1],mg[2]], axis=-1)
+    inds2 = tf.stack([mg[0],mg[1],mg[3]], axis=-1)
     res = tf.concat([
         tf.gather_nd(A, inds1),
         tf.gather_nd(B, inds2)], axis=-1
@@ -651,7 +653,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.kernel = kwargs.pop("kernel")
         self.node_message = kwargs.pop("node_message")
         self.hidden_dim = kwargs.pop("hidden_dim")
-        self.do_lsh = kwargs.pop("do_lsh")
+        self.do_lsh = kwargs.pop("do_lsh", True)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation"))
 
