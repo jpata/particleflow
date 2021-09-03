@@ -148,6 +148,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if customize:
         prefix += customize + "_"
         config = customization_functions[customize](config)
+        #FIXME: refactor this
+        global_batch_size = config["setup"]["batch_size"]
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -419,7 +421,7 @@ def customize_gun_sample(config):
     config["dataset"]["sin_phi_loss_coef"] = 0.0
     config["dataset"]["cos_phi_loss_coef"] = 0.0
     config["setup"]["trainable"] = "regression"
-    config["setup"]["batch_size"] = 20*config["setup"]["batch_size"]
+    config["setup"]["batch_size"] = 10*config["setup"]["batch_size"]
     return config
 
 customization_functions = {
