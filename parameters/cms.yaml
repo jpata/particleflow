@@ -55,11 +55,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-3
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 50
   num_val_files: 10
   dtype: float32
   trainable:
@@ -79,7 +79,7 @@ optimizer:
 
 # LR Schedules
 exponentialdecay:
-  decay_steps: 10000
+  decay_steps: 2000
   decay_rate: 0.99
   staircase: yes
 onecycle:
@@ -102,11 +102,12 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   combined_graph_layer:
-    bin_size: 160
+    bin_size: 640
     max_num_bins: 100
     distance_dim: 128
-    layernorm: no
+    layernorm: yes
     dropout: 0.0
+    dist_activation: linear
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
@@ -137,20 +138,20 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
+    id_hidden_dim: 512
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 2
+    id_num_layers: 3
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: no
 
   skip_connection: yes
