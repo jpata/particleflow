@@ -98,6 +98,7 @@ parameters:
     layernorm: no
     num_node_messages: 1
     dropout: 0.0
+    dist_activation: linear
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
