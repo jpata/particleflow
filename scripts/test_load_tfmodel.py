@@ -2,7 +2,7 @@ import tensorflow as tf
 import sys
 import numpy as np
 
-bin_size = 128
+bin_size = 640
 num_features = 15
 
 def load_graph(frozen_graph_filename):
@@ -28,5 +28,5 @@ def load_graph(frozen_graph_filename):
 graph = load_graph(sys.argv[1])
 
 with tf.compat.v1.Session(graph=graph) as sess:
-    out = sess.run("Identity:0", feed_dict={"x:0": np.random.randn(1, 39*bin_size, num_features)})
+    out = sess.run("Identity:0", feed_dict={"x:0": np.random.randn(1, 10*bin_size, num_features)})
     print(out)

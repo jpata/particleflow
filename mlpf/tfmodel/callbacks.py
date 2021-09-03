@@ -4,7 +4,7 @@ from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.callbacks import ModelCheckpoint
 from pathlib import Path
 import numpy as np
-
+import json
 
 class CustomTensorBoard(TensorBoard):
     """
@@ -16,6 +16,9 @@ class CustomTensorBoard(TensorBoard):
 
     Also logs momemtum for supported optimizers that use momemtum.
     """
+    def __init__(self, *args, **kwargs):
+        self.dump_history = kwargs.pop("dump_history")
+        super().__init__(*args, **kwargs)
 
     def _collect_learning_rate(self, logs):
         logs = logs or {}
@@ -40,6 +43,13 @@ class CustomTensorBoard(TensorBoard):
     def on_epoch_end(self, epoch, logs):
         logs = logs or {}
         logs.update(self._collect_learning_rate(logs))
+        if self.dump_history:
+            history_path = Path(self.log_dir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            history_path = str(history_path)
+            with open("{}/history_{}.json".format(history_path, epoch), "w") as fi:
+                converted_logs = {k: float(v) for k, v in logs.items()}
+                json.dump(converted_logs, fi)
         super().on_epoch_end(epoch, logs)
 
     def on_train_batch_end(self, batch, logs):

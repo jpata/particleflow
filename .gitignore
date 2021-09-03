@@ -13,3 +13,12 @@ mlpf/pytorch/data
 test_tmp/
 test_tmp_delphes/
 .DS_Store
+
+prp
+*.pyc
+*.pyo
+
+mlpf/updated/LRP/pid*
+mlpf/updated/LRP/class*
+
+*.ipynb_checkpoints

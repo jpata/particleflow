@@ -11,9 +11,12 @@ import re
 
 import tensorflow as tf
 import tensorflow_addons as tfa
+import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+
+from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
 
 
 def load_config(config_file_path):
@@ -48,14 +51,15 @@ def parse_config(config, ntrain=None, ntest=None, weights=None):
 
 def create_experiment_dir(prefix=None, suffix=None):
     if prefix is None:
-        train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     else:
-        train_dir = Path("experiments") / (prefix + datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        train_dir = Path("experiments") / (prefix + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
 
     if suffix is not None:
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
+    print("Creating experiment dir {}".format(train_dir))
     return str(train_dir)
 
 
@@ -73,7 +77,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
     if len(checkpoint_list) == 1:
         raise UserWarning("There is only one checkpoint. No deletion was made.")
     elif len(checkpoint_list) == 0:
-        raise UserWarning("Couldn't find ant checkpoints. No deletion was made.")
+        raise UserWarning("Couldn't find any checkpoints. No deletion was made.")
     else:
         # Sort the checkpoints according to the loss in their filenames
         checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
@@ -86,23 +90,31 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
 
 
 def get_strategy(global_batch_size):
-    try:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
+    if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
+        gpus = [-1]
+        print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
+            If you don't have or intend to use GPUs, this message can be ignored.")
+    else:
+        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
+    if gpus[0] == -1:
+        num_gpus = 0
+    else:
         num_gpus = len(gpus)
-        print("num_gpus=", num_gpus)
-        if num_gpus > 1:
-            strategy = tf.distribute.MirroredStrategy()
-            global_batch_size = num_gpus * global_batch_size
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    except Exception as e:
-        print("fallback to CPU", e)
+    print("num_gpus=", num_gpus)
+    if num_gpus > 1:
+        strategy = tf.distribute.MirroredStrategy()
+        global_batch_size = num_gpus * global_batch_size
+    elif num_gpus == 1:
+        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    elif num_gpus == 0:
+        print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
     return strategy, global_batch_size
 
 
-def get_lr_schedule(config, lr, steps):
+def get_lr_schedule(config, steps):
+    lr = float(config["setup"]["lr"])
     callbacks = []
     schedule = config["setup"]["lr_schedule"]
     if schedule == "onecycle":
@@ -136,6 +148,84 @@ def get_lr_schedule(config, lr, steps):
     return lr_schedule, callbacks
 
 
+def get_optimizer(config, lr_schedule=None):
+    if lr_schedule is None:
+        lr = float(config["setup"]["lr"])
+    else:
+        lr = lr_schedule
+    if config["setup"]["optimizer"] == "adam":
+        cfg_adam = config["optimizer"]["adam"]
+        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+    if config["setup"]["optimizer"] == "adamw":
+        cfg_adamw = config["optimizer"]["adamw"]
+        return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
+    elif config["setup"]["optimizer"] == "sgd":
+        cfg_sgd = config["optimizer"]["sgd"]
+        return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+    else:
+        raise ValueError("Only 'adam' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
+
+
+def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
+    if cfg_hypertune["algorithm"] == "random":
+        print("Keras Tuner: Using RandomSearch")
+        cfg_rand = cfg_hypertune["random"]
+        return kt.RandomSearch(
+            model_builder,
+            objective=cfg_rand["objective"],
+            max_trials=cfg_rand["max_trials"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "bayesian":
+        print("Keras Tuner: Using BayesianOptimization")
+        cfg_bayes = cfg_hypertune["bayesian"]
+        return kt.BayesianOptimization(
+            model_builder,
+            objective=cfg_bayes["objective"],
+            max_trials=cfg_bayes["max_trials"],
+            num_initial_points=cfg_bayes["num_initial_points"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "hyperband":
+        print("Keras Tuner: Using Hyperband")
+        cfg_hb = cfg_hypertune["hyperband"]
+        return kt.Hyperband(
+            model_builder,
+            objective=cfg_hb["objective"],
+            max_epochs=cfg_hb["max_epochs"],
+            factor=cfg_hb["factor"],
+            hyperband_iterations=cfg_hb["iterations"],
+            directory=outdir + "/tb",
+            project_name="mlpf",
+            overwrite=recreate,
+            executions_per_trial=cfg_hb["executions_per_trial"],
+            distribution_strategy=strategy,
+        )
+
+
+def get_raytune_schedule(raytune_cfg):
+    if raytune_cfg["sched"] == "asha":
+        return AsyncHyperBandScheduler(
+            metric="val_loss",
+            mode="min",
+            time_attr="training_iteration",
+            max_t=raytune_cfg["asha"]["max_t"],
+            grace_period=raytune_cfg["asha"]["grace_period"],
+            reduction_factor=raytune_cfg["asha"]["reduction_factor"],
+            brackets=raytune_cfg["asha"]["brackets"],
+        )
+    if raytune_cfg["sched"] == "hyperband":
+        return HyperBandScheduler(
+            metric="val_loss",
+            mode="min",
+            time_attr="training_iteration",
+            max_t=raytune_cfg["hyperband"]["max_t"],
+            reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
+        )
+
+
 def compute_weights_invsqrt(X, y, w):
     wn = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
     wn *= tf.cast(X[:, 0] != 0, tf.float32)
@@ -152,7 +242,7 @@ def compute_weights_none(X, y, w):
 def make_weight_function(config):
     def weight_func(X,y,w):
 
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
         w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
         w_none = tf.ones_like(w)
@@ -177,22 +267,23 @@ def make_weight_function(config):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
+
+        msk = tf.expand_dims(tf.cast(y[:, :, 0]!=0, tf.float32), axis=-1)
         return (
             X,
             {
                 "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
-                "charge": y[:, :, 1:2],
-                "pt": y[:, :, 2:3],
-                "eta": y[:, :, 3:4],
-                "sin_phi": y[:, :, 4:5],
-                "cos_phi": y[:, :, 5:6],
-                "energy": y[:, :, 6:7],
+                "charge": y[:, :, 1:2]*msk,
+                "pt": y[:, :, 2:3]*msk,
+                "eta": y[:, :, 3:4]*msk,
+                "sin_phi": y[:, :, 4:5]*msk,
+                "cos_phi": y[:, :, 5:6]*msk,
+                "energy": y[:, :, 6:7]*msk,
             },
             w,
         )
 
     return func
-
 
 def get_dataset_def(config):
     cds = config["dataset"]
@@ -209,7 +300,7 @@ def get_dataset_def(config):
     )
 
 
-def get_train_val_datasets(config, global_batch_size, n_train, n_test):
+def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=True):
     dataset_def = get_dataset_def(config)
 
     tfr_files = sorted(glob.glob(dataset_def.processed_path))
@@ -255,11 +346,15 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test):
     else:
         dataset_transform = None
 
-    ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-    ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+    # ds_train = ds_train.map(classwise_energy_normalization)
+    # ds_test = ds_train.map(classwise_energy_normalization)
 
-    return ds_train_r, ds_test_r, dataset_transform
-
+    if repeat:
+        ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
+        ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
+        return ds_train_r, ds_test_r, dataset_transform
+    else:
+        return ds_train, ds_test, dataset_transform
 
 def prepare_val_data(config, dataset_def, single_file=False):
     if single_file:
@@ -296,6 +391,10 @@ def set_config_loss(config, trainable):
     elif trainable == "regression":
         config["dataset"]["classification_loss_coef"] = 0.0
         config["dataset"]["charge_loss_coef"] = 0.0
+        config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["eta_loss_coef"] = 0.0
+        config["dataset"]["sin_phi_loss_coef"] = 0.0
+        config["dataset"]["cos_phi_loss_coef"] = 0.0
     elif trainable == "all":
         pass
     return config
@@ -311,16 +410,24 @@ def get_class_loss(config):
     return cls_loss
 
 
+def get_loss_from_params(input_dict):
+    input_dict = input_dict.copy()
+    loss_type = input_dict.pop("type")
+    loss_cls = getattr(tf.keras.losses, loss_type)
+    return loss_cls(**input_dict)
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
+
+    default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": getattr(tf.keras.losses, config["dataset"].get("charge_loss", "MeanSquaredError"))(),
-        "pt": getattr(tf.keras.losses, config["dataset"].get("pt_loss", "MeanSquaredError"))(),
-        "eta": getattr(tf.keras.losses, config["dataset"].get("eta_loss", "MeanSquaredError"))(),
-        "sin_phi": getattr(tf.keras.losses, config["dataset"].get("sin_phi_loss", "MeanSquaredError"))(),
-        "cos_phi": getattr(tf.keras.losses, config["dataset"].get("cos_phi_loss", "MeanSquaredError"))(),
-        "energy": getattr(tf.keras.losses, config["dataset"].get("energy_loss", "MeanSquaredError"))(),
+        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
