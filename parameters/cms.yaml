@@ -65,6 +65,29 @@ setup:
   trainable:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  optimizer: adam  # adam, adamw, sgd
+
+optimizer:
+  adam:
+    amsgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
+
+# LR Schedules
+exponentialdecay:
+  decay_steps: 2000
+  decay_rate: 0.99
+  staircase: yes
+onecycle:
+  mom_min: 0.85
+  mom_max: 0.95
+  warmup_ratio: 0.3
+  div_factor: 25.0
+  final_div: 100000.0
 
 sample_weights:
   cls: inverse_sqrt
@@ -138,7 +161,61 @@ timing:
   num_ev: 100
   num_iter: 3
 
-exponentialdecay:
-  decay_steps: 2000
-  decay_rate: 0.99
-  staircase: yes
+callbacks:
+  checkpoint:
+    save_weights_only: yes
+    monitor: "val_loss"
+    save_best_only: no
+  plot_freq: 10
+  tensorboard:
+    dump_history: yes
+    hist_freq: 1
+
+hypertune:
+  algorithm: hyperband  # random, bayesian, hyperband
+  random:
+    objective: val_loss
+    max_trials: 100
+  bayesian:
+    objective: val_loss
+    max_trials: 100
+    num_initial_points: 2
+  hyperband:
+    objective: val_loss
+    max_epochs: 100
+    factor: 3
+    iterations: 1
+    executions_per_trial: 1
+
+raytune:
+  local_dir:  # Note: please specify an absolute path
+  sched: "asha"  # asha, hyperband
+  parameters:
+    # optimizer parameters
+    lr: [1e-4]
+    batch_size: [32]
+    expdecay_decay_steps: [10000]
+    # model parameters
+    combined_graph_layer:
+      layernorm: [False]
+      hidden_dim: [64, 128, 256]
+      distance_dim: [128, 256]
+      num_node_messages: [1]
+      node_message:
+        normalize_degrees: [True]
+        output_dim: [64, 128, 256]
+      dropout: [0.0]
+      bin_size: [80, 160, 320]
+      kernel:
+        clip_value_low: [0.0]
+    num_graph_layers_common: [2, 3, 4]
+    num_graph_layers_energy: [2, 3, 4]
+  # Tune schedule specific parameters
+  asha:
+    max_t: 100
+    reduction_factor: 3
+    brackets: 1
+    grace_period: 5
+  hyperband:
+    max_t: 100
+    reduction_factor: 3
