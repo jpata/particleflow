@@ -7,4 +7,4 @@ IMG=/home/software/singularity/base.simg:latest
 cd ~/particleflow
 
 #TF training
-singularity exec --nv $IMG python3 mlpf/pipeline.py train -c parameters/cms.yaml
+singularity exec --nv $IMG python3 mlpf/pipeline.py train -c parameters/cms.yaml --plot-freq 1
