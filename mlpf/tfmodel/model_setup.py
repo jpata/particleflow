@@ -662,7 +662,6 @@ def configure_model_weights(model, trainable_layers):
             cg.trainable = False
         for cg in model.cg_energy:
             cg.trainable = True
-
         model.output_dec.set_trainable_regression()
     elif trainable_layers == "classification":
         for cg in model.cg:

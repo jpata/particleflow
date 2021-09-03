@@ -149,6 +149,11 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         prefix += customize + "_"
         config = customization_functions[customize](config)
 
+    if recreate or (weights is None):
+        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+    else:
+        outdir = str(Path(weights).parent)
+
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
     if "CPU" not in strategy.extended.worker_devices[0]:
@@ -166,10 +171,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
-    if recreate or (weights is None):
-        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-    else:
-        outdir = str(Path(weights).parent)
     if experiment:
         experiment.set_name(outdir)
         experiment.log_code("mlpf/tfmodel/model.py")
@@ -196,7 +197,11 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
         # Run model once to build the layers
         print(X_val.shape)
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+        
+        if config["tensorflow"]["eager"]:
+            model(X_val[:1])
+        else:
+            model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
         if weights:
@@ -402,16 +407,19 @@ def find_lr(config, outdir, figname, logscale):
 
 
 def customize_gun_sample(config):
-    config["dataset"]["padded_num_elem_size"] = 640
+
+    #FIXME: must be at least 2x bin_size
+    config["dataset"]["padded_num_elem_size"] = 1280
+
     config["dataset"]["processed_path"] = "data/SinglePiFlatPt0p7To10_cfi/tfr_cand/*.tfrecords"
-    config["dataset"]["raw_path"] = "data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl.bz2"
+    config["dataset"]["raw_path"] = "data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl*"
     config["dataset"]["classification_loss_coef"] = 0.0
     config["dataset"]["charge_loss_coef"] = 0.0
     config["dataset"]["eta_loss_coef"] = 0.0
     config["dataset"]["sin_phi_loss_coef"] = 0.0
     config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "ffn_energy"
-    config["setup"]["batch_size"] = 10*config["setup"]["batch_size"]
+    config["setup"]["trainable"] = "regression"
+    config["setup"]["batch_size"] = 20*config["setup"]["batch_size"]
     return config
 
 customization_functions = {
@@ -472,6 +480,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         config["dataset"]["num_output_classes"],
         dataset_def,
     )
+
     callbacks.append(optim_callbacks)
     callbacks.append(tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss'))
 
@@ -487,7 +496,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
         callbacks=callbacks,
     )
-    print("Hyperparamter search complete.")
+    print("Hyperparameter search complete.")
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     tuner.results_summary()

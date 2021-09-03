@@ -37,8 +37,6 @@ def pairwise_gaussian_dist(A, B):
 def pairwise_learnable_dist(A, B, ffn, training=False):
     shp = tf.shape(A)
 
-    # tf.print("shp", shp)
-    # import pdb;pdb.set_trace()
     #stack node feature vectors of src[i], dst[j] into a matrix res[i,j] = (src[i], dst[j])
     mg = tf.meshgrid(tf.range(shp[0]), tf.range(shp[1]), tf.range(shp[2]), tf.range(shp[2]), indexing="ij")
     inds1 = tf.stack([mg[0],mg[1],mg[2]], axis=-1)
@@ -384,6 +382,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         n_bins = tf.math.floordiv(n_points, self.bin_size)
 
         #put each input item into a bin defined by the argmax output across the LSH embedding
+        #FIXME: this needs n_bins to be at least 2 to work correctly!
         mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, :n_bins//2])
         cmul = tf.concat([mul, -mul], axis=-1)
         bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
@@ -661,7 +660,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.do_lsh = kwargs.pop("do_lsh", True)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
-        self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation"))
+        self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
 
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, epsilon=1e-6, name=kwargs.get("name")+"_layernorm")
