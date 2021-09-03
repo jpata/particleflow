@@ -237,7 +237,7 @@ class Dataset:
         Xs = np.concatenate(Xs)
         ys = np.concatenate(ys)
 
-        #set weights for each sample to be equal to the number of samples of this type
+        #set weights for each sample to be equal to the number of target particles of this type
         #in the training script, this can be used to compute either inverse or class-balanced weights
         uniq_vals, uniq_counts = np.unique(np.concatenate([y[:, 0] for y in ys]), return_counts=True)
         for i in range(len(ys)):

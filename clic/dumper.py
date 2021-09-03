@@ -61,7 +61,8 @@ def pfParticleToDict(par):
         "px": mom[0],
         "py": mom[1],
         "pz": mom[2],
-        "energy": par.getEnergy()
+        "energy": par.getEnergy(),
+        "charge": par.getCharge()
     }
     return vec
 
@@ -210,6 +211,7 @@ if __name__ == "__main__":
         nPF=colPF.getNumberOfElements()
         nCl=colCl.getNumberOfElements()
         nTr=colTr.getNumberOfElements()
+        nHit=simTrackHits.getNumberOfElements()
         nHCB=colHCB.getNumberOfElements()
         nHCE=colHCE.getNumberOfElements()
         nECB=colECB.getNumberOfElements()
@@ -223,7 +225,7 @@ if __name__ == "__main__":
             assert(not (recohit in calohit_recotosim))
             calohit_recotosim[recohit] = simhit
  
-        print "Event %d, nGen=%d, nPF=%d, nClusters=%d, nTracks=%d, nHCAL=%d, nECAL=%d" % (nEvent, nMc, nPF, nCl, nTr, nHCB+nHCE, nECB+nECE)
+        print "Event %d, nGen=%d, nPF=%d, nClusters=%d, nTracks=%d, nHCAL=%d, nECAL=%d, nHits=%d" % (nEvent, nMc, nPF, nCl, nTr, nHCB+nHCE, nECB+nECE, nHit)
     
         genparticles = []
         genparticle_dict = {}

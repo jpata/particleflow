@@ -56,11 +56,11 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 2
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 100
-  num_val_files: 10
+  batch_size: 20
+  num_events_train: 1000
+  num_events_test: 1000
+  num_epochs: 50
+  num_val_files: 20
   dtype: float32
   trainable: classification
   classification_loss_type: categorical_cross_entropy
@@ -83,31 +83,27 @@ parameters:
   dropout: 0.0
   activation: gelu
   combined_graph_layer:
-    do_lsh: yes
-    bin_size: 128
+    do_lsh: no
+    bin_size: 160
     max_num_bins: 100
     distance_dim: 128
     layernorm: no
     dropout: 0.0
-    dist_activation: linear
+    dist_activation: gelu
     kernel:
-      type: NodePairTrainableKernel
-      output_dim: 8
-      hidden_dim: 32
-      num_layers: 2
-      activation: gelu
-    node_message:
-      type: NodeMessageLearnable
-      output_dim: 256
-      hidden_dim: 128
-      num_layers: 2
-      activation: gelu
-      aggregation_direction: dst
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
     num_node_messages: 1
-    hidden_dim: 256
+    node_message:
+      type: GHConvDense
+      output_dim: 128
+      activation: gelu
+      normalize_degrees: yes
+    hidden_dim: 128
     activation: gelu
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_common: 0
+  num_graph_layers_energy: 0
   output_decoding:
     activation: gelu
     regression_use_classification: yes
@@ -148,6 +144,6 @@ timing:
   num_iter: 3
 
 exponentialdecay:
-  decay_steps: 2000
-  decay_rate: 0.99
+  decay_steps: 1000
+  decay_rate: 0.98
   staircase: yes
