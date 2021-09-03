@@ -190,9 +190,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         configure_model_weights(model, config["setup"]["trainable"])
         model(tf.cast(X_val[:1], model_dtype))
 
-        print("trainable weights")
-        for w in model.trainable_weights:
-            print(w.name)
+        print("model weights")
+        tw_names = [m.name for m in model.trainable_weights]
+        for w in model.weights:
+            print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
 
         loss_dict, loss_weights = get_loss_dict(config)
         model.compile(
