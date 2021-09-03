@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import mplhep
+import mplhep as hep
 import os.path as osp
 
 pid_to_text = {
@@ -147,8 +147,8 @@ def sample_label(ax, y=0.98):
 def particle_label(ax, pid):
     plt.text(0.03, 0.92, pid_to_text[pid], va="top", ha="left", size=10, transform=ax.transAxes)
 
-def plot_confusion_matrix(cm,
-                          target_names,
+def plot_confusion_matrix(cm, target_names,
+                          fname, epoch,
                           title='Confusion matrix',
                           cmap=None,
                           normalize=True):
@@ -187,9 +187,11 @@ def plot_confusion_matrix(cm,
     import matplotlib.pyplot as plt
     import numpy as np
     import itertools
+    plt.style.use('default')
 
-    accuracy = np.trace(cm) / float(np.sum(cm))
-    misclass = 1 - accuracy
+    # # only true if it weren't normalized:
+    # accuracy = np.trace(cm) / float(np.sum(cm))
+    # misclass = 1 - accuracy
 
     if cmap is None:
         cmap = plt.get_cmap('Blues')
@@ -201,7 +203,7 @@ def plot_confusion_matrix(cm,
     fig = plt.figure(figsize=(5, 4))
     ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
+    plt.title(title + ' at epoch ' + str(epoch))
     plt.colorbar()
 
     if target_names is not None:
@@ -220,12 +222,16 @@ def plot_confusion_matrix(cm,
                      horizontalalignment="center",
                      color="white" if cm[i, j] > thresh else "black")
 
-
     plt.ylabel('True label')
     plt.xlim(-1, len(target_names))
     plt.ylim(-1, len(target_names))
-    plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+    plt.xlabel('Predicted label')
+    # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
+
+    plt.savefig(fname + '.png')
+    plt.close(fig)
+
     return fig, ax
 
 
@@ -244,7 +250,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='tar
         [bins["E_val"][0], bins["E_val"][-1]],
         color="black", ls="--", lw=0.5)
     plt.savefig(osp.join(outpath,"energy_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     plt.hist(v0[msk_true, 0], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
@@ -257,7 +263,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='tar
     particle_label(ax, pid)
     ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
     plt.savefig(osp.join(outpath,"energy_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
 
     res = (v0[msk_both, 1] - v0[msk_both, 0])/v0[msk_both, 0]
@@ -273,7 +279,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='tar
     sample_label(ax)
     particle_label(ax, pid)
     plt.savefig(osp.join(outpath,"energy_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()
@@ -328,7 +334,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='t
         [bins["eta_val"][0], bins["eta_val"][-1]],
         color="black", ls="--", lw=0.5)
     plt.savefig(osp.join(outpath,"eta_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     plt.hist(v0[msk_true, 0], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
@@ -341,7 +347,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='t
     particle_label(ax, pid)
     ax.set_ylim(ax.get_ylim()[0], 1.5*ax.get_ylim()[1])
     plt.savefig(osp.join(outpath,"eta_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
 
     res = (v0[msk_both, 1] - v0[msk_both, 0])
@@ -357,7 +363,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='t
     sample_label(ax)
     particle_label(ax, pid)
     plt.savefig(osp.join(outpath,"eta_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()
@@ -412,7 +418,7 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='t
         [bins["phi_val"][0], bins["phi_val"][-1]],
         color="black", ls="--", lw=0.5)
     plt.savefig(osp.join(outpath,"phi_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     plt.figure(figsize=(4,4))
     ax = plt.axes()
     plt.hist(v0[msk_true, 0], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"]);
@@ -439,7 +445,7 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target='t
     sample_label(ax)
     particle_label(ax, pid)
     plt.savefig(osp.join(outpath,"phi_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-    
+
     #efficiency vs fake rate
     plt.figure(figsize=(4,4))
     ax = plt.axes()

@@ -11,9 +11,12 @@ import re
 
 import tensorflow as tf
 import tensorflow_addons as tfa
+import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+
+from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
 
 
 def load_config(config_file_path):
@@ -87,23 +90,31 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
 
 
 def get_strategy(global_batch_size):
-    try:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")]
+    if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
+        gpus = [-1]
+        print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
+            If you don't have or intend to use GPUs, this message can be ignored.")
+    else:
+        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
+    if gpus[0] == -1:
+        num_gpus = 0
+    else:
         num_gpus = len(gpus)
-        print("num_gpus=", num_gpus)
-        if num_gpus > 1:
-            strategy = tf.distribute.MirroredStrategy()
-            global_batch_size = num_gpus * global_batch_size
-        else:
-            strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    except Exception as e:
-        print("fallback to CPU", e)
+    print("num_gpus=", num_gpus)
+    if num_gpus > 1:
+        strategy = tf.distribute.MirroredStrategy()
+        global_batch_size = num_gpus * global_batch_size
+    elif num_gpus == 1:
+        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+    elif num_gpus == 0:
+        print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
     return strategy, global_batch_size
 
 
-def get_lr_schedule(config, lr, steps):
+def get_lr_schedule(config, steps):
+    lr = float(config["setup"]["lr"])
     callbacks = []
     schedule = config["setup"]["lr_schedule"]
     if schedule == "onecycle":
@@ -135,6 +146,84 @@ def get_lr_schedule(config, lr, steps):
     else:
         raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
     return lr_schedule, callbacks
+
+
+def get_optimizer(config, lr_schedule=None):
+    if lr_schedule is None:
+        lr = float(config["setup"]["lr"])
+    else:
+        lr = lr_schedule
+    if config["setup"]["optimizer"] == "adam":
+        cfg_adam = config["optimizer"]["adam"]
+        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+    if config["setup"]["optimizer"] == "adamw":
+        cfg_adamw = config["optimizer"]["adamw"]
+        return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
+    elif config["setup"]["optimizer"] == "sgd":
+        cfg_sgd = config["optimizer"]["sgd"]
+        return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+    else:
+        raise ValueError("Only 'adam' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
+
+
+def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
+    if cfg_hypertune["algorithm"] == "random":
+        print("Keras Tuner: Using RandomSearch")
+        cfg_rand = cfg_hypertune["random"]
+        return kt.RandomSearch(
+            model_builder,
+            objective=cfg_rand["objective"],
+            max_trials=cfg_rand["max_trials"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "bayesian":
+        print("Keras Tuner: Using BayesianOptimization")
+        cfg_bayes = cfg_hypertune["bayesian"]
+        return kt.BayesianOptimization(
+            model_builder,
+            objective=cfg_bayes["objective"],
+            max_trials=cfg_bayes["max_trials"],
+            num_initial_points=cfg_bayes["num_initial_points"],
+            project_name="mlpf",
+            overwrite=recreate,
+        )
+    elif cfg_hypertune["algorithm"] == "hyperband":
+        print("Keras Tuner: Using Hyperband")
+        cfg_hb = cfg_hypertune["hyperband"]
+        return kt.Hyperband(
+            model_builder,
+            objective=cfg_hb["objective"],
+            max_epochs=cfg_hb["max_epochs"],
+            factor=cfg_hb["factor"],
+            hyperband_iterations=cfg_hb["iterations"],
+            directory=outdir + "/tb",
+            project_name="mlpf",
+            overwrite=recreate,
+            executions_per_trial=cfg_hb["executions_per_trial"],
+            distribution_strategy=strategy,
+        )
+
+
+def get_raytune_schedule(raytune_cfg):
+    if raytune_cfg["sched"] == "asha":
+        return AsyncHyperBandScheduler(
+            metric="val_loss",
+            mode="min",
+            time_attr="training_iteration",
+            max_t=raytune_cfg["asha"]["max_t"],
+            grace_period=raytune_cfg["asha"]["grace_period"],
+            reduction_factor=raytune_cfg["asha"]["reduction_factor"],
+            brackets=raytune_cfg["asha"]["brackets"],
+        )
+    if raytune_cfg["sched"] == "hyperband":
+        return HyperBandScheduler(
+            metric="val_loss",
+            mode="min",
+            time_attr="training_iteration",
+            max_t=raytune_cfg["hyperband"]["max_t"],
+            reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
+        )
 
 
 def compute_weights_invsqrt(X, y, w):
