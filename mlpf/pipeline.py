@@ -421,7 +421,7 @@ def customize_gun_sample(config):
     config["dataset"]["sin_phi_loss_coef"] = 0.0
     config["dataset"]["cos_phi_loss_coef"] = 0.0
     config["setup"]["trainable"] = "regression"
-    config["setup"]["batch_size"] = 10*config["setup"]["batch_size"]
+    config["setup"]["batch_size"] = 5*config["setup"]["batch_size"]
     return config
 
 customization_functions = {
