@@ -462,6 +462,7 @@ class OutputDecoding(tf.keras.Model):
 
         layernorm=False,
         mask_reg_cls0=True,
+        energy_multimodal=True,
         **kwargs):
 
         super(OutputDecoding, self).__init__(**kwargs)
@@ -475,6 +476,8 @@ class OutputDecoding(tf.keras.Model):
         self.phi_skip_gate = phi_skip_gate
 
         self.mask_reg_cls0 = mask_reg_cls0
+
+        self.energy_multimodal = energy_multimodal
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
@@ -518,14 +521,14 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            num_output_classes, energy_hidden_dim, "ffn_energy",
+            num_output_classes if self.energy_multimodal else 1, energy_hidden_dim, "ffn_energy",
             dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
             dropout=dropout)
 
-        self.ffn_energy_classwise = point_wise_feed_forward_network(
-            1, energy_hidden_dim, "ffn_energy_classwise_shift",
-            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-            dropout=dropout)
+        # self.ffn_energy_classwise = point_wise_feed_forward_network(
+        #     2, energy_hidden_dim, "ffn_energy_classwise_shift",
+        #     dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+        #     dropout=dropout)
 
     """
     X_input: (n_batch, n_elements, n_input_features) raw node input features
@@ -584,14 +587,17 @@ class OutputDecoding(tf.keras.Model):
             X_encoded_energy = tf.concat([X_encoded_energy, tf.stop_gradient(out_id_logits)], axis=-1)
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
-        pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
 
-        pred_energy += tf.reduce_sum(
-            out_id_hard_softmax*self.ffn_energy_classwise(
-                tf.concat([orig_energy, tf.stop_gradient(out_id_logits)], axis=-1), training=training),
-            axis=-1, keepdims=True)
+        if self.energy_multimodal:
+            pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
+        else:
+            pred_energy = pred_energy_corr
 
-        pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
+        # classwise_energy_corr = self.ffn_energy_classwise(tf.concat([orig_energy, out_id_logits], axis=-1), training=training)
+        # pred_energy += classwise_energy_corr[:, :, 0:1]
+        # pred_energy *= classwise_energy_corr[:, :, 1:2]
+
+        # pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
         #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
@@ -657,8 +663,9 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.dropout = kwargs.pop("dropout")
         self.kernel = kwargs.pop("kernel")
         self.node_message = kwargs.pop("node_message")
-        self.hidden_dim = kwargs.pop("hidden_dim")
+        self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
         self.do_lsh = kwargs.pop("do_lsh", True)
+        self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
 
@@ -668,12 +675,11 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         #self.gaussian_noise = tf.keras.layers.GaussianNoise(0.01)
         self.ffn_dist = point_wise_feed_forward_network(
             self.distance_dim,
-            self.hidden_dim,
+            self.ffn_dist_hidden_dim,
             kwargs.get("name") + "_ffn_dist",
-            num_layers=2, activation=self.activation,
+            num_layers=self.ffn_dist_num_layers, activation=self.activation,
             dropout=self.dropout
         )
-
         if self.do_lsh:
             self.message_building_layer = MessageBuildingLayerLSH(
                 distance_dim=self.distance_dim,

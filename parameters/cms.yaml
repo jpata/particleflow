@@ -79,7 +79,7 @@ optimizer:
 
 # LR Schedules
 exponentialdecay:
-  decay_steps: 2000
+  decay_steps: 10000
   decay_rate: 0.99
   staircase: yes
 onecycle:
@@ -102,12 +102,14 @@ parameters:
   model: gnn_dense
   input_encoding: cms
   combined_graph_layer:
-    bin_size: 640
+    bin_size: 160
     max_num_bins: 100
-    distance_dim: 128
-    layernorm: yes
+    distance_dim: 64
+    layernorm: no
     dropout: 0.0
-    dist_activation: linear
+    dist_activation: gelu
+    ffn_dist_num_layers: 1
+    ffn_dist_hidden_dim: 128
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
@@ -115,13 +117,12 @@ parameters:
     num_node_messages: 1
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 256
       activation: gelu
       normalize_degrees: yes
-    hidden_dim: 128
     activation: gelu
-  num_graph_layers_common: 3
-  num_graph_layers_energy: 3
+  num_graph_layers_common: 2
+  num_graph_layers_energy: 2
   output_decoding:
     activation: gelu
     regression_use_classification: yes
@@ -143,7 +144,7 @@ parameters:
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    energy_hidden_dim: 512
 
     id_num_layers: 3
     charge_num_layers: 2
@@ -153,6 +154,8 @@ parameters:
     energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: no
+
+    energy_multimodal: yes
 
   skip_connection: yes
   debug: no
