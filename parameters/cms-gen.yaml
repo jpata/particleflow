@@ -55,15 +55,16 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 5e-3
-  batch_size: 10
+  lr: 1e-3
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 9000
   num_epochs: 50
   num_val_files: 10
   dtype: float32
   trainable: classification
-  classification_loss_type: sigmoid_focal_crossentropy
+  classification_loss_type: categorical_cross_entropy #categorical_cross_entropy, sigmoid_focal_crossentropy
+  classification_label_smoothing: 0.0
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
@@ -90,38 +91,52 @@ onecycle:
   final_div: 100000.0
 
 sample_weights:
-  cls: inverse_sqrt
+  cls: none
   charge: signal_only
-  pt: signal_only
-  eta: signal_only
-  sin_phi: signal_only
-  cos_phi: signal_only
-  energy: signal_only
+  pt: signal_only_inverse_sqrt
+  eta: signal_only_inverse_sqrt
+  sin_phi: signal_only_inverse_sqrt
+  cos_phi: signal_only_inverse_sqrt
+  energy: signal_only_inverse_sqrt
 
 parameters:
   model: gnn_dense
   input_encoding: cms
+  node_update_mode: concat
+  do_node_encoding: no
+  node_encoding_hidden_dim: 0
   combined_graph_layer:
     bin_size: 160
-    max_num_bins: 100
+    max_num_bins: 200
     distance_dim: 64
-    layernorm: no
+    layernorm: yes
     dropout: 0.0
     dist_activation: gelu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
+    # kernel:
+    #   type: NodePairGaussianKernel
+    #   dist_mult: 0.1
+    #   clip_value_low: 0.0
     kernel:
-      type: NodePairGaussianKernel
-      dist_mult: 0.1
-      clip_value_low: 0.0
-    num_node_messages: 1
+      type: NodePairTrainableKernel
+      output_dim: 8
+      hidden_dim: 64
+      num_layers: 2
+    # node_message:
+    #   type: GHConvDense
+    #   output_dim: 256
+    #   activation: gelu
+    #   normalize_degrees: yes
     node_message:
-      type: GHConvDense
+      type: NodeMessageLearnable
       output_dim: 256
+      hidden_dim: 256
+      num_layers: 1
       activation: gelu
-      normalize_degrees: yes
+    num_node_messages: 1
     activation: gelu
-  num_graph_layers_common: 2
+  num_graph_layers_common: 4
   num_graph_layers_energy: 2
   output_decoding:
     activation: gelu
@@ -139,7 +154,7 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 1024
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256

@@ -232,12 +232,6 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
-        self.aggregation_direction = kwargs.pop("aggregation_direction")
-
-        if self.aggregation_direction == "dst":
-            self.agg_dim = -2
-        elif self.aggregation_direction == "src":
-            self.agg_dim = -3
 
         self.ffn = point_wise_feed_forward_network(
             self.output_dim,
@@ -250,10 +244,20 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
 
     def call(self, inputs):
         x, adj, msk = inputs
-        avg_message = tf.reduce_mean(adj, axis=self.agg_dim)
-        max_message = tf.reduce_max(adj, axis=self.agg_dim)
-        x2 = tf.concat([x, avg_message, max_message], axis=-1)*msk
-        return self.activation(self.ffn(x2))
+
+        #collect incoming messages
+        avg_message_dst = tf.reduce_mean(adj, axis=-2)
+        max_message_dst = tf.reduce_max(adj, axis=-2)
+        min_message_dst = tf.reduce_min(adj, axis=-2)
+
+        #collect outgoing messages
+        avg_message_src = tf.reduce_mean(adj, axis=-3)
+        max_message_src = tf.reduce_max(adj, axis=-3)
+        min_message_src = tf.reduce_min(adj, axis=-3)
+
+        #node update
+        x2 = tf.concat([x, avg_message_dst, max_message_dst, min_message_dst, avg_message_src, max_message_src, min_message_src], axis=-1)
+        return self.activation(self.ffn(x2))*msk
 
 def point_wise_feed_forward_network(d_model, dff, name, num_layers=1, activation='elu', dtype=tf.dtypes.float32, dim_decrease=False, dropout=0.0):
 
@@ -731,7 +735,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 class PFNetDense(tf.keras.Model):
     def __init__(self,
             do_node_encoding=False,
-            hidden_dim=128,
+            node_encoding_hidden_dim=128,
             dropout=0.0,
             activation="gelu",
             multi_output=False,
@@ -746,7 +750,8 @@ class PFNetDense(tf.keras.Model):
             node_message={},
             output_decoding={},
             debug=False,
-            schema="cms"
+            schema="cms",
+            node_update_mode="concat"
         ):
         super(PFNetDense, self).__init__()
 
@@ -756,16 +761,17 @@ class PFNetDense(tf.keras.Model):
         self.skip_connection = skip_connection
         
         self.do_node_encoding = do_node_encoding
-        self.hidden_dim = hidden_dim
+        self.node_encoding_hidden_dim = node_encoding_hidden_dim
         self.dropout = dropout
+        self.node_update_mode = node_update_mode
         self.activation = getattr(tf.keras.activations, activation)
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
-                self.hidden_dim,
-                self.hidden_dim,
+                combined_graph_layer["node_message"]["output_dim"],
+                self.node_encoding_hidden_dim,
                 "node_encoding",
-                num_layers=2,
+                num_layers=1,
                 activation=self.activation,
                 dropout=self.dropout
             )
@@ -791,41 +797,56 @@ class PFNetDense(tf.keras.Model):
         msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
         #encode the elements for classification (id)
-        enc = self.enc(X)
-
+        X_enc = self.enc(X)
 
         encs = []
         if self.skip_connection:
-            encs.append(enc)
-        enc_cg = enc
+            encs.append(X_enc)
+
+        X_enc_cg = X_enc
         if self.do_node_encoding:
-            enc_cg = self.node_encoding(enc_cg, training=training)
+            X_enc_ffn = self.activation(self.node_encoding(X_enc_cg, training=training))
+            X_enc_cg = X_enc_ffn
+
         for cg in self.cg:
-            enc_all = cg(enc_cg, msk, training=training)
-            enc_cg = enc_all["enc"]
+            enc_all = cg(X_enc_cg, msk, training=training)
+
+            if self.node_update_mode == "additive":
+                X_enc_cg += enc_all["enc"]
+            elif self.node_update_mode == "concat":
+                encs.append(X_enc_cg)
+
             if self.debug:
                 debugging_data[cg.name] = enc_all
-            encs.append(enc_cg)
+        
+        if self.node_update_mode == "concat":
+            dec_output = tf.concat(encs, axis=-1)*msk_input
+        elif self.node_update_mode == "additive":
+            dec_output = X_enc_cg
 
-        dec_input = []
-        dec_input += encs
-        dec_output = tf.concat(dec_input, axis=-1)*msk_input
+        X_enc_cg = X_enc
+        if self.do_node_encoding:
+            X_enc_cg = X_enc_ffn
+
+        encs_energy = []
+        for cg in self.cg_energy:
+            enc_all = cg(X_enc_cg, msk, training=training)
+            if self.node_update_mode == "additive":
+                X_enc_cg += enc_all["enc"]
+            elif self.node_update_mode == "concat":
+                encs_energy.append(X_enc_cg)
+
+            if self.debug:
+                debugging_data[cg.name] = enc_all
+            encs_energy.append(X_enc_cg)
+
+        if self.node_update_mode == "concat":
+            dec_output_energy = tf.concat(encs_energy, axis=-1)*msk_input
+        elif self.node_update_mode == "additive":
+            dec_output_energy = X_enc_cg
+
         if self.debug:
             debugging_data["dec_output"] = dec_output
-
-        enc_cg = enc
-        encs_energy = []
-        if self.skip_connection:
-            encs_energy.append(enc)
-        for cg in self.cg_energy:
-            enc_all = cg(enc_cg, msk, training=training)
-            enc_cg = enc_all["enc"]
-            if self.debug:
-                debugging_data[cg.name] = enc_all
-            encs_energy.append(enc_cg)
-
-        dec_output_energy = tf.concat(encs_energy, axis=-1)*msk_input
-        if self.debug:
             debugging_data["dec_output_energy"] = dec_output_energy
 
         ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
