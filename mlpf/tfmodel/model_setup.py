@@ -521,7 +521,8 @@ def make_gnn_dense(config, dtype):
 
     parameters = [
         "do_node_encoding",
-        "hidden_dim",
+        "node_update_mode",
+        "node_encoding_hidden_dim",
         "dropout",
         "activation",
         "num_graph_layers_common",
