@@ -55,15 +55,15 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
-  batch_size: 5
+  lr: 5e-3
+  batch_size: 10
   num_events_train: 80000
   num_events_test: 9000
   num_epochs: 50
   num_val_files: 10
   dtype: float32
-  trainable:
-  classification_loss_type: categorical_cross_entropy
+  trainable: classification
+  classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
@@ -152,7 +152,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: no
 
     energy_multimodal: yes

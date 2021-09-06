@@ -152,7 +152,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: no
 
     energy_multimodal: yes
