@@ -402,7 +402,7 @@ def set_config_loss(config, trainable):
 
 def get_class_loss(config):
     if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False, label_smoothing=config["setup"].get("classification_label_smoothing", 0.0))
     elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
         cls_loss = tfa.losses.sigmoid_focal_crossentropy
     else:

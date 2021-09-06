@@ -413,6 +413,22 @@ class CustomCallback(tf.keras.callbacks.Callback):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
 
+            plt.figure(figsize=(4,4))
+            npred = np.sum(ypred_id == icls, axis=1)
+            ntrue = np.sum(self.ytrue_id == icls, axis=1)
+            maxval = max(np.max(npred), np.max(ntrue))
+            plt.scatter(ntrue, npred, marker=".")
+            plt.plot([0,maxval], [0, maxval], color="black", ls="--")
+
+            image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
+            plt.savefig(image_path, bbox_inches="tight")
+            plt.close("all")
+            if self.comet_experiment:
+                self.comet_experiment.log_image(image_path, step=epoch)
+                num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
+                self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
+
+
             if icls!=0:
                 self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
 
@@ -668,7 +684,6 @@ def configure_model_weights(model, trainable_layers):
             cg.trainable = True
         for cg in model.cg_energy:
             cg.trainable = False
-
         model.output_dec.set_trainable_classification()
     else:
         if isinstance(trainable_layers, str):

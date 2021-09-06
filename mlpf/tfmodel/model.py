@@ -525,11 +525,6 @@ class OutputDecoding(tf.keras.Model):
             dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
             dropout=dropout)
 
-        # self.ffn_energy_classwise = point_wise_feed_forward_network(
-        #     2, energy_hidden_dim, "ffn_energy_classwise_shift",
-        #     dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-        #     dropout=dropout)
-
     """
     X_input: (n_batch, n_elements, n_input_features) raw node input features
     X_encoded: (n_batch, n_elements, n_encoded_features) encoded/transformed node features
@@ -641,7 +636,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
         self.ffn_energy.trainable = True
-        self.ffn_energy_classwise.trainable = True
 
     def set_trainable_classification(self):
         self.ffn_id.trainable = True
@@ -650,7 +644,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
         self.ffn_energy.trainable = False
-        self.ffn_energy_classwise.trainable = False
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
