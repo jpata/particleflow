@@ -814,6 +814,7 @@ class PFNetDense(tf.keras.Model):
             if self.node_update_mode == "additive":
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
+                X_enc_cg = enc_all["enc"]
                 encs.append(X_enc_cg)
 
             if self.debug:
@@ -834,6 +835,7 @@ class PFNetDense(tf.keras.Model):
             if self.node_update_mode == "additive":
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
+                X_enc_cg = enc_all["enc"]
                 encs_energy.append(X_enc_cg)
 
             if self.debug:
