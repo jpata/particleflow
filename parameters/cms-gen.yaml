@@ -106,34 +106,34 @@ parameters:
   do_node_encoding: no
   node_encoding_hidden_dim: 0
   combined_graph_layer:
-    bin_size: 80
-    max_num_bins: 500
+    bin_size: 160
+    max_num_bins: 100
     distance_dim: 64
     layernorm: yes
     dropout: 0.0
     dist_activation: gelu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
-    # kernel:
-    #   type: NodePairGaussianKernel
-    #   dist_mult: 0.1
-    #   clip_value_low: 0.0
     kernel:
-      type: NodePairTrainableKernel
-      output_dim: 8
-      hidden_dim: 64
-      num_layers: 2
-    # node_message:
-    #   type: GHConvDense
-    #   output_dim: 256
-    #   activation: gelu
-    #   normalize_degrees: yes
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+    # kernel:
+    #   type: NodePairTrainableKernel
+    #   output_dim: 8
+    #   hidden_dim: 64
+    #   num_layers: 2
     node_message:
-      type: NodeMessageLearnable
-      output_dim: 128
-      hidden_dim: 256
-      num_layers: 1
+      type: GHConvDense
+      output_dim: 256
       activation: gelu
+      normalize_degrees: yes
+    # node_message:
+    #   type: NodeMessageLearnable
+    #   output_dim: 128
+    #   hidden_dim: 256
+    #   num_layers: 1
+    #   activation: gelu
     num_node_messages: 1
     activation: gelu
   num_graph_layers_common: 4

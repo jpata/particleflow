@@ -59,7 +59,7 @@ setup:
   batch_size: 5
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 50
+  num_epochs: 100
   num_val_files: 10
   dtype: float32
   trainable:
@@ -90,17 +90,20 @@ onecycle:
   final_div: 100000.0
 
 sample_weights:
-  cls: inverse_sqrt
+  cls: none
   charge: signal_only
-  pt: signal_only
-  eta: signal_only
-  sin_phi: signal_only
-  cos_phi: signal_only
-  energy: signal_only
+  pt: signal_only_inverse_sqrt
+  eta: signal_only_inverse_sqrt
+  sin_phi: signal_only_inverse_sqrt
+  cos_phi: signal_only_inverse_sqrt
+  energy: signal_only_inverse_sqrt
 
 parameters:
   model: gnn_dense
   input_encoding: cms
+  node_update_mode: concat
+  do_node_encoding: no
+  node_encoding_hidden_dim: 0
   combined_graph_layer:
     bin_size: 160
     max_num_bins: 100
