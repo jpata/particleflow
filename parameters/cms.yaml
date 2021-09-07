@@ -56,7 +56,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 5
+  batch_size: 4
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
@@ -101,28 +101,40 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  node_update_mode: additive
-  do_node_encoding: yes
+  node_update_mode: concat
+  do_node_encoding: no
   node_encoding_hidden_dim: 128
   combined_graph_layer:
-    bin_size: 160
-    max_num_bins: 100
+    bin_size: 80
+    max_num_bins: 200
     distance_dim: 64
     layernorm: no
     dropout: 0.0
     dist_activation: gelu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
+    #kernel:
+    #  type: NodePairGaussianKernel
+    #  dist_mult: 0.1
+    #  clip_value_low: 0.0
     kernel:
-      type: NodePairGaussianKernel
-      dist_mult: 0.1
-      clip_value_low: 0.0
+      type: NodePairTrainableKernel
+      output_dim: 4
+      hidden_dim_pair: 32
+      hidden_dim_node: 128
+      num_layers: 1
     num_node_messages: 1
+    #node_message:
+    #  type: GHConvDense
+    #  output_dim: 256
+    #  activation: gelu
+    #  normalize_degrees: yes
     node_message:
-      type: GHConvDense
-      output_dim: 256
+      type: NodeMessageLearnable
+      output_dim: 128
+      hidden_dim: 128
+      num_layers: 1
       activation: gelu
-      normalize_degrees: yes
     activation: gelu
   num_graph_layers_common: 2
   num_graph_layers_energy: 2
