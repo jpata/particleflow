@@ -31,6 +31,21 @@ _CITATION = """
 DELPHES_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 PADDED_NUM_ELEM_SIZE = 6400
 
+#based on delphes/ntuplizer.py
+X_FEATURES = [
+    "typ_idx"
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "e",
+    "eta_outer",
+    "sin_phi_outer",
+    "cos_phi_outer",
+    "charge",
+    "is_gen_muon",
+    "is_gen_electron",
+]
 
 class DelphesPf(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for delphes_pf dataset."""
@@ -59,6 +74,7 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             supervised_keys=("X", "ygen"),  # Set to `None` to disable
             homepage="",
             citation=_CITATION,
+            metadata=tfds.core.MetadataDict(x_features=X_FEATURES),
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):

@@ -23,10 +23,30 @@ _CITATION = """
 CMS_PF_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-# ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
+ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
+
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
+CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFEM", "HFHAD", "gamma", "ele", "mu"]
+
 PADDED_NUM_ELEM_SIZE = 6400
 
+X_FEATURES = [
+    "typ_idx",
+    "pt",
+    "eta",
+    "phi",
+    "e",
+    "layer",
+    "depth",
+    "charge",
+    "trajpoint",
+    "eta_ecal",
+    "phi_ecal",
+    "eta_hcal",
+    "phi_hcal",
+    "muon_dt_hits",
+    "muon_csc_hits",
+]
 
 class CmsPf(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
@@ -36,13 +56,10 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    Ask jpata for the data and place it in <your_dir>. Then build the dataset using
-    `tfds build <path_to_heptfds>/heptfds/cms_pf --manual_dir <your_dir>`. Alternatively,
-    load the dataset using tfds.load() and give the argument
-    `download_and_prepare_kwargs={"download_config": download_config}` where `download_config`
-    is a tfds.download.DownloadConfig with manual_dir set to <your_dir>.
+    mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/raw data/TTbar_14TeV_TuneCUETP8M1_cfi/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/val data/TTbar_14TeV_TuneCUETP8M1_cfi/
     """
-
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -52,9 +69,9 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(6400, 15), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, 15), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, 7), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, 7), dtype=tf.float32),
                 }
             ),
             # If there's a common (input, target) tuple from the
@@ -63,6 +80,7 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
             supervised_keys=("X", "ycand"),  # Set to `None` to disable
             homepage="",
             citation=_CITATION,
+            metadata=tfds.core.MetadataDict(x_features=X_FEATURES),
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
@@ -76,6 +94,7 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
             files = path.glob("*.pkl")
         else:
             files = path.glob("*.pkl.bz2")
+
         for fi in files:
             X, ygen, ycand = self.prepare_data_cms(str(fi))
             for ii in range(X[0].shape[0]):
@@ -125,23 +144,7 @@ class CmsPf(tfds.core.GeneratorBasedBuilder):
             Xelem_flat = np.stack(
                 [
                     Xelem[k].view(np.float32).data
-                    for k in [
-                        "typ_idx",
-                        "pt",
-                        "eta",
-                        "phi",
-                        "e",
-                        "layer",
-                        "depth",
-                        "charge",
-                        "trajpoint",
-                        "eta_ecal",
-                        "phi_ecal",
-                        "eta_hcal",
-                        "phi_hcal",
-                        "muon_dt_hits",
-                        "muon_csc_hits",
-                    ]
+                    for k in X_FEATURES
                 ],
                 axis=-1,
             )
