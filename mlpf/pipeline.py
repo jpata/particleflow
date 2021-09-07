@@ -239,7 +239,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         config["callbacks"],
         outdir,
         ds_test.take(10),
-        ds_info
+        ds_info,
+        comet_experiment=experiment
     )
     callbacks.append(optim_callbacks)
 
