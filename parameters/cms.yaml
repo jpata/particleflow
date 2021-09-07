@@ -57,9 +57,9 @@ setup:
   weights_config:
   lr: 1e-3
   batch_size: 5
-  num_events_train: 80000
-  num_events_test: 10000
-  num_epochs: 10
+  num_events_train: 90000
+  num_events_test: 9900
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: categorical_cross_entropy
