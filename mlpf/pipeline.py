@@ -27,6 +27,7 @@ import tensorflow_addons as tfa
 import keras_tuner as kt
 
 from tfmodel.data import Dataset
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 from tfmodel.model_setup import (
     make_model,
     configure_model_weights,
@@ -48,7 +49,6 @@ from tfmodel.utils import (
     compute_weights_invsqrt,
     compute_weights_none,
     get_train_val_datasets,
-    targets_multi_output,
     get_dataset_def,
     prepare_val_data,
     set_config_loss,
@@ -58,6 +58,7 @@ from tfmodel.utils import (
     delete_all_but_best_checkpoint,
     get_tuner,
     get_raytune_schedule,
+    get_heptfds_dataset,
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -151,6 +152,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         #FIXME: refactor this
         global_batch_size = config["setup"]["batch_size"]
 
+    dataset_def = get_dataset_def(config)
+    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
+
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
@@ -164,14 +168,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
-
-    dataset_def = get_dataset_def(config)
-    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
-
-    #FIXME: split up training/test and validation dataset and parameters
-    dataset_def.padded_num_elem_size = 6400
-
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
 
     if experiment:
         experiment.set_name(outdir)
@@ -197,13 +193,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
         model = make_model(config, model_dtype)
 
-        # Run model once to build the layers
-        print(X_val.shape)
-        
-        if config["tensorflow"]["eager"]:
-            model(X_val[:1])
-        else:
-            model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+        # Build the layers after the element and feature dimensions are specified
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
         if weights:
@@ -242,33 +233,24 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         )
         model.summary()
 
-    validation_particles = None
-    if config["dataset"]["target_particles"] == "cand":
-        validation_particles = ycand_val
-    elif config["dataset"]["target_particles"] == "gen":
-        validation_particles = ygen_val
-
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        X_val,
-        validation_particles,
-        dataset_transform,
-        config["dataset"]["num_output_classes"],
-        dataset_def,
-        experiment
+        ds_test.take(10),
+        ds_info
     )
     callbacks.append(optim_callbacks)
 
     fit_result = model.fit(
-        ds_train_r,
-        validation_data=ds_test_r,
+        ds_train.repeat(),
+        validation_data=ds_test.repeat(),
         epochs=initial_epoch + n_epochs,
         callbacks=callbacks,
         steps_per_epoch=n_train // global_batch_size,
         validation_steps=n_test // global_batch_size,
         initial_epoch=initial_epoch,
     )
+
 
     history_path = Path(outdir) / "history"
     history_path = str(history_path)
@@ -280,7 +262,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     if "CPU" not in strategy.extended.worker_devices[0]:
         p.terminate()
-
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -349,7 +330,7 @@ def find_lr(config, outdir, figname, logscale):
     """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
     which an appropriate LR-range can be determined"""
     config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
-    ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
+    ds_train, _ = get_heptfds_dataset(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, maybe_global_batch_size = get_strategy(global_batch_size)
@@ -399,7 +380,7 @@ def find_lr(config, outdir, figname, logscale):
         callbacks = [lr_finder]
 
         model.fit(
-            ds_train_r,
+            ds_train,
             epochs=max_steps,
             callbacks=callbacks,
             steps_per_epoch=1,
@@ -753,6 +734,32 @@ def raytune_analysis(exp_dir, save, skip):
     analysis = Analysis(exp_dir,  default_metric="val_loss", default_mode="min")
     plot_ray_analysis(analysis, save=save, skip=skip)
 
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("--ntrain", default=None, help="override the number of training events", type=int)
+@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+def debug_data(config, ntrain, ntest):
+    """Train a model defined by config"""
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+        config, ntrain, ntest, weights=None,
+    )
+
+    dataset_def = get_dataset_def(config)
+    ds_train, ds_test, dataset_transform = get_train_val_datasets(config, global_batch_size=1, n_train=n_train, n_test=n_test)
+
+    # cand_counts = np.zeros(8)
+    # for data_item in tqdm(ds_train, desc="Counting"):
+    #     import pdb; pdb.set_trace()
+    #     cand_vals, cand_count = np.unique(np.argmax(data_item[1]['cls'], axis=2), return_counts=True)
+    #     cand_counts[cand_vals.astype("int32")] += cand_count
+    # print("cand_counts: ", cand_counts)
+
+    dsf = CMSDatasetFactory(config)
+    ds_train, _ = dsf.get_dataset(split="train")
+    ds_test, _ = dsf.get_dataset(split="test")
+    for data_item in tqdm(ds_train, desc="Counting"):
+        import pdb; pdb.set_trace()
 
 if __name__ == "__main__":
     main()
