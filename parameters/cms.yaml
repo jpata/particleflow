@@ -56,7 +56,7 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 4
+  batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
   num_epochs: 100
@@ -105,7 +105,7 @@ parameters:
   do_node_encoding: no
   node_encoding_hidden_dim: 128
   combined_graph_layer:
-    bin_size: 80
+    bin_size: 160
     max_num_bins: 200
     distance_dim: 64
     layernorm: no
@@ -113,31 +113,31 @@ parameters:
     dist_activation: gelu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
-    #kernel:
-    #  type: NodePairGaussianKernel
-    #  dist_mult: 0.1
-    #  clip_value_low: 0.0
     kernel:
-      type: NodePairTrainableKernel
-      output_dim: 4
-      hidden_dim_pair: 32
-      hidden_dim_node: 128
-      num_layers: 1
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+    #kernel:
+    #  type: NodePairTrainableKernel
+    #  output_dim: 4
+    #  hidden_dim_pair: 32
+    #  hidden_dim_node: 128
+    #  num_layers: 1
     num_node_messages: 1
-    #node_message:
-    #  type: GHConvDense
-    #  output_dim: 256
-    #  activation: gelu
-    #  normalize_degrees: yes
     node_message:
-      type: NodeMessageLearnable
-      output_dim: 128
-      hidden_dim: 128
-      num_layers: 1
+      type: GHConvDense
+      output_dim: 256
       activation: gelu
+      normalize_degrees: yes
+    #node_message:
+    #  type: NodeMessageLearnable
+    #  output_dim: 128
+    #  hidden_dim: 128
+    #  num_layers: 1
+    #  activation: gelu
     activation: gelu
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_common: 4
+  num_graph_layers_energy: 4
   output_decoding:
     activation: gelu
     regression_use_classification: yes
@@ -166,7 +166,7 @@ parameters:
     pt_num_layers: 2
     eta_num_layers: 2
     phi_num_layers: 2
-    energy_num_layers: 2
+    energy_num_layers: 3
     layernorm: yes
     mask_reg_cls0: no
 
