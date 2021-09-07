@@ -2,7 +2,7 @@ import tensorflow as tf
 import sys
 import numpy as np
 
-bin_size = 640
+bin_size = 160
 num_features = 15
 
 def load_graph(frozen_graph_filename):

@@ -11,7 +11,7 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTba
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_2.root
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_3.root
 
-mv *.root data/TTbar_14TeV_TuneCUETP8M1_cfi/root/
+cd ../../..
 
 #Create the ntuples
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
@@ -30,7 +30,7 @@ mv local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl local_test_
 mkdir -p experiments
 
 echo "Cloning hep_tfds."
-git clone https://github.com/erwulff/hep_tfds.git
+git clone https://github.com/jpata/hep_tfds.git
 echo "Installing hep_tfds."
 cd hep_tfds
 sudo python3 setup.py install
