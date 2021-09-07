@@ -314,15 +314,16 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
         return dm
 
 class NodePairTrainableKernel(tf.keras.layers.Layer):
-    def __init__(self, output_dim=32, hidden_dim=32, num_layers=2, activation="elu", **kwargs):
+    def __init__(self, output_dim=32, hidden_dim_node=256, hidden_dim_pair=32, num_layers=2, activation="elu", **kwargs):
         self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim_node = hidden_dim_node
+        self.hidden_dim_pair = hidden_dim_pair
         self.num_layers = num_layers
         self.activation = getattr(tf.keras.activations, activation)
 
         self.ffn_node = point_wise_feed_forward_network(
-            8,
-            self.hidden_dim,
+            self.output_dim,
+            self.hidden_dim_node,
             kwargs.get("name") + "_" + "node",
             num_layers=self.num_layers,
             activation=self.activation
@@ -330,7 +331,7 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
 
         self.pair_kernel = point_wise_feed_forward_network(
             self.output_dim,
-            self.hidden_dim,
+            self.hidden_dim_pair,
             kwargs.get("name") + "_" + "pair_kernel",
             num_layers=self.num_layers,
             activation=self.activation
@@ -407,7 +408,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
         #Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
-
+        
         #remove the masked points row-wise and column-wise
         dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
         dm = tf.einsum("abijk,abj->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
