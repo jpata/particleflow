@@ -15,6 +15,7 @@ import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
 
@@ -350,15 +351,7 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=Tr
     else:
         dataset_transform = None
 
-    # ds_train = ds_train.map(classwise_energy_normalization)
-    # ds_test = ds_train.map(classwise_energy_normalization)
-
-    if repeat:
-        ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-        ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
-        return ds_train_r, ds_test_r, dataset_transform
-    else:
-        return ds_train, ds_test, dataset_transform
+    return ds_train, ds_test, dataset_transform
 
 def prepare_val_data(config, dataset_def, single_file=False):
     if single_file:
@@ -383,6 +376,35 @@ def prepare_val_data(config, dataset_def, single_file=False):
     ycand_val = np.concatenate(ycands)
 
     return X_val, ygen_val, ycand_val
+
+
+def get_heptfds_dataset(config, global_batch_size=None, n_train=None, n_test=None):
+    cds = config["dataset"]
+
+    if global_batch_size is None:
+        global_batch_size = config['setup']['batch_size']
+
+    if cds['schema'] == "cms":
+        dsf = CMSDatasetFactory(config)
+    elif cds['schema'] == "delphes":
+        dsf = DelphesDatasetFactory(config)
+    else:
+        raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
+
+    ds_train, ds_info = dsf.get_dataset("train")
+    ds_test, _ = dsf.get_dataset("test")
+    ds_train = ds_train.batch(global_batch_size)
+    ds_test = ds_test.batch(global_batch_size)
+
+    ds_train = ds_train.map(dsf.get_map_to_supervised())
+    ds_test = ds_test.map(dsf.get_map_to_supervised())
+
+    if n_train is not None:
+        ds_train = ds_train.take(n_train)
+    if n_test is not None:
+        ds_test = ds_test.take(n_test)
+
+    return ds_train, ds_test, ds_info
 
 
 def set_config_loss(config, trainable):

@@ -27,7 +27,7 @@ from pathlib import Path
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
-
+import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
 
@@ -60,22 +60,29 @@ def plot_to_image(figure):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1, comet_experiment=None):
+    def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
         super(CustomCallback, self).__init__()
-        self.X = X
-        self.y = y
         self.plot_freq = plot_freq
         self.comet_experiment = comet_experiment
 
-        self.dataset_def = dataset_def
+        self.X = []
+        self.ytrue = {}
+        for inputs, targets, weights in tfds.as_numpy(dataset):
+            self.X.append(inputs)
+            for target_name in targets.keys():
+                if not (target_name in self.ytrue):
+                    self.ytrue[target_name] = []
+                self.ytrue[target_name].append(targets[target_name])
 
-        #transform the prediction target from an array into a dictionary for easier access
-        self.ytrue = dataset_transform(self.X, self.y, None)[1]
-        self.ytrue = {k: np.array(v) for k, v in self.ytrue.items()}
+        self.X = np.concatenate(self.X)
+        for target_name in self.ytrue.keys():
+            self.ytrue[target_name] = np.concatenate(self.ytrue[target_name])
         self.ytrue_id = np.argmax(self.ytrue["cls"], axis=-1)
+        self.dataset_info = dataset_info
+
+        self.num_output_classes = self.ytrue["cls"].shape[-1]
 
         self.outpath = outpath
-        self.num_output_classes = num_output_classes
 
         #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.color_map = {
@@ -134,7 +141,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def plot_event_visualization(self, epoch, outpath, ypred, ypred_id, msk, ievent=0):
 
-        X_eta, X_phi, X_energy = self.dataset_def.get_X_eta_phi_energy(self.X)
+        x_feat = self.dataset_info.metadata.get("x_features")
+        X_energy = self.X[:, :, x_feat.index("e")]
+        X_eta = self.X[:, :, x_feat.index("eta")]
+
+        if "phi" in x_feat:
+            X_phi = self.X[:, :, x_feat.index("phi")]
+        else:
+            X_phi = np.arctan2(
+                self.X[:, :, x_feat.index("sin_phi")],
+                self.Xs[:, :, x_feat.index("cos_phi")]
+            )
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
 
@@ -395,8 +412,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #run the model inference on the validation dataset
         ypred = self.model.predict(self.X, batch_size=1)
-        #ypred = self.model(self.X, training=False)
-        #ypred = {k: v.numpy() for k, v in ypred.items()}
 
         #choose the class with the highest probability as the prediction
         #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
@@ -438,15 +453,15 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
                 self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
 
-        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
+        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.ytrue, **ypred)
 
 def prepare_callbacks(
         callbacks_cfg, outdir,
-        X_val, y_val,
-        dataset_transform,
-        num_output_classes,
-        dataset_def,
-        comet_experiment=None):
+        dataset,
+        dataset_info,
+        comet_experiment=None
+    ):
+
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
@@ -477,10 +492,9 @@ def prepare_callbacks(
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
     cb = CustomCallback(
-        dataset_def, history_path,
-        X_val, y_val,
-        dataset_transform,
-        num_output_classes,
+        history_path,
+        dataset,
+        dataset_info,
         plot_freq=callbacks_cfg["plot_freq"],
         comet_experiment=comet_experiment
     )

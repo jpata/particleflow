@@ -219,3 +219,8 @@ raytune:
   hyperband:
     max_t: 100
     reduction_factor: 3
+
+delphes_pf:
+  version: 1.0.0
+  data_dir:
+  manual_dir:
