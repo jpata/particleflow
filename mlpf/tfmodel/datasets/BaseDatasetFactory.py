@@ -18,7 +18,6 @@ class BaseDatasetFactory:
             msk_elems = tf.cast(X[:, :, 0:1]!=0, tf.float32)
             msk_signal = tf.cast(y[:, :, 0:1]!=0, tf.float32)
 
-
             #inputs: X
             #targets: dict by classification (cls) and regression feature columns
             #weights: dict of weights for each target

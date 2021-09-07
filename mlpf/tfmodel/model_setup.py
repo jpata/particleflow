@@ -453,8 +453,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
                 self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
 
-        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.ytrue, **ypred)
-
 def prepare_callbacks(
         callbacks_cfg, outdir,
         dataset,
@@ -572,45 +570,25 @@ def make_dense(config, dtype):
     )
     return model
 
-def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
+def eval_model(model, dataset, config, outdir):
     import scipy
-    for ibatch in tqdm(range(max(1, X.shape[0]//global_batch_size)), desc="Evaluating model"):
-        nb1 = ibatch*global_batch_size
-        nb2 = (ibatch+1)*global_batch_size
+    ibatch = 0
+    for X, y, w in tqdm(dataset, desc="Evaluating model"):
 
-        y_pred = model.predict(X[nb1:nb2], batch_size=global_batch_size)
-        if type(y_pred) is dict:  # for e.g. when the model is multi_output
-            y_pred_raw_ids = y_pred['cls']
-        else:
-            y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
-        
-        #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-        # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-        # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
-
-        msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
-
-        #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-        # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
-        # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-        y_pred_raw_ids = y_pred_raw_ids*msk
-
-        y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
-
-        if type(y_pred) is dict:
-            y_pred_rest = np.concatenate([y_pred["charge"], y_pred["pt"], y_pred["eta"], y_pred["sin_phi"], y_pred["cos_phi"], y_pred["energy"]], axis=-1)
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred_rest], axis=-1)
-        else:
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        y_pred = model.predict(X)
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
+
+        outs = {}
+        for key in y.keys():
+            outs["true_{}".format(key)] = y[key]
+            outs["pred_{}".format(key)] = y_pred[key]
         np.savez(
             np_outfile,
-            X=X[nb1:nb2],
-            ygen=ygen[nb1:nb2],
-            ycand=ycand[nb1:nb2],
-            ypred=y_pred_id, ypred_raw=y_pred_raw_ids
+            X=X,
+            **outs
         )
+        ibatch += 1
 
 def freeze_model(model, config, outdir):
 
