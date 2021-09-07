@@ -152,9 +152,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         #FIXME: refactor this
         global_batch_size = config["setup"]["batch_size"]
 
-    dataset_def = get_dataset_def(config)
-    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
-
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
@@ -165,9 +162,14 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if "CPU" not in strategy.extended.worker_devices[0]:
         nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
         p = subprocess.Popen(shlex.split(nvidia_smi_call))
+    
     # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
     if maybe_global_batch_size is not None:
         global_batch_size = maybe_global_batch_size
+    
+    dataset_def = get_dataset_def(config)
+    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
+
 
     if experiment:
         experiment.set_name(outdir)

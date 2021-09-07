@@ -887,56 +887,19 @@ class PFNetDense(tf.keras.Model):
         self.output_dec.set_trainable_named(layer_names)
 
     # def train_step(self, data):
-    #     # Unpack the data. Its structure depends on your model and
-    #     # on what you pass to `fit()`.
     #     x, y, sample_weights = data
-
+    #     tf.print(x.shape)
     #     if not hasattr(self, "step"):
     #         self.step = 0
 
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
-
-    #         #regression losses computed only for correctly classified particles
-    #         pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-    #         true_cls = tf.argmax(y["cls"], axis=-1)
-    #         #msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
-    #         #sample_weights["energy"] *= msk_loss
-    #         #sample_weights["pt"] *= msk_loss
-    #         #sample_weights["eta"] *= msk_loss
-    #         #sample_weights["sin_phi"] *= msk_loss
-    #         #sample_weights["cos_phi"] *= msk_loss
-
-    #         for icls in [3, ]:
-    #             msk1 = (true_cls==icls)
-    #             msk2 = (pred_cls==icls)
-    #             import matplotlib
-    #             import matplotlib.pyplot as plt
-
-    #             plt.figure(figsize=(4,4))
-    #             minval = np.min(y["energy"][msk1].numpy().flatten())
-    #             maxval = np.max(y["energy"][msk1].numpy().flatten())
-    #             plt.scatter(
-    #                 y["energy"][msk1&msk2].numpy().flatten(),
-    #                 y_pred["energy"][msk1&msk2].numpy().flatten(),
-    #                 marker=".", alpha=0.5
-    #             )
-    #             plt.xlabel("true")
-    #             plt.ylabel("pred")
-    #             plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
-    #             plt.savefig("train_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
-    #             plt.close("all")
-
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
-    #     # Compute gradients
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)
-    #     # Update weights
     #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     # Update metrics (includes the metric that tracks the loss)
     #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value
 
     #     self.step += 1
     #     return {m.name: m.result() for m in self.metrics}
