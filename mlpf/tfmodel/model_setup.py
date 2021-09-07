@@ -384,6 +384,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
 
+        if self.plot_freq==0:
+            return
         if self.plot_freq>1:
             if epoch%self.plot_freq!=0 or epoch==1:
                 return

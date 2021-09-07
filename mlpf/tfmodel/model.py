@@ -719,21 +719,25 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         #compute node features for graph building
         x_dist = self.dist_activation(self.ffn_dist(x, training=training))
 
-        #x_dist = self.gaussian_noise(x_dist, training=training)
-
         #compute the element-to-element messages / distance matrix / graph structure
         if self.do_lsh:
             bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
+
+            #bins_split: (FIXME)
+            #x: (batch, bin, elem, node_feature)
+            #dm: (batch, bin, elem, elem, pair_feature)
+            #msk_f: (batch, bin, elem, elem, 1)
+
         else:
             dm = self.message_building_layer(x_dist, msk)
             msk_f = tf.expand_dims(tf.cast(msk, x.dtype), axis=-1)
             bins_split = None
+            #dm: (batch, elem, elem, pair_feature)
 
         #run the node update with message passing
         for msg in self.message_passing_layers:
+            
             x = msg((x, dm, msk_f))
-
-            #x = self.gaussian_noise(x, training=training)
 
             if self.dropout_layer:
                 x = self.dropout_layer(x, training=training)

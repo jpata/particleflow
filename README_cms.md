@@ -35,3 +35,13 @@ cd particleflow
 #run a small local test including data prep and training
 ./scripts/local_test_cms_pipeline.sh
 ```
+
+
+# ONNX export
+
+Using tensorflow=2.4.0, onnx=1.10.1, tf2onnx=1.8.5/50049d
+INFO - Using opset <onnx, 12>
+
+```
+singularity exec --nv ~/HEP-KBFI/singularity/base.simg python3 -m tf2onnx.convert --graphdef experiments/cms_20210906_145912_639176.joosep-desktop-work/model_frozen/frozen_graph.pb --output model.onnx --inputs x:0[-1,-1,15] --inputs x:0 --outputs Identity:0 --opset 12
+```
