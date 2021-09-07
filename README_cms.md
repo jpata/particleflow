@@ -36,6 +36,11 @@ cd particleflow
 ./scripts/local_test_cms_pipeline.sh
 ```
 
+# Dataset creation
+
+```
+PYTHONPATH=hep_tfds singularity exec -B /home -B /scratch-persistent /home/software/singularity/tf26.simg tfds build ./hep_tfds/heptfds/cms_pf --manual_dir ./data/TTbar_14TeV_TuneCUETP8M1_cfi/
+```
 
 # ONNX export
 
