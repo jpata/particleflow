@@ -25,7 +25,7 @@ python3 mlpf/pipeline.py data -c parameters/delphes.yaml
 
 cd hep_tfds
 echo "Building TFRecords files."
-tfds build heptfds/delphes_pf --overwrite --manual_dir data/ --data_dir data/
+tfds build heptfds/delphes_pf --overwrite --manual_dir data/
 cd ../
 sudo rm -rf hep_tfds
 echo "Removed hep_tfds repo."
