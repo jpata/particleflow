@@ -307,8 +307,8 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, 1) message matrix
     """
-    def call(self, x_msg_binned, training=False):
-        dm = tf.expand_dims(pairwise_gaussian_dist(x_msg_binned, x_msg_binned), axis=-1)
+    def call(self, x_msg_binned, msk, training=False):
+        dm = tf.expand_dims(pairwise_gaussian_dist(x_msg_binned*msk, x_msg_binned*msk), axis=-1)
         dm = tf.exp(-self.dist_mult*dm)
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
         return dm
@@ -320,10 +320,18 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
         self.num_layers = num_layers
         self.activation = getattr(tf.keras.activations, activation)
 
-        self.ffn_kernel = point_wise_feed_forward_network(
+        self.ffn_node = point_wise_feed_forward_network(
+            8,
+            self.hidden_dim,
+            kwargs.get("name") + "_" + "node",
+            num_layers=self.num_layers,
+            activation=self.activation
+        )
+
+        self.pair_kernel = point_wise_feed_forward_network(
             self.output_dim,
             self.hidden_dim,
-            kwargs.get("name") + "_" + "ffn",
+            kwargs.get("name") + "_" + "pair_kernel",
             num_layers=self.num_layers,
             activation=self.activation
         )
@@ -335,8 +343,11 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, output_dim) message matrix
     """
-    def call(self, x_msg_binned, training=False):
-        dm = pairwise_learnable_dist(x_msg_binned, x_msg_binned, self.ffn_kernel, training=training)
+    def call(self, x_msg_binned, msk, training=False):
+
+        node_proj = self.activation(self.ffn_node(x_msg_binned))*msk
+
+        dm = pairwise_learnable_dist(node_proj, node_proj, self.pair_kernel, training=training)
         dm = self.activation(dm)
         return dm
 
@@ -395,7 +406,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         #Run the node-to-node kernel (distance computation / graph building / attention)
-        dm = self.kernel(x_msg_binned, training=training)
+        dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
 
         #remove the masked points row-wise and column-wise
         dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
