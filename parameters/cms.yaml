@@ -101,9 +101,9 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 0
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 128
   combined_graph_layer:
     bin_size: 160
     max_num_bins: 100
@@ -158,7 +158,7 @@ parameters:
     layernorm: yes
     mask_reg_cls0: no
 
-    energy_multimodal: yes
+    energy_multimodal: no
 
   skip_connection: yes
   debug: no

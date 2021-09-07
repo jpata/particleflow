@@ -79,7 +79,8 @@ def main(config):
 
     x = np.random.randn(1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"])
     ypred = concat_pf([model_pf(x), x])
-    model_pf.load_weights("./experiments/cms_20210902_172254_670759.gpu0.local/weights/weights-50-45.108299.hdf5")
+    model_pf.load_weights("./experiments/cms_20210906_150454_299380.gpu0.local/weights/weights-30-25.802000.hdf5", by_name=True)
+    #model_pf.load_weights("./logs/weights-02.hdf5", by_name=True)
 
     model_disc = make_disc_model(config, ypred.shape[-1])
 
@@ -149,14 +150,13 @@ def main(config):
         return tf.keras.losses.binary_crossentropy(x,y, from_logits=True)
 
     #The MLPF reconstruction model (generator) is optimized to confuse the discriminator
-    optimizer1 = tf.keras.optimizers.Adam(lr=0.000014)
-    model_pf.trainable = True
+    optimizer1 = tf.keras.optimizers.Adam(lr=1e-5)
     model_disc.trainable = False
     m1.compile(loss=loss, optimizer=optimizer1)
     m1.summary()
 
     #The discriminator model (adversarial) is optimized to distinguish between the true target and MLPF-reconstructed events
-    optimizer2 = tf.keras.optimizers.Adam(lr=0.00001)
+    optimizer2 = tf.keras.optimizers.Adam(lr=1e-5)
     model_pf.trainable = False
     model_disc.trainable = True
     m2.compile(loss=loss, optimizer=optimizer2)
@@ -188,11 +188,11 @@ def main(config):
             # mlpf_train_inputs = mlpf_train_inputs + tf.random.normal(mlpf_train_inputs.shape, stddev=0.0001)
 
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
-            mlpf_train_disc_targets = tf.concat([batch_size*[0.9], batch_size*[0.1]], axis=0)
+            mlpf_train_disc_targets = tf.concat([batch_size*[0.99], batch_size*[0.01]], axis=0)
             loss2 = m2.train_on_batch([mlpf_train_inputs, mlpf_train_outputs], mlpf_train_disc_targets)
 
             #Train the MLPF reconstruction (generative) model with an inverted target
-            disc_train_disc_targets = tf.concat([batch_size*[0.9]], axis=0)
+            disc_train_disc_targets = tf.concat([batch_size*[1.0]], axis=0)
             loss1 = m1.train_on_batch(xb, disc_train_disc_targets)
 
             loss_tot1 += loss1
@@ -219,11 +219,11 @@ def main(config):
             #true target particles have a classification target of 1, MLPF reconstructed a target of 0
             mlpf_train_inputs = tf.concat([xb, xb], axis=0)
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
-            mlpf_train_disc_targets = tf.concat([batch_size*[0.9], batch_size*[0.1]], axis=0)
+            mlpf_train_disc_targets = tf.concat([batch_size*[0.99], batch_size*[0.01]], axis=0)
             loss2 = m2.test_on_batch([mlpf_train_inputs, mlpf_train_outputs], mlpf_train_disc_targets)
 
             #Train the MLPF reconstruction (generative) model with an inverted target
-            disc_train_disc_targets = tf.concat([batch_size*[0.9]], axis=0)
+            disc_train_disc_targets = tf.concat([batch_size*[1.0]], axis=0)
             loss1 = m1.test_on_batch(xb, disc_train_disc_targets)
 
             p = m2.predict_on_batch([mlpf_train_inputs, mlpf_train_outputs])
