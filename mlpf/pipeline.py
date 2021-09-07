@@ -276,8 +276,6 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
-    # Switch off multi-output for the evaluation for backwards compatibility
-    config["setup"]["multi_output"] = False
 
     if evaluation_dir is None:
         eval_dir = str(Path(train_dir) / "evaluation")
@@ -294,17 +292,10 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         model_dtype = tf.dtypes.float32
 
     dataset_def = get_dataset_def(config)
-
-    if not (validation_files is None):
-        dataset_def.val_filelist = glob.glob(str(validation_files))
-
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
+    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size)
 
     model = make_model(config, model_dtype)
-
-    # Evaluate model once to build the layers
-    print(X_val.shape)
-    model(tf.cast(X_val[:1], model_dtype))
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
     # need to load the weights in the same trainable configuration as the model was set up
     configure_model_weights(model, config["setup"].get("weights_config", "all"))
@@ -314,10 +305,8 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    model(tf.cast(X_val[:1], model_dtype))
 
-    model.compile()
-    eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
+    eval_model(model, ds_test, config, eval_dir)
     freeze_model(model, config, train_dir)
 
 @main.command()
