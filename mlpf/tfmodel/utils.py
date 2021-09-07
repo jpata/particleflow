@@ -174,7 +174,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             model_builder,
             objective=cfg_rand["objective"],
             max_trials=cfg_rand["max_trials"],
-            project_name="mlpf",
+            project_name=outdir,
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "bayesian":
@@ -185,7 +185,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             objective=cfg_bayes["objective"],
             max_trials=cfg_bayes["max_trials"],
             num_initial_points=cfg_bayes["num_initial_points"],
-            project_name="mlpf",
+            project_name=outdir,
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "hyperband":

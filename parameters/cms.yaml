@@ -23,7 +23,7 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 0.01
   pt_loss_coef: 0.0001
   eta_loss_coef: 100.0
@@ -59,7 +59,7 @@ setup:
   batch_size: 2
   num_events_train: 80000
   num_events_test: 10000
-  num_epochs: 100
+  num_epochs: 10
   num_val_files: 10
   dtype: float32
   trainable:
@@ -184,7 +184,7 @@ callbacks:
     save_weights_only: yes
     monitor: "val_loss"
     save_best_only: no
-  plot_freq: 10
+  plot_freq: 0
   tensorboard:
     dump_history: yes
     hist_freq: 1
@@ -200,7 +200,7 @@ hypertune:
     num_initial_points: 2
   hyperband:
     objective: val_loss
-    max_epochs: 100
+    max_epochs: 10
     factor: 3
     iterations: 1
     executions_per_trial: 1

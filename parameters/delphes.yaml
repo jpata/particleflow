@@ -91,6 +91,9 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: default
+  node_update_mode: concat
+  do_node_encoding: no
+  node_encoding_hidden_dim: 128
   combined_graph_layer:
     bin_size: 640
     max_num_bins: 100
@@ -99,6 +102,8 @@ parameters:
     num_node_messages: 1
     dropout: 0.0
     dist_activation: linear
+    ffn_dist_num_layers: 1
+    ffn_dist_hidden_dim: 128
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
