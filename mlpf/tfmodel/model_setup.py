@@ -590,10 +590,15 @@ def eval_model(model, dataset, config, outdir):
         )
         ibatch += 1
 
-def freeze_model(model, config, outdir):
+def freeze_model(config, weights, outdir):
 
-    model.compile(loss="mse", optimizer="adam")
-    model.save(outdir + "/model_full", save_format="tf")
+    config["setup"]["multi_output"] = False
+    model = make_model(config, getattr(tf.dtypes, config["setup"]["dtype"]))
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    model.load_weights(weights, by_name=True)
+
+    # model.compile(loss="mse", optimizer="adam")
+    # model.save(outdir + "/model_full", save_format="tf")
 
     full_model = tf.function(lambda x: model(x, training=False))
     full_model = full_model.get_concrete_function(

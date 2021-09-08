@@ -55,7 +55,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
+  lr: 1e-4
   batch_size: 5
   num_events_train: 90000
   num_events_test: 9900
@@ -100,7 +100,7 @@ parameters:
     distance_dim: 64
     layernorm: no
     dropout: 0.0
-    dist_activation: gelu
+    dist_activation: elu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
     kernel:
@@ -117,7 +117,7 @@ parameters:
     node_message:
       type: GHConvDense
       output_dim: 256
-      activation: gelu
+      activation: elu
       normalize_degrees: yes
     #node_message:
     #  type: NodeMessageLearnable
@@ -125,11 +125,11 @@ parameters:
     #  hidden_dim: 128
     #  num_layers: 1
     #  activation: gelu
-    activation: gelu
+    activation: elu
   num_graph_layers_common: 2
   num_graph_layers_energy: 2
   output_decoding:
-    activation: gelu
+    activation: elu
     regression_use_classification: yes
     dropout: 0.0
 
@@ -157,7 +157,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 3
-    layernorm: yes
+    layernorm: no
     mask_reg_cls0: no
 
     energy_multimodal: no
