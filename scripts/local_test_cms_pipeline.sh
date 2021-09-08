@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+export PYTHONPATH=`pwd`/hep_tfds
 
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 
@@ -29,19 +30,7 @@ mv local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl local_test_
 
 mkdir -p experiments
 
-echo "Cloning hep_tfds."
-git clone https://github.com/jpata/hep_tfds.git
-echo "Installing hep_tfds."
-cd hep_tfds
-sudo python3 setup.py install
-cd ..
-
-cd hep_tfds
-echo "Building TFRecords files."
-tfds build heptfds/cms_pf --manual_dir ../local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
-cd ..
-sudo rm -rf hep_tfds
-echo "Removed hep_tfds repo."
+tfds build hep_tfds/heptfds/cms_pf --manual_dir ../local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5
