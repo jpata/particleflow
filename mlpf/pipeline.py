@@ -284,6 +284,7 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         eval_dir = str(Path(train_dir) / "evaluation")
     else:
         eval_dir = evaluation_dir
+
     Path(eval_dir).mkdir(parents=True, exist_ok=True)
 
     if config["setup"]["dtype"] == "float16":
@@ -309,8 +310,8 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
     
-    freeze_model(config, weights, train_dir)
-    #eval_model(model, ds_test, config, eval_dir)
+    eval_model(model, ds_test, config, eval_dir)
+    freeze_model(model, config, ds_test.take(1), train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")
