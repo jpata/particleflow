@@ -1,0 +1,3 @@
+[submodule "hep_tfds"]
+	path = hep_tfds
+	url = ./hep_tfds
