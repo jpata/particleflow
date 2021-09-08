@@ -308,9 +308,9 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-
-    eval_model(model, ds_test, config, eval_dir)
-    freeze_model(model, config, train_dir)
+    
+    freeze_model(config, weights, train_dir)
+    #eval_model(model, ds_test, config, eval_dir)
 
 @main.command()
 @click.help_option("-h", "--help")
