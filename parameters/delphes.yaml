@@ -111,14 +111,13 @@ parameters:
     node_message:
       type: GHConvDense
       output_dim: 256
-      activation: gelu
+      activation: elu
       normalize_degrees: yes
-    hidden_dim: 128
-    activation: gelu
+    activation: elu
   num_graph_layers_common: 3
   num_graph_layers_energy: 3
   output_decoding:
-    activation: gelu
+    activation: elu
     regression_use_classification: yes
     dropout: 0.0
 
