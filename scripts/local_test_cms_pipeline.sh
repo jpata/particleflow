@@ -50,6 +50,3 @@ ls ./experiments/cms_*/weights/
 
 #Generate the pred.npz file of predictions
 python3 mlpf/pipeline.py evaluate -c parameters/cms.yaml -t ./experiments/cms_*
-
-#Load the model
-python3 scripts/test_load_tfmodel.py ./experiments/cms_*/model_frozen/frozen_graph.pb

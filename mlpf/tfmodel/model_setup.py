@@ -24,6 +24,12 @@ import platform
 import mplhep
 from tqdm import tqdm
 from pathlib import Path
+
+import tf2onnx
+import sklearn
+import sklearn.metrics
+import onnxruntime
+
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
@@ -590,31 +596,43 @@ def eval_model(model, dataset, config, outdir):
         )
         ibatch += 1
 
-def freeze_model(config, weights, outdir):
+def freeze_model(model, config, ds_test, outdir):
+    bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+    num_features = config["dataset"]["num_input_features"]
+    num_out_classes = config["dataset"]["num_output_classes"]
 
-    config["setup"]["multi_output"] = False
-    model = make_model(config, getattr(tf.dtypes, config["setup"]["dtype"]))
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-    model.load_weights(weights, by_name=True)
+    def model_output(ret):
+        return tf.concat([ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1)
+    full_model = tf.function(lambda x: model_output(model(x, training=False)))
 
-    # model.compile(loss="mse", optimizer="adam")
-    # model.save(outdir + "/model_full", save_format="tf")
+    #we need to use opset 12 for the version of ONNXRuntime in CMSSW
+    #the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
+    model_proto, _ = tf2onnx.convert.from_function(
+        full_model,
+        opset=12,
+        input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
+        output_path="model.onnx"
+    )
 
-    full_model = tf.function(lambda x: model(x, training=False))
-    full_model = full_model.get_concrete_function(
-        tf.TensorSpec((None, None, config["dataset"]["num_input_features"]), tf.float32))
-    from tensorflow.python.framework import convert_to_constants
-    frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
-    graph = tf.compat.v1.graph_util.remove_training_nodes(frozen_func.graph.as_graph_def())
-    
-    tf.io.write_graph(graph_or_graph_def=graph,
-      logdir="{}/model_frozen".format(outdir),
-      name="frozen_graph.pb",
-      as_text=False)
-    tf.io.write_graph(graph_or_graph_def=graph,
-      logdir="{}/model_frozen".format(outdir),
-      name="frozen_graph.pbtxt",
-      as_text=True)
+    ds = list(tfds.as_numpy(ds_test.take(1)))
+    X = ds[0][0]
+    y = ds[0][1]
+
+    onnx_sess = onnxruntime.InferenceSession("model.onnx")
+    pred_onx = onnx_sess.run(None, {"x:0": X})[0]
+    pred_tf = model(X)
+
+    msk = X[:, :, 0]!=0
+    true_id = np.argmax(y["cls"][:, :, :num_out_classes], axis=-1)[msk]
+    pred_id_onx = np.argmax(pred_onx[:, :, :num_out_classes], axis=-1)[msk]
+    pred_id_tf = np.argmax(pred_tf["cls"], axis=-1)[msk]
+
+    cm1 = sklearn.metrics.confusion_matrix(true_id, pred_id_onx, labels=range(num_out_classes))
+    cm2 = sklearn.metrics.confusion_matrix(true_id, pred_id_tf, labels=range(num_out_classes))
+
+    print(cm1)
+    print(cm2)
+
 
 class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
     def __init__(self, use_weights=False, **kwargs):

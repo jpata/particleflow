@@ -31,7 +31,12 @@ jobs:
           sudo apt install python3 python3-pip wget
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
-          sudo python3 -m pip install tensorflow==2.4 setGPU sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods awkward0 keras-tuner networkx tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]'
+          sudo python3 -m pip install tensorflow==2.4 setGPU \
+            sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods \
+            awkward0 keras-tuner networkx \
+            tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
+            tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
+            tf2onnx onnxruntime
       - name: Run CMS TF model using the pipeline
         run: ./scripts/local_test_cms_pipeline.sh
 
