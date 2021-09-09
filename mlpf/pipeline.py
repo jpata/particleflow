@@ -434,27 +434,13 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
 
     dataset_def = get_dataset_def(config)
-    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
-
-    #FIXME: split up training/test and validation dataset and parameters
-    dataset_def.padded_num_elem_size = 6400
-
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
-
-    validation_particles = None
-    if config["dataset"]["target_particles"] == "cand":
-        validation_particles = ycand_val
-    elif config["dataset"]["target_particles"] == "gen":
-        validation_particles = ygen_val
+    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        X_val,
-        validation_particles,
-        dataset_transform,
-        config["dataset"]["num_output_classes"],
-        dataset_def,
+        ds_test.take(10),
+        ds_info,
     )
 
     callbacks.append(optim_callbacks)
@@ -464,9 +450,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     tuner.search_space_summary()
 
     tuner.search(
-        ds_train_r,
+        ds_train.repeat(),
         epochs=n_epochs,
-        validation_data=ds_test_r,
+        validation_data=ds_test.repeat(),
         steps_per_epoch=n_train // global_batch_size,
         validation_steps=n_test // global_batch_size,
         #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
