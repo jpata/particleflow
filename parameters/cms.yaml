@@ -55,14 +55,14 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-3
   batch_size: 5
   num_events_train: 90000
   num_events_test: 9900
-  num_epochs: 50
+  num_epochs: 100
   dtype: float32
   trainable:
-  classification_loss_type: categorical_cross_entropy
+  classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 

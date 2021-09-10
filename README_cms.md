@@ -39,14 +39,8 @@ cd particleflow
 # Dataset creation
 
 ```
+mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/raw data/TTbar_14TeV_TuneCUETP8M1_cfi/
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/val data/TTbar_14TeV_TuneCUETP8M1_cfi/
 PYTHONPATH=hep_tfds singularity exec -B /home -B /scratch-persistent /home/software/singularity/tf26.simg tfds build ./hep_tfds/heptfds/cms_pf --manual_dir ./data/TTbar_14TeV_TuneCUETP8M1_cfi/
-```
-
-# ONNX export
-
-Using tensorflow=2.4.0, onnx=1.10.1, tf2onnx=1.8.5/50049d
-INFO - Using opset <onnx, 12>
-
-```
-singularity exec --nv ~/HEP-KBFI/singularity/base.simg python3 -m tf2onnx.convert --graphdef experiments/cms_20210906_145912_639176.joosep-desktop-work/model_frozen/frozen_graph.pb --output model.onnx --inputs x:0[-1,-1,15] --inputs x:0 --outputs Identity:0 --opset 12
 ```
