@@ -72,40 +72,28 @@ from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
+def customize_gun_sample(config):
+
+    config["dataset"]["classification_loss_coef"] = 0.0
+    config["dataset"]["charge_loss_coef"] = 0.0
+    config["dataset"]["eta_loss_coef"] = 0.0
+    config["dataset"]["sin_phi_loss_coef"] = 0.0
+    config["dataset"]["cos_phi_loss_coef"] = 0.0
+    config["setup"]["trainable"] = "regression"
+
+    config["training_dataset"] = "cms_pf_single_pi"
+    config["testing_dataset"] = "cms_pf_single_pi"
+    return config
+
+customization_functions = {
+    "gun_sample": customize_gun_sample
+}
+
 
 @click.group()
 @click.help_option("-h", "--help")
 def main():
     pass
-
-
-@main.command()
-@click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("--customize", help="customization function", type=str, default=None)
-def data(config, customize):
-
-    config, _, _, _, _, _, _ = parse_config(config)
-
-    if customize:
-        config = customization_functions[customize](config)
-
-    cds = config["dataset"]
-
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path"),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds.get("processed_path"),
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"]
-    )
-
-    dataset_def.process(
-        config["dataset"]["num_files_per_chunk"]
-    )
         
 
 @main.command()
@@ -328,6 +316,7 @@ def find_lr(config, outdir, figname, logscale):
     strategy, num_gpus = get_strategy()
 
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
+    ds_train = ds_train.take(1)
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -367,7 +356,7 @@ def find_lr(config, outdir, figname, logscale):
         callbacks = [lr_finder]
 
         model.fit(
-            ds_train,
+            ds_train.repeat(),
             epochs=max_steps,
             callbacks=callbacks,
             steps_per_epoch=1,
@@ -375,26 +364,6 @@ def find_lr(config, outdir, figname, logscale):
 
         lr_finder.plot(save_dir=outdir, figname=figname, log_scale=logscale)
 
-
-def customize_gun_sample(config):
-
-    #FIXME: must be at least 2x bin_size
-    config["dataset"]["padded_num_elem_size"] = 1280
-
-    config["dataset"]["processed_path"] = "data/SinglePiFlatPt0p7To10_cfi/tfr_cand/*.tfrecords"
-    config["dataset"]["raw_path"] = "data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl*"
-    config["dataset"]["classification_loss_coef"] = 0.0
-    config["dataset"]["charge_loss_coef"] = 0.0
-    config["dataset"]["eta_loss_coef"] = 0.0
-    config["dataset"]["sin_phi_loss_coef"] = 0.0
-    config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "regression"
-    config["setup"]["batch_size"] = 5*config["setup"]["batch_size"]
-    return config
-
-customization_functions = {
-    "gun_sample": customize_gun_sample
-}
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -407,33 +376,38 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-o", "--outdir", help="output dir", type=click.Path())
+@click.option("-c", "--config", help="configuration file", type=click.Path(), required=True)
+@click.option("-o", "--outdir", help="output dir", type=click.Path(), required=True)
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
 def hypertune(config, outdir, ntrain, ntest, recreate):
     config_file_path = config
-    config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
+    config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
     # Override number of epochs with max_epochs from Hyperband config if specified
     if config["hypertune"]["algorithm"] == "hyperband":
-        n_epochs = config["hypertune"]["hyperband"]["max_epochs"]
+        config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
-    total_steps = n_epochs * n_train // global_batch_size
+    strategy, num_gpus = get_strategy()
+ 
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
+    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
+    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
-    model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
+    num_train_steps = 0
+    for _ in ds_train:
+        num_train_steps += 1
+    num_test_steps = 0
+    for _ in ds_test:
+        num_test_steps += 1
 
-    dataset_def = get_dataset_def(config)
-    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
+    model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        ds_test.take(10),
+        ds_val,
         ds_info,
     )
 
@@ -445,11 +419,10 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
     tuner.search(
         ds_train.repeat(),
-        epochs=n_epochs,
+        epochs=config["setup"]["num_epochs"],
         validation_data=ds_test.repeat(),
-        steps_per_epoch=n_train // global_batch_size,
-        validation_steps=n_test // global_batch_size,
-        #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
         callbacks=callbacks,
     )
     print("Hyperparameter search complete.")
