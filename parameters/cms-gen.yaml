@@ -23,17 +23,13 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 0.01
   pt_loss_coef: 0.0001
   eta_loss_coef: 100.0
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 0.0001
-  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_gen/*.tfrecords
-  num_files_per_chunk: 1
-  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
     type: Huber
   pt_loss:
@@ -56,15 +52,13 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 2
-  num_events_train: 80000
-  num_events_test: 9000
-  num_epochs: 50
-  num_val_files: 10
+  num_events_train: 90000
+  num_events_test: 9900
+  num_events_validation: 100
+  num_epochs: 100
   dtype: float32
-  trainable: classification
-  classification_loss_type: categorical_cross_entropy #categorical_cross_entropy, sigmoid_focal_crossentropy
-  classification_label_smoothing: 0.0
+  trainable:
+  classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
@@ -90,56 +84,48 @@ onecycle:
   div_factor: 25.0
   final_div: 100000.0
 
-sample_weights:
-  cls: none
-  charge: signal_only
-  pt: signal_only_inverse_sqrt
-  eta: signal_only_inverse_sqrt
-  sin_phi: signal_only_inverse_sqrt
-  cos_phi: signal_only_inverse_sqrt
-  energy: signal_only_inverse_sqrt
-
 parameters:
   model: gnn_dense
   input_encoding: cms
   node_update_mode: concat
   do_node_encoding: no
-  node_encoding_hidden_dim: 0
+  node_encoding_hidden_dim: 128
   combined_graph_layer:
     bin_size: 160
-    max_num_bins: 100
+    max_num_bins: 200
     distance_dim: 64
-    layernorm: yes
+    layernorm: no
     dropout: 0.0
-    dist_activation: gelu
+    dist_activation: elu
     ffn_dist_num_layers: 1
     ffn_dist_hidden_dim: 128
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
-    # kernel:
-    #   type: NodePairTrainableKernel
-    #   output_dim: 8
-    #   hidden_dim: 64
-    #   num_layers: 2
+    #kernel:
+    #  type: NodePairTrainableKernel
+    #  output_dim: 4
+    #  hidden_dim_pair: 32
+    #  hidden_dim_node: 128
+    #  num_layers: 1
+    num_node_messages: 1
     node_message:
       type: GHConvDense
       output_dim: 256
-      activation: gelu
+      activation: elu
       normalize_degrees: yes
-    # node_message:
-    #   type: NodeMessageLearnable
-    #   output_dim: 128
-    #   hidden_dim: 256
-    #   num_layers: 1
-    #   activation: gelu
-    num_node_messages: 1
-    activation: gelu
-  num_graph_layers_common: 4
+    #node_message:
+    #  type: NodeMessageLearnable
+    #  output_dim: 128
+    #  hidden_dim: 128
+    #  num_layers: 1
+    #  activation: gelu
+    activation: elu
+  num_graph_layers_common: 2
   num_graph_layers_energy: 2
   output_decoding:
-    activation: gelu
+    activation: elu
     regression_use_classification: yes
     dropout: 0.0
 
@@ -154,23 +140,23 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 1024
+    id_hidden_dim: 512
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 512
+    energy_hidden_dim: 256
 
     id_num_layers: 3
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
     phi_num_layers: 2
-    energy_num_layers: 2
+    energy_num_layers: 3
     layernorm: yes
     mask_reg_cls0: no
 
-    energy_multimodal: yes
+    energy_multimodal: no
 
   skip_connection: yes
   debug: no
@@ -184,7 +170,7 @@ callbacks:
     save_weights_only: yes
     monitor: "val_loss"
     save_best_only: no
-  plot_freq: 10
+  plot_freq: 0
   tensorboard:
     dump_history: yes
     hist_freq: 1
@@ -200,7 +186,7 @@ hypertune:
     num_initial_points: 2
   hyperband:
     objective: val_loss
-    max_epochs: 100
+    max_epochs: 10
     factor: 3
     iterations: 1
     executions_per_trial: 1
@@ -237,3 +223,19 @@ raytune:
   hyperband:
     max_t: 100
     reduction_factor: 3
+
+training_dataset: cms_pf_ttbar
+testing_dataset: cms_pf_ttbar
+validation_dataset: cms_pf_ttbar
+
+datasets: 
+  cms_pf_ttbar:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 5
+  cms_pf_single_pi:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 50
