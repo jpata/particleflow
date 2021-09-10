@@ -63,9 +63,9 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(1, 6400, 12), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(1, 6400, 7), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(1, 6400, 7), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(6400, 12), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
                 }
             ),
             # If there's a common (input, target) tuple from the
@@ -105,15 +105,12 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
     def _generate_examples(self, path):
         """Yields examples."""
         for fi in path.glob("*.pkl.bz2"):
-            X, ygen, ycand = self.prepare_data_delphes((str(fi)))
-            for ii in range(X[0].shape[0]):
-                x = [X[0][ii]]
-                yg = [ygen[0][ii]]
-                yc = [ycand[0][ii]]
-                yield str(fi) + "_" + str(ii), {
-                    "X": x,
-                    "ygen": yg,
-                    "ycand": yc,
+            X, ygen, ycand = self.prepare_data_delphes(str(fi))
+            for ibatch in range(X.shape[0]): 
+                yield str(fi) + "_" + str(ibatch), {
+                    "X": X[ibatch],
+                    "ygen": ygen[ibatch],
+                    "ycand": ycand[ibatch],
                 }
 
     def prepare_data_delphes(self, fname):
@@ -147,9 +144,12 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             ygens.append(ygen)
             ycands.append(ycand)
 
-        X = [np.concatenate(Xs)]
-        ygen = [np.concatenate(ygens)]
-        ycand = [np.concatenate(ycands)]
+        X = np.concatenate(Xs)
+        ygen = np.concatenate(ygens)
+        ycand = np.concatenate(ycands)
+
+        print(X.shape, ygen.shape, ycand.shape)
+
         del data
         return X, ygen, ycand
 
