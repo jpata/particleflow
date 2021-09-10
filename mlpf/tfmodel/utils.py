@@ -26,7 +26,7 @@ def load_config(config_file_path):
     return cfg
 
 
-def parse_config(config, ntrain=None, ntest=None, weights=None):
+def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
     config_file_stem = Path(config).stem
     config = load_config(config)
 
@@ -38,6 +38,9 @@ def parse_config(config, ntrain=None, ntest=None, weights=None):
 
     if ntest:
         config["setup"]["num_events_test"] = ntest
+
+    if nepochs:
+        config["setup"]["num_epochs"] = nepochs
 
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True

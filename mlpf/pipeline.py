@@ -139,7 +139,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem = parse_config(
-        config, ntrain, ntest, weights
+        config, ntrain=ntrain, ntest=ntest, nepochs=nepochs, weights=weights
     )
 
     if plot_freq:
@@ -322,18 +322,12 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 def find_lr(config, outdir, figname, logscale):
     """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
     which an appropriate LR-range can be determined"""
-    config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
-    ds_train, _ = get_heptfds_dataset(config)
+    config, _ = parse_config(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    strategy, num_gpus = get_strategy()
 
-    # If using more than 1 GPU, we scale the batch size by the number of GPUs
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
-
-    dataset_def = get_dataset_def(config)
-    X_val, _, _ = prepare_val_data(config, dataset_def, single_file=True)
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -349,7 +343,7 @@ def find_lr(config, outdir, figname, logscale):
         config = set_config_loss(config, config["setup"]["trainable"])
 
         # Run model once to build the layers
-        model(tf.cast(X_val[:1], model_dtype))
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         configure_model_weights(model, config["setup"]["trainable"])
 
