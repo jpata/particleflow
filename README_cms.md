@@ -32,15 +32,22 @@ In case the above links do not load, the presentations are also mirrored on the 
 git clone https://github.com/jpata/particleflow.git
 cd particleflow
 
-#run a small local test including data prep and training
-./scripts/local_test_cms_pipeline.sh
+git submodule init
+git submodule setup
+
+#Download the training datasets, about 60GB
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/tensorflow_datasets ~/
+
+#Run the training, multi-GPU support on the same machine is available
+CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/cms.yaml
 ```
 
 # Dataset creation
 
+Generate TFRecord datasets from the pickle files
 ```
 mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/raw data/TTbar_14TeV_TuneCUETP8M1_cfi/
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/val data/TTbar_14TeV_TuneCUETP8M1_cfi/
-PYTHONPATH=hep_tfds singularity exec -B /home -B /scratch-persistent /home/software/singularity/tf26.simg tfds build ./hep_tfds/heptfds/cms_pf --manual_dir ./data/TTbar_14TeV_TuneCUETP8M1_cfi/
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi data/
+tfds build ./hep_tfds/heptfds/cms_pf/ttbar --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singlepi --manual_dir data
 ```
