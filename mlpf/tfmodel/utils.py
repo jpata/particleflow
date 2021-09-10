@@ -29,25 +29,23 @@ def load_config(config_file_path):
 def parse_config(config, ntrain=None, ntest=None, weights=None):
     config_file_stem = Path(config).stem
     config = load_config(config)
+
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-    global_batch_size = config["setup"]["batch_size"]
     n_epochs = config["setup"]["num_epochs"]
+    
     if ntrain:
-        n_train = ntrain
-    else:
-        n_train = config["setup"]["num_events_train"]
+        config["setup"]["num_events_train"] = ntrain
+
     if ntest:
-        n_test = ntest
-    else:
-        n_test = config["setup"]["num_events_test"]
+        config["setup"]["num_events_test"] = ntest
 
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True
 
     if weights is None:
-        weights = config["setup"]["weights"]
+        config["setup"]["weights"] = weights
 
-    return config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights
+    return config, config_file_stem
 
 
 def create_experiment_dir(prefix=None, suffix=None):
@@ -90,7 +88,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy(global_batch_size):
+def get_strategy():
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
@@ -104,14 +102,13 @@ def get_strategy(global_batch_size):
     print("num_gpus=", num_gpus)
     if num_gpus > 1:
         strategy = tf.distribute.MirroredStrategy()
-        global_batch_size = num_gpus * global_batch_size
     elif num_gpus == 1:
         strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     elif num_gpus == 0:
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
-    return strategy, global_batch_size
+    return strategy, num_gpus
 
 
 def get_lr_schedule(config, steps):
@@ -297,10 +294,6 @@ def get_dataset_def(config):
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
-        validation_file_path=cds["validation_file_path"],
         schema=cds["schema"],
     )
 
@@ -378,11 +371,8 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
-def get_heptfds_dataset(config, global_batch_size=None, n_train=None, n_test=None):
+def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events):
     cds = config["dataset"]
-
-    if global_batch_size is None:
-        global_batch_size = config['setup']['batch_size']
 
     if cds['schema'] == "cms":
         dsf = CMSDatasetFactory(config)
@@ -391,20 +381,17 @@ def get_heptfds_dataset(config, global_batch_size=None, n_train=None, n_test=Non
     else:
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
 
-    ds_train, ds_info = dsf.get_dataset("train")
-    ds_test, _ = dsf.get_dataset("test")
-    ds_train = ds_train.batch(global_batch_size)
-    ds_test = ds_test.batch(global_batch_size)
+    ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
+    bs = config["datasets"][dataset_name]["batch_per_gpu"]
+    if num_gpus>1:
+        bs = bs*num_gpus
 
-    ds_train = ds_train.map(dsf.get_map_to_supervised())
-    ds_test = ds_test.map(dsf.get_map_to_supervised())
+    ds = ds.take(num_events)
+    ds = ds.batch(bs)
 
-    if n_train is not None:
-        ds_train = ds_train.take(n_train)
-    if n_test is not None:
-        ds_test = ds_test.take(n_test)
+    ds = ds.map(dsf.get_map_to_supervised())
 
-    return ds_train, ds_test, ds_info
+    return ds, ds_info
 
 
 def set_config_loss(config, trainable):
