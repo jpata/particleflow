@@ -89,11 +89,11 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         qcd_dir = delphes_dir / "pythia8_qcd/val"
 
         if not ttbar_dir.exists():
-            ttbar_dir.mkdir()
+            ttbar_dir.mkdir(parents=True)
             for ttbar_file in delphes_dir.glob("*ttbar*.pkl.bz2"):
                 ttbar_file.rename(ttbar_dir / ttbar_file.name)
         if not qcd_dir.exists():
-            qcd_dir.mkdir()
+            qcd_dir.mkdir(parents=True)
             for qcd_file in delphes_dir.glob("*qcd*.pkl.bz2"):
                 qcd_file.rename(qcd_dir / qcd_file.name)
 
