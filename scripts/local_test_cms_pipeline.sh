@@ -30,7 +30,7 @@ mv local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl local_test_
 
 mkdir -p experiments
 
-tfds build hep_tfds/heptfds/cms_pf --manual_dir local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
+tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 
 #Run a simple training on a few events
 python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5

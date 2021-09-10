@@ -138,19 +138,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     """Train a model defined by config"""
     config_file_path = config
-    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+    config, config_file_stem = parse_config(
         config, ntrain, ntest, weights
     )
-    if nepochs:
-        n_epochs = nepochs
+
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
     if customize:
         prefix += customize + "_"
         config = customization_functions[customize](config)
-        #FIXME: refactor this
-        global_batch_size = config["setup"]["batch_size"]
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -158,18 +155,24 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         outdir = str(Path(weights).parent)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    strategy, num_gpus = get_strategy()
     if "CPU" not in strategy.extended.worker_devices[0]:
         nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
         p = subprocess.Popen(shlex.split(nvidia_smi_call))
     
-    # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
-    
-    dataset_def = get_dataset_def(config)
-    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size, n_train=n_train, n_test=n_test)
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
+    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
+    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
+    num_train_steps = 0
+    for _ in ds_train:
+        num_train_steps += 1
+    num_test_steps = 0
+    for _ in ds_test:
+        num_test_steps += 1
+
+    print("num_train_steps", num_train_steps)
+    print("num_test_steps", num_test_steps)
 
     if experiment:
         experiment.set_name(outdir)
@@ -179,10 +182,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
-    total_steps = n_epochs * n_train // global_batch_size
-
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=num_train_steps)
         opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
@@ -238,7 +239,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        ds_test.take(10),
+        ds_val,
         ds_info,
         comet_experiment=experiment
     )
@@ -247,10 +248,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     fit_result = model.fit(
         ds_train.repeat(),
         validation_data=ds_test.repeat(),
-        epochs=initial_epoch + n_epochs,
+        epochs=initial_epoch + config["setup"]["num_epochs"],
         callbacks=callbacks,
-        steps_per_epoch=n_train // global_batch_size,
-        validation_steps=n_test // global_batch_size,
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
         initial_epoch=initial_epoch,
     )
 
@@ -272,13 +273,12 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-@click.option("-v", "--validation_files", help="optionally override validation file path", type=click.Path(), default=None)
-def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
+def evaluate(config, train_dir, weights, evaluation_dir):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
-    config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
+    config, _ = parse_config(config, weights=weights)
 
     if evaluation_dir is None:
         eval_dir = str(Path(train_dir) / "evaluation")
@@ -295,8 +295,8 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
     else:
         model_dtype = tf.dtypes.float32
 
-    dataset_def = get_dataset_def(config)
-    ds_train, ds_test, ds_info = get_heptfds_dataset(config, global_batch_size)
+    strategy, num_gpus = get_strategy()
+    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
@@ -310,8 +310,8 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
     
-    eval_model(model, ds_test, config, eval_dir)
-    freeze_model(model, config, ds_test.take(1), train_dir)
+    eval_model(model, ds_val, config, eval_dir)
+    freeze_model(model, config, ds_val.take(1), train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")

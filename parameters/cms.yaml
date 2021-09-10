@@ -30,10 +30,6 @@ dataset:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 0.0001
-  raw_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/*.pkl*
-  processed_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/tfr_cand/*.tfrecords
-  num_files_per_chunk: 1
-  validation_file_path: data/TTbar_14TeV_TuneCUETP8M1_cfi/val/*.pkl*
   energy_loss:
     type: Huber
   pt_loss:
@@ -56,9 +52,9 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  batch_size: 5
   num_events_train: 90000
   num_events_test: 9900
+  num_events_validation: 100
   num_epochs: 100
   dtype: float32
   trainable:
@@ -228,7 +224,18 @@ raytune:
     max_t: 100
     reduction_factor: 3
 
-cms_pf:
-  version: 1.0.0
-  data_dir:
-  manual_dir:
+training_dataset: cms_pf_ttbar
+testing_dataset: cms_pf_ttbar
+validation_dataset: cms_pf_ttbar
+
+datasets: 
+  cms_pf_ttbar:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 5
+  cms_pf_single_pi:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 50
