@@ -148,8 +148,6 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         ygen = np.concatenate(ygens)
         ycand = np.concatenate(ycands)
 
-        print(X.shape, ygen.shape, ycand.shape)
-
         del data
         return X, ygen, ycand
 
