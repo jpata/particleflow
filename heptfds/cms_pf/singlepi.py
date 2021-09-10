@@ -29,7 +29,7 @@ class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SinglePiFlatPt0p7To10_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -54,8 +54,8 @@ class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        print(path)
-        return {"train": self._generate_examples(path / "raw"), "test": self._generate_examples(path / "val")}
+        sample_dir = "SinglePiFlatPt0p7To10_cfi"
+        return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
 
     def _generate_examples(self, path):
         """Yields examples."""

@@ -29,9 +29,8 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/raw data/TTbar_14TeV_TuneCUETP8M1_cfi/
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/val data/TTbar_14TeV_TuneCUETP8M1_cfi/
+    mkdir -p data
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -56,8 +55,8 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        print(path)
-        return {"train": self._generate_examples(path / "raw"), "test": self._generate_examples(path / "val")}
+        sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
+        return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
 
     def _generate_examples(self, path):
         """Yields examples."""
