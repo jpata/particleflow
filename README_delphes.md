@@ -1,24 +1,23 @@
+## Setup
+
+```
+git clone https://github.com/jpata/particleflow
+cd particleflow
+git submodule init
+git submodule update
+```
+
 ## Delphes dataset and training
 
-The following instructions use singularity, but you may have a different local setup.
-
 ```bash
-#Download all pkl.bz2 files from https://zenodo.org/record/4559324
-
-#now move the data into the right place
-mv *pythia8_qcd*.pkl.bz2 data/pythia8_qcd/val
-mv *pythia8_ttbar*.pkl.bz2 data/pythia8_qcd/raw
-mv data/pythia8_qcd/raw/*pythia8_ttbar_9_*.pkl.bz2 data/pythia8_qcd/val
-
-# Generate the TFRecord datasets needed for larger-than-RAM training
-python3 mlpf/pipeline.py data -c parameters/delphes.yaml
+#Downloads the dataset from zenodo, builds TFRecord dataset, about 100GB of free space needed in ~/
+tfds build hep_tfds/heptfds/delphes_pf
 
 # Run the training of the base GNN model using e.g. 5 GPUs in a data-parallel mode
 CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/delphes.yaml
 
 #Run the validation to produce the predictions file
-python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes_* -v "data/pythia8_qcd/val/*.pkl.bz2" -e evaluate_qcd
-python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes_* -v "data/pythia8_ttbar/val/*.pkl.bz2" -e evaluate_ttbar
+python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t experiments/delphes_*
 ```
 
 ## Recipe for generation
