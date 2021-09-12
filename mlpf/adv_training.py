@@ -6,6 +6,7 @@ import random
 
 from tqdm import tqdm
 from tfmodel.model_setup import make_model, targets_multi_output, CustomCallback
+from tfmodel.utils import get_heptfds_dataset
 from tfmodel.data import Dataset
 
 #A deep sets conditional discriminator
@@ -79,59 +80,25 @@ def main(config):
 
     x = np.random.randn(1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"])
     ypred = concat_pf([model_pf(x), x])
-    model_pf.load_weights("./experiments/cms_20210906_150454_299380.gpu0.local/weights/weights-30-25.802000.hdf5", by_name=True)
+    model_pf.load_weights("experiments/cms_20210909_132136_111774.gpu0.local/weights/weights-100-1.280379.hdf5", by_name=True)
     #model_pf.load_weights("./logs/weights-02.hdf5", by_name=True)
 
     model_disc = make_disc_model(config, ypred.shape[-1])
 
-    cds = config["dataset"]
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"]
-    )
-    Xs = []
-    ycands = []
-    for fi in dataset_def.val_filelist[:5]:
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-        Xs.append(np.concatenate(X))
-        ycands.append(np.concatenate(ycand))
-
-    X_val = np.concatenate(Xs)
-    ycand_val = np.concatenate(ycands)
-
-    dataset_transform = targets_multi_output(config['dataset']['num_output_classes'])
-    cb = CustomCallback(dataset_def, "logs", X_val, ycand_val, dataset_transform, config['dataset']['num_output_classes'], plot_freq=1)
-    cb.set_model(model_pf)
-
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, ])
-    )
-
-    n_train = 1000
-    n_test = 1000
+    num_gpus = 1
+    ds = "cms_pf_ttbar"
     batch_size = 4
+    config["datasets"][ds]["batch_per_gpu"] = batch_size
+    ds_train, ds_info = get_heptfds_dataset(ds, config, num_gpus, "train", 128)
+    ds_test, _ = get_heptfds_dataset(ds, config, num_gpus, "test", 128)
+    ds_val, _ = get_heptfds_dataset(ds, config, num_gpus, "test", 128)
 
-    ds_train = dataset.take(n_train).padded_batch(batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).padded_batch(batch_size, padded_shapes=ps)
+    cb = CustomCallback(
+        "logs",
+        ds_val,
+        ds_info, plot_freq=10)
 
-    n_train = 0
-    for elem in ds_train:
-        n_train += 1
-    n_test = 0
-    for elem in ds_test:
-        n_test += 1
+    cb.set_model(model_pf)
 
     input_elems = tf.keras.layers.Input(
         shape=(config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]),
@@ -172,14 +139,13 @@ def main(config):
         loss_tot2_test = 0.0
 
 
-        for step, (xb, yb, wb) in tqdm(enumerate(ds_train), desc="Training", total=n_train):
+        for step, (xb, yb, wb) in tqdm(enumerate(ds_train), desc="Training"):
 
             msk_x = tf.cast(xb[:, :, 0:1]!=0, tf.float32)
 
             yp = concat_pf([model_pf(xb, training=True), xb])
+            yb = concat_pf([yb, xb])
 
-            yid = tf.one_hot(tf.cast(yb[:, :, 0], tf.int32), cds["num_output_classes"])
-            yb = tf.concat([yid, yb[:, :, 1:]], axis=-1)
             yb = yb*msk_x
 
             #Train the discriminative (adversarial) model
@@ -206,13 +172,12 @@ def main(config):
         preds_0 = []
         preds_1 = []
 
-        for step, (xb, yb, wb) in tqdm(enumerate(ds_test), desc="Testing", total=n_test):
+        for step, (xb, yb, wb) in tqdm(enumerate(ds_test), desc="Testing"):
             msk_x = tf.cast(xb[:, :, 0:1]!=0, tf.float32)
 
             yp = concat_pf([model_pf(xb, training=False), xb])
+            yb = concat_pf([yb, xb])
 
-            yid = tf.one_hot(tf.cast(yb[:, :, 0], tf.int32), cds["num_output_classes"])
-            yb = tf.concat([yid, yb[:, :, 1:]], axis=-1)
             yb = yb*msk_x
 
             #Train the discriminative (adversarial) model
