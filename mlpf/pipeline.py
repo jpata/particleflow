@@ -92,7 +92,7 @@ def customize_pipeline_test(config):
     return config
 
 customization_functions = {
-    "gun_sample": customize_gun_sample
+    "gun_sample": customize_gun_sample,
     "pipeline_test": pipeline_test
 }
 
