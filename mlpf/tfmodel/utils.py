@@ -374,7 +374,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
-def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events):
+def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
     cds = config["dataset"]
 
     if cds['schema'] == "cms":
@@ -389,13 +389,51 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events):
     if num_gpus>1:
         bs = bs*num_gpus
 
-    ds = ds.take(num_events)
-    ds = ds.batch(bs)
+    if not (num_events is None):
+        ds = ds.take(num_events)
 
+    ds = ds.batch(bs)
     ds = ds.map(dsf.get_map_to_supervised())
 
     return ds, ds_info
 
+#Load multiple datasets and mix them together
+def get_datasets(dataset_names, config, num_gpus, split):
+
+    #Load each separate dataset
+    datasets = []
+    steps = []
+    for ds_name in dataset_names:
+        ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
+
+        num_steps = 0
+        for elem in ds:
+            num_steps += 1
+        print("Loaded {}:{} with {} steps after batching".format(ds_name, split, num_steps))
+
+        datasets.append(ds)
+        steps.append(num_steps)
+
+    #Now interleave elements from the datasets randomly
+    ids = 0
+    indices = []
+    for ds, num_steps in zip(datasets, steps):
+        indices += num_steps*[ids]
+        ids += 1
+
+    indices = np.array(indices)
+    np.random.shuffle(indices)
+
+    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
+
+    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+
+    num_steps = 0
+    for _ in ds:
+        num_steps += 1
+
+    print("Joint dataset {} with {} steps".format(",".join(dataset_names), num_steps))
+    return ds, num_steps
 
 def set_config_loss(config, trainable):
     if trainable == "classification":

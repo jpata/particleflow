@@ -224,8 +224,18 @@ raytune:
     max_t: 100
     reduction_factor: 3
 
-training_dataset: cms_pf_ttbar
-testing_dataset: cms_pf_ttbar
+training_datasets:
+  - cms_pf_ttbar
+  - cms_pf_single_pi
+  - cms_pf_single_electron
+  - cms_pf_single_mu
+
+testing_datasets:
+  - cms_pf_ttbar
+  - cms_pf_single_pi
+  - cms_pf_single_electron
+  - cms_pf_single_mu
+
 validation_dataset: cms_pf_ttbar
 
 datasets: 
@@ -235,6 +245,16 @@ datasets:
     manual_dir:
     batch_per_gpu: 5
   cms_pf_single_pi:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 50
+  cms_pf_single_electron:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 50
+  cms_pf_single_mu:
     version: 1.0.0
     data_dir:
     manual_dir:
