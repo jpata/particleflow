@@ -33,7 +33,7 @@ mkdir -p experiments
 tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir local_test_data
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5
+python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5 --customize pipeline_test
 
 ls ./experiments/cms_*/weights/
 
