@@ -12,7 +12,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-SinglePi events.
+SingleMu events.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -21,7 +21,7 @@ _CITATION = """
 
 PADDED_NUM_ELEM_SIZE = 320
 
-class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
+class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
     VERSION = tfds.core.Version("1.0.0")
@@ -29,7 +29,7 @@ class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SinglePiFlatPt0p7To10_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleMuFlatLogPt_100MeVto2TeV_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -54,7 +54,7 @@ class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SinglePiFlatPt0p7To10_cfi"
+        sample_dir = "SingleMuFlatLogPt_100MeVto2TeV_cfi"
         return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
 
     def _generate_examples(self, path):
