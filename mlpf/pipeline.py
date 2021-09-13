@@ -59,6 +59,7 @@ from tfmodel.utils import (
     get_tuner,
     get_raytune_schedule,
     get_heptfds_dataset,
+    get_datasets
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -89,7 +90,6 @@ customization_functions = {
     "gun_sample": customize_gun_sample
 }
 
-
 @click.group()
 @click.help_option("-h", "--help")
 def main():
@@ -100,8 +100,8 @@ def main():
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("--ntrain", default=None, help="override the number of training events", type=int)
-@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+@click.option("--ntrain", default=None, help="override the number of training steps", type=int)
+@click.option("--ntest", default=None, help="override the number of testing steps", type=int)
 @click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
@@ -127,7 +127,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem = parse_config(
-        config, ntrain=ntrain, ntest=ntest, nepochs=nepochs, weights=weights
+        config, nepochs=nepochs, weights=weights
     )
 
     if plot_freq:
@@ -147,17 +147,17 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if "CPU" not in strategy.extended.worker_devices[0]:
         nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
         p = subprocess.Popen(shlex.split(nvidia_smi_call))
-    
-    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
-    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
-    num_train_steps = 0
-    for _ in ds_train:
-        num_train_steps += 1
-    num_test_steps = 0
-    for _ in ds_test:
-        num_test_steps += 1
+    ds_train, num_train_steps = get_datasets(config["training_datasets"], config, num_gpus, "train")
+    ds_test, num_test_steps = get_datasets(config["testing_datasets"], config, num_gpus, "test")
+    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+
+    if ntrain:
+        ds_train = ds_train.take(ntrain)
+        num_train_steps = ntrain
+    if ntest:
+        ds_test = ds_test.take(ntest)
+        num_test_steps = ntest
 
     print("num_train_steps", num_train_steps)
     print("num_test_steps", num_test_steps)
@@ -284,7 +284,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
@@ -298,8 +298,8 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
     
-    eval_model(model, ds_val, config, eval_dir)
-    freeze_model(model, config, ds_val.take(1), train_dir)
+    eval_model(model, ds_test, config, eval_dir)
+    freeze_model(model, config, ds_test.take(1), train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")
