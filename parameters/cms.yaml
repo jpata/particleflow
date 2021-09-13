@@ -52,8 +52,6 @@ setup:
   weights:
   weights_config:
   lr: 1e-3
-  num_events_train: 90000
-  num_events_test: 9900
   num_events_validation: 100
   num_epochs: 100
   dtype: float32
