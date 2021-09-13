@@ -215,8 +215,10 @@ raytune:
     max_t: 100
     reduction_factor: 3
 
-training_dataset: delphes_pf
-testing_dataset: delphes_pf
+training_datasets:
+  - delphes_pf
+testing_datasets:
+  - delphes_pf
 validation_dataset: delphes_pf
 
 datasets:

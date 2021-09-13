@@ -86,8 +86,14 @@ def customize_gun_sample(config):
     config["testing_dataset"] = "cms_pf_single_pi"
     return config
 
+def customize_pipeline_test(config):
+    config["training_datasets"] = ["cms_pf_ttbar"]
+    config["testing_datasets"] = ["cms_pf_ttbar"]
+    return config
+
 customization_functions = {
     "gun_sample": customize_gun_sample
+    "pipeline_test": pipeline_test
 }
 
 @click.group()
@@ -284,7 +290,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
+    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
