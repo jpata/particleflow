@@ -87,8 +87,8 @@ def customize_gun_sample(config):
     return config
 
 def customize_pipeline_test(config):
-    config["training_datasets"] = ["cms_pf_ttbar"]
-    config["testing_datasets"] = ["cms_pf_ttbar"]
+    config["training_datasets"] = [config["training_datasets"][0], ]
+    config["testing_datasets"] = [config["testing_datasets"][0], ]
     return config
 
 customization_functions = {
@@ -140,7 +140,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         config["callbacks"]["plot_freq"] = plot_freq
 
     if customize:
-        prefix += customize + "_"
         config = customization_functions[customize](config)
 
     if recreate or (weights is None):
