@@ -93,7 +93,7 @@ def customize_pipeline_test(config):
 
 customization_functions = {
     "gun_sample": customize_gun_sample,
-    "pipeline_test": pipeline_test
+    "pipeline_test": customize_pipeline_test
 }
 
 @click.group()
