@@ -14,7 +14,7 @@ mkdir -p $WORKDIR
 
 PILEUP=NoPileUp
 
-N=100
+N=1000
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -59,9 +59,9 @@ pwd
 ls -lrt
 
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
-cmsRun step2_phase1_new.py >& step2.log
-cmsRun step3_phase1_new.py >& step3.log
-cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py >& step4.log
+cmsRun step2_phase1_new.py 2>&1 | tee step1.log
+cmsRun step3_phase1_new.py 2>&1 | tee step2.log
+cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py 2>&1 | tee step3.log
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table --events-per-file -1
+python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table --events-per-file -1 2>&1 | tee step4.log
 #rm step*.root

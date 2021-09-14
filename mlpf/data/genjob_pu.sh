@@ -15,7 +15,7 @@ mkdir -p $WORKDIR
 PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/pu_files.txt
 
-N=10
+N=50
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
