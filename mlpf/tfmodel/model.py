@@ -888,7 +888,6 @@ class PFNetDense(tf.keras.Model):
 
     # def train_step(self, data):
     #     x, y, sample_weights = data
-    #     tf.print(x.shape)
     #     if not hasattr(self, "step"):
     #         self.step = 0
 
