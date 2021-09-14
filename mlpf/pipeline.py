@@ -149,9 +149,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus = get_strategy()
-    if "CPU" not in strategy.extended.worker_devices[0]:
-        nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
-        p = subprocess.Popen(shlex.split(nvidia_smi_call))
+    #if "CPU" not in strategy.extended.worker_devices[0]:
+    #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
+    #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
     ds_train, num_train_steps = get_datasets(config["training_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["testing_datasets"], config, num_gpus, "test")
@@ -257,8 +257,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     print("Training done.")
 
-    if "CPU" not in strategy.extended.worker_devices[0]:
-        p.terminate()
+    #if "CPU" not in strategy.extended.worker_devices[0]:
+    #    p.terminate()
 
 @main.command()
 @click.help_option("-h", "--help")
