@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: cms
   target_particles: cand
-  num_input_features: 15
+  num_input_features: 16
   num_output_features: 7
 #       NONE = 0,
 #       TRACK = 1,
@@ -51,9 +51,9 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-3
+  lr: 1e-4
   num_events_validation: 100
-  num_epochs: 100
+  num_epochs: 1000
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -168,7 +168,7 @@ callbacks:
     save_weights_only: yes
     monitor: "val_loss"
     save_best_only: no
-  plot_freq: 0
+  plot_freq: 10
   tensorboard:
     dump_history: yes
     hist_freq: 1
@@ -224,21 +224,17 @@ raytune:
 
 training_datasets:
   - cms_pf_ttbar
-  - cms_pf_single_pi
   - cms_pf_single_electron
-  - cms_pf_single_mu
 
 testing_datasets:
   - cms_pf_ttbar
-  - cms_pf_single_pi
   - cms_pf_single_electron
-  - cms_pf_single_mu
 
 validation_dataset: cms_pf_ttbar
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:
     batch_per_gpu: 5
@@ -248,7 +244,7 @@ datasets:
     manual_dir:
     batch_per_gpu: 50
   cms_pf_single_electron:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:
     batch_per_gpu: 50
