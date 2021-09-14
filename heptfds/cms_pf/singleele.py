@@ -24,9 +24,10 @@ PADDED_NUM_ELEM_SIZE = 320
 class CmsPfSingleElectron(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "1.1.0": "Initial release.",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleElectronFlatPt1To100_pythia8_cfi data/
@@ -55,14 +56,13 @@ class CmsPfSingleElectron(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "SingleElectronFlatPt1To100_pythia8_cfi"
-        return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
+        files = sorted(list((path/sample_dir/"raw").glob("*.pkl*")))
+        idx_split = int(0.8*len(files))
+        files_train = files[:idx_split]
+        files_test= files[idx_split:]
+        return {"train": self._generate_examples(files_train), "test": self._generate_examples(files_test)}
 
-    def _generate_examples(self, path):
-        """Yields examples."""
-        if len(list(path.glob("*.pkl.bz2"))) == 0:
-            files = path.glob("*.pkl")
-        else:
-            files = path.glob("*.pkl.bz2")
+    def _generate_examples(self, files):
 
         for fi in files:
             X, ygen, ycand = cms_utils.prepare_data_cms(str(fi), PADDED_NUM_ELEM_SIZE)

@@ -24,9 +24,10 @@ PADDED_NUM_ELEM_SIZE = 6400
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "1.1.0": "Add muon type, fix electron GSF association",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     mkdir -p data
@@ -56,14 +57,14 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
+        files = sorted(list((path/sample_dir/"raw").glob("*.pkl*")))
+        idx_split = int(0.8*len(files))
+        files_train = files[:idx_split]
+        files_test= files[idx_split:]
+        return {"train": self._generate_examples(files_train), "test": self._generate_examples(files_test)}
 
-    def _generate_examples(self, path):
+    def _generate_examples(self, files):
         """Yields examples."""
-        if len(list(path.glob("*.pkl.bz2"))) == 0:
-            files = path.glob("*.pkl")
-        else:
-            files = path.glob("*.pkl.bz2")
 
         for fi in files:
             X, ygen, ycand = cms_utils.prepare_data_cms(str(fi), PADDED_NUM_ELEM_SIZE)

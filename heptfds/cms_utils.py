@@ -28,6 +28,7 @@ X_FEATURES = [
     "phi_hcal",
     "muon_dt_hits",
     "muon_csc_hits",
+    "muon_type",
 ]
                     
 Y_FEATURES = [
