@@ -258,14 +258,17 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         chosen_elem = None
 
         #Pions and muons will be assigned to tracks
-        if abs(tp) == 211 or abs(tp) == 13:
+        if abs(tp) == 211 or abs(tp) == 13 or abs(tp) == 11:
             for elem in neighbors:
                 tp_neighbor = g.nodes[elem]["typ"]
-                if tp_neighbor == 1:
+
+                #track or gsf
+                if tp_neighbor==1 or tp_neighbor==6:
                     if not (elem in elem_to_cand):
                         chosen_elem = elem
                         elem_to_cand[elem] = cand
                         break
+
         #other particles will be assigned to the highest-energy cluster (ECAL, HCAL, HFEM, HFHAD, SC)
         else:
             neighbors = [n for n in neighbors if g.nodes[n]["typ"] in [4,5,8,9,10]]
@@ -283,7 +286,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     elem_branches = [
         "typ", "pt", "eta", "phi", "e",
         "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits",
+        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
         "px", "py", "pz", "deltap", "sigmadeltap"
     ]
     target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
@@ -416,6 +419,7 @@ def process(args):
         element_pz = ev[b'element_pz']
         element_muon_dt_hits = ev[b'element_muon_dt_hits']
         element_muon_csc_hits = ev[b'element_muon_csc_hits']
+        element_muon_type = ev[b'element_muon_type']
 
         trackingparticle_pid = ev[b'trackingparticle_pid']
         trackingparticle_pt = ev[b'trackingparticle_pt']
@@ -469,6 +473,7 @@ def process(args):
                 pz=element_pz[iobj],
                 muon_dt_hits=element_muon_dt_hits[iobj],
                 muon_csc_hits=element_muon_csc_hits[iobj],
+                muon_type=element_muon_type[iobj]
             )
         for iobj in range(len(trackingparticle_pid)):
             g.add_node(("tp", iobj),
