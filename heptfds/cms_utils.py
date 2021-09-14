@@ -29,6 +29,8 @@ X_FEATURES = [
     "muon_dt_hits",
     "muon_csc_hits",
     "muon_type",
+    "gsf_brem_sc_energy",
+    "num_hits"
 ]
                     
 Y_FEATURES = [
