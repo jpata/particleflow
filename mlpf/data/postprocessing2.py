@@ -250,7 +250,9 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         elem_to_gp[elem] += [gp]
  
     unmatched_cand = [] 
-    elem_to_cand = {} 
+    elem_to_cand = {}
+
+    #Find primary element for each PFCandidate
     for cand in sorted(all_pfcandidates, key=lambda x: g.nodes[x]["pt"], reverse=True):
         tp = g.nodes[cand]["typ"]
         neighbors = list(rg.neighbors(cand))
