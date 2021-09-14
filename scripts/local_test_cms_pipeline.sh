@@ -24,16 +24,12 @@ for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; d
 	  --save-normalized-table --events-per-file 5
 done
 
-#Set aside some data for validation
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/val
-mv local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw/pfntuple_3_0.pkl local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/val/
-
 mkdir -p experiments
 
 tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir local_test_data
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --ntrain 5 --ntest 5 --customize pipeline_test
+python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --customize pipeline_test
 
 ls ./experiments/cms_*/weights/
 
