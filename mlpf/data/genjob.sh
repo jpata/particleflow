@@ -63,5 +63,5 @@ cmsRun step2_phase1_new.py 2>&1 | tee step1.log
 cmsRun step3_phase1_new.py 2>&1 | tee step2.log
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py 2>&1 | tee step3.log
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table --events-per-file -1 2>&1 | tee step4.log
-#rm step*.root
+python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table --events-per-file -1
+rm step*.root
