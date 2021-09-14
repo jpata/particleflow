@@ -127,3 +127,26 @@ def prepare_data_cms(fn, padded_num_elem_size):
     ycand = [np.concatenate(ycands)]
 
     return X, ygen, ycand
+
+def split_sample(path, pad_size, test_frac=0.8):
+        files = sorted(list(path.glob("*.pkl*")))
+        idx_split = int(test_frac*len(files))
+        files_train = files[:idx_split]
+        files_test = files[idx_split:]
+        return {"train": generate_examples(files_train, pad_size), "test": generate_examples(files_test, pad_size)}
+
+def generate_examples(files, pad_size):
+    """Yields examples."""
+
+    for fi in files:
+        X, ygen, ycand = prepare_data_cms(str(fi), pad_size)
+        for ii in range(X[0].shape[0]):
+            x = X[0][ii]
+            yg = ygen[0][ii]
+            yc = ycand[0][ii]
+            yield str(fi) + "_" + str(ii), {
+                "X": x,
+                "ygen": yg,
+                "ycand": yc,
+            }
+

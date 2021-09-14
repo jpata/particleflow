@@ -57,24 +57,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        files = sorted(list((path/sample_dir/"raw").glob("*.pkl*")))
-        idx_split = int(0.8*len(files))
-        files_train = files[:idx_split]
-        files_test= files[idx_split:]
-        return {"train": self._generate_examples(files_train), "test": self._generate_examples(files_test)}
+        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
-        """Yields examples."""
-
-        for fi in files:
-            X, ygen, ycand = cms_utils.prepare_data_cms(str(fi), PADDED_NUM_ELEM_SIZE)
-            for ii in range(X[0].shape[0]):
-                x = X[0][ii]
-                yg = ygen[0][ii]
-                yc = ycand[0][ii]
-                yield str(fi) + "_" + str(ii), {
-                    "X": x,
-                    "ygen": yg,
-                    "ycand": yc,
-                }
-
+        return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)

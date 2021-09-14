@@ -24,9 +24,10 @@ PADDED_NUM_ELEM_SIZE = 320
 class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "1.1.0": "Add muon type, fix electron GSF association",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SinglePiFlatPt0p7To10_cfi data/
@@ -55,24 +56,7 @@ class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "SinglePiFlatPt0p7To10_cfi"
-        return {"train": self._generate_examples(path/sample_dir/"raw"), "test": self._generate_examples(path/sample_dir/"val")}
+        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
 
-    def _generate_examples(self, path):
-        """Yields examples."""
-        if len(list(path.glob("*.pkl.bz2"))) == 0:
-            files = path.glob("*.pkl")
-        else:
-            files = path.glob("*.pkl.bz2")
-
-        for fi in files:
-            X, ygen, ycand = cms_utils.prepare_data_cms(str(fi), PADDED_NUM_ELEM_SIZE)
-            for ii in range(X[0].shape[0]):
-                x = X[0][ii]
-                yg = ygen[0][ii]
-                yc = ycand[0][ii]
-                yield str(fi) + "_" + str(ii), {
-                    "X": x,
-                    "ygen": yg,
-                    "ycand": yc,
-                }
-
+    def _generate_examples(self, files):
+        return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)
