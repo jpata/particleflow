@@ -7,4 +7,4 @@ IMG=/home/software/singularity/tf26.simg:latest
 cd ~/particleflow
 
 #TF training
-PYTHONPATH=hep_tfds singularity exec --nv $IMG python3 mlpf/pipeline.py train -c parameters/cms.yaml --plot-freq 100
+PYTHONPATH=hep_tfds singularity exec --nv $IMG python3 mlpf/pipeline.py train -c parameters/cms.yaml --plot-freq 10

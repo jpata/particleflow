@@ -4,7 +4,7 @@ import sys, os, fnmatch
 
 outdir = "/hdfs/local/joosep/mlpf/gen"
 samples = [
-    #"SinglePiFlatPt0p7To10_cfi",
+    "SinglePiFlatPt0p7To10_cfi",
     #"SingleTauFlatPt2To150_cfi",
     #"SingleMuFlatPt0p7To10_cfi",
     #"SingleElectronFlatPt1To100_pythia8_cfi",
@@ -13,7 +13,7 @@ samples = [
 ]
 
 samples_pu = [
-    "TTbar_14TeV_TuneCUETP8M1_cfi",
+    #"TTbar_14TeV_TuneCUETP8M1_cfi",
 ]
 
 if __name__ == "__main__":
