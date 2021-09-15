@@ -1,5 +1,5 @@
 import sys
-import cPickle as pickle
+import pickle
 from DataFormats.FWLite import Events, Handle
 
 class Expression:

@@ -1,4 +1,40 @@
-## Presentations
+# CMS training
+
+```
+#get the code
+git clone https://github.com/jpata/particleflow.git
+cd particleflow
+
+git submodule init
+git submodule setup
+
+#Download the training datasets, about 60GB
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/tensorflow_datasets ~/
+
+#Run the training, multi-GPU support on the same machine is available
+CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/cms.yaml
+```
+
+# Dataset creation
+
+The following example generates a small training sample using CMSSW
+```bash
+cd mlpf/data
+./run_gen.sh
+```
+Note that `pu_files.txt` and a corresponding CMSSW release must exist locally. Batch submission of the generator jobs is dependent on the local batch system and is left as an exercise to the reader.
+
+Generate TFRecord datasets from the pickle files
+```bash
+mkdir -p data
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar* data/
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/Single* data/
+tfds build ./hep_tfds/heptfds/cms_pf/ttbar --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singlepi --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singleele --manual_dir data
+```
+
+## Older presentations in CMS
 
 - CMS ML Forum, 2020-09-30: https://indico.cern.ch/event/952419/contributions/4041555/attachments/2113070/3554608/2020_09_30.pdf
 - CMS ML Town Hall, 2020-07-03: https://indico.cern.ch/event/922319/contributions/3928284/attachments/2068518/3472668/2020_07_02.pdf
@@ -22,16 +58,3 @@
 - Caltech ML meeting, 2019-09-19: https://indico.cern.ch/event/849944/contributions/3572113/attachments/1911520/3158764/2019_09_18_pf_ml.pdf
 - CMS PF group, 2019-09-10: https://indico.cern.ch/event/846887/contributions/3557300/attachments/1904664/3145310/2019_09_10_pf_refactoring.pdf
 - Caltech ML meeting, 2019-09-05: https://indico.cern.ch/event/845349/contributions/3554787/attachments/1902837/3141723/2019_09_05_pfalgo.pdf
-
-In case the above links do not load, the presentations are also mirrored on the following CERNBox link: https://cernbox.cern.ch/index.php/s/GkIRJU1YZuai4ix
-
-# CMS training
-
-```
-#get the code
-git clone https://github.com/jpata/particleflow.git
-cd particleflow
-
-#run a small local test including data prep and training
-./scripts/local_test_cms_pipeline.sh
-```
