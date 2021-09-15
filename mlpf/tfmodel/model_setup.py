@@ -24,10 +24,16 @@ import platform
 import mplhep
 from tqdm import tqdm
 from pathlib import Path
+
+import tf2onnx
+import sklearn
+import sklearn.metrics
+import onnxruntime
+
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
-
+import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
 
@@ -60,22 +66,29 @@ def plot_to_image(figure):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, dataset_def, outpath, X, y, dataset_transform, num_output_classes, plot_freq=1, comet_experiment=None):
+    def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
         super(CustomCallback, self).__init__()
-        self.X = X
-        self.y = y
         self.plot_freq = plot_freq
         self.comet_experiment = comet_experiment
 
-        self.dataset_def = dataset_def
+        self.X = []
+        self.ytrue = {}
+        for inputs, targets, weights in tfds.as_numpy(dataset):
+            self.X.append(inputs)
+            for target_name in targets.keys():
+                if not (target_name in self.ytrue):
+                    self.ytrue[target_name] = []
+                self.ytrue[target_name].append(targets[target_name])
 
-        #transform the prediction target from an array into a dictionary for easier access
-        self.ytrue = dataset_transform(self.X, self.y, None)[1]
-        self.ytrue = {k: np.array(v) for k, v in self.ytrue.items()}
+        self.X = np.concatenate(self.X)
+        for target_name in self.ytrue.keys():
+            self.ytrue[target_name] = np.concatenate(self.ytrue[target_name])
         self.ytrue_id = np.argmax(self.ytrue["cls"], axis=-1)
+        self.dataset_info = dataset_info
+
+        self.num_output_classes = self.ytrue["cls"].shape[-1]
 
         self.outpath = outpath
-        self.num_output_classes = num_output_classes
 
         #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.color_map = {
@@ -134,7 +147,17 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def plot_event_visualization(self, epoch, outpath, ypred, ypred_id, msk, ievent=0):
 
-        X_eta, X_phi, X_energy = self.dataset_def.get_X_eta_phi_energy(self.X)
+        x_feat = self.dataset_info.metadata.get("x_features")
+        X_energy = self.X[:, :, x_feat.index("e")]
+        X_eta = self.X[:, :, x_feat.index("eta")]
+
+        if "phi" in x_feat:
+            X_phi = self.X[:, :, x_feat.index("phi")]
+        else:
+            X_phi = np.arctan2(
+                self.X[:, :, x_feat.index("sin_phi")],
+                self.Xs[:, :, x_feat.index("cos_phi")]
+            )
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
 
@@ -384,6 +407,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
 
+        if self.plot_freq==0:
+            return
         if self.plot_freq>1:
             if epoch%self.plot_freq!=0 or epoch==1:
                 return
@@ -393,8 +418,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #run the model inference on the validation dataset
         ypred = self.model.predict(self.X, batch_size=1)
-        #ypred = self.model(self.X, training=False)
-        #ypred = {k: v.numpy() for k, v in ypred.items()}
 
         #choose the class with the highest probability as the prediction
         #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
@@ -413,6 +436,22 @@ class CustomCallback(tf.keras.callbacks.Callback):
             cp_dir_cls = cp_dir / "cls_{}".format(icls)
             cp_dir_cls.mkdir(parents=True, exist_ok=True)
 
+            plt.figure(figsize=(4,4))
+            npred = np.sum(ypred_id == icls, axis=1)
+            ntrue = np.sum(self.ytrue_id == icls, axis=1)
+            maxval = max(np.max(npred), np.max(ntrue))
+            plt.scatter(ntrue, npred, marker=".")
+            plt.plot([0,maxval], [0, maxval], color="black", ls="--")
+
+            image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
+            plt.savefig(image_path, bbox_inches="tight")
+            plt.close("all")
+            if self.comet_experiment:
+                self.comet_experiment.log_image(image_path, step=epoch)
+                num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
+                self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
+
+
             if icls!=0:
                 self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
 
@@ -420,15 +459,13 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
                 self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
 
-        np.savez(str(cp_dir/"pred.npz"), X=self.X, ytrue=self.y, **ypred)
-
 def prepare_callbacks(
         callbacks_cfg, outdir,
-        X_val, y_val,
-        dataset_transform,
-        num_output_classes,
-        dataset_def,
-        comet_experiment=None):
+        dataset,
+        dataset_info,
+        comet_experiment=None
+    ):
+
     callbacks = []
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
@@ -459,10 +496,9 @@ def prepare_callbacks(
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)
     cb = CustomCallback(
-        dataset_def, history_path,
-        X_val, y_val,
-        dataset_transform,
-        num_output_classes,
+        history_path,
+        dataset,
+        dataset_info,
         plot_freq=callbacks_cfg["plot_freq"],
         comet_experiment=comet_experiment
     )
@@ -505,7 +541,8 @@ def make_gnn_dense(config, dtype):
 
     parameters = [
         "do_node_encoding",
-        "hidden_dim",
+        "node_update_mode",
+        "node_encoding_hidden_dim",
         "dropout",
         "activation",
         "num_graph_layers_common",
@@ -539,66 +576,63 @@ def make_dense(config, dtype):
     )
     return model
 
-def eval_model(X, ygen, ycand, model, config, outdir, global_batch_size):
+def eval_model(model, dataset, config, outdir):
     import scipy
-    for ibatch in tqdm(range(max(1, X.shape[0]//global_batch_size)), desc="Evaluating model"):
-        nb1 = ibatch*global_batch_size
-        nb2 = (ibatch+1)*global_batch_size
+    ibatch = 0
+    for X, y, w in tqdm(dataset, desc="Evaluating model"):
 
-        y_pred = model.predict(X[nb1:nb2], batch_size=global_batch_size)
-        if type(y_pred) is dict:  # for e.g. when the model is multi_output
-            y_pred_raw_ids = y_pred['cls']
-        else:
-            y_pred_raw_ids = y_pred[:, :, :config["dataset"]["num_output_classes"]]
-        
-        #softmax score must be over a threshold 0.6 to call it a particle (prefer low fake rate to high efficiency)
-        # y_pred_id_sm = scipy.special.softmax(y_pred_raw_ids, axis=-1)
-        # y_pred_id_sm[y_pred_id_sm < 0.] = 0.0
-
-        msk = np.ones(y_pred_raw_ids.shape, dtype=np.bool)
-
-        #Use thresholds for charged and neutral hadrons based on matching the DelphesPF fake rate
-        # msk[y_pred_id_sm[:, :, 1] < 0.8, 1] = 0
-        # msk[y_pred_id_sm[:, :, 2] < 0.025, 2] = 0
-        y_pred_raw_ids = y_pred_raw_ids*msk
-
-        y_pred_id = np.argmax(y_pred_raw_ids, axis=-1)
-
-        if type(y_pred) is dict:
-            y_pred_rest = np.concatenate([y_pred["charge"], y_pred["pt"], y_pred["eta"], y_pred["sin_phi"], y_pred["cos_phi"], y_pred["energy"]], axis=-1)
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred_rest], axis=-1)
-        else:
-            y_pred_id = np.concatenate([np.expand_dims(y_pred_id, axis=-1), y_pred[:, :, config["dataset"]["num_output_classes"]:]], axis=-1)
+        y_pred = model.predict(X)
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
+
+        outs = {}
+        for key in y.keys():
+            outs["true_{}".format(key)] = y[key]
+            outs["pred_{}".format(key)] = y_pred[key]
         np.savez(
             np_outfile,
-            X=X[nb1:nb2],
-            ygen=ygen[nb1:nb2],
-            ycand=ycand[nb1:nb2],
-            ypred=y_pred_id, ypred_raw=y_pred_raw_ids
+            X=X,
+            **outs
         )
+        ibatch += 1
 
-def freeze_model(model, config, outdir):
+def freeze_model(model, config, ds_test, outdir):
+    bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+    num_features = config["dataset"]["num_input_features"]
+    num_out_classes = config["dataset"]["num_output_classes"]
 
-    model.compile(loss="mse", optimizer="adam")
-    model.save(outdir + "/model_full", save_format="tf")
+    def model_output(ret):
+        return tf.concat([ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1)
+    full_model = tf.function(lambda x: model_output(model(x, training=False)))
 
-    full_model = tf.function(lambda x: model(x, training=False))
-    full_model = full_model.get_concrete_function(
-        tf.TensorSpec((None, None, config["dataset"]["num_input_features"]), tf.float32))
-    from tensorflow.python.framework import convert_to_constants
-    frozen_func = convert_to_constants.convert_variables_to_constants_v2(full_model)
-    graph = tf.compat.v1.graph_util.remove_training_nodes(frozen_func.graph.as_graph_def())
-    
-    tf.io.write_graph(graph_or_graph_def=graph,
-      logdir="{}/model_frozen".format(outdir),
-      name="frozen_graph.pb",
-      as_text=False)
-    tf.io.write_graph(graph_or_graph_def=graph,
-      logdir="{}/model_frozen".format(outdir),
-      name="frozen_graph.pbtxt",
-      as_text=True)
+    #we need to use opset 12 for the version of ONNXRuntime in CMSSW
+    #the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
+    model_proto, _ = tf2onnx.convert.from_function(
+        full_model,
+        opset=12,
+        input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
+        output_path="model.onnx"
+    )
+
+    ds = list(tfds.as_numpy(ds_test.take(1)))
+    X = ds[0][0]
+    y = ds[0][1]
+
+    onnx_sess = onnxruntime.InferenceSession("model.onnx")
+    pred_onx = onnx_sess.run(None, {"x:0": X})[0]
+    pred_tf = model(X)
+
+    msk = X[:, :, 0]!=0
+    true_id = np.argmax(y["cls"][:, :, :num_out_classes], axis=-1)[msk]
+    pred_id_onx = np.argmax(pred_onx[:, :, :num_out_classes], axis=-1)[msk]
+    pred_id_tf = np.argmax(pred_tf["cls"], axis=-1)[msk]
+
+    cm1 = sklearn.metrics.confusion_matrix(true_id, pred_id_onx, labels=range(num_out_classes))
+    cm2 = sklearn.metrics.confusion_matrix(true_id, pred_id_tf, labels=range(num_out_classes))
+
+    print(cm1)
+    print(cm2)
+
 
 class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
     def __init__(self, use_weights=False, **kwargs):
@@ -668,7 +702,6 @@ def configure_model_weights(model, trainable_layers):
             cg.trainable = True
         for cg in model.cg_energy:
             cg.trainable = False
-
         model.output_dec.set_trainable_classification()
     else:
         if isinstance(trainable_layers, str):
