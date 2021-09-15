@@ -15,6 +15,7 @@ import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
 
@@ -25,28 +26,29 @@ def load_config(config_file_path):
     return cfg
 
 
-def parse_config(config, ntrain=None, ntest=None, weights=None):
+def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
     config_file_stem = Path(config).stem
     config = load_config(config)
+
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-    global_batch_size = config["setup"]["batch_size"]
     n_epochs = config["setup"]["num_epochs"]
+    
     if ntrain:
-        n_train = ntrain
-    else:
-        n_train = config["setup"]["num_events_train"]
+        config["setup"]["num_events_train"] = ntrain
+
     if ntest:
-        n_test = ntest
-    else:
-        n_test = config["setup"]["num_events_test"]
+        config["setup"]["num_events_test"] = ntest
+
+    if nepochs:
+        config["setup"]["num_epochs"] = nepochs
 
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True
 
     if weights is None:
-        weights = config["setup"]["weights"]
+        config["setup"]["weights"] = weights
 
-    return config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights
+    return config, config_file_stem
 
 
 def create_experiment_dir(prefix=None, suffix=None):
@@ -89,7 +91,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy(global_batch_size):
+def get_strategy():
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
@@ -103,14 +105,13 @@ def get_strategy(global_batch_size):
     print("num_gpus=", num_gpus)
     if num_gpus > 1:
         strategy = tf.distribute.MirroredStrategy()
-        global_batch_size = num_gpus * global_batch_size
     elif num_gpus == 1:
         strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     elif num_gpus == 0:
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
         num_gpus = 0
-    return strategy, global_batch_size
+    return strategy, num_gpus
 
 
 def get_lr_schedule(config, steps):
@@ -174,7 +175,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             model_builder,
             objective=cfg_rand["objective"],
             max_trials=cfg_rand["max_trials"],
-            project_name="mlpf",
+            project_name=outdir,
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "bayesian":
@@ -185,7 +186,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             objective=cfg_bayes["objective"],
             max_trials=cfg_bayes["max_trials"],
             num_initial_points=cfg_bayes["num_initial_points"],
-            project_name="mlpf",
+            project_name=outdir,
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "hyperband":
@@ -242,7 +243,7 @@ def compute_weights_none(X, y, w):
 def make_weight_function(config):
     def weight_func(X,y,w):
 
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
+        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
         w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
 
         w_none = tf.ones_like(w)
@@ -251,9 +252,13 @@ def make_weight_function(config):
         w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
         w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
 
+        w_signal_only_invsqrt = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
+        w_signal_only_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
+
         weight_d = {
             "none": w_none,
             "signal_only": w_signal_only,
+            "signal_only_inverse_sqrt": w_signal_only_invsqrt,
             "inverse_sqrt": w_invsqrt
         }
 
@@ -292,10 +297,6 @@ def get_dataset_def(config):
         num_input_features=int(cds["num_input_features"]),
         num_output_features=int(cds["num_output_features"]),
         padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path", None),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds["processed_path"],
-        validation_file_path=cds["validation_file_path"],
         schema=cds["schema"],
     )
 
@@ -346,15 +347,7 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=Tr
     else:
         dataset_transform = None
 
-    # ds_train = ds_train.map(classwise_energy_normalization)
-    # ds_test = ds_train.map(classwise_energy_normalization)
-
-    if repeat:
-        ds_train_r = ds_train.repeat(config["setup"]["num_epochs"])
-        ds_test_r = ds_test.repeat(config["setup"]["num_epochs"])
-        return ds_train_r, ds_test_r, dataset_transform
-    else:
-        return ds_train, ds_test, dataset_transform
+    return ds_train, ds_test, dataset_transform
 
 def prepare_val_data(config, dataset_def, single_file=False):
     if single_file:
@@ -381,6 +374,67 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
+def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
+    cds = config["dataset"]
+
+    if cds['schema'] == "cms":
+        dsf = CMSDatasetFactory(config)
+    elif cds['schema'] == "delphes":
+        dsf = DelphesDatasetFactory(config)
+    else:
+        raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
+
+    ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
+    bs = config["datasets"][dataset_name]["batch_per_gpu"]
+    if num_gpus>1:
+        bs = bs*num_gpus
+
+    if not (num_events is None):
+        ds = ds.take(num_events)
+
+    ds = ds.batch(bs)
+    ds = ds.map(dsf.get_map_to_supervised())
+
+    return ds, ds_info
+
+#Load multiple datasets and mix them together
+def get_datasets(dataset_names, config, num_gpus, split):
+
+    #Load each separate dataset
+    datasets = []
+    steps = []
+    for ds_name in dataset_names:
+        ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
+
+        num_steps = 0
+        for elem in ds:
+            num_steps += 1
+        print("Loaded {}:{} with {} steps after batching".format(ds_name, split, num_steps))
+
+        datasets.append(ds)
+        steps.append(num_steps)
+
+    #Now interleave elements from the datasets randomly
+    ids = 0
+    indices = []
+    for ds, num_steps in zip(datasets, steps):
+        indices += num_steps*[ids]
+        ids += 1
+
+    indices = np.array(indices)
+    np.random.shuffle(indices)
+
+    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
+
+    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+
+    num_steps = 0
+    for _ in ds:
+        num_steps += 1
+
+    print("Joint dataset {} with {} steps".format(",".join(dataset_names), num_steps))
+    return ds, num_steps
+
 def set_config_loss(config, trainable):
     if trainable == "classification":
         config["dataset"]["pt_loss_coef"] = 0.0
@@ -402,7 +456,7 @@ def set_config_loss(config, trainable):
 
 def get_class_loss(config):
     if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False)
+        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False, label_smoothing=config["setup"].get("classification_label_smoothing", 0.0))
     elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
         cls_loss = tfa.losses.sigmoid_focal_crossentropy
     else:

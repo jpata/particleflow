@@ -232,12 +232,6 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
-        self.aggregation_direction = kwargs.pop("aggregation_direction")
-
-        if self.aggregation_direction == "dst":
-            self.agg_dim = -2
-        elif self.aggregation_direction == "src":
-            self.agg_dim = -3
 
         self.ffn = point_wise_feed_forward_network(
             self.output_dim,
@@ -250,10 +244,20 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
 
     def call(self, inputs):
         x, adj, msk = inputs
-        avg_message = tf.reduce_mean(adj, axis=self.agg_dim)
-        max_message = tf.reduce_max(adj, axis=self.agg_dim)
-        x2 = tf.concat([x, avg_message, max_message], axis=-1)*msk
-        return self.activation(self.ffn(x2))
+
+        #collect incoming messages
+        avg_message_dst = tf.reduce_mean(adj, axis=-2)
+        max_message_dst = tf.reduce_max(adj, axis=-2)
+        min_message_dst = tf.reduce_min(adj, axis=-2)
+
+        #collect outgoing messages
+        avg_message_src = tf.reduce_mean(adj, axis=-3)
+        max_message_src = tf.reduce_max(adj, axis=-3)
+        min_message_src = tf.reduce_min(adj, axis=-3)
+
+        #node update
+        x2 = tf.concat([x, avg_message_dst, max_message_dst, min_message_dst, avg_message_src, max_message_src, min_message_src], axis=-1)
+        return self.activation(self.ffn(x2))*msk
 
 def point_wise_feed_forward_network(d_model, dff, name, num_layers=1, activation='elu', dtype=tf.dtypes.float32, dim_decrease=False, dropout=0.0):
 
@@ -303,23 +307,32 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, 1) message matrix
     """
-    def call(self, x_msg_binned, training=False):
-        dm = tf.expand_dims(pairwise_gaussian_dist(x_msg_binned, x_msg_binned), axis=-1)
+    def call(self, x_msg_binned, msk, training=False):
+        dm = tf.expand_dims(pairwise_gaussian_dist(x_msg_binned*msk, x_msg_binned*msk), axis=-1)
         dm = tf.exp(-self.dist_mult*dm)
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
         return dm
 
 class NodePairTrainableKernel(tf.keras.layers.Layer):
-    def __init__(self, output_dim=32, hidden_dim=32, num_layers=2, activation="elu", **kwargs):
+    def __init__(self, output_dim=32, hidden_dim_node=256, hidden_dim_pair=32, num_layers=2, activation="elu", **kwargs):
         self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim_node = hidden_dim_node
+        self.hidden_dim_pair = hidden_dim_pair
         self.num_layers = num_layers
         self.activation = getattr(tf.keras.activations, activation)
 
-        self.ffn_kernel = point_wise_feed_forward_network(
+        self.ffn_node = point_wise_feed_forward_network(
             self.output_dim,
-            self.hidden_dim,
-            kwargs.get("name") + "_" + "ffn",
+            self.hidden_dim_node,
+            kwargs.get("name") + "_" + "node",
+            num_layers=self.num_layers,
+            activation=self.activation
+        )
+
+        self.pair_kernel = point_wise_feed_forward_network(
+            self.output_dim,
+            self.hidden_dim_pair,
+            kwargs.get("name") + "_" + "pair_kernel",
             num_layers=self.num_layers,
             activation=self.activation
         )
@@ -331,8 +344,11 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
 
     returns: (n_batch, n_bins, n_points, n_points, output_dim) message matrix
     """
-    def call(self, x_msg_binned, training=False):
-        dm = pairwise_learnable_dist(x_msg_binned, x_msg_binned, self.ffn_kernel, training=training)
+    def call(self, x_msg_binned, msk, training=False):
+
+        node_proj = self.activation(self.ffn_node(x_msg_binned))*msk
+
+        dm = pairwise_learnable_dist(node_proj, node_proj, self.pair_kernel, training=training)
         dm = self.activation(dm)
         return dm
 
@@ -391,8 +407,8 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
 
         #Run the node-to-node kernel (distance computation / graph building / attention)
-        dm = self.kernel(x_msg_binned, training=training)
-
+        dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
+        
         #remove the masked points row-wise and column-wise
         dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
         dm = tf.einsum("abijk,abj->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
@@ -462,6 +478,7 @@ class OutputDecoding(tf.keras.Model):
 
         layernorm=False,
         mask_reg_cls0=True,
+        energy_multimodal=True,
         **kwargs):
 
         super(OutputDecoding, self).__init__(**kwargs)
@@ -475,6 +492,8 @@ class OutputDecoding(tf.keras.Model):
         self.phi_skip_gate = phi_skip_gate
 
         self.mask_reg_cls0 = mask_reg_cls0
+
+        self.energy_multimodal = energy_multimodal
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
@@ -518,12 +537,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            num_output_classes, energy_hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
-            dropout=dropout)
-
-        self.ffn_energy_classwise = point_wise_feed_forward_network(
-            1, energy_hidden_dim, "ffn_energy_classwise_shift",
+            num_output_classes if self.energy_multimodal else 1, energy_hidden_dim, "ffn_energy",
             dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
             dropout=dropout)
 
@@ -584,14 +598,17 @@ class OutputDecoding(tf.keras.Model):
             X_encoded_energy = tf.concat([X_encoded_energy, tf.stop_gradient(out_id_logits)], axis=-1)
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
-        pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
 
-        pred_energy += tf.reduce_sum(
-            out_id_hard_softmax*self.ffn_energy_classwise(
-                tf.concat([orig_energy, tf.stop_gradient(out_id_logits)], axis=-1), training=training),
-            axis=-1, keepdims=True)
+        if self.energy_multimodal:
+            pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
+        else:
+            pred_energy = pred_energy_corr
 
-        pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
+        # classwise_energy_corr = self.ffn_energy_classwise(tf.concat([orig_energy, out_id_logits], axis=-1), training=training)
+        # pred_energy += classwise_energy_corr[:, :, 0:1]
+        # pred_energy *= classwise_energy_corr[:, :, 1:2]
+
+        # pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
 
         #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
         #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
@@ -635,7 +652,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
         self.ffn_energy.trainable = True
-        self.ffn_energy_classwise.trainable = True
 
     def set_trainable_classification(self):
         self.ffn_id.trainable = True
@@ -644,7 +660,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
         self.ffn_energy.trainable = False
-        self.ffn_energy_classwise.trainable = False
 
 class CombinedGraphLayer(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -657,8 +672,9 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.dropout = kwargs.pop("dropout")
         self.kernel = kwargs.pop("kernel")
         self.node_message = kwargs.pop("node_message")
-        self.hidden_dim = kwargs.pop("hidden_dim")
+        self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
         self.do_lsh = kwargs.pop("do_lsh", True)
+        self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
 
@@ -668,12 +684,11 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         #self.gaussian_noise = tf.keras.layers.GaussianNoise(0.01)
         self.ffn_dist = point_wise_feed_forward_network(
             self.distance_dim,
-            self.hidden_dim,
+            self.ffn_dist_hidden_dim,
             kwargs.get("name") + "_ffn_dist",
-            num_layers=2, activation=self.activation,
+            num_layers=self.ffn_dist_num_layers, activation=self.activation,
             dropout=self.dropout
         )
-
         if self.do_lsh:
             self.message_building_layer = MessageBuildingLayerLSH(
                 distance_dim=self.distance_dim,
@@ -704,21 +719,25 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         #compute node features for graph building
         x_dist = self.dist_activation(self.ffn_dist(x, training=training))
 
-        #x_dist = self.gaussian_noise(x_dist, training=training)
-
         #compute the element-to-element messages / distance matrix / graph structure
         if self.do_lsh:
             bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
+
+            #bins_split: (FIXME)
+            #x: (batch, bin, elem, node_feature)
+            #dm: (batch, bin, elem, elem, pair_feature)
+            #msk_f: (batch, bin, elem, elem, 1)
+
         else:
             dm = self.message_building_layer(x_dist, msk)
             msk_f = tf.expand_dims(tf.cast(msk, x.dtype), axis=-1)
             bins_split = None
+            #dm: (batch, elem, elem, pair_feature)
 
         #run the node update with message passing
         for msg in self.message_passing_layers:
+            
             x = msg((x, dm, msk_f))
-
-            #x = self.gaussian_noise(x, training=training)
 
             if self.dropout_layer:
                 x = self.dropout_layer(x, training=training)
@@ -732,7 +751,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
 class PFNetDense(tf.keras.Model):
     def __init__(self,
             do_node_encoding=False,
-            hidden_dim=128,
+            node_encoding_hidden_dim=128,
             dropout=0.0,
             activation="gelu",
             multi_output=False,
@@ -747,7 +766,8 @@ class PFNetDense(tf.keras.Model):
             node_message={},
             output_decoding={},
             debug=False,
-            schema="cms"
+            schema="cms",
+            node_update_mode="concat"
         ):
         super(PFNetDense, self).__init__()
 
@@ -757,16 +777,17 @@ class PFNetDense(tf.keras.Model):
         self.skip_connection = skip_connection
         
         self.do_node_encoding = do_node_encoding
-        self.hidden_dim = hidden_dim
+        self.node_encoding_hidden_dim = node_encoding_hidden_dim
         self.dropout = dropout
+        self.node_update_mode = node_update_mode
         self.activation = getattr(tf.keras.activations, activation)
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
-                self.hidden_dim,
-                self.hidden_dim,
+                combined_graph_layer["node_message"]["output_dim"],
+                self.node_encoding_hidden_dim,
                 "node_encoding",
-                num_layers=2,
+                num_layers=1,
                 activation=self.activation,
                 dropout=self.dropout
             )
@@ -792,41 +813,58 @@ class PFNetDense(tf.keras.Model):
         msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
         #encode the elements for classification (id)
-        enc = self.enc(X)
-
+        X_enc = self.enc(X)
 
         encs = []
         if self.skip_connection:
-            encs.append(enc)
-        enc_cg = enc
+            encs.append(X_enc)
+
+        X_enc_cg = X_enc
         if self.do_node_encoding:
-            enc_cg = self.node_encoding(enc_cg, training=training)
+            X_enc_ffn = self.activation(self.node_encoding(X_enc_cg, training=training))
+            X_enc_cg = X_enc_ffn
+
         for cg in self.cg:
-            enc_all = cg(enc_cg, msk, training=training)
-            enc_cg = enc_all["enc"]
+            enc_all = cg(X_enc_cg, msk, training=training)
+
+            if self.node_update_mode == "additive":
+                X_enc_cg += enc_all["enc"]
+            elif self.node_update_mode == "concat":
+                X_enc_cg = enc_all["enc"]
+                encs.append(X_enc_cg)
+
             if self.debug:
                 debugging_data[cg.name] = enc_all
-            encs.append(enc_cg)
+        
+        if self.node_update_mode == "concat":
+            dec_output = tf.concat(encs, axis=-1)*msk_input
+        elif self.node_update_mode == "additive":
+            dec_output = X_enc_cg
 
-        dec_input = []
-        dec_input += encs
-        dec_output = tf.concat(dec_input, axis=-1)*msk_input
+        X_enc_cg = X_enc
+        if self.do_node_encoding:
+            X_enc_cg = X_enc_ffn
+
+        encs_energy = []
+        for cg in self.cg_energy:
+            enc_all = cg(X_enc_cg, msk, training=training)
+            if self.node_update_mode == "additive":
+                X_enc_cg += enc_all["enc"]
+            elif self.node_update_mode == "concat":
+                X_enc_cg = enc_all["enc"]
+                encs_energy.append(X_enc_cg)
+
+            if self.debug:
+                debugging_data[cg.name] = enc_all
+            encs_energy.append(X_enc_cg)
+
+        if self.node_update_mode == "concat":
+            dec_output_energy = tf.concat(encs_energy, axis=-1)*msk_input
+        elif self.node_update_mode == "additive":
+            dec_output_energy = X_enc_cg
+
         if self.debug:
             debugging_data["dec_output"] = dec_output
-
-        enc_cg = enc
-        encs_energy = []
-        if self.skip_connection:
-            encs_energy.append(enc)
-        for cg in self.cg_energy:
-            enc_all = cg(enc_cg, msk, training=training)
-            enc_cg = enc_all["enc"]
-            if self.debug:
-                debugging_data[cg.name] = enc_all
-            encs_energy.append(enc_cg)
-
-        dec_output_energy = tf.concat(encs_energy, axis=-1)*msk_input
-        if self.debug:
             debugging_data["dec_output_energy"] = dec_output_energy
 
         ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
@@ -849,56 +887,18 @@ class PFNetDense(tf.keras.Model):
         self.output_dec.set_trainable_named(layer_names)
 
     # def train_step(self, data):
-    #     # Unpack the data. Its structure depends on your model and
-    #     # on what you pass to `fit()`.
     #     x, y, sample_weights = data
-
     #     if not hasattr(self, "step"):
     #         self.step = 0
 
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
-
-    #         #regression losses computed only for correctly classified particles
-    #         pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-    #         true_cls = tf.argmax(y["cls"], axis=-1)
-    #         #msk_loss = tf.cast((pred_cls==true_cls) & (true_cls!=0), tf.float32)
-    #         #sample_weights["energy"] *= msk_loss
-    #         #sample_weights["pt"] *= msk_loss
-    #         #sample_weights["eta"] *= msk_loss
-    #         #sample_weights["sin_phi"] *= msk_loss
-    #         #sample_weights["cos_phi"] *= msk_loss
-
-    #         for icls in [3, ]:
-    #             msk1 = (true_cls==icls)
-    #             msk2 = (pred_cls==icls)
-    #             import matplotlib
-    #             import matplotlib.pyplot as plt
-
-    #             plt.figure(figsize=(4,4))
-    #             minval = np.min(y["energy"][msk1].numpy().flatten())
-    #             maxval = np.max(y["energy"][msk1].numpy().flatten())
-    #             plt.scatter(
-    #                 y["energy"][msk1&msk2].numpy().flatten(),
-    #                 y_pred["energy"][msk1&msk2].numpy().flatten(),
-    #                 marker=".", alpha=0.5
-    #             )
-    #             plt.xlabel("true")
-    #             plt.ylabel("pred")
-    #             plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
-    #             plt.savefig("train_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
-    #             plt.close("all")
-
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
-    #     # Compute gradients
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)
-    #     # Update weights
     #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     # Update metrics (includes the metric that tracks the loss)
     #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value
 
     #     self.step += 1
     #     return {m.name: m.result() for m in self.metrics}

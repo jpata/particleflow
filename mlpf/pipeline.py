@@ -27,6 +27,7 @@ import tensorflow_addons as tfa
 import keras_tuner as kt
 
 from tfmodel.data import Dataset
+from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 from tfmodel.model_setup import (
     make_model,
     configure_model_weights,
@@ -48,7 +49,6 @@ from tfmodel.utils import (
     compute_weights_invsqrt,
     compute_weights_none,
     get_train_val_datasets,
-    targets_multi_output,
     get_dataset_def,
     prepare_val_data,
     set_config_loss,
@@ -58,6 +58,8 @@ from tfmodel.utils import (
     delete_all_but_best_checkpoint,
     get_tuner,
     get_raytune_schedule,
+    get_heptfds_dataset,
+    get_datasets
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -71,48 +73,41 @@ from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
+def customize_gun_sample(config):
+
+    config["dataset"]["classification_loss_coef"] = 0.0
+    config["dataset"]["charge_loss_coef"] = 0.0
+    config["dataset"]["eta_loss_coef"] = 0.0
+    config["dataset"]["sin_phi_loss_coef"] = 0.0
+    config["dataset"]["cos_phi_loss_coef"] = 0.0
+    config["setup"]["trainable"] = "regression"
+
+    config["training_dataset"] = "cms_pf_single_pi"
+    config["testing_dataset"] = "cms_pf_single_pi"
+    return config
+
+def customize_pipeline_test(config):
+    config["training_datasets"] = [config["training_datasets"][0], ]
+    config["testing_datasets"] = [config["testing_datasets"][0], ]
+    return config
+
+customization_functions = {
+    "gun_sample": customize_gun_sample,
+    "pipeline_test": customize_pipeline_test
+}
 
 @click.group()
 @click.help_option("-h", "--help")
 def main():
     pass
-
-
-@main.command()
-@click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("--customize", help="customization function", type=str, default=None)
-def data(config, customize):
-
-    config, _, _, _, _, _, _ = parse_config(config)
-
-    if customize:
-        config = customization_functions[customize](config)
-
-    cds = config["dataset"]
-
-    dataset_def = Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        raw_path=cds.get("raw_path"),
-        raw_files=cds.get("raw_files", None),
-        processed_path=cds.get("processed_path"),
-        validation_file_path=cds["validation_file_path"],
-        schema=cds["schema"]
-    )
-
-    dataset_def.process(
-        config["dataset"]["num_files_per_chunk"]
-    )
         
 
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("--ntrain", default=None, help="override the number of training events", type=int)
-@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+@click.option("--ntrain", default=None, help="override the number of training steps", type=int)
+@click.option("--ntest", default=None, help="override the number of testing steps", type=int)
 @click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
 @click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
@@ -137,19 +132,15 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     """Train a model defined by config"""
     config_file_path = config
-    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
-        config, ntrain, ntest, weights
+    config, config_file_stem = parse_config(
+        config, nepochs=nepochs, weights=weights
     )
-    if nepochs:
-        n_epochs = nepochs
+
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
     if customize:
-        prefix += customize + "_"
         config = customization_functions[customize](config)
-        #FIXME: refactor this
-        global_batch_size = config["setup"]["batch_size"]
 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
@@ -157,21 +148,24 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         outdir = str(Path(weights).parent)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    if "CPU" not in strategy.extended.worker_devices[0]:
-        nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
-        p = subprocess.Popen(shlex.split(nvidia_smi_call))
-    # If using more than 1 GPU, we scale the batch size by the number of GPUs before the dataset is loaded
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
+    strategy, num_gpus = get_strategy()
+    #if "CPU" not in strategy.extended.worker_devices[0]:
+    #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
+    #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
-    dataset_def = get_dataset_def(config)
-    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
+    ds_train, num_train_steps = get_datasets(config["training_datasets"], config, num_gpus, "train")
+    ds_test, num_test_steps = get_datasets(config["testing_datasets"], config, num_gpus, "test")
+    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
-    #FIXME: split up training/test and validation dataset and parameters
-    dataset_def.padded_num_elem_size = 6400
+    if ntrain:
+        ds_train = ds_train.take(ntrain)
+        num_train_steps = ntrain
+    if ntest:
+        ds_test = ds_test.take(ntest)
+        num_test_steps = ntest
 
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
+    print("num_train_steps", num_train_steps)
+    print("num_test_steps", num_test_steps)
 
     if experiment:
         experiment.set_name(outdir)
@@ -181,10 +175,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
-    total_steps = n_epochs * n_train // global_batch_size
-
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=num_train_steps)
         opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
@@ -197,13 +189,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
         model = make_model(config, model_dtype)
 
-        # Run model once to build the layers
-        print(X_val.shape)
-        
-        if config["tensorflow"]["eager"]:
-            model(X_val[:1])
-        else:
-            model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+        # Build the layers after the element and feature dimensions are specified
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
         if weights:
@@ -242,33 +229,25 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         )
         model.summary()
 
-    validation_particles = None
-    if config["dataset"]["target_particles"] == "cand":
-        validation_particles = ycand_val
-    elif config["dataset"]["target_particles"] == "gen":
-        validation_particles = ygen_val
-
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        X_val,
-        validation_particles,
-        dataset_transform,
-        config["dataset"]["num_output_classes"],
-        dataset_def,
-        experiment
+        ds_val,
+        ds_info,
+        comet_experiment=experiment
     )
     callbacks.append(optim_callbacks)
 
     fit_result = model.fit(
-        ds_train_r,
-        validation_data=ds_test_r,
-        epochs=initial_epoch + n_epochs,
+        ds_train.repeat(),
+        validation_data=ds_test.repeat(),
+        epochs=initial_epoch + config["setup"]["num_epochs"],
         callbacks=callbacks,
-        steps_per_epoch=n_train // global_batch_size,
-        validation_steps=n_test // global_batch_size,
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
         initial_epoch=initial_epoch,
     )
+
 
     history_path = Path(outdir) / "history"
     history_path = str(history_path)
@@ -278,9 +257,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     print("Training done.")
 
-    if "CPU" not in strategy.extended.worker_devices[0]:
-        p.terminate()
-
+    #if "CPU" not in strategy.extended.worker_devices[0]:
+    #    p.terminate()
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -288,20 +266,18 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-@click.option("-v", "--validation_files", help="optionally override validation file path", type=click.Path(), default=None)
-def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
+def evaluate(config, train_dir, weights, evaluation_dir):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
-    config, _, global_batch_size, _, _, _, weights = parse_config(config, weights=weights)
-    # Switch off multi-output for the evaluation for backwards compatibility
-    config["setup"]["multi_output"] = False
+    config, _ = parse_config(config, weights=weights)
 
     if evaluation_dir is None:
         eval_dir = str(Path(train_dir) / "evaluation")
     else:
         eval_dir = evaluation_dir
+
     Path(eval_dir).mkdir(parents=True, exist_ok=True)
 
     if config["setup"]["dtype"] == "float16":
@@ -312,18 +288,11 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
     else:
         model_dtype = tf.dtypes.float32
 
-    dataset_def = get_dataset_def(config)
-
-    if not (validation_files is None):
-        dataset_def.val_filelist = glob.glob(str(validation_files))
-
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=False)
+    strategy, num_gpus = get_strategy()
+    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
 
     model = make_model(config, model_dtype)
-
-    # Evaluate model once to build the layers
-    print(X_val.shape)
-    model(tf.cast(X_val[:1], model_dtype))
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
     # need to load the weights in the same trainable configuration as the model was set up
     configure_model_weights(model, config["setup"].get("weights_config", "all"))
@@ -333,11 +302,9 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    model(tf.cast(X_val[:1], model_dtype))
-
-    model.compile()
-    eval_model(X_val, ygen_val, ycand_val, model, config, eval_dir, global_batch_size)
-    freeze_model(model, config, train_dir)
+    
+    eval_model(model, ds_test, config, eval_dir)
+    freeze_model(model, config, ds_test.take(1), train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -348,18 +315,13 @@ def evaluate(config, train_dir, weights, evaluation_dir, validation_files):
 def find_lr(config, outdir, figname, logscale):
     """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
     which an appropriate LR-range can be determined"""
-    config, _, global_batch_size, n_train, _, _, _ = parse_config(config)
-    ds_train_r, _, _ = get_train_val_datasets(config, global_batch_size, n_train, n_test=0)
+    config, _ = parse_config(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
+    strategy, num_gpus = get_strategy()
 
-    # If using more than 1 GPU, we scale the batch size by the number of GPUs
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
-
-    dataset_def = get_dataset_def(config)
-    X_val, _, _ = prepare_val_data(config, dataset_def, single_file=True)
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
+    ds_train = ds_train.take(1)
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -375,7 +337,7 @@ def find_lr(config, outdir, figname, logscale):
         config = set_config_loss(config, config["setup"]["trainable"])
 
         # Run model once to build the layers
-        model(tf.cast(X_val[:1], model_dtype))
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         configure_model_weights(model, config["setup"]["trainable"])
 
@@ -399,7 +361,7 @@ def find_lr(config, outdir, figname, logscale):
         callbacks = [lr_finder]
 
         model.fit(
-            ds_train_r,
+            ds_train.repeat(),
             epochs=max_steps,
             callbacks=callbacks,
             steps_per_epoch=1,
@@ -407,26 +369,6 @@ def find_lr(config, outdir, figname, logscale):
 
         lr_finder.plot(save_dir=outdir, figname=figname, log_scale=logscale)
 
-
-def customize_gun_sample(config):
-
-    #FIXME: must be at least 2x bin_size
-    config["dataset"]["padded_num_elem_size"] = 1280
-
-    config["dataset"]["processed_path"] = "data/SinglePiFlatPt0p7To10_cfi/tfr_cand/*.tfrecords"
-    config["dataset"]["raw_path"] = "data/SinglePiFlatPt0p7To10_cfi/raw/*.pkl*"
-    config["dataset"]["classification_loss_coef"] = 0.0
-    config["dataset"]["charge_loss_coef"] = 0.0
-    config["dataset"]["eta_loss_coef"] = 0.0
-    config["dataset"]["sin_phi_loss_coef"] = 0.0
-    config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "regression"
-    config["setup"]["batch_size"] = 10*config["setup"]["batch_size"]
-    return config
-
-customization_functions = {
-    "gun_sample": customize_gun_sample
-}
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -439,48 +381,39 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-o", "--outdir", help="output dir", type=click.Path())
+@click.option("-c", "--config", help="configuration file", type=click.Path(), required=True)
+@click.option("-o", "--outdir", help="output dir", type=click.Path(), required=True)
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
 def hypertune(config, outdir, ntrain, ntest, recreate):
     config_file_path = config
-    config, _, global_batch_size, n_train, n_test, n_epochs, _ = parse_config(config, ntrain, ntest)
+    config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
     # Override number of epochs with max_epochs from Hyperband config if specified
     if config["hypertune"]["algorithm"] == "hyperband":
-        n_epochs = config["hypertune"]["hyperband"]["max_epochs"]
+        config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-    if maybe_global_batch_size is not None:
-        global_batch_size = maybe_global_batch_size
-    total_steps = n_epochs * n_train // global_batch_size
+    strategy, num_gpus = get_strategy()
+ 
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
+    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
+    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
-    model_builder, optim_callbacks = hypertuning.get_model_builder(config, total_steps)
+    num_train_steps = 0
+    for _ in ds_train:
+        num_train_steps += 1
+    num_test_steps = 0
+    for _ in ds_test:
+        num_test_steps += 1
 
-    dataset_def = get_dataset_def(config)
-    ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(config, global_batch_size, n_train, n_test)
-
-    #FIXME: split up training/test and validation dataset and parameters
-    dataset_def.padded_num_elem_size = 6400
-
-    X_val, ygen_val, ycand_val = prepare_val_data(config, dataset_def, single_file=True)
-
-    validation_particles = None
-    if config["dataset"]["target_particles"] == "cand":
-        validation_particles = ycand_val
-    elif config["dataset"]["target_particles"] == "gen":
-        validation_particles = ygen_val
+    model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
         outdir,
-        X_val,
-        validation_particles,
-        dataset_transform,
-        config["dataset"]["num_output_classes"],
-        dataset_def,
+        ds_val,
+        ds_info,
     )
 
     callbacks.append(optim_callbacks)
@@ -490,12 +423,11 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     tuner.search_space_summary()
 
     tuner.search(
-        ds_train_r,
-        epochs=n_epochs,
-        validation_data=ds_test_r,
-        steps_per_epoch=n_train // global_batch_size,
-        validation_steps=n_test // global_batch_size,
-        #callbacks=[tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')]
+        ds_train.repeat(),
+        epochs=config["setup"]["num_epochs"],
+        validation_data=ds_test.repeat(),
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
         callbacks=callbacks,
     )
     print("Hyperparameter search complete.")
@@ -753,6 +685,32 @@ def raytune_analysis(exp_dir, save, skip):
     analysis = Analysis(exp_dir,  default_metric="val_loss", default_mode="min")
     plot_ray_analysis(analysis, save=save, skip=skip)
 
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("--ntrain", default=None, help="override the number of training events", type=int)
+@click.option("--ntest", default=None, help="override the number of testing events", type=int)
+def debug_data(config, ntrain, ntest):
+    """Train a model defined by config"""
+    config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(
+        config, ntrain, ntest, weights=None,
+    )
+
+    dataset_def = get_dataset_def(config)
+    ds_train, ds_test, dataset_transform = get_train_val_datasets(config, global_batch_size=1, n_train=n_train, n_test=n_test)
+
+    # cand_counts = np.zeros(8)
+    # for data_item in tqdm(ds_train, desc="Counting"):
+    #     import pdb; pdb.set_trace()
+    #     cand_vals, cand_count = np.unique(np.argmax(data_item[1]['cls'], axis=2), return_counts=True)
+    #     cand_counts[cand_vals.astype("int32")] += cand_count
+    # print("cand_counts: ", cand_counts)
+
+    dsf = CMSDatasetFactory(config)
+    ds_train, _ = dsf.get_dataset(split="train")
+    ds_test, _ = dsf.get_dataset(split="test")
+    for data_item in tqdm(ds_train, desc="Counting"):
+        import pdb; pdb.set_trace()
 
 if __name__ == "__main__":
     main()
