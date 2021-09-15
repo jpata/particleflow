@@ -224,9 +224,11 @@ raytune:
 
 training_datasets:
   - cms_pf_ttbar
+  - cms_pf_single_electron
 
 testing_datasets:
   - cms_pf_ttbar
+  - cms_pf_single_electron
 
 validation_dataset: cms_pf_ttbar
 
