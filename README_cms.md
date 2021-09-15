@@ -46,8 +46,10 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/cms.
 
 Generate TFRecord datasets from the pickle files
 ```
-mkdir -p data/TTbar_14TeV_TuneCUETP8M1_cfi
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi data/
+mkdir -p data
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar* data/
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/Single* data/
 tfds build ./hep_tfds/heptfds/cms_pf/ttbar --manual_dir data
 tfds build ./hep_tfds/heptfds/cms_pf/singlepi --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singleele --manual_dir data
 ```
