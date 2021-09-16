@@ -244,4 +244,4 @@ def analyze_ray_experiment(exp_dir, default_metric, default_mode):
 
     topk_summary_plot_v2(analysis, 5, save_dir=exp_dir)
 
-    summ, styled = summarize_top_k(analysis, 10, save_dir=exp_dir)
+    summ, styled = summarize_top_k(analysis, k=10, save_dir=exp_dir)
