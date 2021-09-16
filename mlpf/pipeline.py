@@ -65,6 +65,7 @@ from tfmodel.utils import (
 from tfmodel.lr_finder import LRFinder
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
+from tfmodel.utils_analysis import plot_ray_analysis, analyze_ray_experiment
 
 import ray
 from ray import tune
@@ -562,51 +563,6 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
             )
 
 
-def get_hp_str(result):
-    def func(key):
-        if "config" in key:
-            return key.split("config/")[-1]
-    s = ""
-    for ii, hp in enumerate(list(filter(None.__ne__, [func(key) for key in result.keys()]))):
-        if ii % 6 == 0:
-            s += "\n"
-        s += "{}={}; ".format(hp, result["config/{}".format(hp)].values[0])
-    return s
-
-def plot_ray_analysis(analysis, save=False, skip=0):
-    to_plot = [
-    #'adam_beta_1',
-       'charge_loss', 'cls_acc_unweighted', 'cls_loss',
-       'cos_phi_loss', 'energy_loss', 'eta_loss', 'learning_rate', 'loss',
-       'pt_loss', 'sin_phi_loss', 'val_charge_loss',
-       'val_cls_acc_unweighted', 'val_cls_acc_weighted', 'val_cls_loss',
-       'val_cos_phi_loss', 'val_energy_loss', 'val_eta_loss', 'val_loss',
-       'val_pt_loss', 'val_sin_phi_loss',
-    ]
-
-    dfs = analysis.fetch_trial_dataframes()
-    result_df = analysis.dataframe()
-    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
-        result = result_df[result_df["logdir"] == key]
-
-        fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
-        for var, ax in zip(to_plot, axs.flat):
-            # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
-            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
-            ax.set_xlabel("Epoch")
-            ax.set_ylabel(var)
-            ax.grid(alpha=0.3)
-        plt.suptitle(get_hp_str(result))
-
-        if save:
-            plt.savefig(key + "/trial_summary.jpg")
-            plt.close()
-    if not save:
-        plt.show()
-    else:
-        print("Saved plots in trial dirs.")
-
-
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
@@ -681,9 +637,12 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume):
 @click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
 @click.option("-s", "--save", help="save plots in trial dirs", is_flag=True)
 @click.option("-k", "--skip", help="skip first values to avoid large losses at start of training", type=int)
-def raytune_analysis(exp_dir, save, skip):
-    analysis = Analysis(exp_dir,  default_metric="val_loss", default_mode="min")
+@click.option("--metric", help="experiment dir", type=str)
+@click.option("--mode", help="experiment dir", type=str)
+def raytune_analysis(exp_dir, save, skip, mode, metric):
+    analysis = Analysis(exp_dir,  default_metric=metric, default_mode=mode)
     plot_ray_analysis(analysis, save=save, skip=skip)
+    analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
 
 @main.command()
 @click.help_option("-h", "--help")
