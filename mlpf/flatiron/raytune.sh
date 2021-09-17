@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 4
+#SBATCH -N 12
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --constraint=a100,sxm4

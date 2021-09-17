@@ -581,6 +581,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
         os.environ["TUNE_RESULT_DIR"] = trd
 
+    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 24 * 60 * 60  # Avoid timeout errors
     if not local:
         ray.init(address='auto')
 
@@ -612,6 +613,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         num_cpus_per_worker=cpus,
         num_gpus_per_worker=gpus,
         num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
+        timeout_s=24 * 60 * 60,
     )
 
     analysis = tune.run(
@@ -624,6 +626,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
         resume=resume,
+        max_failures=10,
     )
     print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
 
