@@ -194,7 +194,7 @@ raytune:
   sched: "asha"  # asha, hyperband
   parameters:
     # optimizer parameters
-    lr: [1e-4]
+    lr: [1e-3]
     batch_size: [32]
     expdecay_decay_steps: [10000]
     # model parameters
@@ -215,12 +215,12 @@ raytune:
   # Tune schedule specific parameters
   asha:
     max_t: 100
-    reduction_factor: 3
+    reduction_factor: 4
     brackets: 1
-    grace_period: 5
+    grace_period: 10
   hyperband:
     max_t: 100
-    reduction_factor: 3
+    reduction_factor: 4
 
 training_datasets:
   - cms_pf_ttbar
