@@ -209,8 +209,8 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
 def get_raytune_schedule(raytune_cfg):
     if raytune_cfg["sched"] == "asha":
         return AsyncHyperBandScheduler(
-            metric="val_loss",
-            mode="min",
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
             time_attr="training_iteration",
             max_t=raytune_cfg["asha"]["max_t"],
             grace_period=raytune_cfg["asha"]["grace_period"],
@@ -219,8 +219,8 @@ def get_raytune_schedule(raytune_cfg):
         )
     if raytune_cfg["sched"] == "hyperband":
         return HyperBandScheduler(
-            metric="val_loss",
-            mode="min",
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
             time_attr="training_iteration",
             max_t=raytune_cfg["hyperband"]["max_t"],
             reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],

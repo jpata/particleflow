@@ -192,6 +192,8 @@ hypertune:
 raytune:
   local_dir:  # Note: please specify an absolute path
   sched: "asha"  # asha, hyperband
+  default_metric: "val_cls_acc_weighted"
+  default_mode: "max"
   parameters:
     # optimizer parameters
     lr: [1e-3]

@@ -635,8 +635,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     skip = 20
     if skip > cfg["setup"]["num_epochs"]:
         skip = 0
-    analysis.default_metric = "val_loss"
-    analysis.default_mode = "min"
+    analysis.default_metric = cfg["raytune"]["default_metric"]
+    analysis.default_mode = cfg["raytune"]["default_mode"]
     plot_ray_analysis(analysis, save=True, skip=skip)
     topk_summary_plot_v2(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
     summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
