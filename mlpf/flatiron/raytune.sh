@@ -50,7 +50,7 @@ export ip_head
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $node_1"
-srun --nodes=1 --ntasks=1 -w $node_1 mlpf/flatiron/start-head.sh $ip $SLURM_JOB_ID $2 "/mnt/ceph/users/ewulff/nvidia_smi_logs/" &
+srun --nodes=1 --ntasks=1 -w $node_1 mlpf/raytune/start-head.sh $ip $SLURM_JOB_ID $2 "/mnt/ceph/users/ewulff/nvidia_smi_logs/" &
 sleep 30
 
 worker_num=$(($SLURM_JOB_NUM_NODES - 1)) #number of nodes other than the head node
@@ -58,7 +58,7 @@ for ((  i=1; i<=$worker_num; i++ ))
 do
   node_i=${nodes_array[$i]}
   echo "STARTING WORKER $i at $node_i"
-  srun --nodes=1 --ntasks=1 -w $node_i mlpf/flatiron/start-worker.sh $ip_head $SLURM_JOB_ID $i $2 "/mnt/ceph/users/ewulff/nvidia_smi_logs/" &
+  srun --nodes=1 --ntasks=1 -w $node_i mlpf/raytune/start-worker.sh $ip_head $SLURM_JOB_ID $i $2 "/mnt/ceph/users/ewulff/nvidia_smi_logs/" &
   sleep 5
 done
 ##############################################################################################
