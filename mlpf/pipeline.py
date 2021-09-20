@@ -578,6 +578,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     if tune_result_dir is not None:
         os.environ["TUNE_RESULT_DIR"] = tune_result_dir
     else:
+        if isinstance(cfg["raytune"]["local_dir"], type(None)):
+            raise TypeError("Please specify a local_dir in the raytune section of the config file.")
         trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
         os.environ["TUNE_RESULT_DIR"] = trd
 
