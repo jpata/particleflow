@@ -451,7 +451,7 @@ def set_raytune_search_parameters(search_space, config):
     config["parameters"]["combined_graph_layer"]["node_message"]["activation"] = search_space["activation"]
     config["parameters"]["combined_graph_layer"]["dist_activation"] = search_space["activation"]
     config["parameters"]["combined_graph_layer"]["activation"] = search_space["activation"]
-    
+
     config["parameters"]["num_graph_layers_common"] = search_space["num_graph_layers_common"]
     config["parameters"]["num_graph_layers_energy"] = search_space["num_graph_layers_energy"]
     config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"]
