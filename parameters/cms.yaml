@@ -198,10 +198,12 @@ raytune:
     # optimizer parameters
     lr: [1e-3]
     batch_size: [32]
+    activation: ["elu"]  # applies to activation, dist_activation and node_message activation
     expdecay_decay_steps: [10000]
     # model parameters
     combined_graph_layer:
       layernorm: [False]
+      ffn_dist_num_layers: [1]
       ffn_dist_hidden_dim: [64, 128, 256]
       distance_dim: [128, 256]
       num_node_messages: [1]

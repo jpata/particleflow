@@ -442,10 +442,16 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 def set_raytune_search_parameters(search_space, config):
     config["parameters"]["combined_graph_layer"]["layernorm"] = search_space["layernorm"]
     config["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"] = search_space["ffn_dist_hidden_dim"]
+    config["parameters"]["combined_graph_layer"]["ffn_dist_num_layers"] = search_space["ffn_dist_num_layers"]
     config["parameters"]["combined_graph_layer"]["distance_dim"] = search_space["distance_dim"]
     config["parameters"]["combined_graph_layer"]["num_node_messages"] = search_space["num_node_messages"]
     config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = search_space["normalize_degrees"]
     config["parameters"]["combined_graph_layer"]["node_message"]["output_dim"] = search_space["output_dim"]
+
+    config["parameters"]["combined_graph_layer"]["node_message"]["activation"] = search_space["activation"]
+    config["parameters"]["combined_graph_layer"]["dist_activation"] = search_space["activation"]
+    config["parameters"]["combined_graph_layer"]["activation"] = search_space["activation"]
+    
     config["parameters"]["num_graph_layers_common"] = search_space["num_graph_layers_common"]
     config["parameters"]["num_graph_layers_energy"] = search_space["num_graph_layers_energy"]
     config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"]
@@ -590,12 +596,14 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     search_space = {
         # Optimizer parameters
         "lr": tune.grid_search(cfg["raytune"]["parameters"]["lr"]),
+        "activation": tune.grid_search(cfg["raytune"]["parameters"]["activation"]),
         "batch_size": tune.grid_search(cfg["raytune"]["parameters"]["batch_size"]),
         "expdecay_decay_steps": tune.grid_search(cfg["raytune"]["parameters"]["expdecay_decay_steps"]),
 
         # Model parameters
         "layernorm": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["layernorm"]),
         "ffn_dist_hidden_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"]),
+        "ffn_dist_num_layers": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["ffn_dist_num_layers"]),
         "distance_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["distance_dim"]),
         "num_node_messages": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["num_node_messages"]),
         "num_graph_layers_common": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_common"]),
@@ -630,7 +638,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         resume=resume,
         max_failures=10,
     )
-    print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
+    print("Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
+        analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]))
 
     skip = 20
     if skip > cfg["setup"]["num_epochs"]:
