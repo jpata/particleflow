@@ -654,6 +654,12 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     topk_summary_plot_v2(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
     summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
 
+    best_params = analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"])
+    with open(Path(analysis.get_best_logdir()).parent / "best_parameters.txt", "a") as best_params_file:
+        best_params_file.write("Best hyperparameters according to {}\n".format(cfg["raytune"]["default_metric"]))
+        for key, val in best_params.items():
+            best_params_file.write(("{}: {}\n".format(key, val)))
+
     with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
         timefile.write(str(end - start) + "\n")
 
