@@ -7,7 +7,7 @@ import sys
 import os
 import yaml
 import json
-import datetime
+from datetime import datetime
 import glob
 import random
 import platform
@@ -626,6 +626,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         timeout_s=24 * 60 * 60,
     )
 
+    start = datetime.now()
     analysis = tune.run(
         distributed_trainable,
         config=search_space,
@@ -638,6 +639,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         resume=resume,
         max_failures=10,
     )
+    end = datetime.now()
+    print("Total time of tune.run(...): {}".format(end - start))
+
     print("Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
         analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]))
 
@@ -649,6 +653,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     plot_ray_analysis(analysis, save=True, skip=skip)
     topk_summary_plot_v2(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
     summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
+
+    with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
+        timefile.write(str(end - start) + "\n")
 
     ray.shutdown()
 
