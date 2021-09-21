@@ -24,10 +24,12 @@ if __name__ == "__main__":
     mem_onnx = mem.used/1000/1000
     print("mem_onnx", mem_initial)
 
-    for num_elems in [1600, 3200, 6400, 12800, 25600]:
+    for num_elems in range(1600, 25600, 320):
         times = []
         mem_used = []
-        for i in range(500):
+        
+        #average over 100 events
+        for i in range(100):
 
             #allocate array in system RAM
             X = np.array(np.random.randn(1, num_elems, 18), np.float32)
