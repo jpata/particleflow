@@ -454,10 +454,11 @@ def set_raytune_search_parameters(search_space, config):
 
     config["parameters"]["num_graph_layers_common"] = search_space["num_graph_layers_common"]
     config["parameters"]["num_graph_layers_energy"] = search_space["num_graph_layers_energy"]
-    config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"]
     config["parameters"]["combined_graph_layer"]["bin_size"] = search_space["bin_size"]
     config["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"] = search_space["clip_value_low"]
 
+    config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"] / 2
+    config["parameters"]["output_decoding"]["dropout"] = search_space["dropout"]
 
     config["setup"]["lr"] = search_space["lr"]
     if isinstance(config["training_datasets"], list):
@@ -608,7 +609,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         "num_node_messages": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["num_node_messages"]),
         "num_graph_layers_common": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_common"]),
         "num_graph_layers_energy": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_energy"]),
-        "dropout": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["dropout"]),
+        "dropout": tune.grid_search(cfg["raytune"]["parameters"]["dropout"]),
         "bin_size": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["bin_size"]),
         "clip_value_low": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"]),
         "normalize_degrees": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"]),
