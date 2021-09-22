@@ -4,15 +4,22 @@
 #get the code
 git clone https://github.com/jpata/particleflow.git
 cd particleflow
+git checkout v1.4
 
 git submodule init
-git submodule setup
+git submodule update
 
 #Download the training datasets, about 60GB
 rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/tensorflow_datasets ~/
 
-#Run the training, multi-GPU support on the same machine is available
-CUDA_VISIBLE_DEVICES=0,1,2,3,4 python3 mlpf/pipeline.py train -c parameters/cms.yaml
+#Run the training, multi-GPU support on the same machine is available, specify explicitly the GPUs you want to use
+CUDA_VISIBLE_DEVICES=... python3 mlpf/pipeline.py train -c parameters/cms.yaml
+```
+# Baseline CMS MLPF model
+
+The current model (exported .onnx, SavedModel as .pb, training history, evaluation output) is available at
+```
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/models/cms/cms_20210917_142344_403761.gpu0.local.tar.xz ./
 ```
 
 # Dataset creation
@@ -31,7 +38,11 @@ rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar* data/
 rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/Single* data/
 tfds build ./hep_tfds/heptfds/cms_pf/ttbar --manual_dir data
 tfds build ./hep_tfds/heptfds/cms_pf/singlepi --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singlepi0 --manual_dir data
 tfds build ./hep_tfds/heptfds/cms_pf/singleele --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singlemu --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singlegamma --manual_dir data
+tfds build ./hep_tfds/heptfds/cms_pf/singletau --manual_dir data
 ```
 
 ## Older presentations in CMS
