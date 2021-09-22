@@ -391,7 +391,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.xlabel(xlabel)
         plt.ylabel("Fraction of particles / bin")
 
-        image_path = str(cp_dir / "eff_fake_cls{}.png".format(icls))
+        image_path = str(cp_dir / "eff_fake_cls{}_ivar{}.png".format(icls, ivar))
         plt.savefig(image_path, bbox_inches="tight")
         plt.close("all")
 
@@ -454,6 +454,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
             if icls!=0:
                 self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
+                self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls, ivar=2, bins=np.linspace(-5,5,100))
 
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
