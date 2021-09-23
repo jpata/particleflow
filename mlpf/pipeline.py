@@ -57,9 +57,8 @@ from tfmodel.utils import (
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
     get_tuner,
-    get_raytune_schedule,
     get_heptfds_dataset,
-    get_datasets
+    get_datasets,
 )
 
 from tfmodel.lr_finder import LRFinder
@@ -73,6 +72,10 @@ from ray.tune.integration.keras import TuneReportCheckpointCallback
 from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
+
+from raytune.search_space import search_space, set_raytune_search_parameters
+from raytune.utils import get_raytune_schedule, get_raytune_search_alg
+
 
 def customize_gun_sample(config):
 
@@ -439,38 +442,6 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         print(trial.hyperparameters.values, trial.score)
 
 
-def set_raytune_search_parameters(search_space, config):
-    config["parameters"]["combined_graph_layer"]["layernorm"] = search_space["layernorm"]
-    config["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"] = search_space["ffn_dist_hidden_dim"]
-    config["parameters"]["combined_graph_layer"]["ffn_dist_num_layers"] = search_space["ffn_dist_num_layers"]
-    config["parameters"]["combined_graph_layer"]["distance_dim"] = search_space["distance_dim"]
-    config["parameters"]["combined_graph_layer"]["num_node_messages"] = search_space["num_node_messages"]
-    config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = search_space["normalize_degrees"]
-    config["parameters"]["combined_graph_layer"]["node_message"]["output_dim"] = search_space["output_dim"]
-
-    config["parameters"]["combined_graph_layer"]["node_message"]["activation"] = search_space["activation"]
-    config["parameters"]["combined_graph_layer"]["dist_activation"] = search_space["activation"]
-    config["parameters"]["combined_graph_layer"]["activation"] = search_space["activation"]
-
-    config["parameters"]["num_graph_layers_common"] = search_space["num_graph_layers_common"]
-    config["parameters"]["num_graph_layers_energy"] = search_space["num_graph_layers_energy"]
-    config["parameters"]["combined_graph_layer"]["bin_size"] = search_space["bin_size"]
-    config["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"] = search_space["clip_value_low"]
-
-    config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"] / 2
-    config["parameters"]["output_decoding"]["dropout"] = search_space["dropout"]
-
-    config["setup"]["lr"] = search_space["lr"]
-    if isinstance(config["training_datasets"], list):
-        training_dataset = config["training_datasets"][0]
-    else:
-        training_dataset = config["training_datasets"]
-    config["datasets"][training_dataset]["batch_per_gpu"] = search_space["batch_size"]
-
-    config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
-    return config
-
-
 def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None):
         full_config, config_file_stem = parse_config(full_config)
 
@@ -594,29 +565,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     if not local:
         ray.init(address='auto')
 
-    search_space = {
-        # Optimizer parameters
-        "lr": tune.grid_search(cfg["raytune"]["parameters"]["lr"]),
-        "activation": tune.grid_search(cfg["raytune"]["parameters"]["activation"]),
-        "batch_size": tune.grid_search(cfg["raytune"]["parameters"]["batch_size"]),
-        "expdecay_decay_steps": tune.grid_search(cfg["raytune"]["parameters"]["expdecay_decay_steps"]),
-
-        # Model parameters
-        "layernorm": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["layernorm"]),
-        "ffn_dist_hidden_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"]),
-        "ffn_dist_num_layers": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["ffn_dist_num_layers"]),
-        "distance_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["distance_dim"]),
-        "num_node_messages": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["num_node_messages"]),
-        "num_graph_layers_common": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_common"]),
-        "num_graph_layers_energy": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_energy"]),
-        "dropout": tune.grid_search(cfg["raytune"]["parameters"]["dropout"]),
-        "bin_size": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["bin_size"]),
-        "clip_value_low": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"]),
-        "normalize_degrees": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"]),
-        "output_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["node_message"]["output_dim"]),
-    }
-
     sched = get_raytune_schedule(cfg["raytune"])
+    search_alg = get_raytune_search_alg(cfg["raytune"])
 
     distributed_trainable = DistributedTrainableCreator(
         partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest),
@@ -633,6 +583,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         config=search_space,
         name=name,
         scheduler=sched,
+        search_alg=search_alg,
         num_samples=1,
         local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],

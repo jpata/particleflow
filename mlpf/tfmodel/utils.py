@@ -17,8 +17,6 @@ from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
-from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
-
 
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
@@ -203,27 +201,6 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
             executions_per_trial=cfg_hb["executions_per_trial"],
             distribution_strategy=strategy,
-        )
-
-
-def get_raytune_schedule(raytune_cfg):
-    if raytune_cfg["sched"] == "asha":
-        return AsyncHyperBandScheduler(
-            metric=raytune_cfg["default_metric"],
-            mode=raytune_cfg["default_mode"],
-            time_attr="training_iteration",
-            max_t=raytune_cfg["asha"]["max_t"],
-            grace_period=raytune_cfg["asha"]["grace_period"],
-            reduction_factor=raytune_cfg["asha"]["reduction_factor"],
-            brackets=raytune_cfg["asha"]["brackets"],
-        )
-    if raytune_cfg["sched"] == "hyperband":
-        return HyperBandScheduler(
-            metric=raytune_cfg["default_metric"],
-            mode=raytune_cfg["default_mode"],
-            time_attr="training_iteration",
-            max_t=raytune_cfg["hyperband"]["max_t"],
-            reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
         )
 
 
