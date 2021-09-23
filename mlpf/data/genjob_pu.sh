@@ -2,7 +2,7 @@
 set -e
 set -x
 
-CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_11_3_0_pre2
+CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0

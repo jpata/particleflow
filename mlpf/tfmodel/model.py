@@ -946,16 +946,17 @@ class PFNetDense(tf.keras.Model):
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
         self.key_dim = kwargs.pop("key_dim")
-        self.attn = KernelAttention(num_heads=4, key_dim=self.key_dim, name=kwargs.get("name") + "_attention")
-        self.ffn = point_wise_feed_forward_network(self.key_dim, 128, kwargs.get("name") + "_ffn", num_layers=1, activation="elu")
+        self.attn = KernelAttention(feature_transform="elu", num_heads=4, key_dim=self.key_dim, name=kwargs.get("name") + "_attention")
+        self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu")
         self.norm0 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln0")
         self.norm1 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln1")
         super(KernelEncoder, self).__init__(*args, **kwargs)
 
     def call(self, args, training=False):
         X, mask = args
-        X = self.norm0(X + self.attn(X, X, training=training), training=training)
-        X = self.norm1(X + self.ffn(X))
+        X_attended = self.attn(X, X, training=training)
+        X = self.norm0(X + X_attended, training=training)
+        X = self.norm1(X + self.ffn(X), training=training)
         return X
 
 class PFNetTransformer(tf.keras.Model):
@@ -971,10 +972,12 @@ class PFNetTransformer(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        key_dim = 256
+        key_dim = 128
         self.ffn = point_wise_feed_forward_network(key_dim, key_dim, "ffn", num_layers=1, activation="elu")
-        self.tf0 = KernelEncoder(key_dim=key_dim, name="tf0")
-        self.tf1 = KernelEncoder(key_dim=key_dim, name="tf1")
+
+        self.encoders = []
+        for i in range(2):
+            self.encoders.append(KernelEncoder(key_dim=key_dim, name="enc{}".format(i)))
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
@@ -988,9 +991,8 @@ class PFNetTransformer(tf.keras.Model):
         X_enc = self.enc(X)
 
         X_enc = self.ffn(X_enc)
-        X_enc_id = self.tf0([X_enc, msk_input], training=training)*msk_input
-        X_enc_energy = self.tf1([X_enc, msk_input], training=training)*msk_input
-
-        ret = self.output_dec([X, X_enc_id, X_enc_energy, msk_input], training=training)
+        for enc in self.encoders:
+            X_enc = enc([X_enc, msk_input], training=training)*msk_input
+        ret = self.output_dec([X, X_enc, X_enc, msk_input], training=training)
 
         return ret

@@ -14,20 +14,24 @@ samples = [
 
 samples_pu = [
     "TTbar_14TeV_TuneCUETP8M1_cfi",
+    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
 ]
+
+NUM_SAMPLES = 2000
 
 if __name__ == "__main__":
 
+    iseed = 1
     for s in samples+samples_pu:
         is_pu = s in samples_pu
 
         os.makedirs(outdir + "/" + s + "/raw", exist_ok=True)
         os.makedirs(outdir + "/" + s + "/root", exist_ok=True)
 
-        for iseed in range(1,2001):
+        for nsamples in range(NUM_SAMPLES):
             if not os.path.isfile(outdir+"/"+s+"/raw/pfntuple_{}.pkl".format(iseed)):
                 if is_pu:
                     print("sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(s, iseed))
                 else:
                     print("sbatch mlpf/tallinn/genjob.sh {} {}".format(s, iseed))
-                
+            iseed += 1 
