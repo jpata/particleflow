@@ -3,6 +3,7 @@ from __future__ import print_function
 import sys, os, fnmatch
 
 outdir = "/hdfs/local/joosep/mlpf/gen"
+
 samples = [
     "SinglePiFlatPt0p7To10_cfi",
     "SingleTauFlatPt2To150_cfi",
