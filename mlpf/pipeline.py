@@ -170,6 +170,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     print("num_train_steps", num_train_steps)
     print("num_test_steps", num_test_steps)
+    total_steps = num_train_steps * config["setup"]["num_epochs"]
+    print("total_steps", total_steps)
 
     if experiment:
         experiment.set_name(outdir)
@@ -180,7 +182,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=num_train_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
         opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
@@ -463,6 +465,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         print("num_train_steps", num_train_steps)
         print("num_test_steps", num_test_steps)
+        total_steps = num_train_steps * full_config["setup"]["num_epochs"]
+        print("total_steps", total_steps)
 
         callbacks = prepare_callbacks(
             full_config["callbacks"],
@@ -472,7 +476,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         )
 
         with strategy.scope():
-            lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=num_train_steps)
+            lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=total_steps)
             callbacks.append(optim_callbacks)
             opt = get_optimizer(full_config, lr_schedule)
 
@@ -589,7 +593,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
         resume=resume,
-        max_failures=10,
+        max_failures=3,
     )
     end = datetime.now()
     print("Total time of tune.run(...): {}".format(end - start))
