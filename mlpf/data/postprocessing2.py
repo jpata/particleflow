@@ -31,6 +31,15 @@ map_candid_to_pdgid = {
      -13: [-13]
 }
 
+elem_branches = [
+    "typ", "pt", "eta", "phi", "e",
+    "layer", "depth", "charge", "trajpoint", 
+    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
+    "px", "py", "pz", "deltap", "sigmadeltap", "gsf_electronseed_trkorecal", "num_hits", "cluster_flags", "corr_energy"
+]
+
+target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
+
 map_pdgid_to_candid = {}
 
 for candid, pdgids in map_candid_to_pdgid.items():
@@ -284,14 +293,6 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         if chosen_elem is None:
             print("unmatched candidate {}, {}".format(cand, g.nodes[cand]))
             unmatched_cand += [cand]
-
-    elem_branches = [
-        "typ", "pt", "eta", "phi", "e",
-        "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
-        "px", "py", "pz", "deltap", "sigmadeltap", "gsf_electronseed_trkorecal", "num_hits", "cluster_flags", "corr_energy"
-    ]
-    target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
     Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
     Xelem.fill(0.0)
