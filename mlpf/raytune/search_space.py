@@ -1,49 +1,49 @@
 from ray.tune import grid_search, choice, uniform, quniform, loguniform, randint, qrandint
 
-
-# samp = grid_search
-# search_space = {
-#         # Optimizer parameters
-#         "lr": samp([1e-3]),
-#         "activation": samp(["elu"]),
-#         "batch_size": samp([32]),
-#         "expdecay_decay_steps": samp([2000]),
-
-#         # Model parameters
-#         "layernorm": samp([False]),
-#         "ffn_dist_hidden_dim": samp([64, 256]),
-#         "ffn_dist_num_layers": samp([1]),
-#         "distance_dim": samp([128]),
-#         "num_node_messages": samp([1]),
-#         "num_graph_layers_common": samp([3]),
-#         "num_graph_layers_energy": samp([3]),
-#         "dropout": samp([0.0]),
-#         "bin_size": samp([160]),
-#         "clip_value_low": samp([0.0]),
-#         "normalize_degrees": samp([True]),
-#         "output_dim": samp([128]),
-# }
-
+raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
+samp = choice
 search_space = {
+        # Optimizer parameters
+        "lr": samp([1e-3]),
+        "activation": samp(["elu"]),
+        "batch_size": samp([32]),
+        "expdecay_decay_steps": samp([2000]),
+
+        # Model parameters
+        "layernorm": samp([False]),
+        "ffn_dist_hidden_dim": samp([64, 256]),
+        "ffn_dist_num_layers": samp([1]),
+        "distance_dim": samp([128]),
+        "num_node_messages": samp([1]),
+        "num_graph_layers_common": samp([3]),
+        "num_graph_layers_energy": samp([3]),
+        "dropout": samp([0.0]),
+        "bin_size": samp([160]),
+        "clip_value_low": samp([0.0]),
+        "normalize_degrees": samp([True]),
+        "output_dim": samp([128]),
+}
+
+# search_space = {
     # Optimizer parameters
-    # "lr": loguniform(1e5, 1e-2),
+    # "lr": loguniform(1e-7, 1e-2),
     # "activation": "elu",
     # "batch_size": samp([32]),
     # "expdecay_decay_steps": samp([2000]),
     # Model parameters
-    "layernorm": quniform(0, 1, 1),
-    "ffn_dist_hidden_dim": quniform(64, 256, 64),
-    "ffn_dist_num_layers": quniform(1, 3, 1),
-    "distance_dim": quniform(64, 512, 64),
-    "num_node_messages": quniform(1, 3, 1),
-    "num_graph_layers_common": quniform(2, 4, 1),
-    "num_graph_layers_energy": quniform(2, 4, 1),
-    "dropout": quniform(0.0, 0.5, 0.1),
-    "bin_size": quniform(160, 320, 160),
-    "clip_value_low": quniform(0.0, 0.2, 0.02),
-    "normalize_degrees": quniform(0, 1, 1),
-    "output_dim": quniform(64, 512, 64),
-}
+    # "layernorm": quniform(0, 1, 1),
+    # "ffn_dist_hidden_dim": quniform(64, 256, 64),
+    # "ffn_dist_num_layers": quniform(1, 3, 1),
+    # "distance_dim": quniform(64, 512, 64),
+    # "num_node_messages": quniform(1, 3, 1),
+    # "num_graph_layers_common": quniform(2, 4, 1),
+    # "num_graph_layers_energy": quniform(2, 4, 1),
+    # "dropout": quniform(0.0, 0.5, 0.1),
+    # "bin_size": quniform(160, 320, 160),
+    # "clip_value_low": quniform(0.0, 0.2, 0.02),
+    # "normalize_degrees": quniform(0, 1, 1),
+    # "output_dim": quniform(64, 512, 64),
+# }
 
 
 def set_raytune_search_parameters(search_space, config):

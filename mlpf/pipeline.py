@@ -73,7 +73,7 @@ from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
-from raytune.search_space import search_space, set_raytune_search_parameters
+from raytune.search_space import search_space, set_raytune_search_parameters, raytune_num_samples
 from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
 
@@ -565,6 +565,10 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
         os.environ["TUNE_RESULT_DIR"] = trd
 
+    expdir = Path(cfg["raytune"]["local_dir"]) / name
+    expdir.mkdir(parents=True, exist_ok=True)
+    shutil.copy("mlpf/raytune/search_space.py", str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py"))  # Copy the config file to the train dir for later reference
+
     ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 24 * 60 * 60  # Avoid timeout errors
     if not local:
         ray.init(address='auto')
@@ -588,7 +592,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         name=name,
         scheduler=sched,
         search_alg=search_alg,
-        num_samples=1,
+        num_samples=raytune_num_samples,
         local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
