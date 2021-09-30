@@ -23,7 +23,7 @@ jobs:
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
-            tf2onnx onnxruntime zenodo_get
+            tf2onnx onnxruntime zenodo_get seaborn
           git submodule init
           git submodule update
       - name: Run delphes TF model
@@ -43,7 +43,7 @@ jobs:
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
-            tf2onnx onnxruntime zenodo_get
+            tf2onnx onnxruntime zenodo_get seaborn
           git submodule init
           git submodule update
       - name: Run CMS TF model using the pipeline
