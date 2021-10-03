@@ -63,8 +63,7 @@ def get_raytune_schedule(raytune_cfg):
             reduction_factor=raytune_cfg["asha"]["reduction_factor"],
             brackets=raytune_cfg["asha"]["brackets"],
         )
-
-    if raytune_cfg["sched"] == "hyperband":
+    elif raytune_cfg["sched"] == "hyperband":
         return HyperBandScheduler(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -72,9 +71,8 @@ def get_raytune_schedule(raytune_cfg):
             max_t=raytune_cfg["hyperband"]["max_t"],
             reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
         )
-
     # requires pip install hpbandster ConfigSpace
-    if (raytune_cfg["sched"] == "bohb") or (raytune_cfg["sched"] == "BOHB"):
+    elif (raytune_cfg["sched"] == "bohb") or (raytune_cfg["sched"] == "BOHB"):
         return HyperBandForBOHB(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -82,8 +80,7 @@ def get_raytune_schedule(raytune_cfg):
             max_t=raytune_cfg["hyperband"]["max_t"],
             reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
         )
-
-    if (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "PBT"):
+    elif (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "PBT"):
         return PopulationBasedTraining(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -92,9 +89,8 @@ def get_raytune_schedule(raytune_cfg):
             hyperparam_mutations=raytune_cfg["pbt"]["hyperparam_mutations"],
             log_config=True,
         )
-
     # requires pip install GPy sklearn
-    if (raytune_cfg["sched"] == "pb2") or (raytune_cfg["sched"] == "PB2"):
+    elif (raytune_cfg["sched"] == "pb2") or (raytune_cfg["sched"] == "PB2"):
         return PB2(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -103,3 +99,6 @@ def get_raytune_schedule(raytune_cfg):
             hyperparam_bounds=raytune_cfg["pb2"]["hyperparam_bounds"],
             log_config=True,
         )
+    else:
+        print("INFO: Not using any Ray Tune trial scheduler.")
+        return None
