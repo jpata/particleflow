@@ -475,6 +475,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
             ds_info,
         )
 
+        callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
+
         with strategy.scope():
             lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=total_steps)
             callbacks.append(optim_callbacks)
