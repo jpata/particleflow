@@ -52,8 +52,8 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  num_events_validation: 100
-  num_epochs: 1000
+  num_events_validation: 1000
+  num_epochs: 200
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -101,24 +101,12 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
-    #kernel:
-    #  type: NodePairTrainableKernel
-    #  output_dim: 4
-    #  hidden_dim_pair: 32
-    #  hidden_dim_node: 128
-    #  num_layers: 1
     num_node_messages: 1
     node_message:
       type: GHConvDense
       output_dim: 256
       activation: elu
       normalize_degrees: yes
-    #node_message:
-    #  type: NodeMessageLearnable
-    #  output_dim: 128
-    #  hidden_dim: 128
-    #  num_layers: 1
-    #  activation: gelu
     activation: elu
   num_graph_layers_common: 2
   num_graph_layers_energy: 2
@@ -228,9 +216,19 @@ raytune:
 
 training_datasets:
   - cms_pf_ttbar
+  - cms_pf_single_pi
+  - cms_pf_single_pi0
+  - cms_pf_single_gamma
+  - cms_pf_single_electron
+  - cms_pf_single_mu
 
 testing_datasets:
   - cms_pf_ttbar
+  - cms_pf_single_pi
+  - cms_pf_single_pi0
+  - cms_pf_single_gamma
+  - cms_pf_single_electron
+  - cms_pf_single_mu
 
 validation_dataset: cms_pf_ttbar
 
@@ -244,14 +242,29 @@ datasets:
     version: 1.1.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
+    batch_per_gpu: 100
+  cms_pf_single_pi0:
+    version: 1.1.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 100
   cms_pf_single_tau:
     version: 1.1.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
+    batch_per_gpu: 100
   cms_pf_single_electron:
     version: 1.1.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
+    batch_per_gpu: 100
+  cms_pf_single_mu:
+    version: 1.1.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 100
+  cms_pf_single_gamma:
+    version: 1.1.0
+    data_dir:
+    manual_dir:
+    batch_per_gpu: 100

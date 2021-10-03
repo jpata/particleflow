@@ -1,0 +1,6 @@
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/932b9bde-6ae4-44cb-b1db-66dab83ab7d1.root
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/33b2fbd9-2544-44af-8652-c9a19edfa400.root
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/936b7b11-5eec-4f97-83ff-48be106b100d.root
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/f052be2f-f604-48e6-b484-1e412f0391f6.root
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/5ac1ea44-a5e0-4454-8945-45fd29c2947f.root
+file:/scratch-persistent/joosep/store/relval/CMSSW_11_2_0_pre8/RelValMinBias_14TeV/GEN-SIM/112X_mcRun3_2021_realistic_v10-v1/00000/ae4379b2-d002-4adc-a168-e782ee296f91.root
