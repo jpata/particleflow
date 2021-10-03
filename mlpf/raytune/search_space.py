@@ -1,7 +1,7 @@
 from ray.tune import grid_search, choice, uniform, quniform, loguniform, randint, qrandint
 
 raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
-samp = choice
+samp = grid_search
 search_space = {
         # Optimizer parameters
         "lr": samp([1e-3]),
