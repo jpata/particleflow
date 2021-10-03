@@ -16,7 +16,7 @@ class CMSDatasetFactory(BaseDatasetFactory):
             as_supervised=False,
             data_dir=dataset_dict["data_dir"],
             with_info=True,
-            shuffle_files=False,
+            shuffle_files=True,
             download_and_prepare_kwargs={"download_config": download_config},
         )
 
