@@ -444,7 +444,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         print(trial.hyperparameters.values, trial.score)
 
 
-def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None):
+def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None):
         full_config, config_file_stem = parse_config(full_config)
 
         if config is not None:
@@ -504,7 +504,6 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
             )
             model.summary()
 
-
             callbacks.append(TuneReportCheckpointCallback(
                 metrics=[
                     "adam_beta_1",
@@ -532,14 +531,28 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
                 ),
             )
 
-            fit_result = model.fit(
-                ds_train.repeat(),
-                validation_data=ds_test.repeat(),
-                epochs=full_config["setup"]["num_epochs"],
-                callbacks=callbacks,
-                steps_per_epoch=num_train_steps,
-                validation_steps=num_test_steps,
-            )
+            try:
+                fit_result = model.fit(
+                    ds_train.repeat(),
+                    validation_data=ds_test.repeat(),
+                    epochs=full_config["setup"]["num_epochs"],
+                    callbacks=callbacks,
+                    steps_per_epoch=num_train_steps,
+                    validation_steps=num_test_steps,
+                )
+            except tf.errors.ResourceExhaustedError:
+                print("INFO: Resource exhausted, skipping this hyperparameter configuration.")
+                skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
+                lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
+
+                with open(skiplog_file_path, "a") as f:
+                    f.write("#"*80 + "\n")
+                    print("#"*80)
+                    for line in lines:
+                        f.write(line)
+                        print(line)
+                    f.write("#"*80 + "\n\n")
+                tf.keras.backend.clear_session()
 
 
 @main.command()
@@ -577,7 +590,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     search_alg = get_raytune_search_alg(cfg["raytune"])
 
     distributed_trainable = DistributedTrainableCreator(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest),
+        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name),
         num_workers=1,  # Number of hosts that each trial is expected to use.
         num_cpus_per_worker=cpus,
         num_gpus_per_worker=gpus,
