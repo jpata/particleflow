@@ -584,7 +584,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     expdir.mkdir(parents=True, exist_ok=True)
     shutil.copy("mlpf/raytune/search_space.py", str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py"))  # Copy the config file to the train dir for later reference
 
-    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 24 * 60 * 60  # Avoid timeout errors
+    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
     if not local:
         ray.init(address='auto')
 
@@ -597,7 +597,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         num_cpus_per_worker=cpus,
         num_gpus_per_worker=gpus,
         num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
-        timeout_s=24 * 60 * 60,
+        timeout_s=1 * 60 * 60,
     )
 
     start = datetime.now()
