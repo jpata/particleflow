@@ -600,6 +600,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         timeout_s=1 * 60 * 60,
     )
 
+    sync_config = tune.SyncConfig(sync_to_driver=False)
+
     start = datetime.now()
     analysis = tune.run(
         distributed_trainable,
@@ -612,7 +614,8 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
         resume=resume,
-        max_failures=3,
+        max_failures=2,
+        sync_config=sync_config,
     )
     end = datetime.now()
     print("Total time of tune.run(...): {}".format(end - start))
@@ -637,8 +640,6 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
         timefile.write(str(end - start) + "\n")
-
-    ray.shutdown()
 
 
 @main.command()
