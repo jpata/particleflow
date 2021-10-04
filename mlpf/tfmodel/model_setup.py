@@ -612,7 +612,7 @@ def freeze_model(model, config, ds_test, outdir):
         full_model,
         opset=12,
         input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
-        output_path="model.onnx"
+        output_path=str(Path(outdir) / "model.onnx")
     )
 
     ds = list(tfds.as_numpy(ds_test.take(1)))
