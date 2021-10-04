@@ -619,7 +619,7 @@ def freeze_model(model, config, ds_test, outdir):
     X = ds[0][0]
     y = ds[0][1]
 
-    onnx_sess = onnxruntime.InferenceSession("model.onnx")
+    onnx_sess = onnxruntime.InferenceSession(str(Path(outdir) / "model.onnx"))
     pred_onx = onnx_sess.run(None, {"x:0": X})[0]
     pred_tf = model(X)
 
