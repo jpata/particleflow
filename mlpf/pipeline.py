@@ -554,7 +554,6 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
                         f.write(line)
                         print(line)
                     f.write("#"*80 + "\n\n")
-                tf.keras.backend.clear_session()
 
 
 @main.command()
