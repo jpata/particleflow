@@ -50,7 +50,6 @@ from tfmodel.utils import (
     compute_weights_none,
     get_train_val_datasets,
     get_dataset_def,
-    prepare_val_data,
     set_config_loss,
     get_loss_dict,
     parse_config,
@@ -62,9 +61,14 @@ from tfmodel.utils import (
 )
 
 from tfmodel.lr_finder import LRFinder
-from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
-from tfmodel.utils_analysis import plot_ray_analysis, analyze_ray_experiment, topk_summary_plot_v2, summarize_top_k
+from tfmodel.utils_analysis import (
+    plot_ray_analysis,
+    analyze_ray_experiment,
+    topk_summary_plot_v2,
+    summarize_top_k,
+    count_skipped_configurations,
+)
 
 import ray
 from ray import tune
@@ -639,6 +643,17 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
         timefile.write(str(end - start) + "\n")
+
+    num_skipped = count_skipped_configurations(analysis.get_best_logdir())
+    print("Number of skipped configurations: {}".format(num_skipped))
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
+def count_skipped(exp_dir):
+    num_skipped = count_skipped_configurations(exp_dir)
+    print("Number of skipped configurations: {}".format(num_skipped))
 
 
 @main.command()
