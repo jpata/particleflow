@@ -75,7 +75,11 @@ from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
 def customize_pipeline_test(config):
-    config["train_test_datasets"] = [config["train_test_datasets"][0], ]
+    #for cms.yaml, keep only ttbar
+    if "physical" in config["train_test_dataset"]:
+        config["train_test_dataset"]["physical"]["datasets"] = ["cms_pf_ttbar"]
+        config["train_test_dataset"] = {"physical": config["train_test_dataset"]["physical"]}
+
     return config
 
 customization_functions = {
