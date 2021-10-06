@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: cms
   target_particles: cand
-  num_input_features: 18
+  num_input_features: 25
   num_output_features: 7
 #       NONE = 0,
 #       TRACK = 1,
