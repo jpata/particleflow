@@ -74,26 +74,11 @@ from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
-def customize_gun_sample(config):
-
-    config["dataset"]["classification_loss_coef"] = 0.0
-    config["dataset"]["charge_loss_coef"] = 0.0
-    config["dataset"]["eta_loss_coef"] = 0.0
-    config["dataset"]["sin_phi_loss_coef"] = 0.0
-    config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "regression"
-
-    config["training_dataset"] = "cms_pf_single_pi"
-    config["testing_dataset"] = "cms_pf_single_pi"
-    return config
-
 def customize_pipeline_test(config):
-    config["training_datasets"] = [config["training_datasets"][0], ]
-    config["testing_datasets"] = [config["testing_datasets"][0], ]
+    config["train_test_datasets"] = [config["train_test_datasets"][0], ]
     return config
 
 customization_functions = {
-    "gun_sample": customize_gun_sample,
     "pipeline_test": customize_pipeline_test
 }
 

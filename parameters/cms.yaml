@@ -215,6 +215,11 @@ raytune:
     reduction_factor: 4
 
 train_test_datasets:
+  physical: 
+    batch_per_gpu: 5
+    datasets:
+      - cms_pf_ttbar
+      - cms_pf_ztt
   gun: 
     batch_per_gpu: 100
     datasets:
@@ -224,11 +229,6 @@ train_test_datasets:
       - cms_pf_single_electron
       - cms_pf_single_mu
       - cms_pf_single_gamma
-  physical: 
-    batch_per_gpu: 5
-    datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
 
 validation_dataset: cms_pf_ttbar
 
