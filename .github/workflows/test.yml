@@ -18,11 +18,12 @@ jobs:
           sudo apt install python3 python3-pip wget
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
-          sudo python3 -m pip install tensorflow==2.4 setGPU \
+          sudo python3 -m pip install tensorflow==2.6 setGPU \
             sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods \
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
+            tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn
           git submodule init
           git submodule update
@@ -38,11 +39,12 @@ jobs:
           sudo apt install python3 python3-pip wget
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
-          sudo python3 -m pip install tensorflow==2.4 setGPU \
+          sudo python3 -m pip install tensorflow==2.6 setGPU \
             sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods \
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
+            tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn
           git submodule init
           git submodule update

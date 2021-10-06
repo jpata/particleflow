@@ -1,4 +1,4 @@
-from .model import DummyNet, PFNetDense
+from .model import PFNetTransformer, PFNetDense
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -531,8 +531,8 @@ def scale_outputs(X,y,w):
 def make_model(config, dtype):
     model = config['parameters']['model']
 
-    if model == 'dense':
-        return make_dense(config, dtype)
+    if model == 'transformer':
+        return make_transformer(config, dtype)
     elif model == 'gnn_dense':
         return make_gnn_dense(config, dtype)
 
@@ -570,10 +570,20 @@ def make_gnn_dense(config, dtype):
 
     return model
 
-def make_dense(config, dtype):
-    model = DummyNet(
+def make_transformer(config, dtype):
+    parameters = [
+        "input_encoding",
+        "output_decoding"
+    ]
+    kwargs = {}
+    for par in parameters:
+        if par in config['parameters'].keys():
+            kwargs[par] = config['parameters'][par]
+
+    model = PFNetTransformer(
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
+        **kwargs
     )
     return model
 
