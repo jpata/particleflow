@@ -20,6 +20,7 @@ from functools import partial
 import shlex
 import subprocess
 import matplotlib.pyplot as plt
+import logging
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -547,16 +548,15 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
                     validation_steps=num_test_steps,
                 )
             except tf.errors.ResourceExhaustedError:
-                print("INFO: Resource exhausted, skipping this hyperparameter configuration.")
+                logging.warning("Resource exhausted, skipping this hyperparameter configuration.")
                 skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
                 lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
 
                 with open(skiplog_file_path, "a") as f:
                     f.write("#"*80 + "\n")
-                    print("#"*80)
                     for line in lines:
                         f.write(line)
-                        print(line)
+                        logging.warning(line[:-1])
                     f.write("#"*80 + "\n\n")
 
 
