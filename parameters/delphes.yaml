@@ -215,10 +215,12 @@ raytune:
     max_t: 100
     reduction_factor: 3
 
-training_datasets:
-  - delphes_pf
-testing_datasets:
-  - delphes_pf
+train_test_datasets:
+  delphes: 
+    batch_per_gpu: 5
+    datasets:
+      - delphes_pf
+
 validation_dataset: delphes_pf
 
 datasets:
@@ -226,4 +228,3 @@ datasets:
     version: 1.0.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 5
