@@ -362,22 +362,17 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
 
     ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-    bs = config["datasets"][dataset_name]["batch_per_gpu"]
-    if num_gpus>1:
-        bs = bs*num_gpus
+    #bs = config["datasets"][dataset_name]["batch_per_gpu"]
 
     if not (num_events is None):
         ds = ds.take(num_events)
 
-    ds = ds.batch(bs)
+    #ds = ds.batch(bs)
     ds = ds.map(dsf.get_map_to_supervised())
 
     return ds, ds_info
 
-#Load multiple datasets and mix them together
-def get_datasets(dataset_names, config, num_gpus, split):
-
-    #Load each separate dataset
+def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     datasets = []
     steps = []
     for ds_name in dataset_names:
@@ -386,7 +381,7 @@ def get_datasets(dataset_names, config, num_gpus, split):
         num_steps = 0
         for elem in ds:
             num_steps += 1
-        print("Loaded {}:{} with {} steps after batching".format(ds_name, split, num_steps))
+        print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
         datasets.append(ds)
         steps.append(num_steps)
@@ -397,19 +392,47 @@ def get_datasets(dataset_names, config, num_gpus, split):
     for ds, num_steps in zip(datasets, steps):
         indices += num_steps*[ids]
         ids += 1
-
-    indices = np.array(indices)
+    indices = np.array(indices, np.int64)
     np.random.shuffle(indices)
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
 
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+    bs = batch_size
+    if num_gpus>1:
+        bs = bs*num_gpus
+    ds = ds.batch(bs)
+    return ds
 
+#Load multiple datasets and mix them together
+def get_datasets(datasets_to_interleave, config, num_gpus, split):
+    datasets = []
+    steps = []
+    for joint_dataset_name in datasets_to_interleave.keys():
+        ds_conf = datasets_to_interleave[joint_dataset_name]
+        interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
+        num_steps = 0
+        for elem in interleaved_ds:
+            num_steps += 1
+        print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
+        datasets.append(interleaved_ds)
+        steps.append(num_steps)
+    
+    ids = 0
+    indices = []
+    for ds, num_steps in zip(datasets, steps):
+        indices += num_steps*[ids]
+        ids += 1
+    indices = np.array(indices, np.int64)
+    np.random.shuffle(indices)
+
+    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
+    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
     num_steps = 0
-    for _ in ds:
+    for elem in ds:
         num_steps += 1
 
-    print("Joint dataset {} with {} steps".format(",".join(dataset_names), num_steps))
+    print("Final dataset with {} steps".format(num_steps))
     return ds, num_steps
 
 def set_config_loss(config, trainable):

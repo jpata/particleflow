@@ -96,12 +96,14 @@ def customize_gun_sample(config):
     return config
 
 def customize_pipeline_test(config):
-    config["training_datasets"] = [config["training_datasets"][0], ]
-    config["testing_datasets"] = [config["testing_datasets"][0], ]
+    #for cms.yaml, keep only ttbar
+    if "physical" in config["train_test_datasets"]:
+        config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
+        config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
+
     return config
 
 customization_functions = {
-    "gun_sample": customize_gun_sample,
     "pipeline_test": customize_pipeline_test
 }
 
@@ -162,9 +164,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
     #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
-    ds_train, num_train_steps = get_datasets(config["training_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(config["testing_datasets"], config, num_gpus, "test")
+    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
+    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val = ds_val.batch(5)
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -301,6 +304,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 
     strategy, num_gpus = get_strategy()
     ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
+    ds_test = ds_test.batch(5)
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))

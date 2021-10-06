@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: cms
   target_particles: cand
-  num_input_features: 18
+  num_input_features: 25
   num_output_features: 7
 #       NONE = 0,
 #       TRACK = 1,
@@ -193,57 +193,54 @@ raytune:
     max_t: 100
     reduction_factor: 4
 
-training_datasets:
-  - cms_pf_ttbar
-  - cms_pf_single_pi
-  - cms_pf_single_pi0
-  - cms_pf_single_gamma
-  - cms_pf_single_electron
-  - cms_pf_single_mu
-
-testing_datasets:
-  - cms_pf_ttbar
-  - cms_pf_single_pi
-  - cms_pf_single_pi0
-  - cms_pf_single_gamma
-  - cms_pf_single_electron
-  - cms_pf_single_mu
+train_test_datasets:
+  physical: 
+    batch_per_gpu: 5
+    datasets:
+      - cms_pf_ttbar
+      - cms_pf_ztt
+  gun: 
+    batch_per_gpu: 100
+    datasets:
+      - cms_pf_single_pi 
+      - cms_pf_single_pi0
+      - cms_pf_single_tau
+      - cms_pf_single_electron
+      - cms_pf_single_mu
+      - cms_pf_single_gamma
 
 validation_dataset: cms_pf_ttbar
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 5
+  cms_pf_ztt:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
   cms_pf_single_pi:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100
   cms_pf_single_pi0:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100
   cms_pf_single_tau:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100
   cms_pf_single_electron:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100
   cms_pf_single_mu:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100
   cms_pf_single_gamma:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 100

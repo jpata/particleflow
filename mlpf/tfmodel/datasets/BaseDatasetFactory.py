@@ -15,8 +15,8 @@ class BaseDatasetFactory:
             X = data_item["X"]
             y = data_item["y{}".format(target_particles)]
 
-            msk_elems = tf.cast(X[:, :, 0:1]!=0, tf.float32)
-            msk_signal = tf.cast(y[:, :, 0:1]!=0, tf.float32)
+            msk_elems = tf.cast(X[:, 0:1]!=0, tf.float32)
+            msk_signal = tf.cast(y[:, 0:1]!=0, tf.float32)
 
             #inputs: X
             #targets: dict by classification (cls) and regression feature columns
@@ -24,13 +24,13 @@ class BaseDatasetFactory:
             return (
                 X,
                 {
-                    "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
-                    "charge": y[:, :, 1:2],
-                    "pt": y[:, :, 2:3],
-                    "eta": y[:, :, 3:4],
-                    "sin_phi": y[:, :, 4:5],
-                    "cos_phi": y[:, :, 5:6],
-                    "energy": y[:, :, 6:7],
+                    "cls": tf.one_hot(tf.cast(y[:, 0], tf.int32), num_output_classes),
+                    "charge": y[:, 1:2],
+                    "pt": y[:, 2:3],
+                    "eta": y[:, 3:4],
+                    "sin_phi": y[:, 4:5],
+                    "cos_phi": y[:, 5:6],
+                    "energy": y[:, 6:7],
                 },
                 {
                     "cls": msk_elems,
