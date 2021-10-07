@@ -82,19 +82,6 @@ from raytune.search_space import search_space, set_raytune_search_parameters, ra
 from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
 
-def customize_gun_sample(config):
-
-    config["dataset"]["classification_loss_coef"] = 0.0
-    config["dataset"]["charge_loss_coef"] = 0.0
-    config["dataset"]["eta_loss_coef"] = 0.0
-    config["dataset"]["sin_phi_loss_coef"] = 0.0
-    config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "regression"
-
-    config["training_dataset"] = "cms_pf_single_pi"
-    config["testing_dataset"] = "cms_pf_single_pi"
-    return config
-
 def customize_pipeline_test(config):
     #for cms.yaml, keep only ttbar
     if "physical" in config["train_test_datasets"]:
