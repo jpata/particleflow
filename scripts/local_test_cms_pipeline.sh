@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -e
+set -e
 export PYTHONPATH=`pwd`/hep_tfds
 
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
