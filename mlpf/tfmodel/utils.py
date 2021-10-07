@@ -136,9 +136,13 @@ def get_lr_schedule(config, steps):
             )
         )
     elif schedule == "exponentialdecay":
+        if config["exponentialdecay"]["decay_steps"] == "epoch":
+            decay_steps = int(steps / config["setup"]["num_epochs"])
+        else:
+            decay_steps = config["exponentialdecay"]["decay_steps"]
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             lr,
-            decay_steps=config["exponentialdecay"]["decay_steps"],
+            decay_steps=decay_steps,
             decay_rate=config["exponentialdecay"]["decay_rate"],
             staircase=config["exponentialdecay"]["staircase"],
         )
