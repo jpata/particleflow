@@ -57,7 +57,7 @@ setup:
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  lr_schedule: exponentialdecay  # exponentialdecay, cosinedecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
 optimizer:

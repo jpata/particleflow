@@ -147,6 +147,11 @@ def get_lr_schedule(config, steps):
             decay_rate=config["exponentialdecay"]["decay_rate"],
             staircase=config["exponentialdecay"]["staircase"],
         )
+    elif schedule == "cosinedecay":
+        lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            decay_steps=steps,
+        )
     else:
         raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
     return lr_schedule, callbacks
