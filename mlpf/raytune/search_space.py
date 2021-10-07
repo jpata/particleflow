@@ -26,10 +26,11 @@ search_space = {
 
 # search_space = {
     # Optimizer parameters
-    # "lr": loguniform(1e-7, 1e-2),
+    # "lr": loguniform(1e-4, 3e-2),
     # "activation": "elu",
-    # "batch_size": samp([32]),
-    # "expdecay_decay_steps": samp([2000]),
+    # "batch_size": quniform(4, 32, 4),
+    # "expdecay_decay_steps": quniform(10, 2000, 10),
+    # "expdecay_decay_rate": uniform(0.9, 1),
     # Model parameters
     # "layernorm": quniform(0, 1, 1),
     # "ffn_dist_hidden_dim": quniform(64, 256, 64),
@@ -38,9 +39,10 @@ search_space = {
     # "num_node_messages": quniform(1, 3, 1),
     # "num_graph_layers_common": quniform(2, 4, 1),
     # "num_graph_layers_energy": quniform(2, 4, 1),
-    # "dropout": quniform(0.0, 0.5, 0.1),
+    # "dropout": uniform(0.0, 0.5),
     # "bin_size": quniform(160, 320, 160),
-    # "clip_value_low": quniform(0.0, 0.2, 0.02),
+    # "clip_value_low": uniform(0.0, 0.2),
+    # "dist_mult": uniform(0.01, 0.2),
     # "normalize_degrees": quniform(0, 1, 1),
     # "output_dim": quniform(64, 512, 64),
 # }
@@ -77,6 +79,8 @@ def set_raytune_search_parameters(search_space, config):
         config["parameters"]["combined_graph_layer"]["bin_size"] = int(search_space["bin_size"])
     if "clip_value_low" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"] = search_space["clip_value_low"]
+    if "dist_mult" in search_space.keys():
+        config["parameters"]["combined_graph_layer"]["kernel"]["dist_mult"] = search_space["dist_mult"]
 
     if "dropout" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"] / 2
@@ -85,6 +89,7 @@ def set_raytune_search_parameters(search_space, config):
     if "lr" in search_space.keys():
         config["setup"]["lr"] = search_space["lr"]
 
+    # TODO: make this work for using multiple datasets with different batch sizes
     if isinstance(config["training_datasets"], list):
         training_dataset = config["training_datasets"][0]
     else:
@@ -95,4 +100,8 @@ def set_raytune_search_parameters(search_space, config):
 
     if "expdecay_decay_steps" in search_space.keys():
         config["exponentialdecay"]["decay_steps"] = int(search_space["expdecay_decay_steps"])
+
+    if "expdecay_decay_rate" in search_space.keys():
+        config["exponentialdecay"]["decay_rate"] = int(search_space["expdecay_decay_rate"])
+
     return config
