@@ -245,3 +245,19 @@ def analyze_ray_experiment(exp_dir, default_metric, default_mode):
     topk_summary_plot_v2(analysis, 5, save_dir=exp_dir)
 
     summ, styled = summarize_top_k(analysis, k=10, save_dir=exp_dir)
+
+
+def count_skipped_configurations(exp_dir):
+    skiplog_file_path = Path(exp_dir) / "skipped_configurations.txt"
+    if skiplog_file_path.exists():
+        with open(skiplog_file_path, "r") as f:
+            lines = f.readlines()
+            count = 0
+            for line in lines:
+                if line == "#"*80 + "\n":
+                    count += 1
+        if count % 2 != 0:
+            print("WARNING: counts is not divisible by two")
+        return count // 2
+    else:
+        print("Could not find {}".format(str(skiplog_file_path)))

@@ -8,6 +8,7 @@ import glob
 import numpy as np
 from tqdm import tqdm
 import re
+import logging
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -16,8 +17,6 @@ import keras_tuner as kt
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
-
-from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler
 
 
 def load_config(config_file_path):
@@ -138,11 +137,20 @@ def get_lr_schedule(config, steps):
             )
         )
     elif schedule == "exponentialdecay":
+        if config["exponentialdecay"]["decay_steps"] == "epoch":
+            decay_steps = int(steps / config["setup"]["num_epochs"])
+        else:
+            decay_steps = config["exponentialdecay"]["decay_steps"]
         lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             lr,
-            decay_steps=config["exponentialdecay"]["decay_steps"],
+            decay_steps=decay_steps,
             decay_rate=config["exponentialdecay"]["decay_rate"],
             staircase=config["exponentialdecay"]["staircase"],
+        )
+    elif schedule == "cosinedecay":
+        lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=lr,
+            decay_steps=steps,
         )
     else:
         raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
@@ -203,27 +211,6 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
             executions_per_trial=cfg_hb["executions_per_trial"],
             distribution_strategy=strategy,
-        )
-
-
-def get_raytune_schedule(raytune_cfg):
-    if raytune_cfg["sched"] == "asha":
-        return AsyncHyperBandScheduler(
-            metric=raytune_cfg["default_metric"],
-            mode=raytune_cfg["default_mode"],
-            time_attr="training_iteration",
-            max_t=raytune_cfg["asha"]["max_t"],
-            grace_period=raytune_cfg["asha"]["grace_period"],
-            reduction_factor=raytune_cfg["asha"]["reduction_factor"],
-            brackets=raytune_cfg["asha"]["brackets"],
-        )
-    if raytune_cfg["sched"] == "hyperband":
-        return HyperBandScheduler(
-            metric=raytune_cfg["default_metric"],
-            mode=raytune_cfg["default_mode"],
-            time_attr="training_iteration",
-            max_t=raytune_cfg["hyperband"]["max_t"],
-            reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
         )
 
 
@@ -433,13 +420,16 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
     steps = []
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
-        interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
-        num_steps = 0
-        for elem in interleaved_ds:
-            num_steps += 1
-        print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
-        datasets.append(interleaved_ds)
-        steps.append(num_steps)
+        if ds_conf["datasets"] is None:
+            logging.warning("No datasets in {} list.".format(joint_dataset_name))
+        else:
+            interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
+            num_steps = 0
+            for elem in interleaved_ds:
+                num_steps += 1
+            print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
+            datasets.append(interleaved_ds)
+            steps.append(num_steps)
     
     ids = 0
     indices = []

@@ -57,7 +57,7 @@ setup:
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  lr_schedule: exponentialdecay  # exponentialdecay, cosinedecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
 optimizer:
@@ -180,30 +180,9 @@ hypertune:
 raytune:
   local_dir:  # Note: please specify an absolute path
   sched: "asha"  # asha, hyperband
-  default_metric: "val_cls_acc_weighted"
-  default_mode: "max"
-  parameters:
-    # optimizer parameters
-    lr: [1e-3]
-    batch_size: [32]
-    activation: ["elu"]  # applies to activation, dist_activation and node_message activation
-    dropout: [0.0]  # applies dropout/2 to combined_graph_layer and dropout to output_decoding
-    expdecay_decay_steps: [10000]
-    # model parameters
-    combined_graph_layer:
-      layernorm: [False]
-      ffn_dist_num_layers: [1]
-      ffn_dist_hidden_dim: [64, 128, 256]
-      distance_dim: [128, 256]
-      num_node_messages: [1]
-      node_message:
-        normalize_degrees: [True]
-        output_dim: [64, 128, 256]
-      bin_size: [80, 160, 320]
-      kernel:
-        clip_value_low: [0.0]
-    num_graph_layers_common: [2, 3, 4]
-    num_graph_layers_energy: [2, 3, 4]
+  search_alg:  # bayes, bohb, hyperopt
+  default_metric: "val_loss"
+  default_mode: "min"
   # Tune schedule specific parameters
   asha:
     max_t: 100

@@ -56,7 +56,7 @@ class OneCycleScheduler(LearningRateSchedule):
         else:
             final_lr = lr_max / (final_div)
 
-        phase_1_steps = steps * warmup_ratio
+        phase_1_steps = int(steps * warmup_ratio)
         phase_2_steps = steps - phase_1_steps
 
         self.lr_max = lr_max
