@@ -8,6 +8,7 @@ import glob
 import numpy as np
 from tqdm import tqdm
 import re
+import logging
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -414,13 +415,16 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
     steps = []
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
-        interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
-        num_steps = 0
-        for elem in interleaved_ds:
-            num_steps += 1
-        print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
-        datasets.append(interleaved_ds)
-        steps.append(num_steps)
+        if ds_conf["datasets"] is None:
+            logging.warning("No datasets in {} list.".format(joint_dataset_name))
+        else:
+            interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
+            num_steps = 0
+            for elem in interleaved_ds:
+                num_steps += 1
+            print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
+            datasets.append(interleaved_ds)
+            steps.append(num_steps)
     
     ids = 0
     indices = []
