@@ -622,14 +622,14 @@ def freeze_model(model, config, ds_test, outdir):
         full_model,
         opset=12,
         input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
-        output_path="model.onnx"
+        output_path=str(Path(outdir) / "model.onnx")
     )
 
     ds = list(tfds.as_numpy(ds_test.take(1)))
     X = ds[0][0]
     y = ds[0][1]
 
-    onnx_sess = onnxruntime.InferenceSession("model.onnx")
+    onnx_sess = onnxruntime.InferenceSession(str(Path(outdir) / "model.onnx"))
     pred_onx = onnx_sess.run(None, {"x:0": X})[0]
     pred_tf = model(X)
 

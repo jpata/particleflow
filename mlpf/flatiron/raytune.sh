@@ -21,7 +21,7 @@ cat $0
 echo "################# End of job submission script. #########################"
 
 export TUNE_RESULT_DIR="/mnt/ceph/users/ewulff/ray_results/tune_result_dir"
-export TUNE_MAX_PENDING_TRIALS_PG=${SLURM_NNODES}
+export TUNE_MAX_PENDING_TRIALS_PG=$((SLURM_NNODES*2))
 
 module purge
 module load slurm gcc cuda/11.1.0_455.23.05 cudnn/v8.0.4-cuda-11.1
