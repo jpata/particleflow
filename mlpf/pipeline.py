@@ -7,7 +7,7 @@ import sys
 import os
 import yaml
 import json
-import datetime
+from datetime import datetime
 import glob
 import random
 import platform
@@ -20,6 +20,7 @@ from functools import partial
 import shlex
 import subprocess
 import matplotlib.pyplot as plt
+import logging
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -50,21 +51,25 @@ from tfmodel.utils import (
     compute_weights_none,
     get_train_val_datasets,
     get_dataset_def,
-    prepare_val_data,
     set_config_loss,
     get_loss_dict,
     parse_config,
     get_best_checkpoint,
     delete_all_but_best_checkpoint,
     get_tuner,
-    get_raytune_schedule,
     get_heptfds_dataset,
-    get_datasets
+    get_datasets,
 )
 
 from tfmodel.lr_finder import LRFinder
-from tfmodel.callbacks import CustomTensorBoard
 from tfmodel import hypertuning
+from tfmodel.utils_analysis import (
+    plot_ray_analysis,
+    analyze_ray_experiment,
+    topk_summary_plot_v2,
+    summarize_top_k,
+    count_skipped_configurations,
+)
 
 import ray
 from ray import tune
@@ -73,26 +78,19 @@ from ray.tune.integration.tensorflow import DistributedTrainableCreator
 from ray.tune.logger import TBXLoggerCallback
 from ray.tune import Analysis
 
-def customize_gun_sample(config):
+from raytune.search_space import search_space, set_raytune_search_parameters, raytune_num_samples
+from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
-    config["dataset"]["classification_loss_coef"] = 0.0
-    config["dataset"]["charge_loss_coef"] = 0.0
-    config["dataset"]["eta_loss_coef"] = 0.0
-    config["dataset"]["sin_phi_loss_coef"] = 0.0
-    config["dataset"]["cos_phi_loss_coef"] = 0.0
-    config["setup"]["trainable"] = "regression"
-
-    config["training_dataset"] = "cms_pf_single_pi"
-    config["testing_dataset"] = "cms_pf_single_pi"
-    return config
 
 def customize_pipeline_test(config):
-    config["training_datasets"] = [config["training_datasets"][0], ]
-    config["testing_datasets"] = [config["testing_datasets"][0], ]
+    #for cms.yaml, keep only ttbar
+    if "physical" in config["train_test_datasets"]:
+        config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
+        config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
+
     return config
 
 customization_functions = {
-    "gun_sample": customize_gun_sample,
     "pipeline_test": customize_pipeline_test
 }
 
@@ -153,9 +151,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
     #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
-    ds_train, num_train_steps = get_datasets(config["training_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(config["testing_datasets"], config, num_gpus, "test")
+    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
+    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val = ds_val.batch(5)
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -166,6 +165,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     print("num_train_steps", num_train_steps)
     print("num_test_steps", num_test_steps)
+    total_steps = num_train_steps * config["setup"]["num_epochs"]
+    print("total_steps", total_steps)
 
     if experiment:
         experiment.set_name(outdir)
@@ -176,7 +177,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=num_train_steps)
+        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
         opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
@@ -290,6 +291,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
 
     strategy, num_gpus = get_strategy()
     ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
+    ds_test = ds_test.batch(5)
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
@@ -438,62 +440,38 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         print(trial.hyperparameters.values, trial.score)
 
 
-def set_raytune_search_parameters(search_space, config):
-    config["parameters"]["combined_graph_layer"]["layernorm"] = search_space["layernorm"]
-    config["parameters"]["combined_graph_layer"]["hidden_dim"] = search_space["hidden_dim"]
-    config["parameters"]["combined_graph_layer"]["distance_dim"] = search_space["distance_dim"]
-    config["parameters"]["combined_graph_layer"]["num_node_messages"] = search_space["num_node_messages"]
-    config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = search_space["normalize_degrees"]
-    config["parameters"]["combined_graph_layer"]["node_message"]["output_dim"] = search_space["output_dim"]
-    config["parameters"]["num_graph_layers_common"] = search_space["num_graph_layers_common"]
-    config["parameters"]["num_graph_layers_energy"] = search_space["num_graph_layers_energy"]
-    config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"]
-    config["parameters"]["combined_graph_layer"]["bin_size"] = search_space["bin_size"]
-    config["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"] = search_space["clip_value_low"]
-
-
-    config["setup"]["lr"] = search_space["lr"]
-    config["setup"]["batch_size"] = search_space["batch_size"]
-
-    config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
-    return config
-
-
-def build_model_and_train(config, checkpoint_dir=None, full_config=None):
-        full_config, config_file_stem, global_batch_size, n_train, n_test, n_epochs, weights = parse_config(full_config)
+def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None):
+        full_config, config_file_stem = parse_config(full_config)
 
         if config is not None:
             full_config = set_raytune_search_parameters(search_space=config, config=full_config)
 
-        strategy, maybe_global_batch_size = get_strategy(global_batch_size)
-        if maybe_global_batch_size is not None:
-            global_batch_size = maybe_global_batch_size
-        total_steps = n_epochs * n_train // global_batch_size
+        strategy, num_gpus = get_strategy()
 
-        ds_train_r, ds_test_r, dataset_transform = get_train_val_datasets(full_config, global_batch_size, n_train, n_test)
+        ds_train, num_train_steps = get_datasets(full_config["training_datasets"], full_config, num_gpus, "train")
+        ds_test, num_test_steps = get_datasets(full_config["testing_datasets"], full_config, num_gpus, "test")
+        ds_val, ds_info = get_heptfds_dataset(full_config["validation_dataset"], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
 
-        dataset_def = get_dataset_def(full_config)
+        if ntrain:
+            ds_train = ds_train.take(ntrain)
+            num_train_steps = ntrain
+        if ntest:
+            ds_test = ds_test.take(ntest)
+            num_test_steps = ntest
 
-        #FIXME: split up training/test and validation dataset and parameters
-        dataset_def.padded_num_elem_size = 6400
-
-        X_val, ygen_val, ycand_val = prepare_val_data(full_config, dataset_def, single_file=True)
-
-        validation_particles = None
-        if full_config["dataset"]["target_particles"] == "cand":
-            validation_particles = ycand_val
-        elif full_config["dataset"]["target_particles"] == "gen":
-            validation_particles = ygen_val
+        print("num_train_steps", num_train_steps)
+        print("num_test_steps", num_test_steps)
+        total_steps = num_train_steps * full_config["setup"]["num_epochs"]
+        print("total_steps", total_steps)
 
         callbacks = prepare_callbacks(
             full_config["callbacks"],
             tune.get_trial_dir(),
-            X_val,
-            validation_particles,
-            dataset_transform,
-            full_config["dataset"]["num_output_classes"],
-            dataset_def,
+            ds_val,
+            ds_info,
         )
+
+        callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
 
         with strategy.scope():
             lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=total_steps)
@@ -524,7 +502,6 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
             )
             model.summary()
 
-
             callbacks.append(TuneReportCheckpointCallback(
                 metrics=[
                     "adam_beta_1",
@@ -552,59 +529,26 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None):
                 ),
             )
 
-            fit_result = model.fit(
-                ds_train_r,
-                validation_data=ds_test_r,
-                epochs=n_epochs,
-                callbacks=callbacks,
-                steps_per_epoch=n_train // global_batch_size,
-                validation_steps=n_test // global_batch_size,
-            )
+            try:
+                fit_result = model.fit(
+                    ds_train.repeat(),
+                    validation_data=ds_test.repeat(),
+                    epochs=full_config["setup"]["num_epochs"],
+                    callbacks=callbacks,
+                    steps_per_epoch=num_train_steps,
+                    validation_steps=num_test_steps,
+                )
+            except tf.errors.ResourceExhaustedError:
+                logging.warning("Resource exhausted, skipping this hyperparameter configuration.")
+                skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
+                lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
 
-
-def get_hp_str(result):
-    def func(key):
-        if "config" in key:
-            return key.split("config/")[-1]
-    s = ""
-    for ii, hp in enumerate(list(filter(None.__ne__, [func(key) for key in result.keys()]))):
-        if ii % 6 == 0:
-            s += "\n"
-        s += "{}={}; ".format(hp, result["config/{}".format(hp)].values[0])
-    return s
-
-def plot_ray_analysis(analysis, save=False, skip=0):
-    to_plot = [
-    #'adam_beta_1',
-       'charge_loss', 'cls_acc_unweighted', 'cls_loss',
-       'cos_phi_loss', 'energy_loss', 'eta_loss', 'learning_rate', 'loss',
-       'pt_loss', 'sin_phi_loss', 'val_charge_loss',
-       'val_cls_acc_unweighted', 'val_cls_acc_weighted', 'val_cls_loss',
-       'val_cos_phi_loss', 'val_energy_loss', 'val_eta_loss', 'val_loss',
-       'val_pt_loss', 'val_sin_phi_loss',
-    ]
-
-    dfs = analysis.fetch_trial_dataframes()
-    result_df = analysis.dataframe()
-    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
-        result = result_df[result_df["logdir"] == key]
-
-        fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
-        for var, ax in zip(to_plot, axs.flat):
-            # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
-            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
-            ax.set_xlabel("Epoch")
-            ax.set_ylabel(var)
-            ax.grid(alpha=0.3)
-        plt.suptitle(get_hp_str(result))
-
-        if save:
-            plt.savefig(key + "/trial_summary.jpg")
-            plt.close()
-    if not save:
-        plt.show()
-    else:
-        print("Saved plots in trial dirs.")
+                with open(skiplog_file_path, "a") as f:
+                    f.write("#"*80 + "\n")
+                    for line in lines:
+                        f.write(line)
+                        logging.warning(line[:-1])
+                    f.write("#"*80 + "\n\n")
 
 
 @main.command()
@@ -616,64 +560,91 @@ def plot_ray_analysis(analysis, save=False, skip=0):
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
 @click.option("--tune_result_dir", help="Tune result dir", type=str, default=None)
 @click.option("-r", "--resume", help="resume run from local_dir", is_flag=True)
-def raytune(config, name, local, cpus, gpus, tune_result_dir, resume):
+@click.option("--ntrain", default=None, help="override the number of training steps", type=int)
+@click.option("--ntest", default=None, help="override the number of testing steps", type=int)
+def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest):
     cfg = load_config(config)
     config_file_path = config
 
     if tune_result_dir is not None:
         os.environ["TUNE_RESULT_DIR"] = tune_result_dir
     else:
+        if isinstance(cfg["raytune"]["local_dir"], type(None)):
+            raise TypeError("Please specify a local_dir in the raytune section of the config file.")
         trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
         os.environ["TUNE_RESULT_DIR"] = trd
 
+    expdir = Path(cfg["raytune"]["local_dir"]) / name
+    expdir.mkdir(parents=True, exist_ok=True)
+    shutil.copy("mlpf/raytune/search_space.py", str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py"))  # Copy the config file to the train dir for later reference
+
+    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
     if not local:
         ray.init(address='auto')
 
-    search_space = {
-        # Optimizer parameters
-        "lr": tune.grid_search(cfg["raytune"]["parameters"]["lr"]),
-        "batch_size": tune.grid_search(cfg["raytune"]["parameters"]["batch_size"]),
-        "expdecay_decay_steps": tune.grid_search(cfg["raytune"]["parameters"]["expdecay_decay_steps"]),
-
-        # Model parameters
-        "layernorm": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["layernorm"]),
-        "hidden_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["hidden_dim"]),
-        "distance_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["distance_dim"]),
-        "num_node_messages": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["num_node_messages"]),
-        "num_graph_layers_common": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_common"]),
-        "num_graph_layers_energy": tune.grid_search(cfg["raytune"]["parameters"]["num_graph_layers_energy"]),
-        "dropout": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["dropout"]),
-        "bin_size": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["bin_size"]),
-        "clip_value_low": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"]),
-        "normalize_degrees": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"]),
-        "output_dim": tune.grid_search(cfg["raytune"]["parameters"]["combined_graph_layer"]["node_message"]["output_dim"]),
-    }
-
     sched = get_raytune_schedule(cfg["raytune"])
+    search_alg = get_raytune_search_alg(cfg["raytune"])
 
     distributed_trainable = DistributedTrainableCreator(
-        partial(build_model_and_train, full_config=config_file_path),
+        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name),
         num_workers=1,  # Number of hosts that each trial is expected to use.
         num_cpus_per_worker=cpus,
         num_gpus_per_worker=gpus,
         num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
+        timeout_s=1 * 60 * 60,
     )
 
+    sync_config = tune.SyncConfig(sync_to_driver=False)
+
+    start = datetime.now()
     analysis = tune.run(
         distributed_trainable,
         config=search_space,
         name=name,
         scheduler=sched,
-        num_samples=1,
+        search_alg=search_alg,
+        num_samples=raytune_num_samples,
         local_dir=cfg["raytune"]["local_dir"],
         callbacks=[TBXLoggerCallback()],
         log_to_file=True,
         resume=resume,
+        max_failures=2,
+        sync_config=sync_config,
     )
-    print("Best hyperparameters found were: ", analysis.get_best_config("val_loss", "min"))
+    end = datetime.now()
+    print("Total time of tune.run(...): {}".format(end - start))
 
-    plot_ray_analysis(analysis, save=True, skip=20)
-    ray.shutdown()
+    print("Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
+        analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]))
+
+    skip = 20
+    if skip > cfg["setup"]["num_epochs"]:
+        skip = 0
+    analysis.default_metric = cfg["raytune"]["default_metric"]
+    analysis.default_mode = cfg["raytune"]["default_mode"]
+    plot_ray_analysis(analysis, save=True, skip=skip)
+    topk_summary_plot_v2(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
+    summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
+
+    best_params = analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"])
+    with open(Path(analysis.get_best_logdir()).parent / "best_parameters.txt", "a") as best_params_file:
+        best_params_file.write("Best hyperparameters according to {}\n".format(cfg["raytune"]["default_metric"]))
+        for key, val in best_params.items():
+            best_params_file.write(("{}: {}\n".format(key, val)))
+
+    with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
+        timefile.write(str(end - start) + "\n")
+
+    num_skipped = count_skipped_configurations(analysis.get_best_logdir())
+    print("Number of skipped configurations: {}".format(num_skipped))
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
+def count_skipped(exp_dir):
+    num_skipped = count_skipped_configurations(exp_dir)
+    print("Number of skipped configurations: {}".format(num_skipped))
 
 
 @main.command()
@@ -681,9 +652,12 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume):
 @click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
 @click.option("-s", "--save", help="save plots in trial dirs", is_flag=True)
 @click.option("-k", "--skip", help="skip first values to avoid large losses at start of training", type=int)
-def raytune_analysis(exp_dir, save, skip):
-    analysis = Analysis(exp_dir,  default_metric="val_loss", default_mode="min")
+@click.option("--metric", help="experiment dir", type=str, default="val_loss")
+@click.option("--mode", help="experiment dir", type=str, default="min")
+def raytune_analysis(exp_dir, save, skip, mode, metric):
+    analysis = Analysis(exp_dir,  default_metric=metric, default_mode=mode)
     plot_ray_analysis(analysis, save=save, skip=skip)
+    analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
 
 @main.command()
 @click.help_option("-h", "--help")

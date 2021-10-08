@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: cms
   target_particles: cand
-  num_input_features: 18
+  num_input_features: 25
   num_output_features: 7
 #       NONE = 0,
 #       TRACK = 1,
@@ -52,12 +52,12 @@ setup:
   weights:
   weights_config:
   lr: 1e-4
-  num_events_validation: 100
-  num_epochs: 1000
+  num_events_validation: 1000
+  num_epochs: 200
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  lr_schedule: exponentialdecay  # exponentialdecay, cosinedecay, onecycle
   optimizer: adam  # adam, adamw, sgd
 
 optimizer:
@@ -101,24 +101,12 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
-    #kernel:
-    #  type: NodePairTrainableKernel
-    #  output_dim: 4
-    #  hidden_dim_pair: 32
-    #  hidden_dim_node: 128
-    #  num_layers: 1
     num_node_messages: 1
     node_message:
       type: GHConvDense
       output_dim: 256
       activation: elu
       normalize_degrees: yes
-    #node_message:
-    #  type: NodeMessageLearnable
-    #  output_dim: 128
-    #  hidden_dim: 128
-    #  num_layers: 1
-    #  activation: gelu
     activation: elu
   num_graph_layers_common: 2
   num_graph_layers_energy: 2
@@ -192,62 +180,67 @@ hypertune:
 raytune:
   local_dir:  # Note: please specify an absolute path
   sched: "asha"  # asha, hyperband
-  parameters:
-    # optimizer parameters
-    lr: [1e-4]
-    batch_size: [32]
-    expdecay_decay_steps: [10000]
-    # model parameters
-    combined_graph_layer:
-      layernorm: [False]
-      hidden_dim: [64, 128, 256]
-      distance_dim: [128, 256]
-      num_node_messages: [1]
-      node_message:
-        normalize_degrees: [True]
-        output_dim: [64, 128, 256]
-      dropout: [0.0]
-      bin_size: [80, 160, 320]
-      kernel:
-        clip_value_low: [0.0]
-    num_graph_layers_common: [2, 3, 4]
-    num_graph_layers_energy: [2, 3, 4]
+  search_alg:  # bayes, bohb, hyperopt
+  default_metric: "val_loss"
+  default_mode: "min"
   # Tune schedule specific parameters
   asha:
     max_t: 100
-    reduction_factor: 3
+    reduction_factor: 4
     brackets: 1
-    grace_period: 5
+    grace_period: 10
   hyperband:
     max_t: 100
-    reduction_factor: 3
+    reduction_factor: 4
 
-training_datasets:
-  - cms_pf_ttbar
-
-testing_datasets:
-  - cms_pf_ttbar
+train_test_datasets:
+  physical: 
+    batch_per_gpu: 5
+    datasets:
+      - cms_pf_ttbar
+      - cms_pf_ztt
+  gun: 
+    batch_per_gpu: 100
+    datasets:
+      - cms_pf_single_pi 
+      - cms_pf_single_pi0
+      - cms_pf_single_tau
+      - cms_pf_single_electron
+      - cms_pf_single_mu
+      - cms_pf_single_gamma
 
 validation_dataset: cms_pf_ttbar
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 5
+  cms_pf_ztt:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
   cms_pf_single_pi:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
+  cms_pf_single_pi0:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
   cms_pf_single_tau:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
   cms_pf_single_electron:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
-    batch_per_gpu: 50
+  cms_pf_single_mu:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_gamma:
+    version: 1.2.0
+    data_dir:
+    manual_dir:

@@ -31,6 +31,15 @@ map_candid_to_pdgid = {
      -13: [-13]
 }
 
+elem_branches = [
+    "typ", "pt", "eta", "phi", "e",
+    "layer", "depth", "charge", "trajpoint", 
+    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
+    "px", "py", "pz", "deltap", "sigmadeltap", "gsf_electronseed_trkorecal", "num_hits", "cluster_flags", "corr_energy"
+]
+
+target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
+
 map_pdgid_to_candid = {}
 
 for candid, pdgids in map_candid_to_pdgid.items():
@@ -220,7 +229,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     for gp in sorted(all_genparticles, key=lambda x: g.nodes[x]["pt"], reverse=True):
         elems = [e for e in g.neighbors(gp)]
 
-        #don't assign any genparticle to these elements (PS, BREM, SC)
+        #don't assign any genparticle to these elements (PS(2,3), BREM(7), SC(10))
         elems = [e for e in elems if not (g.nodes[e]["typ"] in [2,3,7,10])]
 
         #sort elements by energy from genparticle
@@ -243,7 +252,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     #assign unmatched genparticles to best element, allowing for overlaps
     for gp in sorted(unmatched_gp, key=lambda x: g.nodes[x]["pt"], reverse=True):
         elems = [e for e in g.neighbors(gp)]
-        #we don't want to assign any genparticles to PS, BREM or SC - links are not reliable
+        #we don't want to assign any genparticles to PS(2,3), BREM(7) or SC(10) - links are not reliable
         elems = [e for e in elems if not (g.nodes[e]["typ"] in [2,3,7,10])]
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
         _, elem = elems_sorted[0]
@@ -284,14 +293,6 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         if chosen_elem is None:
             print("unmatched candidate {}, {}".format(cand, g.nodes[cand]))
             unmatched_cand += [cand]
-
-    elem_branches = [
-        "typ", "pt", "eta", "phi", "e",
-        "layer", "depth", "charge", "trajpoint", 
-        "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
-        "px", "py", "pz", "deltap", "sigmadeltap", "gsf_brem_sc_energy", "num_hits"
-    ]
-    target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
     Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
     Xelem.fill(0.0)
@@ -422,8 +423,10 @@ def process(args):
         element_muon_dt_hits = ev[b'element_muon_dt_hits']
         element_muon_csc_hits = ev[b'element_muon_csc_hits']
         element_muon_type = ev[b'element_muon_type']
-        element_gsf_brem_sc_energy = ev[b'element_gsf_brem_sc_energy']
+        element_gsf_electronseed_trkorecal = ev[b'element_gsf_electronseed_trkorecal']
         element_num_hits = ev[b'element_num_hits']
+        element_cluster_flags = ev[b'element_cluster_flags']
+        element_corr_energy = ev[b'element_corr_energy']
 
         trackingparticle_pid = ev[b'trackingparticle_pid']
         trackingparticle_pt = ev[b'trackingparticle_pt']
@@ -478,8 +481,10 @@ def process(args):
                 muon_dt_hits=element_muon_dt_hits[iobj],
                 muon_csc_hits=element_muon_csc_hits[iobj],
                 muon_type=element_muon_type[iobj],
-                gsf_brem_sc_energy=element_gsf_brem_sc_energy[iobj],
-                num_hits=element_num_hits[iobj]
+                gsf_electronseed_trkorecal=element_gsf_electronseed_trkorecal[iobj],
+                num_hits=element_num_hits[iobj],
+                cluster_flags=element_cluster_flags[iobj],
+                corr_energy=element_corr_energy[iobj],
             )
         for iobj in range(len(trackingparticle_pid)):
             g.add_node(("tp", iobj),

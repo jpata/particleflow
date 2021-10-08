@@ -22,6 +22,7 @@ From: nvcr.io/nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
     python3 -m pip install tensorflow-addons[tensorflow]
     python3 -m pip install tensorflow-model-optimization
     python3 -m pip install tensorflow-datasets
+    python3 -m pip install tf-models-official tensorflow-text
     python3 -m pip install onnxruntime tf2onnx
     python3 -m pip install scipy
     python3 -m pip install tensorboard_plugin_profile
