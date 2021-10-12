@@ -577,6 +577,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     expdir = Path(cfg["raytune"]["local_dir"]) / name
     expdir.mkdir(parents=True, exist_ok=True)
     shutil.copy("mlpf/raytune/search_space.py", str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py"))  # Copy the config file to the train dir for later reference
+    shutil.copy(config_file_path, str(Path(cfg["raytune"]["local_dir"]) / name / "config.yaml"))  # Copy the config file to the train dir for later reference
 
     ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
     if not local:
