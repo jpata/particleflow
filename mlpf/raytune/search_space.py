@@ -99,9 +99,9 @@ def set_raytune_search_parameters(search_space, config):
         config["datasets"][training_dataset]["batch_per_gpu"] = int(search_space["batch_size"])
 
     if "expdecay_decay_steps" in search_space.keys():
-        config["exponentialdecay"]["decay_steps"] = int(search_space["expdecay_decay_steps"])
+        config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
 
     if "expdecay_decay_rate" in search_space.keys():
-        config["exponentialdecay"]["decay_rate"] = int(search_space["expdecay_decay_rate"])
+        config["exponentialdecay"]["decay_rate"] = search_space["expdecay_decay_rate"]
 
     return config
