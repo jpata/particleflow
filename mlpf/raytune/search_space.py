@@ -6,7 +6,8 @@ search_space = {
         # Optimizer parameters
         "lr": samp([1e-3]),
         "activation": samp(["elu"]),
-        "batch_size": samp([32]),
+        "batch_size_physical": samp([32]),
+        # "batch_size_gun": samp([600]),
         "expdecay_decay_steps": samp([2000]),
 
         # Model parameters
@@ -28,7 +29,8 @@ search_space = {
     # Optimizer parameters
     # "lr": loguniform(1e-4, 3e-2),
     # "activation": "elu",
-    # "batch_size": quniform(4, 32, 4),
+    # "batch_size_physical": quniform(4, 32, 4),
+    # "batch_size_gun": quniform(100, 800, 100),
     # "expdecay_decay_steps": quniform(10, 2000, 10),
     # "expdecay_decay_rate": uniform(0.9, 1),
     # Model parameters
@@ -89,14 +91,11 @@ def set_raytune_search_parameters(search_space, config):
     if "lr" in search_space.keys():
         config["setup"]["lr"] = search_space["lr"]
 
-    # TODO: make this work for using multiple datasets with different batch sizes
-    if isinstance(config["training_datasets"], list):
-        training_dataset = config["training_datasets"][0]
-    else:
-        training_dataset = config["training_datasets"]
+    if "batch_size_physical" in search_space.keys():
+        config["train_test_datasets"]["physical"]["batch_per_gpu"] = int(search_space["batch_size_physical"])
 
-    if "batch_size" in search_space.keys():
-        config["datasets"][training_dataset]["batch_per_gpu"] = int(search_space["batch_size"])
+    if "batch_size_gun" in search_space.keys():
+        config["train_test_datasets"]["gun"]["batch_per_gpu"] = int(search_space["batch_size_gun"])
 
     if "expdecay_decay_steps" in search_space.keys():
         config["exponentialdecay"]["decay_steps"] = search_space["expdecay_decay_steps"]
