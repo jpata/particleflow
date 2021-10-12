@@ -153,7 +153,7 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
-        raise ValueError("Only supported LR schedules are 'exponentialdecay' and 'onecycle'.")
+        raise ValueError("Only supported LR schedules are 'exponentialdecay', 'cosinedecay' and 'onecycle'.")
     return lr_schedule, callbacks
 
 
@@ -172,7 +172,7 @@ def get_optimizer(config, lr_schedule=None):
         cfg_sgd = config["optimizer"]["sgd"]
         return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
     else:
-        raise ValueError("Only 'adam' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
+        raise ValueError("Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
