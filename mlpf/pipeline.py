@@ -448,8 +448,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         strategy, num_gpus = get_strategy()
 
-        ds_train, num_train_steps = get_datasets(full_config["training_datasets"], full_config, num_gpus, "train")
-        ds_test, num_test_steps = get_datasets(full_config["testing_datasets"], full_config, num_gpus, "test")
+        ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
+        ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
         ds_val, ds_info = get_heptfds_dataset(full_config["validation_dataset"], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
 
         if ntrain:
