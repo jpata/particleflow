@@ -440,7 +440,13 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         print(trial.hyperparameters.values, trial.score)
 
 
-def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None):
+def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False):
+        if seeds:
+            # Set seeds for reproducibility
+            random.seed(1234)
+            np.random.seed(1234)
+            tf.random.set_seed(1234)
+
         full_config, config_file_stem = parse_config(full_config)
 
         if config is not None:
@@ -562,7 +568,14 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 @click.option("-r", "--resume", help="resume run from local_dir", is_flag=True)
 @click.option("--ntrain", default=None, help="override the number of training steps", type=int)
 @click.option("--ntest", default=None, help="override the number of testing steps", type=int)
-def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest):
+@click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
+def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest, seeds):
+    if seeds:
+        # Set seeds for reproducibility
+        random.seed(1234)
+        np.random.seed(1234)
+        tf.random.set_seed(1234)
+
     cfg = load_config(config)
     config_file_path = config
 
@@ -584,10 +597,10 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         ray.init(address='auto')
 
     sched = get_raytune_schedule(cfg["raytune"])
-    search_alg = get_raytune_search_alg(cfg["raytune"])
+    search_alg = get_raytune_search_alg(cfg["raytune"], seeds)
 
     distributed_trainable = DistributedTrainableCreator(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name),
+        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
         num_workers=1,  # Number of hosts that each trial is expected to use.
         num_cpus_per_worker=cpus,
         num_gpus_per_worker=gpus,
