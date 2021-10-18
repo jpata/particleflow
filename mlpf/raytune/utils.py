@@ -4,6 +4,9 @@ from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.suggest.hebo import HEBOSearch
 from ray.tune.suggest.bayesopt import BayesOptSearch
 from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.suggest.nevergrad import NevergradSearch
+from ray.tune.suggest.skopt import SkOptSearch
+import nevergrad as ng
 
 
 def get_raytune_search_alg(raytune_cfg, seeds=False):
@@ -42,6 +45,21 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
             mode=raytune_cfg["default_mode"],
             n_initial_points=raytune_cfg["hyperopt"]["n_random_steps"],
             # points_to_evaluate=,
+        )
+    if raytune_cfg["search_alg"] == "scikit":
+        print("INFO: Using bayesian optimization from scikit-learn")
+        return SkOptSearch(
+            optimizer=gp_minimize,
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
+            convert_to_python=True,
+        )
+    if raytune_cfg["search_alg"] == "nevergrad":
+        print("INFO: Using bayesian optimization from nevergrad")
+        return NevergradSearch(
+            optimizer=ng.optimizers.BayesOptim(pca=False, init_budget=raytune_cfg["nevergrad"]["n_random_steps"]),
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
         )
     # HEBO is not yet supported
     # if (raytune_cfg["search_alg"] == "hebo") or (raytune_cfg["search_alg"] == "HEBO"):
