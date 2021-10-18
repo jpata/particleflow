@@ -254,6 +254,11 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     history_path = str(history_path)
     with open("{}/history.json".format(history_path), "w") as fi:
         json.dump(fit_result.history, fi)
+
+    weights = get_best_checkpoint(outdir)
+    print("Loading best weights that could be found from {}".format(weights))
+    model.load_weights(weights, by_name=True)
+
     model.save(outdir + "/model_full", save_format="tf")
 
     print("Training done.")
