@@ -6,7 +6,7 @@ from ray.tune.suggest.bayesopt import BayesOptSearch
 from ray.tune.suggest.hyperopt import HyperOptSearch
 
 
-def get_raytune_search_alg(raytune_cfg):
+def get_raytune_search_alg(raytune_cfg, seeds=False):
     if (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "pb2"):
         if raytune_cfg["search_alg"] is not None:
             print(
@@ -19,7 +19,11 @@ def get_raytune_search_alg(raytune_cfg):
 
     if (raytune_cfg["sched"] == "bohb") or (raytune_cfg["sched"] == "BOHB"):
         print("INFO: Using TuneBOHB search algorithm since it is required for BOHB shedule")
-        return TuneBOHB(metric=raytune_cfg["default_metric"], mode=raytune_cfg["default_mode"])
+        if seeds:
+            seed = 1234
+        else:
+            seed = None
+        return TuneBOHB(metric=raytune_cfg["default_metric"], mode=raytune_cfg["default_mode"], seed=seed)
 
     # requires pip install bayesian-optimization
     if raytune_cfg["search_alg"] == "bayes":

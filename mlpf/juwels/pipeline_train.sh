@@ -44,7 +44,6 @@ else
   exit 1
 fi
 
-python3 tf_list_gpus.py
 echo 'Starting training.'
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c $1 -p $2
 echo 'Training done.'
