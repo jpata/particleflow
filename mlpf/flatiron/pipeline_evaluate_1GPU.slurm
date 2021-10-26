@@ -29,8 +29,6 @@ source ~/miniconda3/bin/activate tf2
 which python3
 python3 --version
 
-python3 tf_list_gpus.py
-
 echo 'Starting evaluation.'
 CUDA_VISIBLE_DEVICES=0 python3 mlpf/pipeline.py evaluate -c $1 -t $2
 echo 'Evaluation done.'
