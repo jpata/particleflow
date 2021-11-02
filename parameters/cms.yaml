@@ -192,6 +192,10 @@ raytune:
   hyperband:
     max_t: 100
     reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
 
 train_test_datasets:
   physical: 
