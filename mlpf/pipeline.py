@@ -88,6 +88,12 @@ def customize_pipeline_test(config):
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
 
+    #make the network smaller for the pipeline test
+    config["parameters"]["num_graph_layers_common"] = 1
+    config["parameters"]["num_graph_layers_energy"] = 1
+    config["parameters"]["combined_graph_layer"]["num_node_messages"] = 1
+    config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+
     return config
 
 customization_functions = {
