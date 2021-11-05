@@ -19,4 +19,4 @@ python3 mlpf/pipeline.py train -c parameters/delphes.yaml --nepochs 2 --ntrain 5
 ls ./experiments/delphes_*/weights/
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate -c parameters/delphes.yaml -t ./experiments/delphes_*
+python3 mlpf/pipeline.py evaluate -t ./experiments/delphes_*
