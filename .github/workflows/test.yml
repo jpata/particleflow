@@ -25,7 +25,7 @@ jobs:
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
-            tensorflow-estimator==2.6.0
+            tensorflow-estimator==2.6.0 keras==2.6.0
           git submodule init
           git submodule update
       - name: Run delphes TF model
@@ -47,7 +47,7 @@ jobs:
             tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
-            tensorflow-estimator==2.6.0
+            tensorflow-estimator==2.6.0 keras==2.6.0
           git submodule init
           git submodule update
       - name: Run CMS TF model using the pipeline
