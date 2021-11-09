@@ -83,12 +83,6 @@ from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
 
 def customize_pipeline_test(config):
-    #make the GNN network smaller for the pipeline test
-    if "num_graph_layers_common" in config["parameters"]:
-        config["parameters"]["num_graph_layers_common"] = 1
-        config["parameters"]["num_graph_layers_energy"] = 1
-        config["parameters"]["combined_graph_layer"]["num_node_messages"] = 1
-
     #for cms.yaml, keep only ttbar
     if "physical" in config["train_test_datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
