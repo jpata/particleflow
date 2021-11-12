@@ -410,8 +410,14 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
         
         #remove the masked points row-wise and column-wise
-        dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
-        dm = tf.einsum("abijk,abj->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
+        msk_f_binned_squeeze = tf.squeeze(msk_f_binned, axis=-1)
+        shp_dm = tf.shape(dm)
+        rshp_row = [shp_dm[0], shp_dm[1], shp_dm[2], 1, 1]
+        rshp_col = [shp_dm[0], shp_dm[1], 1, shp_dm[3], 1]
+        msk_row = tf.reshape(msk_f_binned_squeeze, rshp_row)
+        msk_col = tf.reshape(msk_f_binned_squeeze, rshp_col)
+        dm = tf.math.multiply(dm, msk_row)
+        dm = tf.math.multiply(dm, msk_col)
 
         return bins_split, x_features_binned, dm, msk_f_binned
 
