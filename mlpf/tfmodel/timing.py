@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import pynvml
+import sys
 
 #pip install only onnxruntime_gpu, not onnxruntime!
 import onnxruntime
@@ -17,7 +18,7 @@ if __name__ == "__main__":
     mem_initial = mem.used/1000/1000
     print("mem_initial", mem_initial)
     
-    onnx_sess = onnxruntime.InferenceSession("model.onnx", providers=EP_list)
+    onnx_sess = onnxruntime.InferenceSession(sys.argv[1], providers=EP_list)
     time.sleep(5)
     
     mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
@@ -32,7 +33,7 @@ if __name__ == "__main__":
         for i in range(100):
 
             #allocate array in system RAM
-            X = np.array(np.random.randn(1, num_elems, 18), np.float32)
+            X = np.array(np.random.randn(1, num_elems, 25), np.float32)
             
             #transfer data to GPU, run model, transfer data back
             t0 = time.time()
