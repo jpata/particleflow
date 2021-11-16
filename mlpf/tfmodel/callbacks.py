@@ -5,6 +5,9 @@ from tensorflow.keras.callbacks import ModelCheckpoint
 from pathlib import Path
 import numpy as np
 import json
+import time
+import matplotlib.pyplot as plt
+from datetime import datetime
 
 class CustomTensorBoard(TensorBoard):
     """
@@ -84,3 +87,60 @@ class CustomModelCheckpoint(ModelCheckpoint):
             else:
                 with open(filepath, "wb") as f:
                     pickle.dump(self.optimizer_to_save, f)
+
+
+class TimeHistory(tf.keras.callbacks.Callback):
+    def __init__(self, *args, **kwargs):
+        # Added arguments
+        self.outdir = kwargs.pop("outdir")
+        super().__init__(*args, **kwargs)
+
+    def on_train_begin(self, logs=None):
+        self.times = []
+        self.tf_times = []
+        self.start_time = time.time()
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.epoch_time_start = time.time()
+        self.tf_epoch_time_start = tf.timestamp()
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.times.append(time.time() - self.epoch_time_start)
+        self.tf_times.append(tf.timestamp() - self.tf_epoch_time_start)
+
+    def plot(self, times, title):
+        plt.figure()
+        plt.xlabel('Epoch')
+        plt.ylabel('Total time taken until an epoch in seconds')
+        plt.plot(times, 'ro')
+        for i in range(len(times)):
+            if isinstance(times[i], tf.Tensor):
+                j = times[i].numpy()
+            else:
+                j = times[i]
+            if i == 0:
+                plt.text(i+0.02, j+0.2, str(round(j, 3)))
+            else:
+                if isinstance(times[i-1], tf.Tensor):
+                    j_prev = times[i-1].numpy()
+                else:
+                    j_prev = times[i-1]
+                plt.text(i+0.02, j+0.2, str(round(j-j_prev, 3)))
+        plt.title(title)
+
+        filename = title + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
+        save_path = Path(self.outdir) / filename
+        plt.savefig(save_path)
+
+    def on_train_end(self, logs=None):
+        total_time = time.time() - self.start_time
+
+        data = {
+            "Total time [s]": round(total_time, 2)
+        }
+
+        with open(str(Path(self.outdir) / 'data.json'), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+        self.plot(self.times, "times")
+        self.plot(self.tf_times, "tf_times")

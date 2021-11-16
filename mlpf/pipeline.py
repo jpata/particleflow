@@ -71,6 +71,8 @@ from tfmodel.utils_analysis import (
     count_skipped_configurations,
 )
 
+from tfmodel.callbacks import TimeHistory
+
 import ray
 from ray import tune
 from ray.tune.integration.keras import TuneReportCheckpointCallback
@@ -238,6 +240,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         comet_experiment=experiment
     )
     callbacks.append(optim_callbacks)
+
+    callbacks.append(TimeHistory(outdir=outdir))
 
     fit_result = model.fit(
         ds_train.repeat(),
