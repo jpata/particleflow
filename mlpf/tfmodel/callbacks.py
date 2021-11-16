@@ -111,8 +111,8 @@ class TimeHistory(tf.keras.callbacks.Callback):
     def plot(self, times, title):
         plt.figure()
         plt.xlabel('Epoch')
-        plt.ylabel('Total time taken until an epoch in seconds')
-        plt.plot(times, 'ro')
+        plt.ylabel('Time [s]')
+        plt.plot(times, 'o')
         for i in range(len(times)):
             if isinstance(times[i], tf.Tensor):
                 j = times[i].numpy()
@@ -127,6 +127,7 @@ class TimeHistory(tf.keras.callbacks.Callback):
                     j_prev = times[i-1]
                 plt.text(i+0.02, j+0.2, str(round(j-j_prev, 3)))
         plt.title(title)
+        plt.ylim(bottom=0)
 
         filename = title + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
         save_path = Path(self.outdir) / filename
