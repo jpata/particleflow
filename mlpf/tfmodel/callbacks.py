@@ -8,6 +8,7 @@ import json
 import time
 import matplotlib.pyplot as plt
 from datetime import datetime
+import logging
 
 class CustomTensorBoard(TensorBoard):
     """
@@ -89,26 +90,33 @@ class CustomModelCheckpoint(ModelCheckpoint):
                     pickle.dump(self.optimizer_to_save, f)
 
 
-class TimeHistory(tf.keras.callbacks.Callback):
+class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
     def __init__(self, *args, **kwargs):
         # Added arguments
         self.outdir = kwargs.pop("outdir")
+        self.steps_per_epoch = kwargs.pop("steps_per_epoch")
+        self.batch_size_per_gpu = kwargs.pop("batch_size_per_gpu")
+        self.num_gpus = kwargs.pop("num_gpus")
+
+        if self.num_gpus == 0:
+            self.no_gpu = True
+            logging.warning("No GPUs were found")
+            self.num_gpus = 1  # in order to compute global batch size later
+        else:
+            self.no_gpu = False
         super().__init__(*args, **kwargs)
 
     def on_train_begin(self, logs=None):
         self.times = []
-        self.tf_times = []
-        self.start_time = time.time()
+        self.start_time = tf.timestamp().numpy()
 
     def on_epoch_begin(self, epoch, logs=None):
-        self.epoch_time_start = time.time()
-        self.tf_epoch_time_start = tf.timestamp()
+        self.epoch_time_start = tf.timestamp().numpy()
 
     def on_epoch_end(self, epoch, logs=None):
-        self.times.append(time.time() - self.epoch_time_start)
-        self.tf_times.append(tf.timestamp() - self.tf_epoch_time_start)
+        self.times.append(tf.timestamp().numpy() - self.epoch_time_start)
 
-    def plot(self, times, title):
+    def plot(self, times):
         plt.figure()
         plt.xlabel('Epoch')
         plt.ylabel('Time [s]')
@@ -119,29 +127,40 @@ class TimeHistory(tf.keras.callbacks.Callback):
             else:
                 j = times[i]
             if i == 0:
-                plt.text(i+0.02, j+0.2, str(round(j, 3)))
+                plt.text(i+0.02, j+0.2, str(round(j, 2)))
             else:
                 if isinstance(times[i-1], tf.Tensor):
                     j_prev = times[i-1].numpy()
                 else:
                     j_prev = times[i-1]
-                plt.text(i+0.02, j+0.2, str(round(j-j_prev, 3)))
-        plt.title(title)
+                plt.text(i+0.02, j+0.2, str(round(j-j_prev, 2)))
         plt.ylim(bottom=0)
+        txt = "Time in seconds per epoch. The numbers next to each data point\nshow the difference in seconds compared to the previous epoch."
+        plt.title(txt)
 
-        filename = title + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
+        filename = "time_per_epoch_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
         save_path = Path(self.outdir) / filename
+        print("Saving plot in {}".format(save_path))
         plt.savefig(save_path)
 
     def on_train_end(self, logs=None):
-        total_time = time.time() - self.start_time
+        total_time = tf.timestamp().numpy() - self.start_time
+
+        events_per_epoch = self.num_gpus * self.batch_size_per_gpu * self.steps_per_epoch
+        throughput_per_epoch = np.repeat(events_per_epoch, len(self.times)) / np.array(self.times)  # event throughput [1/s]
+        ave_throughput = np.mean(throughput_per_epoch)
 
         data = {
-            "Total time [s]": round(total_time, 2)
+            "Total time [s]": round(total_time, 2),
+            "Average throughput [events/s]": round(ave_throughput, 2),
+            "Number of epochs": len(self.times),
+            "Number of GPUs": self.num_gpus if not self.no_gpu else 0,
+            "Batch size per GPU": self.batch_size_per_gpu,
+            "Global batch size": self.batch_size_per_gpu * self.num_gpus,
         }
 
-        with open(str(Path(self.outdir) / 'data.json'), 'w', encoding='utf-8') as f:
+        print("Saving result in {}".format(str(Path(self.outdir) / 'result.json')))
+        with open(str(Path(self.outdir) / 'result.json'), 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
-        self.plot(self.times, "times")
-        self.plot(self.tf_times, "tf_times")
+        self.plot(self.times)

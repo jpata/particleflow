@@ -71,7 +71,7 @@ from tfmodel.utils_analysis import (
     count_skipped_configurations,
 )
 
-from tfmodel.callbacks import TimeHistory
+from tfmodel.callbacks import BenchmarkLogggerCallback
 
 import ray
 from ray import tune
@@ -113,7 +113,8 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
+@click.option("-b", "--benchmark_dir", help="dir to save becnhmark results", type=str, default=None)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, benchmark_dir):
 
     try:
         from comet_ml import Experiment
@@ -241,7 +242,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     )
     callbacks.append(optim_callbacks)
 
-    callbacks.append(TimeHistory(outdir=outdir))
+    if benchmark_dir:
+        Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+        callbacks.append(
+            BenchmarkLogggerCallback(
+                outdir=benchmark_dir,
+                steps_per_epoch=num_train_steps,
+                batch_size_per_gpu=config["train_test_datasets"]["delphes"]["batch_per_gpu"],
+                num_gpus=num_gpus,
+                )
+            )
 
     fit_result = model.fit(
         ds_train.repeat(),
