@@ -144,23 +144,42 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         plt.savefig(save_path)
 
     def on_train_end(self, logs=None):
-        total_time = tf.timestamp().numpy() - self.start_time
+        # class methods already do this (eg plot() ) - maybe cast in __init__
+        result_path = Path(self.outdir, "result.json")
+        stop_time = tf.timestamp().numpy()
+        total_time = round(stop_time - self.start_time, 2)
 
         events_per_epoch = self.num_gpus * self.batch_size_per_gpu * self.steps_per_epoch
-        throughput_per_epoch = np.repeat(events_per_epoch, len(self.times)) / np.array(self.times)  # event throughput [1/s]
-        ave_throughput = np.mean(throughput_per_epoch)
+        throughput_per_epoch = np.repeat(events_per_epoch, len(self.times)) / np.array(
+            self.times
+        )  # event throughput [1/s]
+        mean_throughput = round(np.mean(throughput_per_epoch), 2)
 
         data = {
-            "Total time [s]": round(total_time, 2),
-            "Average throughput [events/s]": round(ave_throughput, 2),
-            "Number of epochs": len(self.times),
-            "Number of GPUs": self.num_gpus if not self.no_gpu else 0,
-            "Batch size per GPU": self.batch_size_per_gpu,
-            "Global batch size": self.batch_size_per_gpu * self.num_gpus,
+            "wl-scores": {
+                # may need to generate this array if # epochs is variable...
+                "num_epochs": len(self.times),
+                "epoch_times": self.times,
+            },
+            "wl-stats": {
+                "train_start": self.start_time,
+                "train_stop": stop_time,
+                "train_time": total_time,
+                "GPU": bool(self.num_gpus),
+                "CPU": not self.num_gpus,
+                "num_gpus": self.num_gpus,
+                "batch_size_per_gpu": self.batch_size_per_gpu,
+                "batch_total_size": self.batch_size_per_gpu * self.num_gpus,
+                "steps_per_epoch": self.steps_per_epoch,
+                "events_per_epoch": events_per_epoch,
+                "throughput_per_epoch": list(throughput_per_epoch),
+                "throughput_mean": mean_throughput,
+            },
         }
 
-        print("Saving result in {}".format(str(Path(self.outdir) / 'result.json')))
-        with open(str(Path(self.outdir) / 'result.json'), 'w', encoding='utf-8') as f:
+        print("Saving result to {}".format(result_path.resolve()))
+        with result_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
+        # may not be needed for later versions
         self.plot(self.times)
