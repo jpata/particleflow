@@ -22,7 +22,7 @@ jobs:
             sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods \
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
-            tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
+            tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
             tensorflow-estimator==2.6.0 keras==2.6.0
@@ -44,7 +44,7 @@ jobs:
             sklearn matplotlib mplhep pandas scipy uproot3 uproot3-methods \
             awkward0 keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
-            tqdm click tensorflow-datasets 'ray[default]' 'ray[tune]' \
+            tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]'==1.6.0 \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
             tensorflow-estimator==2.6.0 keras==2.6.0
