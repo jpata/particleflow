@@ -21,6 +21,7 @@ class Expression:
 
 if __name__ == "__main__":
     filename = sys.argv[1]
+    outfilename = sys.argv[2]
     events = Events(filename)
 
     expressions = []
@@ -91,5 +92,5 @@ if __name__ == "__main__":
         for expr in expressions:
             results[expr.label] = expr.get(event)
         all_results.append(results)
-    pickle.dump(all_results, open("out.pkl", "wb"))
+    pickle.dump(all_results, open(outfilename, "wb"))
 
