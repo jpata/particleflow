@@ -14,16 +14,19 @@ From: nvcr.io/nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
     apt install -y wget
     apt install -y libomp-dev
     apt install -y git
+    apt install -y graphviz libgraphviz-dev
 
     python3 -m pip install --upgrade pip
 
-    python3 -m pip install numpy==1.19
-    python3 -m pip install tensorflow==2.6
+    python3 -m pip install numpy
+    python3 -m pip install tensorflow
     python3 -m pip install tensorflow-addons[tensorflow]
     python3 -m pip install tensorflow-model-optimization
     python3 -m pip install tensorflow-datasets
     python3 -m pip install tf-models-official tensorflow-text
     python3 -m pip install onnxruntime tf2onnx
+    python3 -m pip install tf-models-official
+    python3 -m pip install tensorflow-text
     python3 -m pip install scipy
     python3 -m pip install tensorboard_plugin_profile
     python3 -m pip install keras-tuner
@@ -35,7 +38,10 @@ From: nvcr.io/nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
     python3 -m pip install stellargraph
     python3 -m pip install papermill
     python3 -m pip install transformers
+    python3 -m pip install nevergrad
+    python3 -m pip install pyarrow
 
+    python3 -m pip install seaborn
     python3 -m pip install setGPU
     python3 -m pip install sklearn
     python3 -m pip install matplotlib
@@ -52,14 +58,14 @@ From: nvcr.io/nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
     python3 -m pip install tables
     python3 -m pip install boost-histogram
     python3 -m pip install uproot awkward
-    
+    python3 -m pip install pydot pygraphviz
+    python3 -m pip install plotly
+
     python3 -m pip install energyflow
     python3 -m pip install POT
     
-    python3 -m pip install plotly
     
     python3 -m pip install fastparquet
-    python3 -m pip install zenodo_get
 
 %environment
 
