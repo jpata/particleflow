@@ -1,9 +1,9 @@
 # This file contains the generic MLPF model definitions
-# PFNet: the GNN-based model with graph building based on LSH+kNN
-# Transformer: the transformer-based model using fast attention
-# DummyNet: simple elementwise feed forward network for cross-checking
+# PFNetDense: the GNN-based model with graph building based on LSH and a Gaussian distance kernel
+# PFNetTransformer: the transformer-based model using fast attention
 
 import tensorflow as tf
+from official.nlp.modeling.layers.kernel_attention import KernelAttention
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
@@ -410,8 +410,14 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
         
         #remove the masked points row-wise and column-wise
-        dm = tf.einsum("abijk,abi->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
-        dm = tf.einsum("abijk,abj->abijk", dm, tf.squeeze(msk_f_binned, axis=-1))
+        msk_f_binned_squeeze = tf.squeeze(msk_f_binned, axis=-1)
+        shp_dm = tf.shape(dm)
+        rshp_row = [shp_dm[0], shp_dm[1], shp_dm[2], 1, 1]
+        rshp_col = [shp_dm[0], shp_dm[1], 1, shp_dm[3], 1]
+        msk_row = tf.reshape(msk_f_binned_squeeze, rshp_row)
+        msk_col = tf.reshape(msk_f_binned_squeeze, rshp_col)
+        dm = tf.math.multiply(dm, msk_row)
+        dm = tf.math.multiply(dm, msk_col)
 
         return bins_split, x_features_binned, dm, msk_f_binned
 
@@ -943,33 +949,56 @@ class PFNetDense(tf.keras.Model):
     #     self.step += 1
     #     return {m.name: m.result() for m in self.metrics}
 
-class DummyNet(tf.keras.Model):
+class KernelEncoder(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        self.key_dim = kwargs.pop("key_dim")
+        self.attn = KernelAttention(feature_transform="elu", num_heads=4, key_dim=self.key_dim, name=kwargs.get("name") + "_attention")
+        self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu")
+        self.norm0 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln0")
+        self.norm1 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln1")
+        super(KernelEncoder, self).__init__(*args, **kwargs)
+
+    def call(self, args, training=False):
+        X, mask = args
+        X_attended = self.attn(X, X, training=training)
+        X = self.norm0(X + X_attended, training=training)
+        X = self.norm1(X + self.ffn(X), training=training)
+        return X
+
+class PFNetTransformer(tf.keras.Model):
     def __init__(self,
-                num_input_classes=8,
-                num_output_classes=3,
-                num_momentum_outputs=3):
-        super(DummyNet, self).__init__()
+        num_input_classes=8,
+        num_output_classes=3,
+        input_encoding="cms",
+        output_decoding={}):
+        super(PFNetTransformer, self).__init__()
 
-        self.num_momentum_outputs = num_momentum_outputs
+        if input_encoding == "cms":
+            self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "default":
+            self.enc = InputEncoding(num_input_classes)
 
-        self.enc = InputEncoding(num_input_classes)
+        key_dim = 128
+        self.ffn = point_wise_feed_forward_network(key_dim, key_dim, "ffn", num_layers=1, activation="elu")
 
-        self.ffn_id = point_wise_feed_forward_network(num_output_classes, 256)
-        self.ffn_charge = point_wise_feed_forward_network(1, 256)
-        self.ffn_momentum = point_wise_feed_forward_network(num_momentum_outputs, 256)
+        self.encoders = []
+        for i in range(2):
+            self.encoders.append(KernelEncoder(key_dim=key_dim, name="enc{}".format(i)))
+        self.output_dec = OutputDecoding(**output_decoding)
 
-    def call(self, inputs, training):
+    def call(self, inputs, training=False):
         X = inputs
-        msk_input = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), -1)
+        debugging_data = {}
 
-        enc = self.enc(X)
+        #mask padded elements
+        msk = X[:, :, 0] != 0
+        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
-        out_id_logits = self.ffn_id(enc)
-        out_charge = self.ffn_charge(enc)*msk_input
+        X_enc = self.enc(X)
 
-        dec_output_reg = tf.concat([enc, out_id_logits], axis=-1)
-        pred_momentum = self.ffn_momentum(dec_output_reg)*msk_input
-
-        ret = tf.concat([out_id_logits, out_charge, pred_momentum], axis=-1)
+        X_enc = self.ffn(X_enc)
+        for enc in self.encoders:
+            X_enc = enc([X_enc, msk_input], training=training)*msk_input
+        ret = self.output_dec([X, X_enc, X_enc, msk_input], training=training)
 
         return ret

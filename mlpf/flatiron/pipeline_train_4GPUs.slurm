@@ -41,8 +41,6 @@ else
 fi
 mkdir experiments
 
-python3 tf_list_gpus.py
-
 echo 'Starting training.'
 # Run the training of the base GNN model using e.g. 4 GPUs in a data-parallel mode
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c $1 -p $2

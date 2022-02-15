@@ -35,6 +35,32 @@ if __name__ == "__main__":
         ]
     ))
     expressions.append(Expression(
+        "ak4PFJetsPuppi",
+        "vector<reco::PFJet>",
+        [
+            ("pt", "[o.pt() for o in obj]"),
+            ("eta", "[o.eta() for o in obj]"),
+            ("phi", "[o.phi() for o in obj]"),
+            ("energy", "[o.energy() for o in obj]"),
+        ]
+    ))
+    expressions.append(Expression(
+        "pfMet",
+        "vector<reco::PFMET>",
+        [
+            ("pt", "[o.pt() for o in obj]"),
+            ("phi", "[o.phi() for o in obj]"),
+        ]
+    ))
+    expressions.append(Expression(
+        "pfMetPuppi",
+        "vector<reco::PFMET>",
+        [
+            ("pt", "[o.pt() for o in obj]"),
+            ("phi", "[o.phi() for o in obj]"),
+        ]
+    ))
+    expressions.append(Expression(
         "particleFlow",
         "vector<reco::PFCandidate>",
         [
