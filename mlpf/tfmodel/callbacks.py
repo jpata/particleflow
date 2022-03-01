@@ -157,11 +157,12 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
 
         data = {
             "wl-scores": {
+                "throughput_mean": mean_throughput,
+            },
+            "wl-stats": {
                 # may need to generate this array if # epochs is variable...
                 "num_epochs": len(self.times),
                 "epoch_times": self.times,
-            },
-            "wl-stats": {
                 "train_start": self.start_time,
                 "train_stop": stop_time,
                 "train_time": total_time,
@@ -173,7 +174,6 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
                 "steps_per_epoch": self.steps_per_epoch,
                 "events_per_epoch": events_per_epoch,
                 "throughput_per_epoch": list(throughput_per_epoch),
-                "throughput_mean": mean_throughput,
             },
         }
 
