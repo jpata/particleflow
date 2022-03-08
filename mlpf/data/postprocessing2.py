@@ -272,7 +272,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
 
         chosen_elem = None
 
-        #Pions and muons will be assigned to tracks
+        #Pions, muons and electrons will be assigned to tracks
         if abs(tp) == 211 or abs(tp) == 13 or abs(tp) == 11:
             for elem in neighbors:
                 tp_neighbor = g.nodes[elem]["typ"]
@@ -530,8 +530,8 @@ def process(args):
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
     tt = tf["ana/pftree"]
-    events_to_process = [i for i in range(tt.num_entries)] 
-    #events_to_process = range(5)
+    #events_to_process = [i for i in range(tt.num_entries)] 
+    events_to_process = range(5)
 
     all_data = []
     ifile = 0
@@ -539,6 +539,12 @@ def process(args):
     for iev in tqdm.tqdm(events_to_process):
 
         g = make_graph(ev, iev)
+        for elem in g.nodes:
+            if elem[0] == "elem":
+                typ = g.nodes[elem]["typ"]
+                if typ == 6:
+                    print("pred", list(g.predecessors(elem)))
+                    print("succ", list(g.successors(elem)))
         g = cleanup_graph(g)
 
         #make tree visualizations for PFCandidates
