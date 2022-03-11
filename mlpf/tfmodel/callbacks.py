@@ -169,7 +169,7 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
                 "train_stop": stop_time,
                 "train_time": total_time,
                 "GPU": self.num_gpus,
-                "CPU": 0 if self.num_gpu else self.num_devices,
+                "CPU": 0 if self.num_gpus else self.num_devices,
                 "batch_size_per_device": self.batch_size_per_gpu,
                 "batch_total_size": self.batch_size_per_gpu * self.num_devices,
                 "steps_per_epoch": self.steps_per_epoch,
