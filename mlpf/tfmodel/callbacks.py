@@ -97,13 +97,15 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         self.steps_per_epoch = kwargs.pop("steps_per_epoch")
         self.batch_size_per_gpu = kwargs.pop("batch_size_per_gpu")
         self.num_gpus = kwargs.pop("num_gpus")
+        self.num_devices = kwargs.pop("num_devices")
 
-        if self.num_gpus == 0:
-            self.no_gpu = True
-            logging.warning("No GPUs were found")
-            self.num_gpus = 1  # in order to compute global batch size later
-        else:
-            self.no_gpu = False
+        if self.num_gpus:
+            self.num_devices = self.num_gpus
+        elif not self.num_devices:
+            # no GPUs, no devices specified, fallback to CPU
+            self.num_devices = 1
+            logging.warning("No GPUs were found, no devices specified")
+
         super().__init__(*args, **kwargs)
 
     def on_train_begin(self, logs=None):
@@ -149,7 +151,7 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         stop_time = tf.timestamp().numpy()
         total_time = round(stop_time - self.start_time, 2)
 
-        events_per_epoch = self.num_gpus * self.batch_size_per_gpu * self.steps_per_epoch
+        events_per_epoch = self.num_devices * self.batch_size_per_gpu * self.steps_per_epoch
         throughput_per_epoch = np.repeat(events_per_epoch, len(self.times)) / np.array(
             self.times
         )  # event throughput [1/s]
@@ -166,11 +168,10 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
                 "train_start": self.start_time,
                 "train_stop": stop_time,
                 "train_time": total_time,
-                "GPU": bool(self.num_gpus),
-                "CPU": not self.num_gpus,
-                "num_gpus": self.num_gpus,
-                "batch_size_per_gpu": self.batch_size_per_gpu,
-                "batch_total_size": self.batch_size_per_gpu * self.num_gpus,
+                "GPU": self.num_gpus,
+                "CPU": 0 if self.num_gpu else self.num_devices,
+                "batch_size_per_device": self.batch_size_per_gpu,
+                "batch_total_size": self.batch_size_per_gpu * self.num_devices,
                 "steps_per_epoch": self.steps_per_epoch,
                 "events_per_epoch": events_per_epoch,
                 "throughput_per_epoch": list(throughput_per_epoch),

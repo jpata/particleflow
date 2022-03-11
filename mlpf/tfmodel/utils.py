@@ -31,7 +31,7 @@ def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
 
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
     n_epochs = config["setup"]["num_epochs"]
-    
+
     if ntrain:
         config["setup"]["num_events_train"] = ntrain
 
@@ -90,7 +90,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy():
+def get_strategy(num_devices=0):
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
@@ -102,14 +102,14 @@ def get_strategy():
     else:
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
-    if num_gpus > 1:
+    if num_gpus > 1 or num_devices > 0:
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
-        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
+        strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
     elif num_gpus == 0:
         print("fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
-        num_gpus = 0
+
     return strategy, num_gpus
 
 
@@ -430,7 +430,7 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
-    
+
     ids = 0
     indices = []
     for ds, num_steps in zip(datasets, steps):
