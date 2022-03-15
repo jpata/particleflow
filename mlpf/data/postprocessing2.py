@@ -27,7 +27,9 @@ elem_branches = [
     "typ", "pt", "eta", "phi", "e",
     "layer", "depth", "charge", "trajpoint", 
     "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
-    "px", "py", "pz", "deltap", "sigmadeltap", "gsf_electronseed_trkorecal", "num_hits", "cluster_flags", "corr_energy"
+    "px", "py", "pz", "deltap", "sigmadeltap",
+    "gsf_electronseed_trkorecal", "gsf_electronseed_dnn1", "gsf_electronseed_dnn2", "gsf_electronseed_dnn3", "gsf_electronseed_dnn4", "gsf_electronseed_dnn5",
+    "num_hits", "cluster_flags", "corr_energy"
 ]
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
@@ -399,6 +401,11 @@ def make_graph(ev, iev):
     element_muon_csc_hits = ev['element_muon_csc_hits'][iev]
     element_muon_type = ev['element_muon_type'][iev]
     element_gsf_electronseed_trkorecal = ev['element_gsf_electronseed_trkorecal'][iev]
+    element_gsf_electronseed_dnn1 = ev['element_gsf_electronseed_dnn1'][iev]
+    element_gsf_electronseed_dnn2 = ev['element_gsf_electronseed_dnn2'][iev]
+    element_gsf_electronseed_dnn3 = ev['element_gsf_electronseed_dnn3'][iev]
+    element_gsf_electronseed_dnn4 = ev['element_gsf_electronseed_dnn4'][iev]
+    element_gsf_electronseed_dnn5 = ev['element_gsf_electronseed_dnn5'][iev]
     element_num_hits = ev['element_num_hits'][iev]
     element_cluster_flags = ev['element_cluster_flags'][iev]
     element_corr_energy = ev['element_corr_energy'][iev]
@@ -454,6 +461,11 @@ def make_graph(ev, iev):
             muon_csc_hits=element_muon_csc_hits[iobj],
             muon_type=element_muon_type[iobj],
             gsf_electronseed_trkorecal=element_gsf_electronseed_trkorecal[iobj],
+            gsf_electronseed_dnn1=element_gsf_electronseed_dnn1[iobj],
+            gsf_electronseed_dnn2=element_gsf_electronseed_dnn2[iobj],
+            gsf_electronseed_dnn3=element_gsf_electronseed_dnn3[iobj],
+            gsf_electronseed_dnn4=element_gsf_electronseed_dnn4[iobj],
+            gsf_electronseed_dnn5=element_gsf_electronseed_dnn5[iobj],
             num_hits=element_num_hits[iobj],
             cluster_flags=element_cluster_flags[iobj],
             corr_energy=element_corr_energy[iobj],
@@ -543,8 +555,8 @@ def process(args):
             if elem[0] == "elem":
                 typ = g.nodes[elem]["typ"]
                 if typ == 6:
-                    print("pred", list(g.predecessors(elem)))
-                    print("succ", list(g.successors(elem)))
+                    print("pred", [g.nodes[e]["typ"] for e in g.predecessors(elem)])
+                    print("succ", [g.nodes[e]["typ"] for e in g.successors(elem)])
         g = cleanup_graph(g)
 
         #make tree visualizations for PFCandidates

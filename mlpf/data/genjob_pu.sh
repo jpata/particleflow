@@ -2,7 +2,7 @@
 set -e
 set -x
 
-CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_2_0_pre2
+CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -15,7 +15,7 @@ mkdir -p $WORKDIR
 PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/pu_files_local.txt
 
-N=100
+N=5
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
