@@ -102,12 +102,18 @@ def get_strategy(num_devices=0):
     else:
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
-    if num_gpus > 1 or num_devices > 0:
+
+    if num_gpus > 1:
+        # multiple GPUs selected
+        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
+    elif num_devices > 1:
+        # CPU parallelization
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
+        # single GPU
         strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
-    elif num_gpus == 0:
-        print("fallback to CPU")
+    else:
+        print("Fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     return strategy, num_gpus
