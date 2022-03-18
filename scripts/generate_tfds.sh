@@ -12,3 +12,5 @@ IMG=/home/software/singularity/base.simg
 #singularity exec -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/singlegamma --manual_dir $MANUAL_DIR --overwrite
 #singularity exec -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/ztt --manual_dir $MANUAL_DIR --overwrite
 singularity exec --env PYTHONPATH=$PYTHONPATH -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir $MANUAL_DIR --overwrite
+singularity exec --env PYTHONPATH=$PYTHONPATH -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/qcd --manual_dir $MANUAL_DIR --overwrite
+singularity exec --env PYTHONPATH=$PYTHONPATH -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/ztt --manual_dir $MANUAL_DIR --overwrite

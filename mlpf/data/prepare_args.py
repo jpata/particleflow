@@ -2,7 +2,7 @@
 from __future__ import print_function
 import sys, os, fnmatch
 
-outdir = "/hdfs/local/joosep/mlpf/gen"
+outdir = "/hdfs/local/joosep/mlpf/gen/v2"
 
 samples = [
 #    "SinglePiFlatPt0p7To10_cfi",
@@ -15,8 +15,8 @@ samples = [
 
 samples_pu = [
     "TTbar_14TeV_TuneCUETP8M1_cfi",
-#    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
-#    "QCDForPF_13TeV_TuneCUETP8M1_cfi",
+    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
+    "QCDForPF_13TeV_TuneCUETP8M1_cfi",
 ]
 
 NUM_SAMPLES = 100
