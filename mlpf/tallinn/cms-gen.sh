@@ -3,7 +3,7 @@
 #SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 
-IMG=/home/software/singularity/base.simg
+IMG=/home/joosep/HEP-KBFI/singularity/base.simg
 cd ~/particleflow
 
 #TF training

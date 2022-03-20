@@ -12,7 +12,6 @@ import logging
 
 import tensorflow as tf
 import tensorflow_addons as tfa
-import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -176,6 +175,7 @@ def get_optimizer(config, lr_schedule=None):
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
+    import keras_tuner as kt
     if cfg_hypertune["algorithm"] == "random":
         print("Keras Tuner: Using RandomSearch")
         cfg_rand = cfg_hypertune["random"]

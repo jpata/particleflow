@@ -3,7 +3,6 @@
 # PFNetTransformer: the transformer-based model using fast attention
 
 import tensorflow as tf
-from official.nlp.modeling.layers.kernel_attention import KernelAttention
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
@@ -951,6 +950,7 @@ class PFNetDense(tf.keras.Model):
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
+        from official.nlp.modeling.layers.kernel_attention import KernelAttention
         self.key_dim = kwargs.pop("key_dim")
         self.attn = KernelAttention(feature_transform="elu", num_heads=4, key_dim=self.key_dim, name=kwargs.get("name") + "_attention")
         self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu")
