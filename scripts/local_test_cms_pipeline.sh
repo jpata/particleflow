@@ -8,9 +8,7 @@ mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_12001.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_12002.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_12003.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_1.root
 
 cd ../../..
 
@@ -21,7 +19,7 @@ for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; d
 	python3 mlpf/data/postprocessing2.py \
 	  --input $file \
 	  --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
-	  --save-normalized-table --events-per-file 5
+	  --save-normalized-table --events-per-file -1
 done
 
 mkdir -p experiments
