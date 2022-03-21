@@ -20,7 +20,7 @@ jobs:
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.6 setGPU \
             sklearn matplotlib mplhep pandas scipy uproot \
-            awkward keras-tuner networkx \
+            awkward vector keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
@@ -42,7 +42,7 @@ jobs:
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.6 setGPU \
             sklearn matplotlib mplhep pandas scipy uproot \
-            awkward keras-tuner networkx \
+            awkward vector keras-tuner networkx \
             tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]'==1.6.0 \
             tf-models-official tensorflow-text \
