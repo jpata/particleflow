@@ -518,8 +518,9 @@ def process(args):
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
     tt = tf["ana/pftree"]
-    events_to_process = [i for i in range(tt.num_entries)] 
-    #events_to_process = range(5)
+    if args.num_events == -1:
+        args.num_events = tt.num_entries
+    events_to_process = [i for i in range(args.num_events)] 
 
     all_data = []
     ifile = 0
@@ -553,10 +554,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--plot-candidates", type=int, default=0, help="number of PFCandidates to plot as trees in pt-descending order")
-    parser.add_argument("--events-per-file", type=int, default=-1, help="number of events per output file, -1 for all")
     parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph")
     parser.add_argument("--save-normalized-table", action="store_true", help="save the uniquely identified table")
+    parser.add_argument("--num-events", type=int, help="number of events to process", default=-1)
     args = parser.parse_args()
     return args
 
