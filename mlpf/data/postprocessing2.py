@@ -40,23 +40,18 @@ for candid, pdgids in map_candid_to_pdgid.items():
     for p in pdgids:
         map_pdgid_to_candid[p] = candid
 
-def deltaphi(phi1, phi2):
-    return np.mod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
-
-def deltar2(eta1, eta2, phi1, phi2):
-    deta = np.abs(eta1-eta2)
-    dphi = deltaphi(phi1,phi2)
-    dr = deta**2+dphi**2
-    return dr
-
 def deltar_pairs(eta_vec, phi_vec, dr_cut):
-    ret = []
-    for iphot0 in range(len(eta_vec)):
-        for iphot1 in range(iphot0+1, len(eta_vec)):
-            dr = deltar2(eta_vec[iphot0], eta_vec[iphot1], phi_vec[iphot0], phi_vec[iphot1])
-            if dr<dr_cut:
-                ret += [(iphot0, iphot1)]
-    return ret
+
+    deta = np.abs(np.subtract.outer(eta_vec, eta_vec))
+    dphi = np.mod(np.subtract.outer(phi_vec, phi_vec) + np.pi, 2 * np.pi) - np.pi
+
+    dr2 = deta**2 + dphi**2
+    dr2 *= np.tri(*dr2.shape)
+    dr2[dr2==0] = 999
+
+    ind_pairs = np.where(dr2<dr_cut)
+
+    return ind_pairs
 
 def get_charge(pid):
     abs_pid = abs(pid)
@@ -133,8 +128,8 @@ def merge_photons_from_pi0(g):
     phot_phi = [g.nodes[node]["phi"] for node in photons]
     merge_pairs = []
 
-    pairs = deltar_pairs(phot_eta, phot_phi, 0.0001)
-    merge_pairs = [(photons[p[0]], photons[p[1]]) for p in pairs]
+    pairs_0, pairs_1 = deltar_pairs(phot_eta, phot_phi, 0.0001)
+    merge_pairs = [(photons[p0], photons[p1]) for p0, p1 in zip(pairs_0, pairs_1)]
 
     for pair in merge_pairs:
         if pair[0] in g.nodes and pair[1] in g.nodes:
@@ -213,15 +208,15 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
     return g
 
 def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
-    rg = g.reverse()
+    #rg = g.reverse()
 
     all_genparticles = []
     all_elements = []
     all_pfcandidates = []
-    for node in rg.nodes:
+    for node in g.nodes:
         if node[0] == "elem":
             all_elements += [node]
-            for parent in rg.neighbors(node):
+            for parent in g.predecessors(node):
                 all_genparticles += [parent]
         elif node[0] == "pfcand":
             all_pfcandidates += [node]
@@ -232,7 +227,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     elem_to_gp = {}
     unmatched_gp = []
     for gp in sorted(all_genparticles, key=lambda x: g.nodes[x]["pt"], reverse=True):
-        elems = [e for e in g.neighbors(gp)]
+        elems = [e for e in g.successors(gp)]
 
         #don't assign any genparticle to these elements (PS(2,3), BREM(7), SC(10))
         elems = [e for e in elems if not (g.nodes[e]["typ"] in [2,3,7,10])]
@@ -257,7 +252,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
 
     #assign unmatched genparticles to best element, allowing for overlaps
     for gp in sorted(unmatched_gp, key=lambda x: g.nodes[x]["pt"], reverse=True):
-        elems = [e for e in g.neighbors(gp)]
+        elems = [e for e in g.successors(gp)]
         #we don't want to assign any genparticles to PS(2,3), BREM(7) or SC(10) - links are not reliable
         elems = [e for e in elems if not (g.nodes[e]["typ"] in [2,3,7,10])]
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
@@ -270,7 +265,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     #Find primary element for each PFCandidate
     for cand in sorted(all_pfcandidates, key=lambda x: g.nodes[x]["pt"], reverse=True):
         tp = g.nodes[cand]["typ"]
-        neighbors = list(rg.neighbors(cand))
+        neighbors = list(g.predecessors(cand))
 
         chosen_elem = None
 
@@ -306,25 +301,6 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     ygen.fill(0.0)
     ycand = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
     ycand.fill(0.0)
- 
-    #find which elements should be linked together in the output when regressing to PFCandidates or GenParticles
-    graph_elem_cand = nx.Graph()  
-    graph_elem_gen = nx.Graph()  
-    for elem in all_elements:
-        graph_elem_cand.add_node(elem) 
-        graph_elem_gen.add_node(elem) 
- 
-    for cand in all_pfcandidates:
-        for elem1 in rg.neighbors(cand):
-            for elem2 in rg.neighbors(cand):
-                if (elem1 != elem2):
-                    graph_elem_cand.add_edge(elem1, elem2)
-
-    for gp in all_genparticles:
-        for elem1 in g.neighbors(gp):
-            for elem2 in g.neighbors(gp):
-                if (elem1 != elem2):
-                    graph_elem_gen.add_edge(elem1, elem2)
  
     for ielem, elem in enumerate(all_elements):
         elem_type = g.nodes[elem]["typ"]
@@ -552,21 +528,6 @@ def process(args):
 
         g = make_graph(ev, iev)
         g = cleanup_graph(g)
-
-        #make tree visualizations for PFCandidates
-        #ncand = 0 
-        #rg = g.reverse()
-        #for node in sorted(filter(lambda x: x[0]=="pfcand", g.nodes), key=lambda x: g.nodes[x]["e"], reverse=True):
-        #    if ncand < args.plot_candidates:
-        #        fig = save_ego_graph(rg, node, 3, False)
-        #        plt.savefig(outpath + "_ev_{}_cand_{}_idx_{}.pdf".format(iev, ncand, node[1]), bbox_inches="tight")
-        #        plt.clf()
-        #        del fig
-        #    ncand += 1
-
-        #fig = draw_event(g)
-        #plt.savefig(outpath + "_ev_{}.pdf".format(iev))
-        #plt.clf()
 
         #associate target particles to input elements
         Xelem, ycand, ygen = prepare_normalized_table(g)

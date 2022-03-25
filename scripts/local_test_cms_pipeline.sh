@@ -34,4 +34,4 @@ ls ./experiments/cms_*/weights/
 #Generate the pred.npz file of predictions
 python3 mlpf/pipeline.py evaluate -t ./experiments/cms_*
 
-python3 mlpf/pipeline.py train -c parameters/cms-transformer.yaml --nepochs 2 --customize pipeline_test
+#python3 mlpf/pipeline.py train -c parameters/cms-transformer.yaml --nepochs 2 --customize pipeline_test
