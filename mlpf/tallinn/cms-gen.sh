@@ -3,8 +3,8 @@
 #SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 
-IMG=/home/joosep/HEP-KBFI/singularity/base.simg
+IMG=/home/software/singularity/tf-2.8.0.simg
 cd ~/particleflow
 
 #TF training
-singularity exec --nv --env PYTHONPATH=hep_tfds $IMG python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 10
+singularity exec --nv --env PYTHONPATH=hep_tfds $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 10
