@@ -62,6 +62,6 @@ echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> ste
 cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
-#mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple.root --outpath ./ --save-normalized-table --events-per-file -1
+mv pfntuple.root pfntuple_${SEED}.root
+python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 #rm step*.root

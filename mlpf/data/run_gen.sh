@@ -12,9 +12,9 @@
 #./genjob.sh SinglePiPlusFlatPt0p7To1000_cfi 1 &
 #./genjob.sh SinglePiMinusFlatPt0p7To1000_cfi 1 &
 #./genjob.sh SingleGammaFlatPt1To1000_pythia8_cfi 1 &
-#./genjob.sh SingleElectronFlatPt1To1000_pythia8_cfi 1 &
+#./genjob.sh SingleElectronFlatPt1To1000_pythia8_cfi 1
 #./genjob.sh SingleTauFlatPt1To1000_cfi 1 &
 #./genjob.sh SinglePi0Pt1To1000_pythia8_cfi 1 &
 
-./genjob_pu.sh TTbar_14TeV_TuneCUETP8M1_cfi 1
+#./genjob_pu.sh TTbar_14TeV_TuneCUETP8M1_cfi 1
 
