@@ -29,7 +29,7 @@ elem_branches = [
     "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
     "px", "py", "pz", "deltap", "sigmadeltap",
     "gsf_electronseed_trkorecal", "gsf_electronseed_dnn1", "gsf_electronseed_dnn2", "gsf_electronseed_dnn3", "gsf_electronseed_dnn4", "gsf_electronseed_dnn5",
-    "num_hits", "cluster_flags", "corr_energy"
+    "num_hits", "cluster_flags", "corr_energy", "corr_energy_err", "vx", "vy", "vz", "pterror", "etaerror", "phierror", "lambd", "lambdaerror", "theta", "thetaerror"
 ]
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
@@ -385,6 +385,17 @@ def make_graph(ev, iev):
     element_num_hits = ev['element_num_hits'][iev]
     element_cluster_flags = ev['element_cluster_flags'][iev]
     element_corr_energy = ev['element_corr_energy'][iev]
+    element_corr_energy_err = ev['element_corr_energy_err'][iev]
+    element_pterror = ev['element_pterror'][iev]
+    element_etaerror = ev['element_etaerror'][iev]
+    element_phierror = ev['element_phierror'][iev]
+    element_lambda = ev['element_lambda'][iev]
+    element_theta = ev['element_theta'][iev]
+    element_lambdaerror = ev['element_lambdaerror'][iev]
+    element_thetaerror = ev['element_thetaerror'][iev]
+    element_vx = ev['element_vx'][iev]
+    element_vy = ev['element_vy'][iev]
+    element_vz = ev['element_vz'][iev]
 
     trackingparticle_pid = ev['trackingparticle_pid'][iev]
     trackingparticle_pt = ev['trackingparticle_pt'][iev]
@@ -445,6 +456,17 @@ def make_graph(ev, iev):
             num_hits=element_num_hits[iobj],
             cluster_flags=element_cluster_flags[iobj],
             corr_energy=element_corr_energy[iobj],
+            corr_energy_err=element_corr_energy_err[iobj],
+            pterror=element_pterror[iobj],
+            etaerror=element_etaerror[iobj],
+            phierror=element_phierror[iobj],
+            lambd=element_lambda[iobj],
+            theta=element_theta[iobj],
+            lambdaerror=element_lambdaerror[iobj],
+            thetaerror=element_thetaerror[iobj],
+            vx=element_vx[iobj],
+            vy=element_vy[iobj],
+            vz=element_vz[iobj],
         )
     for iobj in range(len(trackingparticle_pid)):
         g.add_node(("tp", iobj),
