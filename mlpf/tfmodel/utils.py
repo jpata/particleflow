@@ -430,9 +430,7 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
             interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
-            num_steps = 0
-            for elem in interleaved_ds:
-                num_steps += 1
+            num_steps = len(interleaved_ds)
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
@@ -447,9 +445,7 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    num_steps = 0
-    for elem in ds:
-        num_steps += 1
+    num_steps = len(ds)
 
     print("Final dataset with {} steps".format(num_steps))
     return ds, num_steps

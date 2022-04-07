@@ -116,7 +116,8 @@ def main():
 @click.option("-b", "--benchmark_dir", help="dir to save becnhmark results", type=str, default=None)
 @click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
 @click.option("-D", "--num_devices", help="number of devices to use", type=int, default=0)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, benchmark_dir, batch_size, num_devices):
+@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, benchmark_dir, batch_size, num_devices, seeds):
 
     try:
         from comet_ml import Experiment
@@ -132,6 +133,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         print("Failed to initialize comet-ml dashboard")
         experiment = None
 
+    if seeds:
+        random.seed(1234)
+        np.random.seed(1234)
+        tf.random.set_seed(1234)
 
     """Train a model defined by config"""
     config_file_path = config
@@ -258,6 +263,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
                 batch_size_per_gpu=config["train_test_datasets"]["delphes"]["batch_per_gpu"],
                 num_gpus=num_gpus,
                 num_devices=num_devices,
+                train_set_size=len(ds_train),
             )
         )
 
