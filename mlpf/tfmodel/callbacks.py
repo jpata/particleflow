@@ -145,10 +145,18 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         stop_time = tf.timestamp().numpy()
         total_time = round(stop_time - self.start_time, 2)
 
-        # event throughput [1/s] (ignore batch padding)
+        # event throughput [1/s]
+        #   - ignore batch padding
         throughput_per_epoch = self.train_set_size / np.array(self.times)
-        mean_throughput = round(np.mean(throughput_per_epoch), 2)
-        mean_epoch_time = round(np.mean(self.times), 2)
+
+        # mean throughput
+        #   - ignore first epoch (lazy graph construction)
+        mean_throughput = round(np.mean(throughput_per_epoch[1:]), 2)
+
+        # mean epoch time
+        #   - ignore first epoch (lazy graph construction)
+        mean_epoch_time = round(np.mean(self.times[1:]), 2)
+        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_devices)
 
         data = {
             "wl-scores": {
@@ -163,10 +171,11 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
                 "train_time": total_time,
                 "GPU": self.num_gpus,
                 "CPU": self.num_devices,
-                "batch_size_per_device": self.batch_size_per_gpu,
-                "batch_total_size": self.batch_size_per_gpu * (self.num_gpus or self.num_devices),
-                "steps_per_epoch": self.steps_per_epoch,
                 "train_set_size": self.train_set_size,
+                "batch_size_per_device": self.batch_size_per_gpu,
+                "batch_size_total": batch_size_total,
+                "steps_per_epoch": self.steps_per_epoch,
+                "events_per_epoch": batch_size_total * self.steps_per_epoch,
                 "throughput_per_epoch": list(throughput_per_epoch),
             },
         }
