@@ -104,20 +104,6 @@ def main():
 @click.option("--customize", help="customization function", type=str, default=None)
 def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
 
-    try:
-        from comet_ml import Experiment
-        experiment = Experiment(
-            project_name="particleflow-tf",
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-        )
-    except Exception as e:
-        print("Failed to initialize comet-ml dashboard")
-        experiment = None
-
 
     """Train a model defined by config"""
     config_file_path = config
@@ -136,11 +122,23 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     else:
         outdir = str(Path(weights).parent)
 
+    try:
+        from comet_ml import OfflineExperiment
+        experiment = OfflineExperiment(
+            project_name="particleflow-tf",
+            auto_metric_logging=True,
+            auto_param_logging=True,
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=False,
+            auto_histogram_activation_logging=False,
+            offline_directory=outdir
+        )
+    except Exception as e:
+        print("Failed to initialize comet-ml dashboard")
+        experiment = None
+
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus = get_strategy()
-    #if "CPU" not in strategy.extended.worker_devices[0]:
-    #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
-    #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
@@ -286,6 +284,10 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for dev in physical_devices:
+        tf.config.experimental.set_memory_growth(dev, True)
+
     ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
     ds_test = ds_test.batch(5)
 

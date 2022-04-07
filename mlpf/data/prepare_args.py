@@ -5,12 +5,11 @@ import sys, os, fnmatch
 outdir = "/hdfs/local/joosep/mlpf/gen/v2"
 
 samples = [
-#    "SinglePiFlatPt0p7To10_cfi",
-#    "SingleTauFlatPt2To150_cfi",
-#    "SingleMuFlatPt0p7To10_cfi",
-#    "SingleElectronFlatPt1To100_pythia8_cfi",
-#    "SingleGammaFlatPt10To100_pythia8_cfi",
-#    "SinglePi0E10_pythia8_cfi",
+#    "SinglePiMinusFlatPt0p7To1000_cfi",
+#    "SingleGammaFlatPt1To1000_pythia8_cfi",
+#    "SingleElectronFlatPt1To1000_pythia8_cfi",
+#    "SingleTauFlatPt1To1000_cfi",
+#    "SinglePi0Pt1To1000_pythia8_cfi",
 ]
 
 samples_pu = [

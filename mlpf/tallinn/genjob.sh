@@ -2,6 +2,8 @@
 #SBATCH -p main
 #SBATCH --mem-per-cpu=4G
 #SBATCH --cpus-per-task=1
+#SBATCH -e logs/error__%A.log
+#SBATCH -o logs/output__%A.log
 
 env
 df -h
@@ -15,7 +17,7 @@ cd $WORKDIR
 
 /home/joosep/particleflow/mlpf/data/genjob.sh $SAMPLE $SEED
 
-cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.root /hdfs/local/joosep/mlpf/gen/$SAMPLE/root/ 
-cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.pkl /hdfs/local/joosep/mlpf/gen/$SAMPLE/raw/
+cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.root /hdfs/local/joosep/mlpf/gen/v2/$SAMPLE/root/ 
+cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.pkl /hdfs/local/joosep/mlpf/gen/v2/$SAMPLE/raw/
 
 rm -Rf $WORKDIR
