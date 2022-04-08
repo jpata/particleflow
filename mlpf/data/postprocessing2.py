@@ -153,9 +153,8 @@ def merge_photons_from_pi0(g):
                     g.edges[(pair[0], suc)]["weight"] += g.edges[(pair[1], suc)]["weight"]
             g.remove_nodes_from([pair[1]])
 
-def cleanup_graph(g, edge_energy_threshold=0.0):
+def cleanup_graph(g, edge_energy_threshold=0.01):
     g = g.copy()
-
     edges_to_remove = []
     nodes_to_remove = []
 
@@ -165,8 +164,6 @@ def cleanup_graph(g, edge_energy_threshold=0.0):
         if node[0] == "elem":
             #remove edges that don't contribute above a threshold 
             ew = [((gen, node), g.edges[gen, node]["weight"]) for gen in g.predecessors(node)]
-            #if the edge weight is exactly 1, this was a trackingparticle
-            ew = filter(lambda x: x[1] != 1.0, ew)
             ew = sorted(ew, key=lambda x: x[1], reverse=True)
             for edge, weight in ew:
                 if weight/g.nodes[edge[0]]["e"] < edge_energy_threshold:
@@ -184,7 +181,8 @@ def cleanup_graph(g, edge_energy_threshold=0.0):
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
 
-    merge_photons_from_pi0(g)   
+    merge_photons_from_pi0(g)
+
 
     #For each truth particle, compute the energy in tracks or calorimeter clusters
     for node in g.nodes:
@@ -222,6 +220,30 @@ def cleanup_graph(g, edge_energy_threshold=0.0):
             g.nodes[node]["E_hfem"] = E_hfem
             g.nodes[node]["E_hfhad"] = E_hfhad
    
+    #If there are multiple tracks matched to a gen/sim particle, keep the association to the closest one by dR 
+    for node in g.nodes:   
+        if node[0] == "sc" or node[0] == "tp":
+            tracks = []
+            for suc in g.successors(node):
+                typ = g.nodes[suc]["typ"]
+                if typ == 1 or typ == 6:
+                    tracks.append(suc)
+            if len(tracks)>1:
+                n0 = g.nodes[node]
+                print(n0["typ"], n0["pt"], n0["eta"], n0["phi"])
+                drs = []
+                for tr in tracks:
+                    n1 = g.nodes[tr]
+                    deta = np.abs(n0["eta"] - n1["eta"])
+                    dphi = np.mod(n0["phi"] - n1["phi"] + np.pi, 2 * np.pi) - np.pi
+                    dr2 = deta**2 + dphi**2
+                    drs.append(dr2)
+                    print("  ", n1["typ"], n1["pt"], n1["eta"], n1["phi"], dr2)
+                imin = np.argmin(drs)
+                for itr in range(len(tracks)):
+                    if itr != imin:
+                        g.edges[(node, tracks[itr])]["weight"] = 0.0
+ 
     for node in g.nodes:
         if node[0] == "sc" or node[0] == "tp":
             typ = g.nodes[node]["typ"]
@@ -287,7 +309,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
 
         #sort elements by energy deposit from genparticle
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
-
+            
         chosen_elem = None
         for weight, elem in elems_sorted:
             if not (elem in elem_to_gp):
@@ -551,8 +573,9 @@ def make_graph(ev, iev):
 
     trackingparticle_to_element_first = ev['trackingparticle_to_element.first'][iev]
     trackingparticle_to_element_second = ev['trackingparticle_to_element.second'][iev]
+    trackingparticle_to_element_cmp = ev['trackingparticle_to_element_cmp'][iev]
     #for trackingparticles associated to elements, set a very high edge weight
-    for tp, elem in zip(trackingparticle_to_element_first, trackingparticle_to_element_second):
+    for tp, elem, c in zip(trackingparticle_to_element_first, trackingparticle_to_element_second, trackingparticle_to_element_cmp):
         if not (g.nodes[("elem", elem)]["typ"] in [2,3,7]):
             g.add_edge(("tp", tp), ("elem", elem), weight=float("inf"))
  
@@ -606,6 +629,13 @@ def process(args):
 
         g = make_graph(ev, iev)
         g = cleanup_graph(g)
+        
+        for elem in g.nodes:
+            if elem[0]=="tp" or elem[0]=="sc":
+                if g.nodes[elem]["typ"] == 11:
+                    print(elem)
+                    for suc in g.successors(elem):
+                        print("  ", suc, g.nodes[suc]["typ"], g.edges[(elem, suc)]["weight"])
 
         #associate target particles to input elements
         Xelem, ycand, ygen = prepare_normalized_table(g)
