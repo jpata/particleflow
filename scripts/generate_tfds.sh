@@ -2,7 +2,7 @@
 
 MANUAL_DIR=/hdfs/local/joosep/mlpf/gen/v2
 export PYTHONPATH=hep_tfds
-IMG=/home/software/singularity/base.simg
+IMG=/home/software/singularity/tf-2.8.0.simg
 
 #singularity exec -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/singlemu --manual_dir $MANUAL_DIR --overwrite
 #singularity exec -B /hdfs $IMG tfds build hep_tfds/heptfds/cms_pf/singleele --manual_dir $MANUAL_DIR --overwrite

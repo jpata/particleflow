@@ -288,7 +288,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     for dev in physical_devices:
         tf.config.experimental.set_memory_growth(dev, True)
 
-    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
+    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
     ds_test = ds_test.batch(5)
 
     model = make_model(config, model_dtype)
@@ -304,7 +304,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model.load_weights(weights, by_name=True)
     
     eval_model(model, ds_test, config, eval_dir)
-    freeze_model(model, config, ds_test.take(1), train_dir)
+    freeze_model(model, config, train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")

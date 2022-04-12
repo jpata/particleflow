@@ -361,7 +361,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
-def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
+def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, supervised=True):
     cds = config["dataset"]
 
     if cds['schema'] == "cms":
@@ -372,13 +372,12 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
 
     ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-    #bs = config["datasets"][dataset_name]["batch_per_gpu"]
 
     if not (num_events is None):
         ds = ds.take(num_events)
 
-    #ds = ds.batch(bs)
-    ds = ds.map(dsf.get_map_to_supervised())
+    if supervised:
+        ds = ds.map(dsf.get_map_to_supervised())
 
     return ds, ds_info
 

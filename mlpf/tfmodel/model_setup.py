@@ -5,16 +5,12 @@ import tensorflow_addons as tfa
 import pickle
 import numpy as np
 import os
-from sklearn.model_selection import train_test_split
-import sys
-import glob
 import io
 import os
 import yaml
 import uuid
 import matplotlib
 import matplotlib.pyplot as plt
-import sklearn
 from argparse import Namespace
 import time
 import json
@@ -32,6 +28,7 @@ import sklearn.metrics
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
+from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
@@ -586,27 +583,32 @@ def make_transformer(config, dtype):
     )
     return model
 
+#Given a model, evaluates it on each batch of the validation dataset
+#For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
 def eval_model(model, dataset, config, outdir):
-    import scipy
-    ibatch = 0
-    for X, y, w in tqdm(dataset, desc="Evaluating model"):
 
-        y_pred = model.predict(X)
+    ibatch = 0
+    for elem in tqdm(dataset, desc="Evaluating model"):
+        y_pred = model.predict(elem["X"])
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
+        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"])
+        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"])
+
         outs = {}
-        for key in y.keys():
-            outs["true_{}".format(key)] = y[key]
+        for key in y_pred.keys():
+            outs["gen_{}".format(key)] = ygen[key]
+            outs["cand_{}".format(key)] = ycand[key]
             outs["pred_{}".format(key)] = y_pred[key]
         np.savez(
             np_outfile,
-            X=X,
+            X=elem["X"],
             **outs
         )
         ibatch += 1
 
-def freeze_model(model, config, ds_test, outdir):
+def freeze_model(model, config, outdir):
     bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
     num_features = config["dataset"]["num_input_features"]
     num_out_classes = config["dataset"]["num_output_classes"]
@@ -623,27 +625,6 @@ def freeze_model(model, config, ds_test, outdir):
         input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
         output_path=str(Path(outdir) / "model.onnx")
     )
-
-    ds = list(tfds.as_numpy(ds_test.take(1)))
-    X = ds[0][0]
-    y = ds[0][1]
-
-    import onnxruntime
-    onnx_sess = onnxruntime.InferenceSession(str(Path(outdir) / "model.onnx"))
-    pred_onx = onnx_sess.run(None, {"x:0": X})[0]
-    pred_tf = model(X)
-
-    msk = X[:, :, 0]!=0
-    true_id = np.argmax(y["cls"][:, :, :num_out_classes], axis=-1)[msk]
-    pred_id_onx = np.argmax(pred_onx[:, :, :num_out_classes], axis=-1)[msk]
-    pred_id_tf = np.argmax(pred_tf["cls"], axis=-1)[msk]
-
-    cm1 = sklearn.metrics.confusion_matrix(true_id, pred_id_onx, labels=range(num_out_classes))
-    cm2 = sklearn.metrics.confusion_matrix(true_id, pred_id_tf, labels=range(num_out_classes))
-
-    print(cm1)
-    print(cm2)
-
 
 class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
     def __init__(self, use_weights=False, **kwargs):
