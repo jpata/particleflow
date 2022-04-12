@@ -5,11 +5,11 @@ import sys, os, fnmatch
 outdir = "/hdfs/local/joosep/mlpf/gen/v2"
 
 samples = [
-#    "SinglePiMinusFlatPt0p7To1000_cfi",
-#    "SingleGammaFlatPt1To1000_pythia8_cfi",
-#    "SingleElectronFlatPt1To1000_pythia8_cfi",
-#    "SingleTauFlatPt1To1000_cfi",
-#    "SinglePi0Pt1To1000_pythia8_cfi",
+    "SinglePiMinusFlatPt0p7To1000_cfi",
+    "SingleGammaFlatPt1To1000_pythia8_cfi",
+    "SingleElectronFlatPt1To1000_pythia8_cfi",
+    "SingleTauFlatPt1To1000_cfi",
+    "SinglePi0Pt1To1000_pythia8_cfi",
 ]
 
 samples_pu = [
@@ -18,7 +18,7 @@ samples_pu = [
     "QCDForPF_13TeV_TuneCUETP8M1_cfi",
 ]
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 200
 
 if __name__ == "__main__":
 
