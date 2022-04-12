@@ -507,7 +507,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes, id_hidden_dim,
             "ffn_cls",
-            dtype=tf.dtypes.float32,
             num_layers=id_num_layers,
             activation=activation,
             dim_decrease=id_dim_decrease,
@@ -516,7 +515,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_charge = point_wise_feed_forward_network(
             1, charge_hidden_dim,
             "ffn_charge",
-            dtype=tf.dtypes.float32,
             num_layers=charge_num_layers,
             activation=activation,
             dim_decrease=charge_dim_decrease,
@@ -525,25 +523,33 @@ class OutputDecoding(tf.keras.Model):
         
         self.ffn_pt = point_wise_feed_forward_network(
             2, pt_hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=pt_num_layers, activation=activation, dim_decrease=pt_dim_decrease,
+            num_layers=pt_num_layers,
+            activation=activation,
+            dim_decrease=pt_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_eta = point_wise_feed_forward_network(
             2, eta_hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=eta_num_layers, activation=activation, dim_decrease=eta_dim_decrease,
+            num_layers=eta_num_layers,
+            activation=activation,
+            dim_decrease=eta_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_phi = point_wise_feed_forward_network(
             4, phi_hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=phi_num_layers, activation=activation, dim_decrease=phi_dim_decrease,
+            num_layers=phi_num_layers,
+            activation=activation,
+            dim_decrease=phi_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
             num_output_classes if self.energy_multimodal else 1, energy_hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+            num_layers=energy_num_layers,
+            activation=activation,
+            dim_decrease=energy_dim_decrease,
             dropout=dropout)
 
     """
@@ -772,7 +778,8 @@ class PFNetDense(tf.keras.Model):
             output_decoding={},
             debug=False,
             schema="cms",
-            node_update_mode="concat"
+            node_update_mode="concat",
+            **kwargs
         ):
         super(PFNetDense, self).__init__()
 
@@ -813,12 +820,12 @@ class PFNetDense(tf.keras.Model):
         X = inputs
         debugging_data = {}
 
-        #mask padded elements
-        msk = X[:, :, 0] != 0
-        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
-
         #encode the elements for classification (id)
         X_enc = self.enc(X)
+
+        #mask padded elements
+        msk = X[:, :, 0] != 0
+        msk_input = tf.expand_dims(tf.cast(msk, X_enc.dtype), -1)
 
         encs = []
         if self.skip_connection:
@@ -872,7 +879,7 @@ class PFNetDense(tf.keras.Model):
             debugging_data["dec_output"] = dec_output
             debugging_data["dec_output_energy"] = dec_output_energy
 
-        ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
+        ret = self.output_dec([X_enc, dec_output, dec_output_energy, msk_input], training=training)
 
         if self.debug:
             for k in debugging_data.keys():

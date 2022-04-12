@@ -21,6 +21,7 @@ import shlex
 import subprocess
 import matplotlib.pyplot as plt
 import logging
+import pickle
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
@@ -89,7 +90,6 @@ customization_functions = {
 @click.help_option("-h", "--help")
 def main():
     pass
-        
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -120,7 +120,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
-        outdir = str(Path(weights).parent)
+        outdir = str(Path(weights).parent.parent)
 
     try:
         from comet_ml import OfflineExperiment
@@ -131,7 +131,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             auto_histogram_weight_logging=True,
             auto_histogram_gradient_logging=False,
             auto_histogram_activation_logging=False,
-            offline_directory=outdir
+            offline_directory=outdir,
+            disabled=True
         )
     except Exception as e:
         print("Failed to initialize comet-ml dashboard")
@@ -183,10 +184,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
+        loaded_opt = None
+        
         if weights:
+            if lr_schedule:
+                raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+
             # We need to load the weights in the same trainable configuration as the model was set up
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
+            loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
@@ -200,6 +207,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
 
         loss_dict, loss_weights = get_loss_dict(config)
+
         model.compile(
             loss=loss_dict,
             optimizer=opt,
@@ -217,7 +225,17 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
                 ]
             },
         )
+
         model.summary()
+
+    #Load the optimizer weights
+    if weights:
+        def model_weight_setting():
+            grad_vars = model.trainable_weights
+            zero_grads = [tf.zeros_like(w) for w in grad_vars]
+            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
+            model.optimizer.set_weights(loaded_opt["weights"])
+        strategy.run(model_weight_setting)
 
     callbacks = prepare_callbacks(
         config["callbacks"],

@@ -60,6 +60,14 @@ def plot_to_image(figure):
     
     return image
 
+class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
+    def on_epoch_end(self, epoch, logs=None):
+        super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
+        with open(self.opt_path.format(epoch=epoch+1, **logs), "wb") as fi:
+            pickle.dump({
+                #"lr": self.model.optimizer.lr,
+                "weights": self.model.optimizer.get_weights()}, fi
+            )
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
@@ -480,13 +488,14 @@ def prepare_callbacks(
 
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(
+    cp_callback = ModelOptimizerCheckpoint(
         filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
-        save_weights_only=callbacks_cfg["checkpoint"]["save_weights_only"],
+        save_weights_only=True,
         verbose=0,
         monitor=callbacks_cfg["checkpoint"]["monitor"],
-        save_best_only=callbacks_cfg["checkpoint"]["save_best_only"],
+        save_best_only=False,
     )
+    cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
     callbacks += [cp_callback]
 
     history_path = Path(outdir) / "history"

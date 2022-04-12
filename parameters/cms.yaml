@@ -153,9 +153,7 @@ timing:
 
 callbacks:
   checkpoint:
-    save_weights_only: yes
     monitor: "val_loss"
-    save_best_only: no
   plot_freq: 10
   tensorboard:
     dump_history: yes

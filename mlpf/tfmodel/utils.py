@@ -152,7 +152,8 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
-        raise ValueError("Only supported LR schedules are 'exponentialdecay', 'cosinedecay' and 'onecycle'.")
+        lr_schedule = None
+        callbacks = []
     return lr_schedule, callbacks
 
 
