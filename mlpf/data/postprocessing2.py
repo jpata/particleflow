@@ -625,7 +625,14 @@ def process(args):
     infile = args.input
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
-    tt = tf["ana/pftree"]
+    
+    if "ana" in tf:
+        tt = tf["ana/pftree"]
+    elif "pfana" in tf:
+        tt = tf["pfana/pftree"]
+    else:
+        raise Exception("Could not find the PFAnalysisNtuplizer TTree")
+
     if args.num_events == -1:
         args.num_events = tt.num_entries
     events_to_process = [i for i in range(args.num_events)] 

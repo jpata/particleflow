@@ -200,6 +200,8 @@ train_test_datasets:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
+      - cms_pf_qcd
+      - cms_pf_ztt
 
 validation_dataset: cms_pf_ttbar
 

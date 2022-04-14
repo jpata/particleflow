@@ -123,16 +123,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         outdir = str(Path(weights).parent.parent)
 
     try:
-        from comet_ml import OfflineExperiment
-        experiment = OfflineExperiment(
+        from comet_ml import Experiment
+        experiment = Experiment(
             project_name="particleflow-tf",
             auto_metric_logging=True,
             auto_param_logging=True,
             auto_histogram_weight_logging=True,
             auto_histogram_gradient_logging=False,
             auto_histogram_activation_logging=False,
-            offline_directory=outdir,
-            disabled=True
+            #offline_directory=outdir,
+            #disabled=True
         )
     except Exception as e:
         print("Failed to initialize comet-ml dashboard")
