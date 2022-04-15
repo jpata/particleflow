@@ -16,5 +16,5 @@
 #./genjob.sh SingleTauFlatPt1To1000_cfi 1 &
 #./genjob.sh SinglePi0Pt1To1000_pythia8_cfi 1 &
 
-#./genjob_pu.sh TTbar_14TeV_TuneCUETP8M1_cfi 1
+./genjob_pu.sh ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi 635
 

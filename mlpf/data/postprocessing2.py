@@ -14,15 +14,6 @@ import tqdm
 
 from networkx.drawing.nx_pydot import graphviz_layout
 
-map_candid_to_pdgid = {
-    0: [0],
-    211: [211, 2212, 321, 3112, 3222, 3312, 3334, 411, 521],
-    130: [111, 130, 2112, 310, 3122, 3322, 511, 421],
-    22: [22],
-    11: [11],
-    13: [13],
-}
-
 elem_branches = [
     "typ", "pt", "eta", "phi", "e",
     "layer", "depth", "charge", "trajpoint", 
@@ -34,11 +25,16 @@ elem_branches = [
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
-map_pdgid_to_candid = {}
+def map_pdgid_to_candid(pdgid, charge):
+    if pdgid in [22,11,13,15]:
+        return pdgid
 
-for candid, pdgids in map_candid_to_pdgid.items():
-    for p in pdgids:
-        map_pdgid_to_candid[p] = candid
+    #charged hadron
+    if abs(charge)>0:
+        return 211
+    
+    #neutral hadron
+    return 130
 
 def deltar_pairs(eta_vec, phi_vec, dr_cut):
 
@@ -210,11 +206,7 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
             E_hfhad = 0.0
 
             #remap PID
-            pid = map_pdgid_to_candid.get(abs(g.nodes[node]["typ"]), 0)
-            if pid in [11,13,211]:
-                pid = math.copysign(pid, g.nodes[node]["typ"])
-            g.nodes[node]["charge"] = get_charge(pid)
-            g.nodes[node]["typ"] = abs(pid)
+            g.nodes[node]["typ"] = map_pdgid_to_candid(abs(g.nodes[node]["typ"]), g.nodes[node]["charge"])
 
             for suc in g.successors(node):
                 elem_type = g.nodes[suc]["typ"]
@@ -503,6 +495,7 @@ def make_graph(ev, iev):
     element_vz = ev['element_vz'][iev]
 
     trackingparticle_pid = ev['trackingparticle_pid'][iev]
+    trackingparticle_charge = ev['trackingparticle_charge'][iev]
     trackingparticle_pt = ev['trackingparticle_pt'][iev]
     trackingparticle_e = ev['trackingparticle_energy'][iev]
     trackingparticle_eta = ev['trackingparticle_eta'][iev]
@@ -510,6 +503,7 @@ def make_graph(ev, iev):
     trackingparticle_ev = ev['trackingparticle_ev'][iev]
 
     caloparticle_pid = ev['caloparticle_pid'][iev]
+    caloparticle_charge = ev['caloparticle_charge'][iev]
     caloparticle_pt = ev['caloparticle_pt'][iev]
     caloparticle_e = ev['caloparticle_energy'][iev]
     caloparticle_eta = ev['caloparticle_eta'][iev]
@@ -571,6 +565,7 @@ def make_graph(ev, iev):
     for iobj in range(len(trackingparticle_pid)):
         g.add_node(("tp", iobj),
             typ=trackingparticle_pid[iobj],
+            charge=trackingparticle_charge[iobj],
             pt=trackingparticle_pt[iobj],
             e=trackingparticle_e[iobj],
             eta=trackingparticle_eta[iobj],
@@ -580,6 +575,7 @@ def make_graph(ev, iev):
     for iobj in range(len(caloparticle_pid)):
         g.add_node(("sc", iobj),
             typ=caloparticle_pid[iobj],
+            charge=caloparticle_charge[iobj],
             pt=caloparticle_pt[iobj],
             e=caloparticle_e[iobj],
             eta=caloparticle_eta[iobj],

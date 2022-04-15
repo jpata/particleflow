@@ -2,8 +2,6 @@
 #SBATCH -p main
 #SBATCH --mem-per-cpu=4G
 #SBATCH --cpus-per-task=1
-#SBATCH -e logs/error__%A.log
-#SBATCH -o logs/output__%A.log
 
 env
 df -h
