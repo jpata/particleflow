@@ -18,8 +18,8 @@ dataset:
 #       SC = 10,
 #       HO = 11,
   num_input_classes: 12
-  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
-  num_output_classes: 8
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7, tau=8)
+  num_output_classes: 9
   padded_num_elem_size: 12000
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
