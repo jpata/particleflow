@@ -21,7 +21,7 @@ samples_pu = [
     "QCDForPF_13TeV_TuneCUETP8M1_cfi",
 ]
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 500
 
 if __name__ == "__main__":
 
