@@ -1,0 +1,3 @@
+mkdir: cannot create directory ‘/mnt/ceph/users/larssorl/tmp/particleflow’: File exists
+mkdir: cannot create directory ‘experiments’: File exists
+slurmstepd: error: *** JOB 1363868 ON workergpu029 CANCELLED AT 2022-04-27T05:06:34 ***

@@ -26,6 +26,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
+import horovod.tensorflow.keras as hvd
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -139,7 +140,12 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         experiment = None
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, num_gpus = get_strategy()
+    horovod_enabled = config["setup"]["horovod_enabled"]
+    if horovod_enabled:
+        initialize_horovod()
+        num_gpus = hvd.size()
+    else:
+        strategy, num_gpus = get_strategy()
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
@@ -166,8 +172,76 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
-    with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+    if horovod_enabled :
+        model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
+    else:
+        with strategy.scope():
+            model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
+    
+
+    #Load the optimizer weights
+    if weights:
+        def model_weight_setting():
+            grad_vars = model.trainable_weights
+            zero_grads = [tf.zeros_like(w) for w in grad_vars]
+            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
+            model.optimizer.set_weights(loaded_opt["weights"])
+        strategy.run(model_weight_setting)
+
+    callbacks = prepare_callbacks(
+        config["callbacks"],
+        outdir,
+        ds_val,
+        ds_info,
+        comet_experiment=experiment,
+        horovod_enabled=config["setup"]["horovod_enabled"]
+    )
+
+    verbose = 1
+    if horovod_enabled: 
+        callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
+        callbacks.append(hvd.callbacks.MetricAverageCallback())
+        verbose = 1 if hvd.rank() == 0 else 0
+
+        num_train_steps /= hvd.size()
+        num_test_steps /= hvd.size()
+
+    callbacks.append(optim_callbacks)
+
+    
+    fit_result = model.fit(
+        ds_train.repeat(),
+        validation_data=ds_test.repeat(),
+        epochs=initial_epoch + config["setup"]["num_epochs"],
+        callbacks=callbacks,
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
+        initial_epoch=initial_epoch,
+        verbose=verbose
+    )
+
+    if not horovod_enabled or hvd.rank() == 0:
+        model_save(outdir, fit_result, model, weights)
+    
+    #if "CPU" not in strategy.extended.worker_devices[0]:
+    #    p.terminate()
+
+def model_save(outdir, fit_result, model, weights):
+    history_path = Path(outdir) / "history"
+    history_path = str(history_path)
+    with open("{}/history.json".format(history_path), "w") as fi:
+        json.dump(str(fit_result.history), fi)
+
+    weights = get_best_checkpoint(outdir)
+    print("Loading best weights that could be found from {}".format(weights))
+    model.load_weights(weights, by_name=True)
+
+    model.save(outdir + "/model_full", save_format="tf")
+
+    print("Training done.")
+
+def model_scope(config, total_steps, weights, horovod_enabled=False):
+    lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
         opt = get_optimizer(config, lr_schedule)
 
         if config["setup"]["dtype"] == "float16":
@@ -227,51 +301,17 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         )
 
         model.summary()
+    return model,optim_callbacks,initial_epoch
 
-    #Load the optimizer weights
-    if weights:
-        def model_weight_setting():
-            grad_vars = model.trainable_weights
-            zero_grads = [tf.zeros_like(w) for w in grad_vars]
-            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            model.optimizer.set_weights(loaded_opt["weights"])
-        strategy.run(model_weight_setting)
-
-    callbacks = prepare_callbacks(
-        config["callbacks"],
-        outdir,
-        ds_val,
-        ds_info,
-        comet_experiment=experiment
-    )
-    callbacks.append(optim_callbacks)
-
-    fit_result = model.fit(
-        ds_train.repeat(),
-        validation_data=ds_test.repeat(),
-        epochs=initial_epoch + config["setup"]["num_epochs"],
-        callbacks=callbacks,
-        steps_per_epoch=num_train_steps,
-        validation_steps=num_test_steps,
-        initial_epoch=initial_epoch,
-    )
+def initialize_horovod():
+    hvd.init()
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
 
-    history_path = Path(outdir) / "history"
-    history_path = str(history_path)
-    with open("{}/history.json".format(history_path), "w") as fi:
-        json.dump(fit_result.history, fi)
-
-    weights = get_best_checkpoint(outdir)
-    print("Loading best weights that could be found from {}".format(weights))
-    model.load_weights(weights, by_name=True)
-
-    model.save(outdir + "/model_full", save_format="tf")
-
-    print("Training done.")
-
-    #if "CPU" not in strategy.extended.worker_devices[0]:
-    #    p.terminate()
 
 
 @main.command()
