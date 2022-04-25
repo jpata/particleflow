@@ -302,9 +302,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for dev in physical_devices:
-        tf.config.experimental.set_memory_growth(dev, True)
+    #physical_devices = tf.config.list_physical_devices('GPU')
+    #for dev in physical_devices:
+    #    tf.config.experimental.set_memory_growth(dev, True)
 
     ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
     ds_test = ds_test.batch(5)
