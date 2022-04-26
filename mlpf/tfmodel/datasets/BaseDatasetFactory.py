@@ -13,6 +13,8 @@ def unpack_target(y, num_output_classes):
         "sin_phi": y[..., 4:5],
         "cos_phi": y[..., 5:6],
         "energy": y[..., 6:7],
+        "sum_energy": tf.reduce_sum(y[..., 6:7], axis=-2),
+        "sum_pt": tf.reduce_sum(y[..., 2:3], axis=-2)
     }
 
 class BaseDatasetFactory:
@@ -45,7 +47,9 @@ class BaseDatasetFactory:
                     "eta": msk_elems*msk_signal,
                     "sin_phi": msk_elems*msk_signal,
                     "cos_phi": msk_elems*msk_signal,
-                    "energy": msk_elems*msk_signal
+                    "energy": msk_elems*msk_signal,
+                    "sum_energy": 1.0,
+                    "sum_pt": 1.0
                 }
             )
         return func

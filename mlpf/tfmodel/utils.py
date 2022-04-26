@@ -387,10 +387,9 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     steps = []
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-
-        num_steps = 0
-        for elem in ds:
-            num_steps += 1
+        ds = ds.take(1000)
+        num_steps = ds.cardinality().numpy()
+        assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
         datasets.append(ds)
@@ -483,6 +482,12 @@ def get_loss_from_params(input_dict):
     loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
+# class MyLoss(tf.keras.losses.Loss):
+#   def call(self, y_true, y_pred):
+#       import pdb;pdb.set_trace()
+#       return tf.reduce_mean(tf.square(y_pred - y_true), axis=-1)
+
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
 
@@ -495,6 +500,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
+        "sum_energy": tf.keras.losses.MeanSquaredError(),
+        "sum_pt": tf.keras.losses.MeanSquaredError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -504,5 +511,7 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
+        "sum_energy": 1e-6,
+        "sum_pt": 1e-6,
     }
     return loss_dict, loss_weights

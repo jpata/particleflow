@@ -652,6 +652,8 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi*msk_input,
             "cos_phi": pred_cos_phi*msk_input,
             "energy": pred_energy*msk_input,
+            "sum_energy": tf.reduce_sum(pred_energy*msk_input, axis=-2),
+            "sum_pt": tf.reduce_sum(pred_pt*msk_input, axis=-2),
         }
 
         return ret
@@ -898,6 +900,7 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
+    # Uncomment these if you want to explicitly debug the training loop
     # def train_step(self, data):
     #     x, y, sample_weights = data
     #     if not hasattr(self, "step"):
@@ -906,6 +909,7 @@ class PFNetDense(tf.keras.Model):
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #         import pdb;pdb.set_trace()
 
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)
@@ -923,27 +927,6 @@ class PFNetDense(tf.keras.Model):
 
     #     pred_cls = tf.argmax(y_pred["cls"], axis=-1)
     #     true_cls = tf.argmax(y["cls"], axis=-1)
-
-    #     for icls in [3, ]:
-    #         msk1 = (true_cls==icls)
-    #         msk2 = (pred_cls==icls)
-    #         import matplotlib
-    #         import matplotlib.pyplot as plt
-
-    #         plt.figure(figsize=(4,4))
-    #         minval = np.min(y["energy"][msk1].numpy().flatten())
-    #         maxval = np.max(y["energy"][msk1].numpy().flatten())
-    #         plt.scatter(
-    #             y["energy"][msk1&msk2].numpy().flatten(),
-    #             y_pred["energy"][msk1&msk2].numpy().flatten(),
-    #             marker=".", alpha=0.5
-    #         )
-    #         plt.xlabel("true")
-    #         plt.ylabel("pred")
-    #         plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
-    #         plt.savefig("test_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
-    #         plt.close("all")
-
 
     #     # Updates the metrics tracking the loss
     #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
