@@ -387,7 +387,6 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     steps = []
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-        ds = ds.take(1000)
         num_steps = ds.cardinality().numpy()
         assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))

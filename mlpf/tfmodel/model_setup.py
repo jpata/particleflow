@@ -149,6 +149,21 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
 
+    def plot_sumperevent_corr(self, epoch, outpath, ypred, var):
+        pred_per_event = np.sum(ypred[var], axis=-2)[:, 0]
+        true_per_event = np.sum(self.ytrue[var], axis=-2)[:, 0]
+
+        plt.figure()
+        plt.scatter(true_per_event, pred_per_event)
+        minval = min(np.min(pred_per_event), np.min(true_per_event))
+        maxval = max(np.max(pred_per_event), np.max(true_per_event))
+        plt.plot([minval, maxval], [minval, maxval], color="black")
+        image_path = str(outpath / "event_{}.png".format(var))
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
     def plot_event_visualization(self, epoch, outpath, ypred, ypred_id, msk, ievent=0):
 
         x_feat = self.dataset_info.metadata.get("x_features")
@@ -432,6 +447,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
 
+        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
+        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
+
         self.plot_cm(epoch, cp_dir, ypred_id, msk)
         for ievent in range(min(5, self.X.shape[0])):
             self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
@@ -454,7 +472,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.comet_experiment.log_image(image_path, step=epoch)
                 num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
                 self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
-
 
             if icls!=0:
                 self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
