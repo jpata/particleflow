@@ -22,21 +22,22 @@ class CustomTensorBoard(TensorBoard):
 
     def _collect_learning_rate(self, logs):
         logs = logs or {}
-        lr_schedule = getattr(self.model.optimizer, "lr", None)
-        if isinstance(lr_schedule, tf.keras.optimizers.schedules.LearningRateSchedule):
-            logs["learning_rate"] = np.float64(tf.keras.backend.get_value(lr_schedule(self.model.optimizer.iterations)))
-        else:
-            logs.update({"learning_rate": np.float64(tf.keras.backend.eval(self.model.optimizer.lr))})
+        if hasattr(self.model.optimizer, "lr"):
+            lr_schedule = getattr(self.model.optimizer, "lr", None)
+            if isinstance(lr_schedule, tf.keras.optimizers.schedules.LearningRateSchedule):
+                logs["learning_rate"] = np.float64(tf.keras.backend.get_value(lr_schedule(self.model.optimizer.iterations)))
+            else:
+                logs.update({"learning_rate": np.float64(tf.keras.backend.eval(self.model.optimizer.lr))})
 
-        # Log momentum if the optimizer has it
-        try:
-            logs.update({"momentum": np.float64(tf.keras.backend.eval(self.model.optimizer.momentum))})
-        except AttributeError:
-            pass
+            # Log momentum if the optimizer has it
+            try:
+                logs.update({"momentum": np.float64(tf.keras.backend.eval(self.model.optimizer.momentum))})
+            except AttributeError:
+                pass
 
-        # In Adam, the momentum parameter is called beta_1
-        if isinstance(self.model.optimizer, tf.keras.optimizers.Adam):
-            logs.update({"adam_beta_1": np.float64(tf.keras.backend.eval(self.model.optimizer.beta_1))})
+            # In Adam, the momentum parameter is called beta_1
+            if isinstance(self.model.optimizer, tf.keras.optimizers.Adam):
+                logs.update({"adam_beta_1": np.float64(tf.keras.backend.eval(self.model.optimizer.beta_1))})
 
         return logs
 

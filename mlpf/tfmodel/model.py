@@ -610,6 +610,7 @@ class OutputDecoding(tf.keras.Model):
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
 
+        #In case of a multimodal prediction, weight the per-class energy predictions by the approximately one-hot vector
         if self.energy_multimodal:
             pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
         else:

@@ -66,7 +66,8 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         with open(self.opt_path.format(epoch=epoch+1, **logs), "wb") as fi:
             pickle.dump({
                 #"lr": self.model.optimizer.lr,
-                "weights": self.model.optimizer.get_weights()}, fi
+                #"weights": self.model.optimizer.get_weights()
+                }, fi
             )
 
 class CustomCallback(tf.keras.callbacks.Callback):
@@ -110,11 +111,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(0, 100, 100),
+            "pt": np.linspace(-100, 1000, 100),
             "eta": np.linspace(-6, 6, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": None,
+            "energy": np.linspace(-100, 5000, 100),
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
@@ -154,7 +155,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         true_per_event = np.sum(self.ytrue[var], axis=-2)[:, 0]
 
         plt.figure()
-        plt.scatter(true_per_event, pred_per_event)
+        plt.hist2d(true_per_event, pred_per_event, bins=100, cmap="Blues")
         minval = min(np.min(pred_per_event), np.min(true_per_event))
         maxval = max(np.max(pred_per_event), np.max(true_per_event))
         plt.plot([minval, maxval], [minval, maxval], color="black")
@@ -273,7 +274,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         bins = self.reg_bins[reg_variable]
         if bins is None:
             bins = 100
-        plt.scatter(vals_true, vals_pred, marker=".", alpha=0.4)
+        plt.hist2d(vals_true, vals_pred, bins=100, cmap="Blues")
 
         if len(vals_true) > 0:
             minval = np.min(vals_true)

@@ -162,9 +162,14 @@ def get_optimizer(config, lr_schedule=None):
         lr = float(config["setup"]["lr"])
     else:
         lr = lr_schedule
+
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        if cfg_adam["pcgrad"]:
+            from tfmodel.PCGrad_tf import PCGrad
+            opt = PCGrad(opt)
+        return opt
     if config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
         return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])

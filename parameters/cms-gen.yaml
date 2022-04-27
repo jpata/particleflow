@@ -65,6 +65,7 @@ setup:
 optimizer:
   adam:
     amsgrad: no
+    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
