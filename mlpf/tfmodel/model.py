@@ -615,18 +615,8 @@ class OutputDecoding(tf.keras.Model):
         else:
             pred_energy = pred_energy_corr
 
-        # classwise_energy_corr = self.ffn_energy_classwise(tf.concat([orig_energy, out_id_logits], axis=-1), training=training)
-        # pred_energy += classwise_energy_corr[:, :, 0:1]
-        # pred_energy *= classwise_energy_corr[:, :, 1:2]
-
-        # pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
-
-        #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
-        #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
-
         #compute pt=E/cosh(eta)
         orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
-        #orig_log_pt = tf.math.log(orig_pt + 1.0)
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)*msk_input
         if self.pt_skip_gate:
@@ -635,8 +625,10 @@ class OutputDecoding(tf.keras.Model):
         else:
             pred_pt = orig_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
         
+        #mask the regression outputs for the nodes with a class prediction 0
+        msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
+
         if self.mask_reg_cls0:
-            msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
             out_charge = out_charge*msk_output
             pred_pt = pred_pt*msk_output
             pred_eta = pred_eta*msk_output
@@ -652,8 +644,10 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi*msk_input,
             "cos_phi": pred_cos_phi*msk_input,
             "energy": pred_energy*msk_input,
-            "sum_energy": tf.reduce_sum(pred_energy*msk_input, axis=-2),
-            "sum_pt": tf.reduce_sum(pred_pt*msk_input, axis=-2),
+
+            #per-event sum of energy and pt
+            "sum_energy": tf.reduce_sum(pred_energy*msk_input*msk_output, axis=-2),
+            "sum_pt": tf.reduce_sum(pred_pt*msk_input*msk_output, axis=-2),
         }
 
         return ret

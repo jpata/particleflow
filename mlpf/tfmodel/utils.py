@@ -510,7 +510,7 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
-        "sum_energy": 1e-6,
-        "sum_pt": 1e-6,
+        "sum_energy": config["dataset"]["sum_energy_loss_coef"],
+        "sum_pt": config["dataset"]["sum_pt_loss_coef"],
     }
     return loss_dict, loss_weights
