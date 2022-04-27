@@ -18,6 +18,8 @@ dataset:
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
+  sum_energy_loss_coef: 0.0
+  sum_pt_loss_coef: 0.0
   energy_loss:
     type: Huber
     delta: 1.0

@@ -30,8 +30,8 @@ dataset:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 0.0001
-  sum_energy_loss_coef: 0.00000001
-  sum_pt_loss_coef: 0.00000001
+  sum_energy_loss_coef: 0.0
+  sum_pt_loss_coef: 0.0
   energy_loss:
     type: Huber
   pt_loss:
