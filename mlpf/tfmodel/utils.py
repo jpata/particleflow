@@ -12,7 +12,6 @@ import logging
 
 import tensorflow as tf
 import tensorflow_addons as tfa
-import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
@@ -153,7 +152,8 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
-        raise ValueError("Only supported LR schedules are 'exponentialdecay', 'cosinedecay' and 'onecycle'.")
+        lr_schedule = None
+        callbacks = []
     return lr_schedule, callbacks
 
 
@@ -162,9 +162,14 @@ def get_optimizer(config, lr_schedule=None):
         lr = float(config["setup"]["lr"])
     else:
         lr = lr_schedule
+
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        if cfg_adam["pcgrad"]:
+            from tfmodel.PCGrad_tf import PCGrad
+            opt = PCGrad(opt)
+        return opt
     if config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
         return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
@@ -176,6 +181,7 @@ def get_optimizer(config, lr_schedule=None):
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
+    import keras_tuner as kt
     if cfg_hypertune["algorithm"] == "random":
         print("Keras Tuner: Using RandomSearch")
         cfg_rand = cfg_hypertune["random"]
@@ -361,7 +367,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
     return X_val, ygen_val, ycand_val
 
 
-def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
+def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, supervised=True):
     cds = config["dataset"]
 
     if cds['schema'] == "cms":
@@ -372,13 +378,12 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
 
     ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-    #bs = config["datasets"][dataset_name]["batch_per_gpu"]
 
     if not (num_events is None):
         ds = ds.take(num_events)
 
-    #ds = ds.batch(bs)
-    ds = ds.map(dsf.get_map_to_supervised())
+    if supervised:
+        ds = ds.map(dsf.get_map_to_supervised())
 
     return ds, ds_info
 
@@ -387,10 +392,8 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     steps = []
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-
-        num_steps = 0
-        for elem in ds:
-            num_steps += 1
+        num_steps = ds.cardinality().numpy()
+        assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
         datasets.append(ds)
@@ -483,6 +486,12 @@ def get_loss_from_params(input_dict):
     loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
+# class MyLoss(tf.keras.losses.Loss):
+#   def call(self, y_true, y_pred):
+#       import pdb;pdb.set_trace()
+#       return tf.reduce_mean(tf.square(y_pred - y_true), axis=-1)
+
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
 
@@ -495,6 +504,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
+        "sum_energy": tf.keras.losses.MeanSquaredError(),
+        "sum_pt": tf.keras.losses.MeanSquaredError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -504,5 +515,7 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
+        "sum_energy": config["dataset"]["sum_energy_loss_coef"],
+        "sum_pt": config["dataset"]["sum_pt_loss_coef"],
     }
     return loss_dict, loss_weights

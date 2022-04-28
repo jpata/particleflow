@@ -2,7 +2,7 @@
 set -e
 set -x
 
-CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_1_0_pre3
+CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -14,7 +14,7 @@ mkdir -p $WORKDIR
 
 PILEUP=NoPileUp
 
-N=200
+N=1000
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -63,5 +63,6 @@ cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table --events-per-file -1
-rm step*.root
+python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
+bzip2 -z pfntuple_${SEED}.pkl
+#rm step*.root

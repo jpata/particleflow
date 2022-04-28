@@ -99,7 +99,7 @@ class OneCycleScheduler(LearningRateSchedule):
 
 
 class MomentumOneCycleScheduler(Callback):
-    """`Callback` that schedules the momentun according to the 1cycle policy as per Leslie Smith's paper
+    """`Callback` that schedules the momentum according to the 1cycle policy as per Leslie Smith's paper
     (https://arxiv.org/pdf/1803.09820.pdf).
     NOTE: This callback only schedules the momentum parameter, not the learning rate. It is intended to be used with the
     KerasOneCycle learning rate scheduler above or similar.
@@ -130,10 +130,10 @@ class MomentumOneCycleScheduler(Callback):
 
     def set_momentum(self, mom):
         # In Adam, the momentum parameter is called beta_1
-        if isinstance(self.model.optimizer, tf.keras.optimizers.Adam):
+        if hasattr(self.model.optimizer, "beta_1"):
             tf.keras.backend.set_value(self.model.optimizer.beta_1, mom)
         # In SDG, the momentum parameter is called momentum
-        elif isinstance(self.model.optimizer, tf.keras.optimizers.SGD):
+        elif hasattr(self.model.optimizer, "momentum"):
             tf.keras.backend.set_value(self.model.optimizer.momentum, mom)
         else:
             raise NotImplementedError(
