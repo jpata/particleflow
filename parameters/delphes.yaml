@@ -18,6 +18,8 @@ dataset:
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
+  sum_energy_loss_coef: 0.0
+  sum_pt_loss_coef: 0.0
   energy_loss:
     type: Huber
     delta: 1.0
@@ -56,6 +58,7 @@ setup:
 optimizer:
   adam:
     amsgrad: no
+    pcgrad: no
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -158,9 +161,7 @@ exponentialdecay:
 
 callbacks:
   checkpoint:
-    save_weights_only: yes
     monitor: "val_loss"
-    save_best_only: no
   plot_freq: 10
   tensorboard:
     dump_history: yes

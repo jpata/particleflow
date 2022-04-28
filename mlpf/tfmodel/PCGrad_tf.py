@@ -70,9 +70,6 @@ class PCGrad(optimizer.Optimizer):
     def _create_slots(self, var_list):
         self.optimizer._create_slots(var_list)
 
-    def _prepare(self):
-        self.optimizer._prepare()
-
     def _apply_dense(self, grad, var):
         return self.optimizer._apply_dense(grad, var)
 
@@ -91,9 +88,9 @@ class PCGrad(optimizer.Optimizer):
     def _resource_apply_sparse(self, grad, var, indices):
         return self.optimizer._resource_apply_sparse(grad, var, indices)
 
-    def _finish(self, update_ops, name_scope):
-        return self.optimizer._finish(update_ops, name_scope)
-
     def _call_if_callable(self, param):
         """Call the function if param is callable."""
         return param() if callable(param) else param
+
+    def get_weights(self):
+        return self.optimizer.get_weights()

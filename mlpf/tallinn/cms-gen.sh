@@ -3,8 +3,8 @@
 #SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 
-IMG=/home/software/singularity/tf26.simg:latest
+IMG=/home/software/singularity/tf-2.8.0.simg
 cd ~/particleflow
 
 #TF training
-PYTHONPATH=hep_tfds singularity exec --nv $IMG python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1
+singularity exec -B /scratch-persistent --nv --env PYTHONPATH=hep_tfds --env TFDS_DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 10

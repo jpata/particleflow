@@ -4,7 +4,6 @@ from tqdm import tqdm
 from pathlib import Path
 import seaborn as sns
 
-from ray.tune import Analysis, ExperimentAnalysis
 
 
 def get_hp_str(result):
@@ -240,6 +239,7 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
 
 
 def analyze_ray_experiment(exp_dir, default_metric, default_mode):
+    from ray.tune import Analysis, ExperimentAnalysis
     analysis = Analysis(exp_dir, default_metric=default_metric, default_mode=default_mode)
 
     topk_summary_plot_v2(analysis, 5, save_dir=exp_dir)
