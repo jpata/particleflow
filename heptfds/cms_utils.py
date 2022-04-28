@@ -9,30 +9,24 @@ CMS_PF_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad"
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
 
-CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
+CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
 CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFEM", "HFHAD", "gamma", "ele", "mu"]
 
 X_FEATURES = [
-    "typ_idx",
-    "pt",
-    "eta",
-    "phi",
-    "e",
-    "layer",
-    "depth",
-    "charge",
-    "trajpoint",
-    "eta_ecal",
-    "phi_ecal",
-    "eta_hcal",
-    "phi_hcal",
-    "muon_dt_hits",
-    "muon_csc_hits",
-    "muon_type",
-    "gsf_brem_sc_energy",
-    "num_hits"
+    "typ_idx", "pt", "eta", "phi", "e",
+    "layer", "depth", "charge", "trajpoint", 
+    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
+    "px", "py", "pz", "deltap", "sigmadeltap",
+    "gsf_electronseed_trkorecal",
+    "gsf_electronseed_dnn1",
+    "gsf_electronseed_dnn2",
+    "gsf_electronseed_dnn3",
+    "gsf_electronseed_dnn4",
+    "gsf_electronseed_dnn5",
+    "num_hits", "cluster_flags", "corr_energy",
+    "corr_energy_err", "vx", "vy", "vz", "pterror", "etaerror", "phierror", "lambd", "lambdaerror", "theta", "thetaerror"
 ]
-                    
+               
 Y_FEATURES = [
     "typ_idx",
     "charge",
@@ -59,11 +53,11 @@ def prepare_data_cms(fn, padded_num_elem_size):
         ycand = event["ycand"]
 
         # remove PS from inputs, they don't seem to be very useful
-        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3)
+        #msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3)
 
-        Xelem = Xelem[~msk_ps]
-        ygen = ygen[~msk_ps]
-        ycand = ycand[~msk_ps]
+        Xelem = Xelem
+        ygen = ygen
+        ycand = ycand
 
         Xelem = append_fields(
             Xelem, "typ_idx", np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
@@ -131,11 +125,15 @@ def prepare_data_cms(fn, padded_num_elem_size):
     return X, ygen, ycand
 
 def split_sample(path, pad_size, test_frac=0.8):
-        files = sorted(list(path.glob("*.pkl*")))
-        idx_split = int(test_frac*len(files))
-        files_train = files[:idx_split]
-        files_test = files[idx_split:]
-        return {"train": generate_examples(files_train, pad_size), "test": generate_examples(files_test, pad_size)}
+    files = sorted(list(path.glob("*.pkl*")))
+    print("Found {} files in {}".format(files, path))
+    assert(len(files)>0)
+    idx_split = int(test_frac*len(files))
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
+    assert(len(files_train)>0)
+    assert(len(files_test)>0)
+    return {"train": generate_examples(files_train, pad_size), "test": generate_examples(files_test, pad_size)}
 
 def generate_examples(files, pad_size):
     """Yields examples."""

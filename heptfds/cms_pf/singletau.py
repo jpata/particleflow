@@ -24,9 +24,10 @@ PADDED_NUM_ELEM_SIZE = 320
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
 
-    VERSION = tfds.core.Version("1.1.0")
+    VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
         "1.1.0": "Add muon type, fix electron GSF association",
+        "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt2To150_cfi data/

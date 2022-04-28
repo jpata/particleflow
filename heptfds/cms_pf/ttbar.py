@@ -19,15 +19,17 @@ TTbar events with PU~55 in a Run3 setup.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 6400
+PADDED_NUM_ELEM_SIZE = 12000
 
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.1.0")
+    VERSION = tfds.core.Version("1.3.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
+        "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
+        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     mkdir -p data

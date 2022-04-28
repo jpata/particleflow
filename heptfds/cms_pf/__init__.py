@@ -7,3 +7,4 @@ from .singlemu import CmsPfSingleMu
 from .singleele import CmsPfSingleElectron
 from .singletau import CmsPfSingleTau
 from .singlegamma import CmsPfSingleGamma
+from .ztt import CmsPfZtt

@@ -1,4 +1,4 @@
-"""CMS PF SinglePi dataset."""
+"""CMS PF TTbar dataset."""
 
 from pathlib import Path
 import tensorflow as tf
@@ -12,25 +12,28 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-SingleGamma events.
+ZTT events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 320
+PADDED_NUM_ELEM_SIZE = 12000
 
-class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_singlegamma dataset."""
+class CmsPfZtt(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.3.0")
     RELEASE_NOTES = {
-        "1.1.0": "Initial release",
+        "1.0.0": "Initial release.",
+        "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
+        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleGammaFlatPt10To100_pythia8_cfi data/
+    mkdir -p data
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -55,7 +58,7 @@ class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleGammaFlatPt10To100_pythia8_cfi"
+        sample_dir = "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
         return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
