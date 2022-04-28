@@ -2,7 +2,7 @@
 
 # Walltime limit
 #SBATCH -t 02:00:00
-#SBATCH -N 2
+#SBATCH -N 8
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4

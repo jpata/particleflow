@@ -95,8 +95,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
         self.num_output_classes = self.ytrue["cls"].shape[-1]
 
         self.outpath = outpath
-        
-        self.horovod_enabled = horovod_enabled
 
         #ch.had, n.had, HFEM, HFHAD, gamma, ele, mu
         self.color_map = {
@@ -120,6 +118,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
             "cos_phi": np.linspace(-1,1,100),
             "energy": np.linspace(-100, 5000, 100),
         }
+
+        self.horovod_enabled = horovod_enabled
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
 
@@ -422,69 +422,77 @@ class CustomCallback(tf.keras.callbacks.Callback):
             self.comet_experiment.log_image(image_path, step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
-        if  self.horovod_enabled == False or hvd.rank() == 0:
-            #first epoch is 1, not 0
-            epoch = epoch + 1
-
-            #save the training logs (losses) for this epoch
-            with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-                json.dump(logs, fi)
-
-            if self.plot_freq==0:
-                return
-            if self.plot_freq>1:
-                if epoch%self.plot_freq!=0 or epoch==1:
-                    return
-
-            cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
-            cp_dir.mkdir(parents=True, exist_ok=True)
-
-            #run the model inference on the validation dataset
-            ypred = self.model.predict(self.X, batch_size=1)
-
-            #choose the class with the highest probability as the prediction
-            #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
-            ypred_id = np.argmax(ypred["cls"], axis=-1)
-            
-            #exclude padded elements from the plotting
-            msk = self.X[:, :, 0] != 0
-
-            self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
-            
-            self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
-            self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
-            
-            self.plot_cm(epoch, cp_dir, ypred_id, msk)
-            for ievent in range(min(5, self.X.shape[0])):
-                self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
-
-            for icls in range(self.num_output_classes):
-                cp_dir_cls = cp_dir / "cls_{}".format(icls)
-                cp_dir_cls.mkdir(parents=True, exist_ok=True)
-
-                plt.figure(figsize=(4,4))
-                npred = np.sum(ypred_id == icls, axis=1)
-                ntrue = np.sum(self.ytrue_id == icls, axis=1)
-                maxval = max(np.max(npred), np.max(ntrue))
-                plt.scatter(ntrue, npred, marker=".")
-                plt.plot([0,maxval], [0, maxval], color="black", ls="--")
-
-                image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
-                plt.savefig(image_path, bbox_inches="tight")
-                plt.close("all")
-                if self.comet_experiment:
-                    self.comet_experiment.log_image(image_path, step=epoch)
-                    num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
-                    self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
+        if self.horovod_enabled:
+            if  hvd.rank() == 0:
+                epoch_end(self, epoch, logs)
+        else:
+            epoch_end(self, epoch, logs)
 
 
-                if icls!=0:
-                    self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
-                    self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls, ivar=2, bins=np.linspace(-5,5,100))
+def epoch_end(self, epoch, logs):
+    #first epoch is 1, not 0
+    epoch = epoch + 1
 
-                for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
-                    self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
-                    self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+    #save the training logs (losses) for this epoch
+    with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+        json.dump(logs, fi)
+
+    if self.plot_freq==0:
+        return
+    if self.plot_freq>1:
+        if epoch%self.plot_freq!=0 or epoch==1:
+            return
+
+    cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
+    cp_dir.mkdir(parents=True, exist_ok=True)
+
+    #run the model inference on the validation dataset
+    ypred = self.model.predict(self.X, batch_size=1)
+
+    #choose the class with the highest probability as the prediction
+    #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
+    ypred_id = np.argmax(ypred["cls"], axis=-1)
+    
+    #exclude padded elements from the plotting
+    msk = self.X[:, :, 0] != 0
+
+    self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
+    
+    self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
+    self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
+    
+    self.plot_cm(epoch, cp_dir, ypred_id, msk)
+    for ievent in range(min(5, self.X.shape[0])):
+        self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
+
+    for icls in range(self.num_output_classes):
+        cp_dir_cls = cp_dir / "cls_{}".format(icls)
+        cp_dir_cls.mkdir(parents=True, exist_ok=True)
+
+        plt.figure(figsize=(4,4))
+        npred = np.sum(ypred_id == icls, axis=1)
+        ntrue = np.sum(self.ytrue_id == icls, axis=1)
+        maxval = max(np.max(npred), np.max(ntrue))
+        plt.scatter(ntrue, npred, marker=".")
+        plt.plot([0,maxval], [0, maxval], color="black", ls="--")
+
+        image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+            num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
+            self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
+
+
+        if icls!=0:
+            self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
+            self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls, ivar=2, bins=np.linspace(-5,5,100))
+
+        for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
+            self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+            self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+
 
 def prepare_callbacks(
         callbacks_cfg, outdir,
@@ -511,8 +519,11 @@ def prepare_callbacks(
     callbacks += [terminate_cb]
 
 
-    if not horovod_enabled or hvd.rank() == 0:
-        callbacks += get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment)  
+    if horovod_enabled:
+        if hvd.rank() == 0:
+            callbacks += get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment)
+    else:
+        callbacks += get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment)    
 
     return callbacks
 
@@ -542,7 +553,7 @@ def get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info
         comet_experiment=comet_experiment
     )
 
-    callbacks += [cb]
+    #callbacks += [cb]
 
     return callbacks
 

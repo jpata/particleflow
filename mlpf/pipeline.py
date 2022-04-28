@@ -146,7 +146,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         num_gpus = hvd.size()
     else:
         strategy, num_gpus = get_strategy()
-
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
@@ -206,6 +205,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         num_train_steps /= hvd.size()
         num_test_steps /= hvd.size()
 
+
     callbacks.append(optim_callbacks)
 
     
@@ -220,9 +220,12 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         verbose=verbose
     )
 
-    if not horovod_enabled or hvd.rank() == 0:
+    if horovod_enabled:
+        if hvd.rank() == 0:
+            model_save(outdir, fit_result, model, weights)
+    else:
         model_save(outdir, fit_result, model, weights)
-    
+
     #if "CPU" not in strategy.extended.worker_devices[0]:
     #    p.terminate()
 
