@@ -17,7 +17,7 @@ from tfmodel.data import Dataset
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
-import horovod.tensorflow.keras as hvd
+
 
 
 def load_config(config_file_path):

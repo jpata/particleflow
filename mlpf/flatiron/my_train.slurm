@@ -2,7 +2,7 @@
 
 # Walltime limit
 #SBATCH -t 02:00:00
-#SBATCH -N 8
+#SBATCH -N 1
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4
@@ -60,9 +60,9 @@ echo 'Starting training.'
 
 #valgrind --track-origins=yes --leak-check=full --show-leak-kinds=all -s mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
 
-mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
+#mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
 
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c $1 -p $2
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c $1 -p $2
 
 echo 'Training done.'
 rsync -a experiments/ /mnt/ceph/users/larssorl/experiments/

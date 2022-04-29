@@ -30,7 +30,7 @@ from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
-import horovod.tensorflow.keras as hvd
+
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
 
@@ -423,6 +423,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if self.horovod_enabled:
+            import horovod.tensorflow.keras as hvd
             if  hvd.rank() == 0:
                 epoch_end(self, epoch, logs)
         else:

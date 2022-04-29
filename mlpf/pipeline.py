@@ -26,7 +26,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
-import horovod.tensorflow.keras as hvd
+
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -142,6 +142,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     # Decide tf.distribute.strategy depending on number of available GPUs
     horovod_enabled = config["setup"]["horovod_enabled"]
     if horovod_enabled:
+        import horovod.tensorflow.keras as hvd
         initialize_horovod()
         num_gpus = hvd.size()
     else:
@@ -244,66 +245,69 @@ def model_save(outdir, fit_result, model, weights):
     print("Training done.")
 
 def model_scope(config, total_steps, weights, horovod_enabled=False):
-    lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
-        opt = get_optimizer(config, lr_schedule)
+    lr_schedule, optim_callbacks,lr = get_lr_schedule(config, steps=total_steps)
+    opt = get_optimizer(config, lr_schedule)
 
-        if config["setup"]["dtype"] == "float16":
-            model_dtype = tf.dtypes.float16
-            policy = mixed_precision.Policy("mixed_float16")
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
+    if horovod_enabled:
+        opt = hvd.DistributedOptimizer(opt)
 
-        model = make_model(config, model_dtype)
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
 
-        # Build the layers after the element and feature dimensions are specified
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    model = make_model(config, model_dtype)
 
-        initial_epoch = 0
-        loaded_opt = None
-        
-        if weights:
-            if lr_schedule:
-                raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+    # Build the layers after the element and feature dimensions are specified
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
-            # We need to load the weights in the same trainable configuration as the model was set up
-            configure_model_weights(model, config["setup"].get("weights_config", "all"))
-            model.load_weights(weights, by_name=True)
-            loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
-            initial_epoch = int(weights.split("/")[-1].split("-")[1])
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    initial_epoch = 0
+    loaded_opt = None
+    
+    if weights:
+        if lr_schedule:
+            raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
 
-        config = set_config_loss(config, config["setup"]["trainable"])
-        configure_model_weights(model, config["setup"]["trainable"])
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+        # We need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        model.load_weights(weights, by_name=True)
+        loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
+        initial_epoch = int(weights.split("/")[-1].split("-")[1])
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
-        print("model weights")
-        tw_names = [m.name for m in model.trainable_weights]
-        for w in model.weights:
-            print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
+    config = set_config_loss(config, config["setup"]["trainable"])
+    configure_model_weights(model, config["setup"]["trainable"])
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
-        loss_dict, loss_weights = get_loss_dict(config)
+    print("model weights")
+    tw_names = [m.name for m in model.trainable_weights]
+    for w in model.weights:
+        print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
 
-        model.compile(
-            loss=loss_dict,
-            optimizer=opt,
-            sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ] + [
-                    SingleClassRecall(
-                        icls,
-                        name="rec_cls{}".format(icls),
-                        dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
-                ]
-            },
-        )
+    loss_dict, loss_weights = get_loss_dict(config)
 
-        model.summary()
+    model.compile(
+        loss=loss_dict,
+        optimizer=opt,
+        sample_weight_mode="temporal",
+        loss_weights=loss_weights,
+        metrics={
+            "cls": [
+                FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+            ] + [
+                SingleClassRecall(
+                    icls,
+                    name="rec_cls{}".format(icls),
+                    dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
+            ]
+        },
+    )
+
+    model.summary()
     return model,optim_callbacks,initial_epoch
 
 def initialize_horovod():
