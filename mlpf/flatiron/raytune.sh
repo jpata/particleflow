@@ -23,8 +23,8 @@ echo "################# End of job submission script. #########################"
 export TUNE_RESULT_DIR="/mnt/ceph/users/ewulff/ray_results/tune_result_dir"
 export TUNE_MAX_PENDING_TRIALS_PG=$((SLURM_NNODES*2))
 
-module purge
-module load slurm gcc cuda/11.1.0_455.23.05 cudnn/v8.0.4-cuda-11.1
+module --force purge; module load modules/1.49-20211101
+module load slurm gcc nccl cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
 nvidia-smi
 
 source ~/miniconda3/bin/activate tf2
