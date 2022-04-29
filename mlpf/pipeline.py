@@ -273,6 +273,69 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     #if "CPU" not in strategy.extended.worker_devices[0]:
     #    p.terminate()
 
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
+def compute_validation_loss(config, train_dir, weights):
+    """Evaluate the trained model in train_dir"""
+    if config is None:
+        config = Path(train_dir) / "config.yaml"
+        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
+    config, _ = parse_config(config, weights=weights)
+
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
+
+    strategy, num_gpus = get_strategy()
+    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
+
+    with strategy.scope():
+        model = make_model(config, model_dtype)
+        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+
+        # need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        if weights:
+            model.load_weights(weights, by_name=True)
+        else:
+            weights = get_best_checkpoint(train_dir)
+            print("Loading best weights that could be found from {}".format(weights))
+            model.load_weights(weights, by_name=True)
+
+        loss_dict, loss_weights = get_loss_dict(config)
+        model.compile(
+            loss=loss_dict,
+            # sample_weight_mode="temporal",
+            loss_weights=loss_weights,
+            metrics={
+                "cls": [
+                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+                ] + [
+                    SingleClassRecall(
+                        icls,
+                        name="rec_cls{}".format(icls),
+                        dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
+                ]
+            },
+        )
+
+        losses = model.evaluate(
+            x=ds_test,
+            steps=num_test_steps,
+            return_dict=True,
+        )
+    with open("{}/losses.txt".format(train_dir), "w") as loss_file:
+        loss_file.write(json.dumps(losses) + "\n")
+
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
