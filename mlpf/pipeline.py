@@ -405,14 +405,6 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
 def hypertune(config, outdir, ntrain, ntest, recreate):
-    import ray
-    from ray import tune
-    from ray.tune.integration.keras import TuneReportCheckpointCallback
-    from ray.tune.integration.tensorflow import DistributedTrainableCreator
-    from ray.tune.logger import TBXLoggerCallback
-    from ray.tune import Analysis
-    from raytune.search_space import search_space, set_raytune_search_parameters, raytune_num_samples
-    from raytune.utils import get_raytune_schedule, get_raytune_search_alg
     config_file_path = config
     config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
@@ -465,6 +457,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
 
 def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False):
+        from ray import tune
+        from raytune.search_space import set_raytune_search_parameters
+        from ray.tune.integration.keras import TuneReportCheckpointCallback
         if seeds:
             # Set seeds for reproducibility
             random.seed(1234)
@@ -594,6 +589,14 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 @click.option("--ntest", default=None, help="override the number of testing steps", type=int)
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
 def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest, seeds):
+    import ray
+    from ray import tune
+    from ray.tune.integration.tensorflow import DistributedTrainableCreator
+    from ray.tune.logger import TBXLoggerCallback
+    from ray.tune import Analysis
+    from raytune.search_space import search_space, raytune_num_samples
+    from raytune.utils import get_raytune_schedule, get_raytune_search_alg
+
     if seeds:
         # Set seeds for reproducibility
         random.seed(1234)
