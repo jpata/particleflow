@@ -3,7 +3,6 @@
 # PFNetTransformer: the transformer-based model using fast attention
 
 import tensorflow as tf
-from official.nlp.modeling.layers.kernel_attention import KernelAttention
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
@@ -508,7 +507,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes, id_hidden_dim,
             "ffn_cls",
-            dtype=tf.dtypes.float32,
             num_layers=id_num_layers,
             activation=activation,
             dim_decrease=id_dim_decrease,
@@ -517,7 +515,6 @@ class OutputDecoding(tf.keras.Model):
         self.ffn_charge = point_wise_feed_forward_network(
             1, charge_hidden_dim,
             "ffn_charge",
-            dtype=tf.dtypes.float32,
             num_layers=charge_num_layers,
             activation=activation,
             dim_decrease=charge_dim_decrease,
@@ -526,25 +523,33 @@ class OutputDecoding(tf.keras.Model):
         
         self.ffn_pt = point_wise_feed_forward_network(
             2, pt_hidden_dim, "ffn_pt",
-            dtype=tf.dtypes.float32, num_layers=pt_num_layers, activation=activation, dim_decrease=pt_dim_decrease,
+            num_layers=pt_num_layers,
+            activation=activation,
+            dim_decrease=pt_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_eta = point_wise_feed_forward_network(
             2, eta_hidden_dim, "ffn_eta",
-            dtype=tf.dtypes.float32, num_layers=eta_num_layers, activation=activation, dim_decrease=eta_dim_decrease,
+            num_layers=eta_num_layers,
+            activation=activation,
+            dim_decrease=eta_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_phi = point_wise_feed_forward_network(
             4, phi_hidden_dim, "ffn_phi",
-            dtype=tf.dtypes.float32, num_layers=phi_num_layers, activation=activation, dim_decrease=phi_dim_decrease,
+            num_layers=phi_num_layers,
+            activation=activation,
+            dim_decrease=phi_dim_decrease,
             dropout=dropout
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
             num_output_classes if self.energy_multimodal else 1, energy_hidden_dim, "ffn_energy",
-            dtype=tf.dtypes.float32, num_layers=energy_num_layers, activation=activation, dim_decrease=energy_dim_decrease,
+            num_layers=energy_num_layers,
+            activation=activation,
+            dim_decrease=energy_dim_decrease,
             dropout=dropout)
 
     """
@@ -605,23 +610,14 @@ class OutputDecoding(tf.keras.Model):
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)*msk_input
 
+        #In case of a multimodal prediction, weight the per-class energy predictions by the approximately one-hot vector
         if self.energy_multimodal:
             pred_energy = tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
         else:
             pred_energy = pred_energy_corr
 
-        # classwise_energy_corr = self.ffn_energy_classwise(tf.concat([orig_energy, out_id_logits], axis=-1), training=training)
-        # pred_energy += classwise_energy_corr[:, :, 0:1]
-        # pred_energy *= classwise_energy_corr[:, :, 1:2]
-
-        # pred_energy = tf.math.exp(tf.clip_by_value(pred_energy, -3, 8))
-
-        #prediction is pred_log_energy=log(energy + 1.0), energy=exp(pred_log_energy) - 1.0
-        #pred_energy = tf.math.exp(tf.clip_by_value(pred_log_energy, -6, 6)) - 1.0
-
         #compute pt=E/cosh(eta)
         orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
-        #orig_log_pt = tf.math.log(orig_pt + 1.0)
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)*msk_input
         if self.pt_skip_gate:
@@ -630,8 +626,10 @@ class OutputDecoding(tf.keras.Model):
         else:
             pred_pt = orig_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
         
+        #mask the regression outputs for the nodes with a class prediction 0
+        msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
+
         if self.mask_reg_cls0:
-            msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
             out_charge = out_charge*msk_output
             pred_pt = pred_pt*msk_output
             pred_eta = pred_eta*msk_output
@@ -647,6 +645,10 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi*msk_input,
             "cos_phi": pred_cos_phi*msk_input,
             "energy": pred_energy*msk_input,
+
+            #per-event sum of energy and pt
+            "sum_energy": tf.reduce_sum(pred_energy*msk_input*msk_output, axis=-2),
+            "sum_pt": tf.reduce_sum(pred_pt*msk_input*msk_output, axis=-2),
         }
 
         return ret
@@ -773,7 +775,8 @@ class PFNetDense(tf.keras.Model):
             output_decoding={},
             debug=False,
             schema="cms",
-            node_update_mode="concat"
+            node_update_mode="concat",
+            **kwargs
         ):
         super(PFNetDense, self).__init__()
 
@@ -814,12 +817,12 @@ class PFNetDense(tf.keras.Model):
         X = inputs
         debugging_data = {}
 
-        #mask padded elements
-        msk = X[:, :, 0] != 0
-        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
-
         #encode the elements for classification (id)
         X_enc = self.enc(X)
+
+        #mask padded elements
+        msk = X[:, :, 0] != 0
+        msk_input = tf.expand_dims(tf.cast(msk, X_enc.dtype), -1)
 
         encs = []
         if self.skip_connection:
@@ -873,7 +876,7 @@ class PFNetDense(tf.keras.Model):
             debugging_data["dec_output"] = dec_output
             debugging_data["dec_output_energy"] = dec_output_energy
 
-        ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
+        ret = self.output_dec([X_enc, dec_output, dec_output_energy, msk_input], training=training)
 
         if self.debug:
             for k in debugging_data.keys():
@@ -892,6 +895,7 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
+    # Uncomment these if you want to explicitly debug the training loop
     # def train_step(self, data):
     #     x, y, sample_weights = data
     #     if not hasattr(self, "step"):
@@ -900,6 +904,7 @@ class PFNetDense(tf.keras.Model):
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #         import pdb;pdb.set_trace()
 
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)
@@ -918,27 +923,6 @@ class PFNetDense(tf.keras.Model):
     #     pred_cls = tf.argmax(y_pred["cls"], axis=-1)
     #     true_cls = tf.argmax(y["cls"], axis=-1)
 
-    #     for icls in [3, ]:
-    #         msk1 = (true_cls==icls)
-    #         msk2 = (pred_cls==icls)
-    #         import matplotlib
-    #         import matplotlib.pyplot as plt
-
-    #         plt.figure(figsize=(4,4))
-    #         minval = np.min(y["energy"][msk1].numpy().flatten())
-    #         maxval = np.max(y["energy"][msk1].numpy().flatten())
-    #         plt.scatter(
-    #             y["energy"][msk1&msk2].numpy().flatten(),
-    #             y_pred["energy"][msk1&msk2].numpy().flatten(),
-    #             marker=".", alpha=0.5
-    #         )
-    #         plt.xlabel("true")
-    #         plt.ylabel("pred")
-    #         plt.plot([minval,maxval], [minval,maxval], color="black", ls="--", lw=1.0)
-    #         plt.savefig("test_cls{}_{}.png".format(icls, self.step), bbox_inches="tight")
-    #         plt.close("all")
-
-
     #     # Updates the metrics tracking the loss
     #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
     #     # Update the metrics.
@@ -951,6 +935,7 @@ class PFNetDense(tf.keras.Model):
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
+        from official.nlp.modeling.layers.kernel_attention import KernelAttention
         self.key_dim = kwargs.pop("key_dim")
         self.attn = KernelAttention(feature_transform="elu", num_heads=4, key_dim=self.key_dim, name=kwargs.get("name") + "_attention")
         self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu")

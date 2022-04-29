@@ -4,45 +4,20 @@
 #get the code
 git clone https://github.com/jpata/particleflow.git
 cd particleflow
-git checkout v1.4
 
 git submodule init
 git submodule update
 
 #Download the training datasets, about 60GB
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/tensorflow_datasets ~/
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms data/
+
+#Convert the training dataset to TFDS, this will require about 370GB free space in ~/tensorflow_datasets
+tfds build hep_tfds/heptfds/cms_pf/ttbar --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
+tfds build hep_tfds/heptfds/cms_pf/qcd --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
+tfds build hep_tfds/heptfds/cms_pf/ztt --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
 
 #Run the training, multi-GPU support on the same machine is available, specify explicitly the GPUs you want to use
-CUDA_VISIBLE_DEVICES=... python3 mlpf/pipeline.py train -c parameters/cms.yaml
-```
-# Baseline CMS MLPF model
-
-The current model (exported .onnx, SavedModel as .pb, training history, evaluation output) is available at
-```
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/models/cms/cms_20210917_142344_403761.gpu0.local.tar.xz ./
-```
-
-# Dataset creation
-
-The following example generates a small training sample using CMSSW
-```bash
-cd mlpf/data
-./run_gen.sh
-```
-Note that `pu_files.txt` and a corresponding CMSSW release must exist locally. Batch submission of the generator jobs is dependent on the local batch system and is left as an exercise to the reader.
-
-Generate TFRecord datasets from the pickle files
-```bash
-mkdir -p data
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/TTbar* data/
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/Single* data/
-tfds build ./hep_tfds/heptfds/cms_pf/ttbar --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singlepi --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singlepi0 --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singleele --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singlemu --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singlegamma --manual_dir data
-tfds build ./hep_tfds/heptfds/cms_pf/singletau --manual_dir data
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml
 ```
 
 ## Older presentations in CMS

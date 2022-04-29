@@ -2,7 +2,7 @@ backend: tensorflow
 
 dataset:
   schema: cms
-  target_particles: cand
+  target_particles: gen
   num_input_features: 41
   num_output_features: 7
 #       NONE = 0,
@@ -30,8 +30,8 @@ dataset:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 0.0001
-  sum_energy_loss_coef: 0.0
-  sum_pt_loss_coef: 0.0
+  sum_energy_loss_coef: 0.00000001
+  sum_pt_loss_coef: 0.00000001
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,19 +53,19 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001129
+  lr: 0.0005
   num_events_validation: 1000
-  num_epochs: 200
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: cosinedecay  # exponentialdecay, onecycle
+  lr_schedule: none  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
 
 optimizer:
   adam:
     amsgrad: no
-    pcgrad: no
+    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -96,27 +96,27 @@ parameters:
     max_num_bins: 200
     distance_dim: 64
     layernorm: no
-    dropout: 0.008156  # 0.016312 / 2  # Set to 0 in future training
+    dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 3
+    ffn_dist_num_layers: 2
     ffn_dist_hidden_dim: 128
     kernel:
       type: NodePairGaussianKernel
-      dist_mult: 0.120898
-      clip_value_low: 0.001998
-    num_node_messages: 3
+      dist_mult: 0.1
+      clip_value_low: 0.0
+    num_node_messages: 2
     node_message:
       type: GHConvDense
       output_dim: 64
       activation: elu
       normalize_degrees: yes
     activation: elu
-  num_graph_layers_common: 3
+  num_graph_layers_common: 2
   num_graph_layers_energy: 2
   output_decoding:
     activation: elu
     regression_use_classification: yes
-    dropout: 0.016312  # Set to 0 in future training
+    dropout: 0.0
 
     pt_skip_gate: no
     eta_skip_gate: yes
@@ -200,19 +200,11 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 32
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
+      - cms_pf_qcd
       - cms_pf_ztt
-  gun: 
-    batch_per_gpu: 800
-    datasets:
-      - cms_pf_single_pi
-      - cms_pf_single_pi0
-      - cms_pf_single_tau
-      - cms_pf_single_electron
-      - cms_pf_single_mu
-      - cms_pf_single_gamma
 
 validation_dataset: cms_pf_ttbar
 
@@ -222,6 +214,10 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_ztt:
+    version: 1.3.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd:
     version: 1.3.0
     data_dir:
     manual_dir:

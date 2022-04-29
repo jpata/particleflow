@@ -21,11 +21,11 @@ import shlex
 import subprocess
 import matplotlib.pyplot as plt
 import logging
+import pickle
 
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
-import keras_tuner as kt
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -71,15 +71,6 @@ from tfmodel.utils_analysis import (
     count_skipped_configurations,
 )
 
-import ray
-from ray import tune
-from ray.tune.integration.keras import TuneReportCheckpointCallback
-from ray.tune.integration.tensorflow import DistributedTrainableCreator
-from ray.tune.logger import TBXLoggerCallback
-from ray.tune import Analysis
-
-from raytune.search_space import search_space, set_raytune_search_parameters, raytune_num_samples
-from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
 
 def customize_pipeline_test(config):
@@ -99,7 +90,6 @@ customization_functions = {
 @click.help_option("-h", "--help")
 def main():
     pass
-        
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -113,20 +103,6 @@ def main():
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
-
-    try:
-        from comet_ml import Experiment
-        experiment = Experiment(
-            project_name="particleflow-tf",
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-        )
-    except Exception as e:
-        print("Failed to initialize comet-ml dashboard")
-        experiment = None
 
 
     """Train a model defined by config"""
@@ -144,13 +120,26 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if recreate or (weights is None):
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
     else:
-        outdir = str(Path(weights).parent)
+        outdir = str(Path(weights).parent.parent)
+
+    try:
+        from comet_ml import Experiment
+        experiment = Experiment(
+            project_name="particleflow-tf",
+            auto_metric_logging=True,
+            auto_param_logging=True,
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=False,
+            auto_histogram_activation_logging=False,
+            #offline_directory=outdir,
+            #disabled=True
+        )
+    except Exception as e:
+        print("Failed to initialize comet-ml dashboard")
+        experiment = None
 
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus = get_strategy()
-    #if "CPU" not in strategy.extended.worker_devices[0]:
-    #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
-    #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
@@ -195,10 +184,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
         initial_epoch = 0
+        loaded_opt = None
+        
         if weights:
+            if lr_schedule:
+                raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+
             # We need to load the weights in the same trainable configuration as the model was set up
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
+            loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
@@ -212,6 +207,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
 
         loss_dict, loss_weights = get_loss_dict(config)
+
         model.compile(
             loss=loss_dict,
             optimizer=opt,
@@ -229,7 +225,17 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
                 ]
             },
         )
+
         model.summary()
+
+    #Load the optimizer weights
+    if weights:
+        def model_weight_setting():
+            grad_vars = model.trainable_weights
+            zero_grads = [tf.zeros_like(w) for w in grad_vars]
+            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
+            model.optimizer.set_weights(loaded_opt["weights"])
+        strategy.run(model_weight_setting)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
@@ -296,7 +302,11 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test")
+    #physical_devices = tf.config.list_physical_devices('GPU')
+    #for dev in physical_devices:
+    #    tf.config.experimental.set_memory_growth(dev, True)
+
+    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
     ds_test = ds_test.batch(5)
 
     model = make_model(config, model_dtype)
@@ -312,7 +322,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         model.load_weights(weights, by_name=True)
     
     eval_model(model, ds_test, config, eval_dir)
-    freeze_model(model, config, ds_test.take(1), train_dir)
+    freeze_model(model, config, train_dir)
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -395,6 +405,14 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
 def hypertune(config, outdir, ntrain, ntest, recreate):
+    import ray
+    from ray import tune
+    from ray.tune.integration.keras import TuneReportCheckpointCallback
+    from ray.tune.integration.tensorflow import DistributedTrainableCreator
+    from ray.tune.logger import TBXLoggerCallback
+    from ray.tune import Analysis
+    from raytune.search_space import search_space, set_raytune_search_parameters, raytune_num_samples
+    from raytune.utils import get_raytune_schedule, get_raytune_search_alg
     config_file_path = config
     config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 

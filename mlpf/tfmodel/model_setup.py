@@ -5,16 +5,12 @@ import tensorflow_addons as tfa
 import pickle
 import numpy as np
 import os
-from sklearn.model_selection import train_test_split
-import sys
-import glob
 import io
 import os
 import yaml
 import uuid
 import matplotlib
 import matplotlib.pyplot as plt
-import sklearn
 from argparse import Namespace
 import time
 import json
@@ -28,11 +24,11 @@ from pathlib import Path
 import tf2onnx
 import sklearn
 import sklearn.metrics
-import onnxruntime
 
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
+from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
@@ -64,6 +60,15 @@ def plot_to_image(figure):
     
     return image
 
+class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
+    def on_epoch_end(self, epoch, logs=None):
+        super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
+        with open(self.opt_path.format(epoch=epoch+1, **logs), "wb") as fi:
+            pickle.dump({
+                #"lr": self.model.optimizer.lr,
+                #"weights": self.model.optimizer.get_weights()
+                }, fi
+            )
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
@@ -106,11 +111,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(0, 100, 100),
+            "pt": np.linspace(-100, 1000, 100),
             "eta": np.linspace(-6, 6, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": None,
+            "energy": np.linspace(-100, 5000, 100),
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
@@ -140,6 +145,21 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plt.title("acc={:.3f} bacc={:.3f}".format(acc, balanced_acc))
 
         image_path = str(outpath / "cm_normed.png")
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+
+    def plot_sumperevent_corr(self, epoch, outpath, ypred, var):
+        pred_per_event = np.sum(ypred[var], axis=-2)[:, 0]
+        true_per_event = np.sum(self.ytrue[var], axis=-2)[:, 0]
+
+        plt.figure()
+        plt.hist2d(true_per_event, pred_per_event, bins=100, cmap="Blues")
+        minval = min(np.min(pred_per_event), np.min(true_per_event))
+        maxval = max(np.max(pred_per_event), np.max(true_per_event))
+        plt.plot([minval, maxval], [minval, maxval], color="black")
+        image_path = str(outpath / "event_{}.png".format(var))
         plt.savefig(image_path, bbox_inches="tight")
         plt.close("all")
         if self.comet_experiment:
@@ -254,7 +274,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         bins = self.reg_bins[reg_variable]
         if bins is None:
             bins = 100
-        plt.scatter(vals_true, vals_pred, marker=".", alpha=0.4)
+        plt.hist2d(vals_true, vals_pred, bins=100, cmap="Blues")
 
         if len(vals_true) > 0:
             minval = np.min(vals_true)
@@ -428,6 +448,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
 
+        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
+        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
+
         self.plot_cm(epoch, cp_dir, ypred_id, msk)
         for ievent in range(min(5, self.X.shape[0])):
             self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
@@ -450,7 +473,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.comet_experiment.log_image(image_path, step=epoch)
                 num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
                 self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
-
 
             if icls!=0:
                 self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
@@ -484,13 +506,14 @@ def prepare_callbacks(
 
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(
+    cp_callback = ModelOptimizerCheckpoint(
         filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
-        save_weights_only=callbacks_cfg["checkpoint"]["save_weights_only"],
+        save_weights_only=True,
         verbose=0,
         monitor=callbacks_cfg["checkpoint"]["monitor"],
-        save_best_only=callbacks_cfg["checkpoint"]["save_best_only"],
+        save_best_only=False,
     )
+    cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
     callbacks += [cp_callback]
 
     history_path = Path(outdir) / "history"
@@ -587,27 +610,32 @@ def make_transformer(config, dtype):
     )
     return model
 
+#Given a model, evaluates it on each batch of the validation dataset
+#For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
 def eval_model(model, dataset, config, outdir):
-    import scipy
-    ibatch = 0
-    for X, y, w in tqdm(dataset, desc="Evaluating model"):
 
-        y_pred = model.predict(X)
+    ibatch = 0
+    for elem in tqdm(dataset, desc="Evaluating model"):
+        y_pred = model.predict(elem["X"])
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
+        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"])
+        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"])
+
         outs = {}
-        for key in y.keys():
-            outs["true_{}".format(key)] = y[key]
+        for key in y_pred.keys():
+            outs["gen_{}".format(key)] = ygen[key]
+            outs["cand_{}".format(key)] = ycand[key]
             outs["pred_{}".format(key)] = y_pred[key]
         np.savez(
             np_outfile,
-            X=X,
+            X=elem["X"],
             **outs
         )
         ibatch += 1
 
-def freeze_model(model, config, ds_test, outdir):
+def freeze_model(model, config, outdir):
     bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
     num_features = config["dataset"]["num_input_features"]
     num_out_classes = config["dataset"]["num_output_classes"]
@@ -624,26 +652,6 @@ def freeze_model(model, config, ds_test, outdir):
         input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"), ),
         output_path=str(Path(outdir) / "model.onnx")
     )
-
-    ds = list(tfds.as_numpy(ds_test.take(1)))
-    X = ds[0][0]
-    y = ds[0][1]
-
-    onnx_sess = onnxruntime.InferenceSession(str(Path(outdir) / "model.onnx"))
-    pred_onx = onnx_sess.run(None, {"x:0": X})[0]
-    pred_tf = model(X)
-
-    msk = X[:, :, 0]!=0
-    true_id = np.argmax(y["cls"][:, :, :num_out_classes], axis=-1)[msk]
-    pred_id_onx = np.argmax(pred_onx[:, :, :num_out_classes], axis=-1)[msk]
-    pred_id_tf = np.argmax(pred_tf["cls"], axis=-1)[msk]
-
-    cm1 = sklearn.metrics.confusion_matrix(true_id, pred_id_onx, labels=range(num_out_classes))
-    cm2 = sklearn.metrics.confusion_matrix(true_id, pred_id_tf, labels=range(num_out_classes))
-
-    print(cm1)
-    print(cm2)
-
 
 class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
     def __init__(self, use_weights=False, **kwargs):
