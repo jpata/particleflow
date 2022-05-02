@@ -204,48 +204,20 @@ train_test_datasets:
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
-  gun: 
-    batch_per_gpu: 800
-    datasets:
-      - cms_pf_single_pi
-      - cms_pf_single_pi0
-      - cms_pf_single_tau
-      - cms_pf_single_electron
-      - cms_pf_single_mu
-      - cms_pf_single_gamma
+      - cms_pf_qcd
 
 validation_dataset: cms_pf_ttbar
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.3.0
+    version: 1.3.1
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.3.0
+    version: 1.3.1
     data_dir:
     manual_dir:
-  cms_pf_single_pi:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi0:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_tau:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_electron:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_mu:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_gamma:
-    version: 1.3.0
+  cms_pf_qcd:
+    version: 1.3.1
     data_dir:
     manual_dir:
