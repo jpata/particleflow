@@ -20,18 +20,18 @@ dataset:
   num_input_classes: 12
   #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7, tau=8)
   num_output_classes: 9
-  padded_num_elem_size: 12000
+  padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
-  classification_loss_coef: 100.0
-  charge_loss_coef: 0.01
-  pt_loss_coef: 0.0001
-  eta_loss_coef: 100.0
-  sin_phi_loss_coef: 10.0
-  cos_phi_loss_coef: 10.0
-  energy_loss_coef: 0.0001
-  sum_energy_loss_coef: 0.00000001
-  sum_pt_loss_coef: 0.00000001
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
+  sum_energy_loss_coef: 0.0
+  sum_pt_loss_coef: 0.0
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,7 +53,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.001
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32
@@ -95,7 +95,7 @@ parameters:
     bin_size: 100
     max_num_bins: 200
     distance_dim: 64
-    layernorm: no
+    layernorm: yes
     dropout: 0.0
     dist_activation: elu
     ffn_dist_num_layers: 2
@@ -111,8 +111,8 @@ parameters:
       activation: elu
       normalize_degrees: yes
     activation: elu
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_common: 3
+  num_graph_layers_energy: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -129,23 +129,22 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 256
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 3
+    id_num_layers: 2
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
     phi_num_layers: 2
-    energy_num_layers: 3
+    energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: no
-
-    energy_multimodal: no
+    mask_reg_cls0: yes
+    energy_multimodal: yes
 
   skip_connection: yes
   debug: no
@@ -210,38 +209,14 @@ validation_dataset: cms_pf_ttbar
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.3.0
+    version: 1.3.1
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.3.0
+    version: 1.3.1
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi0:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_tau:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_electron:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_mu:
-    version: 1.3.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_gamma:
-    version: 1.3.0
+    version: 1.3.1
     data_dir:
     manual_dir:
