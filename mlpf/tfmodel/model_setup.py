@@ -207,7 +207,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
         #Plot the target particles
         plt.axes(ax2)
-        
         msk = self.ytrue_id[ievent] != 0
         eta = self.ytrue["eta"][ievent][msk]
         sphi = self.ytrue["sin_phi"][ievent][msk]
@@ -266,16 +265,14 @@ class CustomCallback(tf.keras.callbacks.Callback):
         vals_pred = ypred[reg_variable][sel].flatten()
         vals_true = self.ytrue[reg_variable][sel].flatten()
 
-        loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-        loss_vals = loss(np.expand_dims(vals_true, -1), np.expand_dims(vals_pred, axis=-1)).numpy()
-
         #save scatterplot of raw values
-        plt.figure()
+        plt.figure(figsize=(6,5))
         bins = self.reg_bins[reg_variable]
         if bins is None:
             bins = 100
-        plt.hist2d(vals_true, vals_pred, bins=100, cmap="Blues")
-
+        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), cmin=1, cmap="Blues", norm=matplotlib.colors.LogNorm())
+        plt.colorbar()
+ 
         if len(vals_true) > 0:
             minval = np.min(vals_true)
             maxval = np.max(vals_true)
@@ -283,29 +280,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
         plt.xlabel("true")
         plt.ylabel("predicted")
-        plt.title("{}, particle weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
+        plt.title(reg_variable)
         image_path = str(outpath / "{}_cls{}_corr.png".format(reg_variable, icls))
         plt.savefig(image_path, bbox_inches="tight")
         if self.comet_experiment:
             self.comet_experiment.log_image(image_path, step=epoch)
         plt.close("all")
-
-        #save loss-weighted correlation histogram
-        plt.figure()
-        plt.hist2d(vals_true, vals_pred, bins=(bins, bins), weights=loss_vals, cmap="Blues")
-        plt.colorbar()
-        if len(vals_true) > 0:
-            minval = np.min(vals_true)
-            maxval = np.max(vals_true)
-            if not (math.isnan(minval) or math.isnan(maxval) or math.isinf(minval) or math.isinf(maxval)):
-                plt.plot([minval, maxval], [minval, maxval], color="black", ls="--", lw=0.5)
-        plt.xlabel("true")
-        plt.ylabel("predicted")
-        plt.title("{}, loss weighted, L={:.4f}".format(reg_variable, np.sum(loss_vals)))
-        image_path = str(outpath / "{}_cls{}_corr_weighted.png".format(reg_variable, icls))
-        plt.savefig(image_path, bbox_inches="tight")
-        if self.comet_experiment:
-            self.comet_experiment.log_image(image_path, step=epoch)
 
         #Also plot the residuals, as we have the true and predicted values already available here
         plt.figure()
@@ -326,7 +306,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
         if self.comet_experiment:
             self.comet_experiment.log_metric('residual_{}_cls{}_mean'.format(reg_variable, icls), np.mean(residual), step=epoch)
             self.comet_experiment.log_metric('residual_{}_cls{}_std'.format(reg_variable, icls), np.std(residual), step=epoch)
-            self.comet_experiment.log_metric('val_loss_{}_cls{}'.format(reg_variable, icls), np.sum(loss_vals), step=epoch)
 
     def plot_elem_to_pred(self, epoch, cp_dir, msk, ypred_id):
         X_id = self.X[msk][:, 0]
@@ -480,7 +459,10 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
             for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
                 self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
-                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+                try:
+                    self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+                except ValueError as e:
+                    print("Could not draw corr plot: {}".format(e))
 
 def prepare_callbacks(
         callbacks_cfg, outdir,
@@ -604,8 +586,10 @@ def make_transformer(config, dtype):
             kwargs[par] = config['parameters'][par]
 
     model = PFNetTransformer(
+        multi_output=config["setup"]["multi_output"],
         num_input_classes=config["dataset"]["num_input_classes"],
         num_output_classes=config["dataset"]["num_output_classes"],
+        schema=config["dataset"]["schema"],
         **kwargs
     )
     return model
