@@ -19,14 +19,15 @@ QCD events with PU~55 in a Run3 setup.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 12000
+PADDED_NUM_ELEM_SIZE = 6400
 
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.3.0")
+    VERSION = tfds.core.Version("1.3.1")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
+        "1.3.1": "Remove PS again"
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     FIXME
