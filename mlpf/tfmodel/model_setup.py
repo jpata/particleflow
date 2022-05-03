@@ -111,11 +111,11 @@ class CustomCallback(tf.keras.callbacks.Callback):
         }
 
         self.reg_bins = {
-            "pt": np.linspace(-100, 1000, 100),
+            "pt": np.linspace(-100, 200, 100),
             "eta": np.linspace(-6, 6, 100),
             "sin_phi": np.linspace(-1,1,100),
             "cos_phi": np.linspace(-1,1,100),
-            "energy": np.linspace(-100, 5000, 100),
+            "energy": np.linspace(-100, 1000, 100),
         }
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
@@ -268,9 +268,21 @@ class CustomCallback(tf.keras.callbacks.Callback):
         #save scatterplot of raw values
         plt.figure(figsize=(6,5))
         bins = self.reg_bins[reg_variable]
+
         if bins is None:
             bins = 100
+
+        if reg_variable == "pt" or reg_variable == "energy":
+            bins = np.logspace(-2,3,100)
+            vals_true = np.log10(vals_true)
+            vals_pred = np.log10(vals_pred)
+            vals_true[np.isnan(vals_true)] = 0.0
+            vals_pred[np.isnan(vals_pred)] = 0.0
+
         plt.hist2d(vals_true, vals_pred, bins=(bins, bins), cmin=1, cmap="Blues", norm=matplotlib.colors.LogNorm())
+        if reg_variable == "pt" or reg_variable == "energy":
+            plt.xscale("log")
+            plt.yscale("log")
         plt.colorbar()
  
         if len(vals_true) > 0:
