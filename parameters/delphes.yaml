@@ -47,14 +47,14 @@ setup:
   num_events_train: 45000
   num_events_test: 5000
   num_events_validation: 5000
-  num_epochs: 1
+  num_epochs: 10
   num_val_files: 5
   dtype: float32
   trainable:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
-  horovod_enabled: False
+  horovod_enabled: True
 
 optimizer:
   adam:
@@ -219,7 +219,7 @@ raytune:
 
 train_test_datasets:
   delphes: 
-    batch_per_gpu: 5
+    batch_per_gpu: 16
     datasets:
       - delphes_pf
 

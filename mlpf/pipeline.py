@@ -3,6 +3,11 @@ try:
 except ModuleNotFoundError as e:
     print("comet_ml not found, ignoring")
 
+try:
+    import horovod.tensorflow.keras as hvd
+except ImportError:
+    print("hvd not enabled, ignoring")
+
 import sys
 import os
 import yaml
@@ -142,7 +147,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     # Decide tf.distribute.strategy depending on number of available GPUs
     horovod_enabled = config["setup"]["horovod_enabled"]
     if horovod_enabled:
-        import horovod.tensorflow.keras as hvd
         initialize_horovod()
         num_gpus = hvd.size()
     else:

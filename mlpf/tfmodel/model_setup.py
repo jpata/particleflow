@@ -1,3 +1,8 @@
+try:
+    import horovod.tensorflow.keras as hvd
+except ImportError:
+    print("hvd not enabled, ignoring")
+
 from .model import PFNetTransformer, PFNetDense
 
 import tensorflow as tf
@@ -423,7 +428,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if self.horovod_enabled:
-            import horovod.tensorflow.keras as hvd
             if  hvd.rank() == 0:
                 epoch_end(self, epoch, logs)
         else:
@@ -504,18 +508,16 @@ def prepare_callbacks(
     ):
 
     callbacks = []
-
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
         update_freq='epoch',
-        profile_batch=(10,90),
-        #profile_batch=0,
+        #profile_batch=(10,90),
+        profile_batch=0,
         dump_history=callbacks_cfg["tensorboard"]["dump_history"],
     )
     # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
     tb.__class__.__name__ = "TensorBoard"
     callbacks += [tb]
-    
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
 
@@ -545,7 +547,6 @@ def get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
     history_path = str(history_path)    
-    
     cb = CustomCallback(
         history_path,
         dataset,
@@ -554,7 +555,7 @@ def get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info
         comet_experiment=comet_experiment
     )
 
-    #callbacks += [cb]
+    callbacks += [cb]
 
     return callbacks
 

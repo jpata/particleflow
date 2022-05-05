@@ -18,8 +18,6 @@ from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleSchedu
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 
-
-
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
         cfg = yaml.load(ymlfile, Loader=yaml.FullLoader)
