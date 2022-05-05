@@ -118,10 +118,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if customize:
         config = customization_functions[customize](config)
 
-    if recreate or (weights is None):
-        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-    else:
-        outdir = str(Path(weights).parent.parent)
+    outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
 
     try:
         from comet_ml import Experiment
@@ -194,7 +191,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             # We need to load the weights in the same trainable configuration as the model was set up
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
-            loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
+            opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+            if os.path.isfile(opt_weight_file):
+                loaded_opt = pickle.load(open(opt_weight_file, "rb"))
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
@@ -229,8 +228,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
         model.summary()
 
-    #Load the optimizer weights
-    if weights:
+    #Set the optimizer weights
+    if loaded_opt:
         def model_weight_setting():
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
