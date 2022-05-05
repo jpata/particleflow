@@ -63,12 +63,17 @@ def plot_to_image(figure):
 class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     def on_epoch_end(self, epoch, logs=None):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
-        with open(self.opt_path.format(epoch=epoch+1, **logs), "wb") as fi:
-            pickle.dump({
-                #"lr": self.model.optimizer.lr,
-                #"weights": self.model.optimizer.get_weights()
-                }, fi
-            )
+        weightfile_path = self.opt_path.format(epoch=epoch+1, **logs)
+        try:
+            with open(weightfile_path, "wb") as fi:
+                pickle.dump({
+                    #"lr": self.model.optimizer.lr,
+                    "weights": self.model.optimizer.get_weights()
+                    }, fi
+                )
+        except Exception as e:
+            print("Could not save optimizer state: {}".format(e))
+            os.remove(weightfile_path)
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):

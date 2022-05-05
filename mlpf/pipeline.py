@@ -104,6 +104,7 @@ def main():
 @click.option("--customize", help="customization function", type=str, default=None)
 def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
 
+    #tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
     config_file_path = config

@@ -53,7 +53,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0001
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32
@@ -91,8 +91,9 @@ parameters:
   node_update_mode: concat
   do_node_encoding: no
   node_encoding_hidden_dim: 128
+
   combined_graph_layer:
-    bin_size: 100
+    bin_size: 32
     max_num_bins: 200
     distance_dim: 64
     layernorm: yes
@@ -100,6 +101,21 @@ parameters:
     dist_activation: elu
     ffn_dist_num_layers: 2
     ffn_dist_hidden_dim: 128
+
+    # MPNN
+    # kernel:
+    #   type: NodePairTrainableKernel
+    #   activation: elu
+    # num_node_messages: 1
+    # node_message:
+    #   type: NodeMessageLearnable
+    #   output_dim: 64
+    #   hidden_dim: 128
+    #   num_layers: 2
+    #   activation: elu
+    # activation: elu
+
+    # GCN
     kernel:
       type: NodePairGaussianKernel
       dist_mult: 0.1
@@ -107,10 +123,11 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 64
+      output_dim: 128
       activation: elu
       normalize_degrees: yes
     activation: elu
+
   num_graph_layers_common: 3
   num_graph_layers_energy: 3
   output_decoding:
