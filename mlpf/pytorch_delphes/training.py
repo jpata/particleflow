@@ -1,53 +1,50 @@
+from pytorch_delphes import make_plot
+from pytorch_delphes.utils_plots import plot_confusion_matrix
+
+import torch
+import mplhep as hep
+import matplotlib.pyplot as plt
 import os
 import pickle as pkl
-import math, time, tqdm
+import math
+import time
+import tqdm
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn.metrics import accuracy_score, confusion_matrix
+import sklearn.metrics
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import mplhep as hep
 
-import torch
 
-import pytorch_delphes
-
-#Ignore divide by 0 errors
+# Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
-def compute_weights(gen_ids_one_hot, device, output_dim_id):
-    vs, cs = torch.unique(gen_ids_one_hot, return_counts=True)
+
+def compute_weights(device, target_ids, output_dim_id):
+    """
+    computes necessary weights to accomodate class imbalance in the loss function
+    """
+    vs, cs = torch.unique(target_ids, return_counts=True)
     weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
-        weights[k] = 1.0/math.sqrt(float(v))
+        weights[k] = 1.0 / math.sqrt(float(v))
     return weights
 
-def make_plot_from_list(l, label, xlabel, ylabel, outpath, save_as):
-    plt.style.use(hep.style.ROOT)
-
-    if not os.path.exists(outpath + '/training_plots/'):
-        os.makedirs(outpath + '/training_plots/')
-
-    fig, ax = plt.subplots()
-    ax.plot(range(len(l)), l, label=label)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.legend(loc='best')
-    plt.savefig(outpath + '/training_plots/' + save_as + '.png')
-    plt.close(fig)
-
-    with open(outpath + '/training_plots/' + save_as + '.pkl', 'wb') as f:
-        pkl.dump(l, f)
 
 @torch.no_grad()
-def test(model, multi_gpu, loader, epoch, alpha, target_type, device, output_dim_id, classification_only, outpath):
+def validation_run(device, model, multi_gpu, loader, epoch, alpha, target_type, output_dim_id, outpath):
     with torch.no_grad():
-        ret = train(model, multi_gpu, loader, epoch, None, alpha, target_type, device, output_dim_id, classification_only, outpath)
+        optimizer = None
+        ret = train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type, output_dim_id, outpath)
     return ret
 
-def train(model, multi_gpu, loader, epoch, optimizer, alpha, target_type, device, output_dim_id, classification_only, outpath):
+
+def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type, output_dim_id, outpath):
+    """
+    a training block over a given epoch...
+    if optimizer is set to None, it freezes the model for a validation_run
+    """
 
     is_train = not (optimizer is None)
 
@@ -56,106 +53,94 @@ def train(model, multi_gpu, loader, epoch, optimizer, alpha, target_type, device
     else:
         model.eval()
 
-    #loss values for each batch: classification, regression, total
-    losses_1, losses_2, losses_tot = [], [], []
+    # initialize placeholders for loss and accuracy
+    losses_clf, losses_reg, losses_tot, accuracies = [], [], [], []
 
-    #accuracy values for each batch (monitor classification performance)
-    accuracies_batch, accuracies_batch_msk = [], []
-
-    #setup confusion matrix
+    # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
     # to compute average inference time
-    t=[]
+    t = []
 
     for i, batch in enumerate(loader):
-        t0 = time.time()
 
         if multi_gpu:
-            X = batch
+            X = batch   # a list (not torch) instance so can't be passed to device
         else:
             X = batch.to(device)
 
-        ## make like tensorflow model, 0-padding events to 6k elements
-        # if X.x.shape[0]<6000:
-        #     new_X = torch.cat([X.x,torch.zeros_like(X.x)[:6000-X.x.shape[0],:]])
-        #     new_ygen_id = torch.cat([X.ygen_id,torch.zeros_like(X.ygen_id)[:6000-X.x.shape[0],:]])
-        #     new_ygen_id[X.x.shape[0]:,0]=new_ygen_id[X.x.shape[0]:,0]+1
-        #
-        #     X.x = new_X
-        #     X.ygen_id=new_ygen_id
+        # run forward pass
+        t0 = time.time()
+        pred, target = model(X)
+        t1 = time.time()
+        t.append(t1 - t0)
 
-        # Forwardprop
-        if i<100:
-            ti = time.time()
-            pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4 = model(X)
-            tf = time.time()
-            if i!=0:
-                t.append(round((tf-ti),2))
-        else:
-            pred_ids_one_hot, pred_p4, gen_ids_one_hot, gen_p4, cand_ids_one_hot, cand_p4 = model(X)
+        pred_ids_one_hot = pred[:, :6]
+        pred_p4 = pred[:, 6:]
 
-        _, gen_ids = torch.max(gen_ids_one_hot, -1)
+        # define target
+        if target_type == 'gen':
+            target_ids_one_hot = target['ygen_id']
+            target_p4 = target['ygen']
+        elif target_type == 'cand':
+            target_ids_one_hot = target['ycand_id']
+            target_p4 = target['ycand']
+
+        # revert one hot encoding
+        _, target_ids = torch.max(target_ids_one_hot, -1)
         _, pred_ids = torch.max(pred_ids_one_hot, -1)
-        _, cand_ids = torch.max(cand_ids_one_hot, -1)     # rule-based result
 
-        # masking
-        msk = ((pred_ids != 0) & (gen_ids != 0))
-        msk2 = ((pred_ids != 0) & (pred_ids == gen_ids))
+        # define some useful masks
+        msk = ((pred_ids != 0) & (target_ids != 0))
+        msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
         # computing loss
-        weights = compute_weights(torch.max(gen_ids_one_hot,-1)[1], device, output_dim_id)
-        l1 = torch.nn.functional.cross_entropy(pred_ids_one_hot, gen_ids, weight=weights) # for classifying PID
-        l2 = alpha * torch.nn.functional.mse_loss(pred_p4[msk2], gen_p4[msk2])  # for regressing p4
+        weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
+        loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+        loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
-        if classification_only:
-            loss = l1
-        else:
-            loss = l1+l2
+        loss_tot = loss_clf + alpha * loss_reg
 
         if is_train:
-            # BACKPROP
-            #print(list(model.parameters())[1].grad)
             optimizer.zero_grad()
-            loss.backward()
+            loss_tot.backward()
             optimizer.step()
 
-        losses_1.append(l1.detach().cpu().item())
-        losses_2.append(l2.detach().cpu().item())
-        losses_tot.append(loss.detach().cpu().item())
+        losses_clf.append(loss_clf.detach().cpu().item())
+        losses_reg.append(loss_reg.detach().cpu().item())
+        losses_tot.append(loss_tot.detach().cpu().item())
 
-        t1 = time.time()
+        accuracies.append(sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(), pred_ids[msk].detach().cpu().numpy()))
 
-        accuracies_batch.append(accuracy_score(gen_ids.detach().cpu().numpy(), pred_ids.detach().cpu().numpy()))
-        accuracies_batch_msk.append(accuracy_score(gen_ids[msk].detach().cpu().numpy(), pred_ids[msk].detach().cpu().numpy()))
+        conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
+                                                        pred_ids.detach().cpu().numpy(),
+                                                        labels=range(6))
 
-        conf_matrix += sklearn.metrics.confusion_matrix(gen_ids.detach().cpu().numpy(),
-                                        np.argmax(pred_ids_one_hot.detach().cpu().numpy(),axis=1), labels=range(6))
-
-        print('{}/{} batch_loss={:.2f} dt={:.1f}s'.format(i, len(loader), loss.detach().cpu().item(), t1-t0), end='\r', flush=True)
-
-    print("Average Inference time per event is: ", round((sum(t) / len(t)),2), 's')
-
-    losses_1 = np.mean(losses_1)
-    losses_2 = np.mean(losses_2)
+    losses_clf = np.mean(losses_clf)
+    losses_reg = np.mean(losses_reg)
     losses_tot = np.mean(losses_tot)
 
-    acc = np.mean(accuracies_batch)
-    acc_msk = np.mean(accuracies_batch_msk)
+    accuracies = np.mean(accuracies)
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    return losses_tot, losses_1, losses_2, acc, acc_msk, conf_matrix, conf_matrix_norm
+    avg_inference_time = sum(t) / len(t)
+    print(f'Average inference time per event is {round(avg_inference_time,3)}s')
+
+    return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def train_loop(model, device, multi_gpu, train_loader, valid_loader, test_loader, n_epochs, patience, optimizer, alpha, target, output_dim_id, classification_only, outpath):
+def training_loop(device, model, multi_gpu, train_loader, valid_loader, n_epochs, patience, optimizer, alpha, target, output_dim_id, outpath):
+    """
+    Main function for training a model
+    """
+
     t0_initial = time.time()
 
-    losses_1_train, losses_2_train, losses_tot_train = [], [], []
-    losses_1_valid, losses_2_valid, losses_tot_valid  = [], [], []
+    losses_clf_train, losses_reg_train, losses_tot_train = [], [], []
+    losses_clf_valid, losses_reg_valid, losses_tot_valid = [], [], []
 
-    accuracies_train, accuracies_msk_train = [], []
-    accuracies_valid, accuracies_msk_valid = [], []
+    accuracies_train, accuracies_valid = [], []
 
     best_val_loss = 99999.9
     stale_epochs = 0
@@ -168,64 +153,68 @@ def train_loop(model, device, multi_gpu, train_loader, valid_loader, test_loader
             print("breaking due to stale epochs")
             break
 
-        # training epoch
+        # training step
         model.train()
-        losses_tot, losses_1, losses_2, acc, acc_msk, conf_matrix, conf_matrix_norm = train(model, multi_gpu, train_loader, epoch, optimizer, alpha, target, device, output_dim_id, classification_only, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, train_loader, epoch, optimizer, alpha, target, output_dim_id, outpath)
 
+        losses_clf_train.append(losses_clf)
+        losses_reg_train.append(losses_reg)
         losses_tot_train.append(losses_tot)
-        losses_1_train.append(losses_1)
-        losses_2_train.append(losses_2)
 
-        accuracies_train.append(acc)
-        accuracies_msk_train.append(acc_msk)
+        accuracies_train.append(accuracies)
 
         # validation step
         model.eval()
-        losses_tot_v, losses_1_v, losses_2_v, acc_v, acc_msk_v, conf_matrix_v, conf_matrix_norm_v = test(model, multi_gpu, valid_loader, epoch, alpha, target, device, output_dim_id, classification_only, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, valid_loader, epoch, alpha, target, output_dim_id, outpath)
 
-        losses_tot_valid.append(losses_tot_v)
-        losses_1_valid.append(losses_1_v)
-        losses_2_valid.append(losses_2_v)
+        losses_clf_valid.append(losses_clf)
+        losses_reg_valid.append(losses_reg)
+        losses_tot_valid.append(losses_tot)
 
-        accuracies_valid.append(acc_v)
-        accuracies_msk_valid.append(acc_msk_v)
+        accuracies_valid.append(accuracies)
 
         # early-stopping
-        if losses_tot_v < best_val_loss:
-            best_val_loss = losses_tot_v
+        if losses_tot < best_val_loss:
+            best_val_loss = losses_tot
             stale_epochs = 0
         else:
             stale_epochs += 1
 
         t1 = time.time()
 
-        epochs_remaining = n_epochs - (epoch+1)
-        time_per_epoch = (t1 - t0_initial)/(epoch + 1)
-        eta = epochs_remaining*time_per_epoch/60
+        epochs_remaining = n_epochs - (epoch + 1)
+        time_per_epoch = (t1 - t0_initial) / (epoch + 1)
+        eta = epochs_remaining * time_per_epoch / 60
 
-        print("epoch={}/{} dt={:.2f}min train_loss={:.5f} valid_loss={:.5f} train_acc={:.5f} valid_acc={:.5f} train_acc_msk={:.5f} valid_acc_msk={:.5f} stale={} eta={:.1f}m".format(
-            epoch+1, n_epochs,
-            (t1-t0)/60, losses_tot_train[epoch], losses_tot_valid[epoch], accuracies_train[epoch], accuracies_valid[epoch],
-            accuracies_msk_train[epoch], accuracies_msk_valid[epoch], stale_epochs, eta))
+        print(f"epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} eta={round(eta, 1)}m")
 
-        torch.save(model.state_dict(), "{0}/epoch_{1}_weights.pth".format(outpath, epoch))
+        # save the model's weights
+        torch.save(model.state_dict(), f'{outpath}/epoch_{epoch}_weights.pth')
 
-        torch.save(conf_matrix_norm, outpath + '/confusion_matrix_plots/cmT_normed_epoch_' + str(epoch) + '.pt')
-        torch.save(conf_matrix_norm_v, outpath + '/confusion_matrix_plots/cmV_normed_epoch_' + str(epoch) + '.pkl')
+        # create directory to hold training plots
+        if not os.path.exists(outpath + '/training_plots/'):
+            os.makedirs(outpath + '/training_plots/')
 
-    make_plot_from_list(losses_tot_train, 'train loss_tot', 'Epochs', 'Loss', outpath, 'losses_tot_train')
-    make_plot_from_list(losses_1_train, 'train loss_1', 'Epochs', 'Loss', outpath, 'losses_1_train')
-    make_plot_from_list(losses_2_train, 'train loss_2', 'Epochs', 'Loss', outpath, 'losses_2_train')
+        # make confusion matrix plots
+        cm_path = outpath + '/training_plots/confusion_matrix_plots/'
+        if not os.path.exists(cm_path):
+            os.makedirs(cm_path)
+        target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
+        plot_confusion_matrix(conf_matrix_train, target_names, epoch, cm_path, f'cmT_epoch_{str(epoch)}')
+        plot_confusion_matrix(conf_matrix_val, target_names, epoch, cm_path, f'cmV_epoch_{str(epoch)}')
 
-    make_plot_from_list(losses_tot_valid, 'valid loss_tot', 'Epochs', 'Loss', outpath, 'losses_tot_valid')
-    make_plot_from_list(losses_1_valid, 'valid loss_1', 'Epochs', 'Loss', outpath, 'losses_1_valid')
-    make_plot_from_list(losses_2_valid, 'valid loss_2', 'Epochs', 'Loss', outpath, 'losses_2_valid')
+    # make loss plots
+    make_plot(losses_clf_train, 'train loss_clf', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_clf_train')
+    make_plot(losses_reg_train, 'train loss_reg', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_reg_train')
+    make_plot(losses_tot_train, 'train loss_tot', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_tot_train')
 
-    make_plot_from_list(accuracies_train, 'train accuracy', 'Epochs', 'Accuracy', outpath, 'accuracies_train')
-    make_plot_from_list(accuracies_msk_train, 'train accuracy_msk', 'Epochs', 'Accuracy', outpath, 'accuracies_msk_train')
+    make_plot(losses_clf_valid, 'valid loss_clf', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_clf_valid')
+    make_plot(losses_reg_valid, 'valid loss_reg', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_reg_valid')
+    make_plot(losses_tot_valid, 'valid loss_tot', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_tot_valid')
 
-    make_plot_from_list(accuracies_valid, 'valid accuracy', 'Epochs', 'Accuracy', outpath, 'accuracies_valid')
-    make_plot_from_list(accuracies_msk_valid, 'valid accuracy_msk', 'Epochs', 'Accuracy', outpath, 'accuracies_msk_valid')
+    # make accuracy plots
+    make_plot(accuracies_train, 'train accuracy', 'Epochs', 'Accuracy', outpath + '/training_plots/accuracies/', 'accuracies_train')
+    make_plot(accuracies_valid, 'valid accuracy', 'Epochs', 'Accuracy', outpath + '/training_plots/accuracies/', 'accuracies_valid')
 
     print('Done with training.')
     return

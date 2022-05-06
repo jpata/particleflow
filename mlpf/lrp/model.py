@@ -26,9 +26,11 @@ from torch_cluster import knn_graph
 class MLPF(nn.Module):
     """
     GNN model based on Gravnet...
+
     Forward pass returns
         preds: tensor of predictions containing a concatenated representation of the pids and p4
-        target: dict() object containing gen and cand target information
+        A: dict() object containing adjacency matrices for each message passing
+        msg_activations: dict() object containing activations before each message passing
     """
 
     def __init__(self,
@@ -79,37 +81,34 @@ class MLPF(nn.Module):
 
     def forward(self, batch):
 
-        # unfold the Batch object
-        input = batch.x
-        target = {'ygen_id': batch.ygen_id,
-                  'ygen': batch.ygen,
-                  'ycand_id': batch.ycand_id,
-                  'ycand': batch.ycand,
-                  }
+        x0 = batch.x
 
         # embed the inputs
-        embedding = self.nn1(input)
+        embedding = self.nn1(x0)
 
         # preform a series of graph convolutions
         A = {}
         msg_activations = {}
         for num, conv in enumerate(self.conv):
-            embedding = conv(embedding)
+            embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding)
 
         # predict the pid's
-        preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
+        preds_id = self.nn2(torch.cat([x0, embedding], axis=-1))
 
         # predict the p4's
-        preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
+        preds_p4 = self.nn3(torch.cat([x0, preds_id], axis=-1))
 
-        return torch.cat([preds_id, preds_p4], axis=-1), target
+        return torch.cat([preds_id, preds_p4], axis=-1), A, msg_activations
 
 
 class GravNetConv_LRP(MessagePassing):
     """
-    Copied from pytorch_geometric source code, with the following edits
-        - used reduce='sum' instead of reduce='mean' in the message passing
-        - removed skip connection
+    Copied from pytorch_geometric source code
+    Edits:
+      - retrieve adjacency matrix (we call A), and the activations before the message passing step (we call msg_activations)
+      - switched the execution of self.lin_s & self.lin_p so that the message passing step can substitute out of the box self.lin_s for lrp purposes
+      - used reduce='sum' instead of reduce='mean' in the message passing
+      - removed skip connection
 
     The GravNet operator from the `"Learning Representations of Irregular
     Particle-detector Geometry with Distance-weighted Graph
@@ -120,6 +119,7 @@ class GravNetConv_LRP(MessagePassing):
     A second projection of the input feature space is then propagated from the
     neighbors to each vertex using distance weights that are derived by
     applying a Gaussian function to the distances.
+
     Args:
         in_channels (int): Size of each input sample, or :obj:`-1` to derive
             the size from the first input(s) to the forward method.
@@ -135,6 +135,7 @@ class GravNetConv_LRP(MessagePassing):
             lies on the GPU. (default: :obj:`1`)
         **kwargs (optional): Additional arguments of
             :class:`torch_geometric.nn.conv.MessagePassing`.
+
     Shapes:
         - **input:**
           node features :math:`(|\mathcal{V}|, F_{in})` or
@@ -145,6 +146,8 @@ class GravNetConv_LRP(MessagePassing):
           *(optional)*
         - **output:** node features :math:`(|\mathcal{V}|, F_{out})` or
           :math:`(|\mathcal{V}_t|, F_{out})` if bipartite
+
+
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -204,12 +207,15 @@ class GravNetConv_LRP(MessagePassing):
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
 
+        # return the adjacency matrix of the graph for lrp purposes
+        A = to_dense_adj(edge_index.to('cpu'), edge_attr=edge_weight.to('cpu'))[0]  # adjacency matrix
+
         # message passing
         out = self.propagate(edge_index, x=(msg_activations, None),
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_r.size(0)))
 
-        return self.lin_out(out)
+        return self.lin_out(out), A, msg_activations
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
