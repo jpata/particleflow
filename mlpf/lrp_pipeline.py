@@ -98,9 +98,9 @@ if __name__ == "__main__":
 
     with open(f'{args.outpath}/Rtensors_list.pkl', 'wb') as f:
         pkl.dump(Rtensors_list, f)
-    with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
-        pkl.dump(preds_list, f)
     with open(f'{args.outpath}/inputs_list.pkl', 'wb') as f:
         pkl.dump(inputs_list, f)
+    with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
+        pkl.dump(preds_list, f)
 
-    make_Rmaps(Rtensors_list, pid='chhadron', neighbors=3)
+    make_Rmaps(Rtensors, inputs_list, preds_list, pid='chhadron', neighbors=3)
