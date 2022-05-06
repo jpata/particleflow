@@ -154,10 +154,10 @@ def particle_label(ax, pid):
 
 
 def plot_confusion_matrix(cm, target_names,
-                          fname, epoch,
+                          epoch, fname,
                           title='Confusion matrix',
                           cmap=None,
-                          normalize=True):
+                          normalize=True, target=None):
     """
     given a sklearn confusion matrix (cm), make a nice plot
 
@@ -209,7 +209,11 @@ def plot_confusion_matrix(cm, target_names,
     fig = plt.figure(figsize=(5, 4))
     ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title + ' at epoch ' + str(epoch))
+    if target == "rule-based":
+        plt.title(title + ' for rule-based PF')
+    else:
+        plt.title(title + ' for MLPF at epoch ' + str(epoch))
+
     plt.colorbar()
 
     if target_names is not None:
@@ -234,8 +238,8 @@ def plot_confusion_matrix(cm, target_names,
     plt.xlabel('Predicted label')
     # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
-
     plt.savefig(fname + '.png')
+    plt.savefig(fname + '.pdf')
     plt.close(fig)
 
     return fig, ax
