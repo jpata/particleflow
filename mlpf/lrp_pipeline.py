@@ -33,6 +33,7 @@ parser.add_argument("--outpath",        type=str,           default='../data/tes
 parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
 parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load")
 parser.add_argument("--out_neuron",     type=int,           default=0,      help="the output neuron you wish to explain")
+parser.add_argument("--pid",            type=str,           default="chhadron",     help="Which model to load")
 parser.add_argument("--n_test",         type=int,           default=50,      help="number of data files to use for testing.. each file contains 100 events")
 parser.add_argument("--run_lrp",        dest='run_lrp',     action='store_true', help="runs lrp")
 parser.add_argument("--make_rmaps",     dest='make_rmaps',  action='store_true', help="makes rmaps")
@@ -43,10 +44,10 @@ args = parser.parse_args()
 if __name__ == "__main__":
     """
     e.g. to run lrp and make Rmaps
-    python -u lrp_pipeline.py --run_lrp --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
+    python -u lrp_pipeline.py --run_lrp --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --n_test=1 --pid='chhadron'
 
     e.g. to only make Rmaps
-    python -u lrp_pipeline.py --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
+    python -u lrp_pipeline.py --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --n_test=1 --out_neuron=0 --pid='chhadron'
     """
 
     if args.run_lrp:
@@ -76,21 +77,6 @@ if __name__ == "__main__":
         for i, event in enumerate(loader):
             print(f'Explaining event # {i}')
 
-            # break down the event to a smaller part for lrp (to avoid memory issues)
-            size = 500
-
-            def get_small_batch(event, size):
-                small_batch = Batch()
-                small_batch.x = event.x[:size]
-                small_batch.ygen = event.ygen[:size]
-                small_batch.ygen_id = event.ygen_id[:size]
-                small_batch.ycand = event.ycand[:size]
-                small_batch.ycand_id = event.ycand_id[:size]
-                small_batch.batch = event.batch[:size]
-                return small_batch
-
-            event = get_small_batch(event, size=size)
-
             # run lrp on sample model
             model.eval()
             lrp_instance = LRP_MLPF(device, model, epsilon=1e-9)
@@ -118,4 +104,4 @@ if __name__ == "__main__":
             preds_list = pkl.load(f)
 
         print('Making Rmaps..')
-        make_Rmaps(args.outpath, Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3, out_neuron=args.out_neuron)
+        make_Rmaps(args.outpath, Rtensors_list, inputs_list, preds_list, pid=args.pid, neighbors=3, out_neuron=args.out_neuron)
