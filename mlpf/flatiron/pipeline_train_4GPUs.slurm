@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Walltime limit
-#SBATCH -t 0:10:00
+#SBATCH -t 168:00:00
 #SBATCH -N 1
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
