@@ -107,14 +107,15 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
+      dist_norm: l2
     node_message:
       type: GHConvDense
       output_dim: 256
       activation: elu
       normalize_degrees: yes
     activation: elu
-  num_graph_layers_common: 3
-  num_graph_layers_energy: 3
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
