@@ -23,10 +23,6 @@ from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 
 # this script makes Rmaps from a processed list of R_tensors
 
-
-out_neuron = 0
-
-
 label_to_class = {0: 'null',
                   1: 'chhadron',
                   2: 'nhadron',
@@ -89,7 +85,7 @@ def process_Rtensor(node, Rtensor, neighbors):
     return Rtensor[:neighbors + 1]
 
 
-def make_Rmaps(Rtensors, inputs, preds, pid='chhadron', neighbors=2):
+def make_Rmaps(Rtensors, inputs, preds, pid='chhadron', neighbors=2, out_neuron=0):
     """
     Recall each event has a corresponding Rmap per node in the event.
     This function process the Rmaps for a given pid.
@@ -155,4 +151,10 @@ def make_Rmaps(Rtensors, inputs, preds, pid='chhadron', neighbors=2):
                    cmap='copper', aspect='auto', norm=matplotlib.colors.LogNorm(vmin=1e-3))
 
         plt.colorbar(label='R-score', orientation="vertical")
-        plt.savefig(f'Rmap_{status}.pdf')
+
+        # create directory to hold Rmaps
+        rmap_dir = outpath + '/rmaps/'
+        if not os.path.exists(rmap_dir):
+            os.makedirs(rmap_dir)
+
+        plt.savefig(f'{rmap_dir}/Rmap_{pid}_{status}_neuron_{out_neuron}.pdf')

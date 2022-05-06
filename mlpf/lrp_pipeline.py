@@ -34,6 +34,8 @@ parser.add_argument("--load_model",     type=str,           default="",     help
 parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load")
 parser.add_argument("--out_neuron",     type=int,           default=0,      help="the output neuron you wish to explain")
 parser.add_argument("--n_test",         type=int,           default=50,      help="number of data files to use for testing.. each file contains 100 events")
+parser.add_argument("--run_lrp",        dest='run_lrp',     action='store_true', help="runs lrp")
+parser.add_argument("--make_rmaps",     dest='make_rmaps',  action='store_true', help="makes rmaps")
 
 args = parser.parse_args()
 
@@ -41,67 +43,80 @@ args = parser.parse_args()
 if __name__ == "__main__":
     """
     e.g. to run lrp and make Rmaps
-    python -u lrp_pipeline.py --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
+    python -u lrp_pipeline.py --run_lrp --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
+
+    e.g. to only make Rmaps
+    python -u lrp_pipeline.py --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
+    """
     """
 
-    # Check if the GPU configuration and define the global base device
-    if torch.cuda.device_count() > 0:
-        print(f'Will use {torch.cuda.device_count()} gpu(s)')
-        print("GPU model:", torch.cuda.get_device_name(0))
-        device = torch.device('cuda:0')
-    else:
-        print('Will use cpu')
-        device = torch.device('cpu')
+    if args.run_lrp:
+        # Check if the GPU configuration and define the global base device
+        if torch.cuda.device_count() > 0:
+            print(f'Will use {torch.cuda.device_count()} gpu(s)')
+            print("GPU model:", torch.cuda.get_device_name(0))
+            device = torch.device('cuda:0')
+        else:
+            print('Will use cpu')
+            device = torch.device('cpu')
 
-    # get sample dataset
-    print('Fetching the data..')
-    full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
-    loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
+        # get sample dataset
+        print('Fetching the data..')
+        full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
+        loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
 
-    # load a pretrained model
-    state_dict, model_kwargs, outpath = load_model(device, args.outpath, args.load_model, args.load_epoch)
-    model = MLPF(**model_kwargs)
-    model.load_state_dict(state_dict)
-    model.to(device)
+        # load a pretrained model
+        state_dict, model_kwargs, outpath = load_model(device, args.outpath, args.load_model, args.load_epoch)
+        model = MLPF(**model_kwargs)
+        model.load_state_dict(state_dict)
+        model.to(device)
 
-    # run lrp
-    Rtensors_list, preds_list, inputs_list = [], [], []
+        # run lrp
+        Rtensors_list, preds_list, inputs_list = [], [], []
 
-    for i, event in enumerate(loader):
-        print(f'Explaining event # {i}')
+        for i, event in enumerate(loader):
+            print(f'Explaining event # {i}')
 
-        # break it down to a smaller part for lrp (to avoid memory issues)
-        size = 500
+            # break it down to a smaller part for lrp (to avoid memory issues)
+            size = 500
 
-        def get_small_batch(event, size):
-            small_batch = Batch()
-            small_batch.x = event.x[:size]
-            small_batch.ygen = event.ygen[:size]
-            small_batch.ygen_id = event.ygen_id[:size]
-            small_batch.ycand = event.ycand[:size]
-            small_batch.ycand_id = event.ycand_id[:size]
-            small_batch.batch = event.batch[:size]
-            return small_batch
+            def get_small_batch(event, size):
+                small_batch = Batch()
+                small_batch.x = event.x[:size]
+                small_batch.ygen = event.ygen[:size]
+                small_batch.ygen_id = event.ygen_id[:size]
+                small_batch.ycand = event.ycand[:size]
+                small_batch.ycand_id = event.ycand_id[:size]
+                small_batch.batch = event.batch[:size]
+                return small_batch
 
-        event = get_small_batch(event, size=size)
+            event = get_small_batch(event, size=size)
 
-        # run lrp on sample model
-        model.eval()
-        lrp_instance = LRP_MLPF(device, model, epsilon=1e-9)
-        Rtensor, pred, input = lrp_instance.explain(event, neuron_to_explain=args.out_neuron)
+            # run lrp on sample model
+            model.eval()
+            lrp_instance = LRP_MLPF(device, model, epsilon=1e-9)
+            Rtensor, pred, input = lrp_instance.explain(event, neuron_to_explain=args.out_neuron)
 
-        Rtensors_list.append(Rtensor.detach().to('cpu'))
-        preds_list.append(pred.detach().to('cpu'))
-        inputs_list.append(input.detach().to('cpu').to_dict())
+            Rtensors_list.append(Rtensor.detach().to('cpu'))
+            preds_list.append(pred.detach().to('cpu'))
+            inputs_list.append(input.detach().to('cpu').to_dict())
 
-        break
+            break
 
-    with open(f'{args.outpath}/Rtensors_list.pkl', 'wb') as f:
-        pkl.dump(Rtensors_list, f)
-    with open(f'{args.outpath}/inputs_list.pkl', 'wb') as f:
-        pkl.dump(inputs_list, f)
-    with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
-        pkl.dump(preds_list, f)
+        with open(f'{args.outpath}/Rtensors_list.pkl', 'wb') as f:
+            pkl.dump(Rtensors_list, f)
+        with open(f'{args.outpath}/inputs_list.pkl', 'wb') as f:
+            pkl.dump(inputs_list, f)
+        with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
+            pkl.dump(preds_list, f)
 
-    print('Making Rmaps..')
-    make_Rmaps(Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3)
+    if args.make_rmaps:
+        with open(f'{args.outpath}/Rtensors_list.pkl',  'rb') as f:
+            Rtensors_list = pkl.load(f)
+        with open(f'{args.outpath}/inputs_list.pkl',  'rb') as f:
+            inputs_list = pkl.load(f)
+        with open(f'{args.outpath}/preds_list.pkl',  'rb') as f:
+            preds_list = pkl.load(f)
+
+        print('Making Rmaps..')
+        make_Rmaps(Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3, out_neuron=args.out_neuron)
