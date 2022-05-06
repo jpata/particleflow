@@ -60,91 +60,83 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
     print('Loading the data..')
-    # full_dataset_ttbar = PFGraphDataset(args.dataset)
+    full_dataset_ttbar = PFGraphDataset(args.dataset)
     full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
 
     # construct Dataloaders to facilitate looping over batches
     print('Building dataloaders..')
-    multi_gpu = True
-    # train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
+    train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
     test_loader = dataloader_qcd(full_dataset_qcd, multi_gpu, args.n_test, batch_size=args.batch_size)
-    torch.save(test_loader, 'test_loader_multigpu.pth')
 
-    multi_gpu = False
-    print('Building dataloaders..')
-    # train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
-    test_loader = dataloader_qcd(full_dataset_qcd, multi_gpu, args.n_test, batch_size=args.batch_size)
-    torch.save(test_loader, 'test_loader.pth')
+    # PF-elements
+    input_dim = 12
 
-    # # PF-elements
-    # input_dim = 12
-    #
-    # # PF-candidates
-    # output_dim_id = 6
-    # output_dim_p4 = 6
-    #
-    # if args.load:
-    #     outpath = args.outpath + args.load_model
-    #     state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
-    #
-    #     model = MLPF(**model_kwargs)
-    #     model.load_state_dict(state_dict)
-    #
-    #     if multi_gpu:
-    #         model = torch_geometric.nn.DataParallel(model)
-    #
-    #     model.to(device)
-    #
-    # else:
-    #     print('Instantiating a model..')
-    #     model_kwargs = {'input_dim': input_dim,
-    #                     'output_dim_id': output_dim_id,
-    #                     'output_dim_p4': output_dim_p4,
-    #                     'embedding_dim': args.embedding_dim,
-    #                     'hidden_dim1': args.hidden_dim1,
-    #                     'hidden_dim2': args.hidden_dim2,
-    #                     'num_convs': args.num_convs,
-    #                     'space_dim': args.space_dim,
-    #                     'propagate_dim': args.propagate_dim,
-    #                     'k': args.nearest,
-    #                     }
-    #
-    #     model = MLPF(**model_kwargs)
-    #
-    #     # get a directory name for the model to store the model's weights and plots
-    #     model_fname = get_model_fname(args.dataset, model, args.n_train, args.n_epochs, args.target, args.alpha, args.title)
-    #     outpath = osp.join(args.outpath, model_fname)
-    #
-    #     if multi_gpu:
-    #         print("Parallelizing the training..")
-    #         model = torch_geometric.nn.DataParallel(model)
-    #
-    #     model.to(device)
-    #
-    #     save_model(args, model_fname, outpath, model_kwargs)
-    #
-    #     print(model)
-    #     print(model_fname)
-    #
-    #     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    #
-    #     model.train()
-    #     training_loop(device, model, multi_gpu,
-    #                   train_loader, valid_loader,
-    #                   args.n_epochs, args.patience,
-    #                   optimizer, args.alpha, args.target,
-    #                   output_dim_id, outpath)
-    #
-    # model.eval()
-    #
-    # # evaluate on testing data..
-    # make_directories_for_plots(outpath, 'test_data')
-    # if args.load:
-    #     make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.load_epoch)
-    #     make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
-    # else:
-    #     make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.n_epochs)
-    #     make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs, 'QCD')
+    # PF-candidates
+    output_dim_id = 6
+    output_dim_p4 = 6
+
+    if args.load:
+        outpath = args.outpath + args.load_model
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
+
+        model = MLPF(**model_kwargs)
+        model.load_state_dict(state_dict)
+
+        if multi_gpu:
+            model = torch_geometric.nn.DataParallel(model)
+
+        model.to(device)
+
+    else:
+        print('Instantiating a model..')
+        model_kwargs = {'input_dim': input_dim,
+                        'output_dim_id': output_dim_id,
+                        'output_dim_p4': output_dim_p4,
+                        'embedding_dim': args.embedding_dim,
+                        'hidden_dim1': args.hidden_dim1,
+                        'hidden_dim2': args.hidden_dim2,
+                        'num_convs': args.num_convs,
+                        'space_dim': args.space_dim,
+                        'propagate_dim': args.propagate_dim,
+                        'k': args.nearest,
+                        }
+
+        model = MLPF(**model_kwargs)
+
+        # get a directory name for the model to store the model's weights and plots
+        model_fname = get_model_fname(args.dataset, model, args.n_train, args.n_epochs, args.target, args.alpha, args.title)
+        outpath = osp.join(args.outpath, model_fname)
+
+        if multi_gpu:
+            print("Parallelizing the training..")
+            model = torch_geometric.nn.DataParallel(model)
+
+        model.to(device)
+
+        save_model(args, model_fname, outpath, model_kwargs)
+
+        print(model)
+        print(model_fname)
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
+        model.train()
+        training_loop(device, model, multi_gpu,
+                      train_loader, valid_loader,
+                      args.n_epochs, args.patience,
+                      optimizer, args.alpha, args.target,
+                      output_dim_id, outpath)
+
+    model.eval()
+
+    # evaluate on testing data..
+    make_directories_for_plots(outpath, 'test_data')
+    if args.load:
+        make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.load_epoch)
+        make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
+    else:
+        make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.n_epochs)
+        make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs, 'QCD')
 
     # # evaluate on training data..
     # make_directories_for_plots(outpath, 'train_data')
