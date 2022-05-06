@@ -85,7 +85,7 @@ def process_Rtensor(node, Rtensor, neighbors):
     return Rtensor[:neighbors + 1]
 
 
-def make_Rmaps(Rtensors, inputs, preds, pid='chhadron', neighbors=2, out_neuron=0):
+def make_Rmaps(outpath, Rtensors, inputs, preds, pid='chhadron', neighbors=2, out_neuron=0):
     """
     Recall each event has a corresponding Rmap per node in the event.
     This function process the Rmaps for a given pid.

@@ -48,7 +48,6 @@ if __name__ == "__main__":
     e.g. to only make Rmaps
     python -u lrp_pipeline.py --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --out_neuron=0 --n_test=1
     """
-    """
 
     if args.run_lrp:
         # Check if the GPU configuration and define the global base device
@@ -119,4 +118,4 @@ if __name__ == "__main__":
             preds_list = pkl.load(f)
 
         print('Making Rmaps..')
-        make_Rmaps(Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3, out_neuron=args.out_neuron)
+        make_Rmaps(args.outpath, Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3, out_neuron=args.out_neuron)
