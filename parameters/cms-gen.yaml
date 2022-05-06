@@ -56,7 +56,7 @@ setup:
   lr: 0.0001
   num_events_validation: 1000
   num_epochs: 100
-  dtype: float16
+  dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # exponentialdecay, onecycle, none
@@ -65,8 +65,8 @@ setup:
 optimizer:
   adam:
     amsgrad: no
-    #pcgrad does not work with LossScaleOptimizer (non-f32)
-    pcgrad: no
+    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
+    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -94,8 +94,8 @@ parameters:
   node_encoding_hidden_dim: 128
 
   combined_graph_layer:
-    bin_size: 32
-    max_num_bins: 200
+    bin_size: 16
+    max_num_bins: 400
     distance_dim: 64
     layernorm: yes
     dropout: 0.0
@@ -125,14 +125,14 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_common: 2
-  num_graph_layers_energy: 2
+  num_graph_layers_id: 1
+  num_graph_layers_reg: 1
   output_decoding:
     activation: elu
     regression_use_classification: yes

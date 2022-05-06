@@ -221,7 +221,6 @@ class GHConvDense(tf.keras.layers.Layer):
 
 class NodeMessageLearnable(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
-
         self.output_dim = kwargs.pop("output_dim")
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
@@ -769,8 +768,8 @@ class PFNetDense(tf.keras.Model):
             multi_output=False,
             num_input_classes=8,
             num_output_classes=3,
-            num_graph_layers_common=1,
-            num_graph_layers_energy=1,
+            num_graph_layers_id=1,
+            num_graph_layers_reg=1,
             input_encoding="cms",
             skip_connection=True,
             graph_kernel={},
@@ -810,8 +809,8 @@ class PFNetDense(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        self.cg_id = [CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_common)]
-        self.cg_reg = [CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_energy)]
+        self.cg_id = [CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)]
+        self.cg_reg = [CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_reg)]
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
@@ -850,15 +849,18 @@ class PFNetDense(tf.keras.Model):
                 debugging_data[cg.name] = enc_all
         
         if self.node_update_mode == "concat":
-            dec_output = tf.concat(encs_id, axis=-1)*msk_input
+            dec_output_id = tf.concat(encs_id, axis=-1)*msk_input
         elif self.node_update_mode == "additive":
-            dec_output = X_enc_cg
+            dec_output_id = X_enc_cg
 
         X_enc_cg = X_enc
         if self.do_node_encoding:
             X_enc_cg = X_enc_ffn
 
         encs_reg = []
+        if self.skip_connection:
+            encs_reg.append(X_enc)
+
         for cg in self.cg_reg:
             enc_all = cg(X_enc_cg, msk, training=training)
             if self.node_update_mode == "additive":
@@ -872,15 +874,15 @@ class PFNetDense(tf.keras.Model):
             encs_reg.append(X_enc_cg)
 
         if self.node_update_mode == "concat":
-            dec_output_energy = tf.concat(encs_reg, axis=-1)*msk_input
+            dec_output_reg = tf.concat(encs_reg, axis=-1)*msk_input
         elif self.node_update_mode == "additive":
-            dec_output_energy = X_enc_cg
+            dec_output_reg = X_enc_cg
 
         if self.debug:
-            debugging_data["dec_output"] = dec_output
-            debugging_data["dec_output_energy"] = dec_output_energy
+            debugging_data["dec_output_id"] = dec_output_id
+            debugging_data["dec_output_reg"] = dec_output_reg
 
-        ret = self.output_dec([X, dec_output, dec_output_energy, msk_input], training=training)
+        ret = self.output_dec([X, dec_output_id, dec_output_reg, msk_input], training=training)
 
         if self.debug:
             for k in debugging_data.keys():
