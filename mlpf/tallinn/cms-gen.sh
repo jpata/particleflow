@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 8
+#SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 
 IMG=/home/software/singularity/tf-2.8.0.simg
