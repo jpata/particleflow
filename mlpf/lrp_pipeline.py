@@ -64,7 +64,7 @@ if __name__ == "__main__":
         full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
         loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
 
-        # load a pretrained model
+        # load a pretrained model and update the outpath
         state_dict, model_kwargs, outpath = load_model(device, args.outpath, args.load_model, args.load_epoch)
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         for i, event in enumerate(loader):
             print(f'Explaining event # {i}')
 
-            # break it down to a smaller part for lrp (to avoid memory issues)
+            # break down the event to a smaller part for lrp (to avoid memory issues)
             size = 500
 
             def get_small_batch(event, size):
@@ -102,19 +102,19 @@ if __name__ == "__main__":
 
             break
 
-        with open(f'{args.outpath}/Rtensors_list.pkl', 'wb') as f:
+        with open(f'{outpath}/Rtensors_list.pkl', 'wb') as f:
             pkl.dump(Rtensors_list, f)
-        with open(f'{args.outpath}/inputs_list.pkl', 'wb') as f:
+        with open(f'{outpath}/inputs_list.pkl', 'wb') as f:
             pkl.dump(inputs_list, f)
-        with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
+        with open(f'{outpath}/preds_list.pkl', 'wb') as f:
             pkl.dump(preds_list, f)
 
     if args.make_rmaps:
-        with open(f'{args.outpath}/Rtensors_list.pkl',  'rb') as f:
+        with open(f'{outpath}/Rtensors_list.pkl',  'rb') as f:
             Rtensors_list = pkl.load(f)
-        with open(f'{args.outpath}/inputs_list.pkl',  'rb') as f:
+        with open(f'{outpath}/inputs_list.pkl',  'rb') as f:
             inputs_list = pkl.load(f)
-        with open(f'{args.outpath}/preds_list.pkl',  'rb') as f:
+        with open(f'{outpath}/preds_list.pkl',  'rb') as f:
             preds_list = pkl.load(f)
 
         print('Making Rmaps..')
