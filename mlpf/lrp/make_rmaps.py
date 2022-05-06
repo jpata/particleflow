@@ -125,8 +125,8 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid='chhadron', neighbors=2, ou
 
     node_types = indexing_by_relevance(neighbors + 1, pid)    # only plot 6 rows/neighbors in Rmap
 
-    # for status, var in {'correct': Rtensor_correct, 'incorrect': Rtensor_incorrect}.items():
-    for status, var in {'incorrect': Rtensor_incorrect}.items():
+    for status, var in {'correct': Rtensor_correct, 'incorrect': Rtensor_incorrect}.items():
+        print(f'Making Rmaps for {status}ly classified {pid}')
         if status == 'incorrect':
             fraction = num_Rtensors_incorrect
         else:
@@ -150,7 +150,7 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid='chhadron', neighbors=2, ou
         plt.imshow((var[:neighbors + 1] + 1e-12).numpy(),
                    cmap='copper', aspect='auto', norm=matplotlib.colors.LogNorm(vmin=1e-3))
 
-        plt.colorbar(label='R-score', orientation="vertical")
+        # plt.colorbar(label='R-score', orientation="vertical")
 
         # create directory to hold Rmaps
         rmap_dir = outpath + '/rmaps/'
