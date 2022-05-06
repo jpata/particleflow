@@ -32,6 +32,7 @@ from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
+import keras
 
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
@@ -65,10 +66,18 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
         weightfile_path = self.opt_path.format(epoch=epoch+1, **logs)
         try:
+            #PCGrad is derived from the legacy optimizer
+            if isinstance(self.model.optimizer, keras.optimizer_v1.TFOptimizer):
+                #lr = self.model.optimizer.optimizer.optimizer.lr
+                weights = self.model.optimizer.optimizer.optimizer.get_weights()
+            else:
+                #lr = self.model.optimizer.lr
+                weights = self.model.optimizer.get_weights()
+
             with open(weightfile_path, "wb") as fi:
                 pickle.dump({
-                    #"lr": self.model.optimizer.lr,
-                    "weights": self.model.optimizer.get_weights()
+                    #"lr": lr,
+                    "weights": weights
                     }, fi
                 )
         except Exception as e:
@@ -423,7 +432,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
 
-        if self.plot_freq==0:
+        if self.plot_freq<=0:
             return
         if self.plot_freq>1:
             if epoch%self.plot_freq!=0 or epoch==1:
@@ -490,8 +499,10 @@ def prepare_callbacks(
 
     callbacks = []
     tb = CustomTensorBoard(
-        log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
-        update_freq='epoch',
+        log_dir=outdir + "/logs",
+        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
+        write_graph=False, write_images=False,
+        update_freq="epoch",
         #profile_batch=(10,90),
         profile_batch=0,
         dump_history=callbacks_cfg["tensorboard"]["dump_history"],

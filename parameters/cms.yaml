@@ -104,6 +104,7 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.120898
       clip_value_low: 0.001998
+      dist_norm: l2
     num_node_messages: 3
     node_message:
       type: GHConvDense

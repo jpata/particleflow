@@ -53,10 +53,10 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0001
   num_events_validation: 1000
   num_epochs: 100
-  dtype: float32
+  dtype: float16
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # exponentialdecay, onecycle, none
@@ -65,7 +65,8 @@ setup:
 optimizer:
   adam:
     amsgrad: no
-    pcgrad: yes
+    #pcgrad does not work with LossScaleOptimizer (non-f32)
+    pcgrad: no
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -104,15 +105,15 @@ parameters:
 
     # MPNN
     #kernel:
-    #  type: NodePairTrainableKernel
-    #  activation: elu
+    # type: NodePairTrainableKernel
+    # activation: elu
     #num_node_messages: 1
     #node_message:
-    #  type: NodeMessageLearnable
-    #  output_dim: 64
-    #  hidden_dim: 128
-    #  num_layers: 2
-    #  activation: elu
+    # type: NodeMessageLearnable
+    # output_dim: 64
+    # hidden_dim: 128
+    # num_layers: 2
+    # activation: elu
     #activation: elu
 
     # GCN
@@ -120,16 +121,18 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
+      dist_norm: l1
     num_node_messages: 2
     node_message:
       type: GHConvDense
       output_dim: 128
       activation: elu
-      normalize_degrees: yes
+      #if this is enabled, it will break float16 training
+      normalize_degrees: no
     activation: elu
 
-  num_graph_layers_common: 3
-  num_graph_layers_energy: 3
+  num_graph_layers_common: 2
+  num_graph_layers_energy: 2
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -216,7 +219,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 5
+    batch_per_gpu: 10
     datasets:
       - cms_pf_ttbar
       - cms_pf_qcd

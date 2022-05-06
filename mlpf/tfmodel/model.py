@@ -17,7 +17,7 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     return bins_split
 
 
-def pairwise_gaussian_dist(A, B):
+def pairwise_l2_dist(A, B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
 
@@ -28,6 +28,12 @@ def pairwise_gaussian_dist(A, B):
     # return pairwise euclidean difference matrix
     # note that this matrix multiplication can go out of range for float16 in case the absolute values of A and B are large
     D = tf.sqrt(tf.maximum(na - 2*tf.matmul(A, B, False, True) + nb, 1e-6))
+    return D
+
+def pairwise_l1_dist(A, B):
+    na = tf.expand_dims(A, -2)
+    nb = tf.expand_dims(B, -3)
+    D = tf.abs(tf.reduce_sum(na-nb, axis=-1))
     return D
 
 def pairwise_learnable_dist(A, B, ffn, training=False):
@@ -241,7 +247,7 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
 
         #node update (batch, bins, elems, elems, elem_dim + msg_dim + msg_dim)
         x2 = tf.concat([x, max_message_dst, max_message_src], axis=-1)
-        return self.activation(self.ffn(x2))*msk
+        return tf.cast(self.activation(self.ffn(x2)), x.dtype)
 
 def point_wise_feed_forward_network(d_model, dff, name, num_layers=1, activation='elu', dtype=tf.dtypes.float32, dim_decrease=False, dropout=0.0):
 
@@ -281,9 +287,17 @@ def get_message_layer(config_dict, name):
     return conv_cls(name=name, **config_dict)
 
 class NodePairGaussianKernel(tf.keras.layers.Layer):
-    def __init__(self, clip_value_low=0.0, dist_mult=0.1, **kwargs):
-        self.clip_value_low = clip_value_low
-        self.dist_mult = dist_mult
+    def __init__(self, **kwargs):
+        self.clip_value_low = kwargs.pop("clip_value_low", 0.0)
+        self.dist_mult = kwargs.pop("dist_mult", 0.1)
+
+        dist_norm = kwargs.pop("dist_norm", "l2")
+        if dist_norm == "l1":
+            self.dist_norm = pairwise_l1_dist
+        elif dist_norm == "l2":
+            self.dist_norm = pairwise_l2_dist
+        else:
+            raise Exception("Unkown dist_norm: {}".format(dist_norm))
         super(NodePairGaussianKernel, self).__init__(**kwargs)
 
     """
@@ -293,7 +307,7 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
     """
     def call(self, x_msg_binned, msk, training=False):
         x = x_msg_binned*msk
-        dm = tf.expand_dims(pairwise_gaussian_dist(x, x), axis=-1)
+        dm = tf.expand_dims(self.dist_norm(x, x), axis=-1)
         dm = tf.exp(-self.dist_mult*dm)
         dm = tf.clip_by_value(dm, self.clip_value_low, 1)
         return dm
@@ -331,10 +345,9 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
     """
     def call(self, x_msg_binned, msk, training=False):
 
-        node_proj = self.activation(self.ffn_node(x_msg_binned))*msk
+        node_proj = self.activation(self.ffn_node(x_msg_binned))
 
-        dm = pairwise_learnable_dist(node_proj, node_proj, self.pair_kernel, training=training)
-        dm = self.activation(dm)
+        dm = tf.cast(pairwise_learnable_dist(node_proj, node_proj, self.pair_kernel, training=training), x_msg_binned.dtype)
         return dm
 
 def build_kernel_from_conf(kernel_dict, name):
@@ -393,14 +406,14 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
         #Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
-        
+
         #remove the masked points row-wise and column-wise
         msk_f_binned_squeeze = tf.squeeze(msk_f_binned, axis=-1)
         shp_dm = tf.shape(dm)
         rshp_row = [shp_dm[0], shp_dm[1], shp_dm[2], 1, 1]
         rshp_col = [shp_dm[0], shp_dm[1], 1, shp_dm[3], 1]
-        msk_row = tf.reshape(msk_f_binned_squeeze, rshp_row)
-        msk_col = tf.reshape(msk_f_binned_squeeze, rshp_col)
+        msk_row = tf.cast(tf.reshape(msk_f_binned_squeeze, rshp_row), dm.dtype)
+        msk_col = tf.cast(tf.reshape(msk_f_binned_squeeze, rshp_col), dm.dtype)
         dm = tf.math.multiply(dm, msk_row)
         dm = tf.math.multiply(dm, msk_col)
 
@@ -888,6 +901,7 @@ class PFNetDense(tf.keras.Model):
 
     # Uncomment these if you want to explicitly debug the training loop
     # def train_step(self, data):
+    #     import numpy as np
     #     x, y, sample_weights = data
     #     if not hasattr(self, "step"):
     #         self.step = 0
@@ -895,10 +909,15 @@ class PFNetDense(tf.keras.Model):
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-    #         import pdb;pdb.set_trace()
 
     #     trainable_vars = self.trainable_variables
     #     gradients = tape.gradient(loss, trainable_vars)
+    #     for tv, g in zip(trainable_vars, gradients):
+    #         g = g.numpy()
+    #         num_nan = np.sum(np.isnan(g))
+    #         if num_nan>0:
+    #             print(tv.name, num_nan, g.shape)
+
     #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     #     self.compiled_metrics.update_state(y, y_pred)
 
