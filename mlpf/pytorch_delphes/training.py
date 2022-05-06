@@ -115,7 +115,7 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
         conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                         pred_ids.detach().cpu().numpy(),
                                                         labels=range(6))
-        break
+
     losses_clf = np.mean(losses_clf)
     losses_reg = np.mean(losses_reg)
     losses_tot = np.mean(losses_tot)
