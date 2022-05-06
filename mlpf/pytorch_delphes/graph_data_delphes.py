@@ -14,6 +14,7 @@ import multiprocessing
 # they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
 
+
 def one_hot_embedding(labels, num_classes):
     """
     Embedding labels to one-hot form.
@@ -26,14 +27,17 @@ def one_hot_embedding(labels, num_classes):
     y = torch.eye(num_classes)
     return y[labels]
 
+
 def process_func(args):
     self, fns, idx_file = args
     return self.process_multiple_files(fns, idx_file)
+
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
 
 class PFGraphDataset(Dataset):
     """
@@ -41,6 +45,7 @@ class PFGraphDataset(Dataset):
     Args:
         root (str): path
     """
+
     def __init__(self, root, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
@@ -77,13 +82,13 @@ class PFGraphDataset(Dataset):
         with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
             data = pickle.load(fi, encoding='iso-8859-1')
 
-        x=[]
-        ygen=[]
-        ycand=[]
-        d=[]
+        x = []
+        ygen = []
+        ycand = []
+        d = []
         batch_data = []
-        ygen_id=[]
-        ycand_id=[]
+        ygen_id = []
+        ycand_id = []
 
         for i in range(len(data['X'])):
             x.append(torch.tensor(data['X'][i], dtype=torch.float))
@@ -91,8 +96,8 @@ class PFGraphDataset(Dataset):
             ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
 
             # one-hot encoding the first element in ygen & ycand (which is the PID) and store it in ygen_id & ycand_id
-            ygen_id.append(ygen[i][:,0])
-            ycand_id.append(ycand[i][:,0])
+            ygen_id.append(ygen[i][:, 0])
+            ycand_id.append(ycand[i][:, 0])
 
             ygen_id[i] = ygen_id[i].long()
             ycand_id[i] = ycand_id[i].long()
@@ -103,8 +108,8 @@ class PFGraphDataset(Dataset):
             # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
             d = Data(
                 x=x[i],
-                ygen=ygen[i][:,1:], ygen_id=ygen_id[i],
-                ycand=ycand[i][:,1:], ycand_id=ycand_id[i]
+                ygen=ygen[i][:, 1:], ygen_id=ygen_id[i],
+                ycand=ycand[i][:, 1:], ycand_id=ycand_id[i]
             )
 
             batch_data.append(d)
@@ -140,6 +145,7 @@ class PFGraphDataset(Dataset):
     def __getitem__(self, idx):
         return self.get(idx)
 
+
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
@@ -160,5 +166,5 @@ if __name__ == "__main__":
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
 
-    pfgraphdataset.process_parallel(args.num_files_merge,args.num_proc)
-    #pfgraphdataset.process(args.num_files_merge)
+    pfgraphdataset.process_parallel(args.num_files_merge, args.num_proc)
+    # pfgraphdataset.process(args.num_files_merge)

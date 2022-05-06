@@ -2,6 +2,7 @@ import sys
 import pickle
 from DataFormats.FWLite import Events, Handle
 
+
 class Expression:
     def __init__(self, label, edmtype, eval_list):
         self.label = label
@@ -18,6 +19,7 @@ class Expression:
             ret = eval(eval_item)
             results[eval_name] = ret
         return results
+
 
 if __name__ == "__main__":
     filename = sys.argv[1]
@@ -72,7 +74,7 @@ if __name__ == "__main__":
             ("pdgId", "[o.pdgId() for o in obj]"),
         ]
     ))
-    
+
     evids = []
     for iev, event in enumerate(events):
         eid = event.object().id()
@@ -80,7 +82,7 @@ if __name__ == "__main__":
         evids.append((eventId, iev))
     evids = sorted(evids, key=lambda x: x[0])
 
-    #loop over events in a well-defined order
+    # loop over events in a well-defined order
     all_results = []
     for _, iev in evids:
         event.to(iev)
@@ -93,4 +95,3 @@ if __name__ == "__main__":
             results[expr.label] = expr.get(event)
         all_results.append(results)
     pickle.dump(all_results, open(outfilename, "wb"))
-

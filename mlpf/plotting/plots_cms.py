@@ -15,20 +15,23 @@ from plot_utils import plot_E_reso, plot_eta_reso, plot_phi_reso, bins
 
 class_labels = list(range(8))
 
+
 def deltaphi(phi1, phi2):
-    return np.fmod(phi1 - phi2 + np.pi, 2*np.pi) - np.pi
+    return np.fmod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
+
 
 def prepare_resolution_plots(big_df, pid, bins, target='cand', outpath='./'):
-    msk_true = (big_df["{}_pid".format(target)]==pid)
-    msk_pred = (big_df["pred_pid"]==pid)
-    msk_both = msk_true&msk_pred
+    msk_true = (big_df["{}_pid".format(target)] == pid)
+    msk_pred = (big_df["pred_pid"] == pid)
+    msk_both = msk_true & msk_pred
     v0 = big_df[["{}_e".format(target), "pred_e"]].values
     v1 = big_df[["{}_eta".format(target), "pred_eta"]].values
     v2 = big_df[["{}_phi".format(target), "pred_phi"]].values
-    
+
     plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
     plot_eta_reso(big_df, pid, v1, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
     plot_phi_reso(big_df, pid, v2, msk_true, msk_pred, msk_both, bins, target=target, outpath=outpath)
+
 
 def load_np(npfile):
     X = np.load(npfile)["X"]
@@ -37,8 +40,10 @@ def load_np(npfile):
     ypred_raw = np.load(npfile)["ypred_raw"]
     return X, ycand, ypred
 
+
 def flatten(arr):
-    return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
+    return arr.reshape((arr.shape[0] * arr.shape[1], arr.shape[2]))
+
 
 if __name__ == "__main__":
     import argparse
@@ -52,7 +57,7 @@ if __name__ == "__main__":
     X_flat = flatten(X)
     ycand_flat = flatten(ycand)
     ypred_flat = flatten(ypred)
-    msk = X_flat[:, 0]!=0
+    msk = X_flat[:, 0] != 0
 
     confusion = sklearn.metrics.confusion_matrix(
         ycand_flat[msk, 0], ypred_flat[msk, 0],
