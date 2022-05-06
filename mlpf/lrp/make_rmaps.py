@@ -132,7 +132,7 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid='chhadron', neighbors=2, ou
         else:
             fraction = f'{num_Rtensors_correct}/{tot_num}'
 
-        print('fraction is: {fraction}')
+        print(f'fraction is: {fraction}')
 
         fig, ax = plt.subplots(figsize=(20, 10))
         if out_neuron < 6:
