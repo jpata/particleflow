@@ -103,4 +103,5 @@ if __name__ == "__main__":
     with open(f'{args.outpath}/preds_list.pkl', 'wb') as f:
         pkl.dump(preds_list, f)
 
-    make_Rmaps(Rtensors, inputs_list, preds_list, pid='chhadron', neighbors=3)
+    print('Making Rmaps..')
+    make_Rmaps(Rtensors_list, inputs_list, preds_list, pid='chhadron', neighbors=3)
