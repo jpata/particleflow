@@ -28,7 +28,7 @@ from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 parser = argparse.ArgumentParser()
 
 # for saving the model
-parser.add_argument("--dataset",        type=str,           default='../data/test_tmp_delphes/data/pythia8_qcd',   help="testing dataset path")
+parser.add_argument("--dataset_qcd",    type=str,           default='../data/test_tmp_delphes/data/pythia8_qcd',   help="testing dataset path")
 parser.add_argument("--outpath",        type=str,           default='../data/test_tmp_delphes/experiments/',       help="path to the trained model directory")
 parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
 parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load")
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     # get sample dataset
     print('Fetching the data..')
-    full_dataset_qcd = PFGraphDataset(args.dataset)
+    full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
     loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
 
     # load a pretrained model
@@ -69,6 +69,21 @@ if __name__ == "__main__":
 
     for i, event in enumerate(loader):
         print(f'Explaining event # {i}')
+
+        # break it down to a smaller part for lrp (to avoid memory issues)
+        size = 500
+
+        def get_small_batch(event, size):
+            small_batch = Batch()
+            small_batch.x = event.x[:size]
+            small_batch.ygen = event.ygen[:size]
+            small_batch.ygen_id = event.ygen_id[:size]
+            small_batch.ycand = event.ycand[:size]
+            small_batch.ycand_id = event.ycand_id[:size]
+            small_batch.batch = event.batch[:size]
+            return small_batch
+
+        event = get_small_batch(event, size=size)
 
         # run lrp on sample model
         model.eval()
