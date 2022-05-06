@@ -129,7 +129,6 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
 
 def load_model(device, outpath, model_directory, load_epoch):
-    outpath = outpath + model_directory
     PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
 
     print('Loading a previously trained model..')

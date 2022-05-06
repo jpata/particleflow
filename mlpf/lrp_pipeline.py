@@ -66,7 +66,8 @@ if __name__ == "__main__":
         loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
 
         # load a pretrained model and update the outpath
-        state_dict, model_kwargs, outpath = load_model(device, args.outpath, args.load_model, args.load_epoch)
+        outpath = args.outpath + args.load_model
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
         model.to(device)
@@ -96,6 +97,7 @@ if __name__ == "__main__":
             pkl.dump(preds_list, f)
 
     if args.make_rmaps:
+        outpath = args.outpath + args.load_model
         with open(f'{outpath}/Rtensors_list.pkl',  'rb') as f:
             Rtensors_list = pkl.load(f)
         with open(f'{outpath}/inputs_list.pkl',  'rb') as f:

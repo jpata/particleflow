@@ -76,7 +76,8 @@ if __name__ == "__main__":
     output_dim_p4 = 6
 
     if args.load:
-        state_dict, model_kwargs, outpath = load_model(device, args.outpath, args.load_model, args.load_epoch)
+        outpath = args.outpath + args.load_model
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
