@@ -127,18 +127,21 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid='chhadron', neighbors=2, ou
 
     for status, var in {'correct': Rtensor_correct, 'incorrect': Rtensor_incorrect}.items():
         print(f'Making Rmaps for {status}ly classified {pid}')
-        if status == 'incorrect':
-            fraction = f'{num_Rtensors_incorrect}/{tot_num}'
+        if status == 'correct':
+            num = num_Rtensors_correct
         else:
-            fraction = f'{num_Rtensors_correct}/{tot_num}'
+            num = num_Rtensors_incorrect
 
-        print(f'fraction is: {fraction}')
+        print(f'fraction is: {num}/{tot_num}')
+
+        if num == 0:
+            continue
 
         fig, ax = plt.subplots(figsize=(20, 10))
         if out_neuron < 6:
-            ax.set_title(f"Average relevance score matrix for {pid}s's classification score of {fraction} {status}ly classified elements", fontsize=26)
+            ax.set_title(f"Average relevance score matrix for {pid}s's classification score of {num}/{tot_num} {status}ly classified elements", fontsize=26)
         else:
-            ax.set_title(f"Average relevance score matrix for {pid}'s {label_to_p4[out_neuron]} of {fraction}/{tot_num} {status}ly classified elements", fontsize=26)
+            ax.set_title(f"Average relevance score matrix for {pid}'s {label_to_p4[out_neuron]} of {num}/{tot_num} {status}ly classified elements", fontsize=26)
 
         ax.set_xticks(np.arange(len(features)))
         ax.set_yticks(np.arange(len(node_types)))

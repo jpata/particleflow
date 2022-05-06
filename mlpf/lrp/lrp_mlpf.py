@@ -14,7 +14,7 @@ from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 class LRP_MLPF():
 
     """
-    Extends the LRP class to act on graph datasets and GNNs based on the Gravnet layer (e.g. the MLPF model, see models.MLPF)
+    A class that act on graph datasets and GNNs based on the Gravnet layer (e.g. the MLPF model)
     The main trick is to realize that the ".lin_s" layers in Gravnet are irrelevant for explanations so shall be skipped
     The hack, however, is to substitute them precisely with the message_passing step
 
