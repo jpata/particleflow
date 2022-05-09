@@ -63,7 +63,6 @@ class CustomTensorBoard(TensorBoard):
             logs.update(self._collect_learning_rate(logs))
         super().on_train_batch_end(batch, logs)
 
-
 class CustomModelCheckpoint(ModelCheckpoint):
     """Extends tensorflow.keras.callbacks.ModelCheckpoint to also save optimizer"""
 
