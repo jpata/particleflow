@@ -53,7 +53,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.001
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32
@@ -94,8 +94,8 @@ parameters:
   node_encoding_hidden_dim: 128
 
   combined_graph_layer:
-    bin_size: 16
-    max_num_bins: 400
+    bin_size: 32
+    max_num_bins: 200
     distance_dim: 64
     layernorm: yes
     dropout: 0.0
@@ -125,14 +125,14 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 128
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 1
-  num_graph_layers_reg: 1
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -219,7 +219,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 10
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
       - cms_pf_qcd
