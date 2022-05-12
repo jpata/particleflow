@@ -26,7 +26,7 @@ elem_branches = [
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
 def map_pdgid_to_candid(pdgid, charge):
-    if pdgid in [22,11,13,15]:
+    if pdgid in [22,11,13]:
         return pdgid
 
     #charged hadron
@@ -120,8 +120,8 @@ def draw_event(g):
     plt.axis("on")
     return fig
 
-def merge_photons_from_pi0(g, deltar_cut=0.001):
-    photons = [elem for elem in g.nodes if g.nodes[elem]["typ"]==22 and (elem[0]=="tp" or elem[0]=="sc")]
+def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
+    photons = [elem for elem in g.nodes if g.nodes[elem]["typ"]==pid and (elem[0]=="tp" or elem[0]=="sc")]
     phot_eta = [g.nodes[node]["eta"] for node in photons]
     phot_phi = [g.nodes[node]["phi"] for node in photons]
     merge_pairs = []
@@ -151,13 +151,22 @@ def merge_photons_from_pi0(g, deltar_cut=0.001):
                     g.edges[(pair[0], suc)]["weight"] += g.edges[(pair[1], suc)]["weight"]
             g.remove_nodes_from([pair[1]])
 
-def cleanup_graph(g, edge_energy_threshold=0.00):
+def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     g = g.copy()
-    edges_to_remove = []
-    nodes_to_remove = []
 
-    #for each element, remove the incoming edge where the caloparticle deposited less than 5% of it's energy
-    #edges_to_remove = []
+    #remove genparticles that deposit less than a fraction of their energy
+    nodes_to_remove = []
+    for node in g.nodes:
+        if node[0]=="sc" or node[0]=="tp":
+            sw = 0.0
+            for edge in g.edges(node):
+                sw += g.edges[edge]["weight"]
+            if sw/g.nodes[node]["e"]<node_energy_threshold:
+                nodes_to_remove += [node]
+    g.remove_nodes_from(nodes_to_remove)
+
+    #for each element, remove the incoming edge where the caloparticle deposited less than a threshold of it's energy
+    edges_to_remove = []
     for node in g.nodes:
         if node[0] == "elem":
             #remove edges that don't contribute above a threshold 
@@ -166,7 +175,6 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
             for edge, weight in ew:
                 if weight/g.nodes[edge[0]]["e"] < edge_energy_threshold:
                     edges_to_remove += [edge] 
-    
     g.remove_edges_from(edges_to_remove)
     
     #remove calopart/trackingpart not linked to any elements
@@ -178,22 +186,6 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
             if deg==0:
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
-
-    merge_photons_from_pi0(g)
-
-    # ptcls = [elem for elem in g.nodes if (elem[0]=="tp" or elem[0]=="sc")]
-    # phot_eta = [g.nodes[node]["eta"] for node in ptcls]
-    # phot_phi = [g.nodes[node]["phi"] for node in ptcls]
-    # merge_pairs = []
-    # pairs_0, pairs_1 = deltar_pairs(phot_eta, phot_phi, 0.00001)
-    # merge_pairs = [(ptcls[p0], ptcls[p1]) for p0, p1 in zip(pairs_0, pairs_1)]
-    # for pair in merge_pairs:
-    #     print(pair)
-    #     print(g.nodes[pair[0]])
-    #     print(g.nodes[pair[1]])
-    #     print("---")
-    # import pdb;pdb.set_trace()
-
 
     #For each truth particle, compute the energy in tracks or calorimeter clusters
     for node in g.nodes:
@@ -240,7 +232,6 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
                     tracks.append(suc)
             if len(tracks)>1:
                 n0 = g.nodes[node]
-                #print(n0["typ"], n0["pt"], n0["eta"], n0["phi"])
                 drs = []
                 for tr in tracks:
                     n1 = g.nodes[tr]
@@ -248,7 +239,6 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
                     dphi = np.mod(n0["phi"] - n1["phi"] + np.pi, 2 * np.pi) - np.pi
                     dr2 = deta**2 + dphi**2
                     drs.append(dr2)
-                    #print("  ", n1["typ"], n1["pt"], n1["eta"], n1["phi"], dr2)
                 imin = np.argmin(drs)
 
                 #set the weight of the edge to the other tracks to 0
@@ -260,10 +250,6 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
         if node[0] == "sc" or node[0] == "tp":
             typ = g.nodes[node]["typ"]
 
-            #print(typ, g.nodes[node]["E_track"], g.nodes[node]["E_calo"], g.nodes[node]["E_hf"], g.nodes[node]["E_other"])
-            #for suc in g.successors(node):
-            #    print("  {}={}".format(g.nodes[suc]["typ"], g.edges[node, suc]["weight"]))
-
             #charged particles that leave no track should not be reconstructed as charged 
             if typ in [211, 13, 11] and g.nodes[node]["E_track"]==0:
                 g.nodes[node]["typ"] = 130
@@ -271,11 +257,11 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
             
             #if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate
             if (g.nodes[node]["E_track"]==0) and (g.nodes[node]["E_calo"]==0) and (g.nodes[node]["E_other"]==0) and g.nodes[node]["E_hf"]>0:
-                if g.nodes[node]["E_hfem"]>g.nodes[node]["E_hfhad"]:
-                    g.nodes[node]["typ"] = 2
+                if g.nodes[node]["E_hfhad"] > g.nodes[node]["E_hfem"]:
+                    g.nodes[node]["typ"] = 1
                     g.nodes[node]["charge"] = 0
                 else:
-                    g.nodes[node]["typ"] = 1
+                    g.nodes[node]["typ"] = 2
                     g.nodes[node]["charge"] = 0
 
     #CaloParticles contain a lot of electrons and muons with a soft pt spectrum
@@ -289,6 +275,12 @@ def cleanup_graph(g, edge_energy_threshold=0.00):
                 else:
                     g.nodes[node]["typ"] = 130
                     g.nodes[node]["charge"] = 0
+    
+    #merge close-by neutral particles
+    merge_closeby_particles(g, 22)
+    merge_closeby_particles(g, 130)
+    merge_closeby_particles(g, 1)
+    merge_closeby_particles(g, 2)
 
     return g
 
@@ -386,7 +378,6 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         genparticles = sorted(elem_to_gp.get(elem, []), key=lambda x: g.edges[(x, elem)]["weight"], reverse=True)
         genparticles = [gp for gp in genparticles if g.nodes[gp]["e"] > genparticle_energy_threshold]
         candidate = elem_to_cand.get(elem, None)
-       
 
         for j in range(len(elem_branches)):
             Xelem[elem_branches[j]][ielem] = g.nodes[elem][elem_branches[j]]
