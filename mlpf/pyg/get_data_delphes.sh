@@ -42,4 +42,4 @@ python3 preprocess_data.py --dataset delphes/pythia8_ttbar \
 python3 preprocess_data.py --dataset delphes/pythia8_qcd \
   --processed_dir delphes/pythia8_qcd/processed --num-files-merge 1 --num-proc 1
 
-mv delphes ../../data
+mv delphes ../../data/
