@@ -1,3 +1,5 @@
+import pandas
+import pandas as pd
 import numpy as np
 import os
 import os.path as osp
@@ -15,9 +17,22 @@ import multiprocessing
 # PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
 
 
+def relabel_indices(pid_array):
+    """
+    relabels classes for convenient ML operations/training
+    """
+    pid_array[pid_array == 211] = 7
+    pid_array[pid_array == 130] = 6
+    pid_array[pid_array == 22] = 5
+    pid_array[pid_array == 13] = 4
+    pid_array[pid_array == 11] = 3
+    return pid_array
+
+
 def one_hot_embedding(labels, num_classes):
     """
     Embedding labels to one-hot form.
+
     Args:
       labels: (LongTensor) class labels, sized [N,].
       num_classes: (int) number of classes.
@@ -46,9 +61,10 @@ class PFGraphDataset(Dataset):
         root (str): path
     """
 
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, data, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
+        self.data = data
 
     @property
     def raw_file_names(self):
@@ -79,41 +95,57 @@ class PFGraphDataset(Dataset):
         pass
 
     def process_single_file(self, raw_file_name):
+        """
+        Loads a list of 100 events from a pkl file.
+        For cms data, each element is assumed to be a dict('Xelem', 'ygen', ycand') of numpy rec_arrays with the first element in ygen/ycand is the pid
+        For delphes data, each element is assumed to be a dict('X', 'ygen', ycand') of numpy standard arrays with the first element in ygen/ycand is the pid
+
+        Args
+            pkl file
+        Returns
+            a list of Data objects of the form ~ Data(x=[#elem, 41], ygen=[#elem, 6], ygen_id=[#elem, 8], ycand=[#elem, 6], ycand_id=[#elem, 8])
+        """
+
+        # load the data pkl file
         with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
             data = pickle.load(fi, encoding='iso-8859-1')
 
-        x = []
-        ygen = []
-        ycand = []
-        d = []
-        batch_data = []
-        ygen_id = []
-        ycand_id = []
+        batched_data = []
+        if self.data == 'delphes':
+            num_classes = 6
+            for i in range(len(data['X'])):
+                # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
+                d = Data(
+                    x=torch.tensor(data['X'][i], dtype=torch.float),
+                    ygen=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 1:],
+                    ygen_id=one_hot_embedding(torch.tensor(data['ygen'][i], dtype=torch.float)[:, 0].long(), num_classes),
+                    ycand=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 1:],
+                    ycand_id=one_hot_embedding(torch.tensor(data['ycand'][i], dtype=torch.float)[:, 0].long(), num_classes)
+                )
+                batched_data.append(d)
+        elif self.data == 'cms':
+            num_classes = 8
+            for i in range(len(data)):
+                Xelem = torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float)
+                ygen = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:]
+                ygen_id = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()
+                ycand = torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:]
+                ycand_id = torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long()
 
-        for i in range(len(data['X'])):
-            x.append(torch.tensor(data['X'][i], dtype=torch.float))
-            ygen.append(torch.tensor(data['ygen'][i], dtype=torch.float))
-            ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
+                ygen_id = one_hot_embedding(relabel_indices(ygen_id), num_classes)
+                ycand_id = one_hot_embedding(relabel_indices(ycand_id), num_classes)
 
-            # one-hot encoding the first element in ygen & ycand (which is the PID) and store it in ygen_id & ycand_id
-            ygen_id.append(ygen[i][:, 0])
-            ycand_id.append(ycand[i][:, 0])
+                # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
+                d = Data(
+                    x=Xelem,
+                    ygen=ygen,
+                    ygen_id=ygen_id,
+                    ycand=ycand,
+                    ycand_id=ycand_id
+                )
 
-            ygen_id[i] = ygen_id[i].long()
-            ycand_id[i] = ycand_id[i].long()
-
-            ygen_id[i] = one_hot_embedding(ygen_id[i], 6)
-            ycand_id[i] = one_hot_embedding(ycand_id[i], 6)
-
-            # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
-            d = Data(
-                x=x[i],
-                ygen=ygen[i][:, 1:], ygen_id=ygen_id[i],
-                ycand=ycand[i][:, 1:], ycand_id=ycand_id[i]
-            )
-
-            batch_data.append(d)
-        return batch_data
+                batched_data.append(d)
+        return batched_data
 
     def process_multiple_files(self, filenames, idx_file):
         datas = [self.process_single_file(fn) for fn in filenames]
@@ -149,6 +181,7 @@ class PFGraphDataset(Dataset):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
@@ -161,7 +194,7 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    pfgraphdataset = PFGraphDataset(root=args.dataset)
+    pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir

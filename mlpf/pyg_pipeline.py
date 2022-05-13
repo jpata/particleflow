@@ -1,8 +1,8 @@
-from pytorch_delphes import parse_args
-from pytorch_delphes import PFGraphDataset, dataloader_ttbar, dataloader_qcd
-from pytorch_delphes import MLPF, training_loop, make_predictions, make_plots
-from pytorch_delphes import make_directories_for_plots
-from pytorch_delphes import get_model_fname, save_model, load_model
+from pyg import parse_args
+from pyg import PFGraphDataset, dataloader_ttbar, dataloader_qcd
+from pyg import MLPF, training_loop, make_predictions, make_plots
+from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
+from pyg import pid_to_class_delphes, pid_to_class_cms, features_delphes, features_cms, target_p4
 
 import torch
 import torch_geometric
@@ -50,30 +50,32 @@ if __name__ == "__main__":
 
     """
     e.g. to train locally run as:
-    python -u pytorch_pipeline.py --title='' --overwrite --target='gen' --n_epochs=1 --n_train=1 --n_valid=1 --n_test=1 --batch_size=1
+    python -u pyg_pipeline.py --title='ex' --overwrite --target='gen' --n_epochs=20 --n_train=1 --n_valid=1 --n_test=1 --batch_size=1 --dataset='../data/cms/data/SingleNeutronFlatPt0p7To1000_cfi' --dataset_qcd='../data/cms/data/SingleNeutronFlatPt0p7To1000_cfi'
 
     e.g. to load and evaluate run as:
-    python -u pytorch_pipeline.py --load --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --target='gen' --n_test=1 --batch_size=2
+    python -u pyg_pipeline.py --load --load_model='MLPF_gen_ntrain_1_nepochs_20_clf_reg' --load_epoch=19 --target='gen' --n_test=1 --batch_size=2
     """
 
     args = parse_args()
 
     # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
     print('Loading the data..')
-    full_dataset_ttbar = PFGraphDataset(args.dataset)
-    full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
+    full_dataset_ttbar = PFGraphDataset(args.dataset, args.data)
+    full_dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
     # construct Dataloaders to facilitate looping over batches
     print('Building dataloaders..')
     train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
     test_loader = dataloader_qcd(full_dataset_qcd, multi_gpu, args.n_test, batch_size=args.batch_size)
 
-    # PF-elements
-    input_dim = 12
-
-    # PF-candidates
-    output_dim_id = 6
-    output_dim_p4 = 6
+    # retrieve the dimensions of the PF-elements & PF-candidates
+    if args.data == 'delphes':
+        input_dim = len(features_delphes)
+        output_dim_id = 6   # we have 6 classes/pids for cms
+    elif args.data == 'cms':
+        input_dim = len(features_cms)
+        output_dim_id = 8   # we have 8 classes/pids for cms
+    output_dim_p4 = len(target_p4)
 
     if args.load:
         outpath = args.outpath + args.load_model
@@ -104,7 +106,7 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
 
         # get a directory name for the model to store the model's weights and plots
-        model_fname = get_model_fname(args.dataset, model, args.n_train, args.n_epochs, args.target, args.alpha, args.title)
+        model_fname = get_model_fname(args.dataset, model, args.data, args.n_train, args.n_epochs, args.target, args.title)
         outpath = osp.join(args.outpath, model_fname)
 
         if multi_gpu:
@@ -121,7 +123,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         model.train()
-        training_loop(device, model, multi_gpu,
+        training_loop(args.data, device, model, multi_gpu,
                       train_loader, valid_loader,
                       args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target,
@@ -132,18 +134,18 @@ if __name__ == "__main__":
     # evaluate on testing data..
     make_directories_for_plots(outpath, 'test_data')
     if args.load:
-        make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.load_epoch)
-        make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
+        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.load_epoch)
+        make_plots(args.data, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
     else:
-        make_predictions(model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.n_epochs)
-        make_plots(model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs, 'QCD')
+        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.n_epochs)
+        make_plots(args.data, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs, 'QCD')
 
     # # evaluate on training data..
     # make_directories_for_plots(outpath, 'train_data')
     # make_predictions(model, multi_gpu, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs)
-    # make_plots(model, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs, 'TTbar')
+    # make_plots(args.data, model, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs, 'TTbar')
     #
     # # evaluate on validation data..
     # make_directories_for_plots(outpath, 'valid_data')
     # make_predictions(model, multi_gpu, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs)
-    # make_plots(model, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs, 'TTbar')
+    # make_plots(args.data, model, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs, 'TTbar')

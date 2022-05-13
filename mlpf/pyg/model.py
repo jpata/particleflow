@@ -9,7 +9,7 @@ from torch import Tensor
 import torch.nn as nn
 from torch.nn import Linear
 from torch_scatter import scatter
-from torch_geometric.nn.conv import MessagePassing
+from torch_geometric.nn.conv import MessagePassing, GCNConv, GraphConv
 from torch_geometric.utils import to_dense_adj
 import torch.nn.functional as F
 
@@ -94,7 +94,7 @@ class MLPF(nn.Module):
         A = {}
         msg_activations = {}
         for num, conv in enumerate(self.conv):
-            embedding = conv(embedding)
+            embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
@@ -102,7 +102,7 @@ class MLPF(nn.Module):
         # predict the p4's
         preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
 
-        return torch.cat([preds_id, preds_p4], axis=-1), target
+        return torch.cat([preds_id, preds_p4], axis=-1), target, A, msg_activations
 
 
 class GravNetConv_LRP(MessagePassing):
@@ -198,18 +198,26 @@ class GravNetConv_LRP(MessagePassing):
         s_l: Tensor = self.lin_s(x[0])
         s_r: Tensor = self.lin_s(x[1]) if is_bipartite else s_l
 
+        # add error message when trying to preform knn without enough neighbors in the region
+        if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
+            raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
+
         edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+        # edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
         # edge_index = knn_graph(s_l, self.k, b[0], b[1]).flip([0])
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
+
+        # return the adjacency matrix of the graph for lrp purposes
+        A = to_dense_adj(edge_index.to('cpu'), edge_attr=edge_weight.to('cpu'))[0]  # adjacency matrix
 
         # message passing
         out = self.propagate(edge_index, x=(msg_activations, None),
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_r.size(0)))
 
-        return self.lin_out(out)
+        return self.lin_out(out), A, msg_activations
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)

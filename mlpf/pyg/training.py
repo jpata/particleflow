@@ -1,7 +1,10 @@
-from pytorch_delphes import make_plot
-from pytorch_delphes.utils_plots import plot_confusion_matrix
+from pyg import make_plot
+from pyg.utils_plots import plot_confusion_matrix
 
 import torch
+from torch_geometric.utils import to_dense_adj, dense_to_sparse
+from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
+
 import mplhep as hep
 import matplotlib.pyplot as plt
 import os
@@ -17,6 +20,76 @@ import matplotlib
 matplotlib.use("Agg")
 
 
+def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
+    """
+    Defines regions in eta,phi space to make bins within an event and build graphs within these bins.
+
+    Returns
+        regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max) and equivalenelty phi
+    """
+    eta_step = (max_eta - min_eta) / num_eta_regions
+    phi_step = (max_phi - min_phi) / num_phi_regions
+
+    tuples_eta = []
+    for j in range(num_eta_regions):
+        tuple = (min_eta + eta_step * (j), min_eta + eta_step * (j + 1))
+        tuples_eta.append(tuple)
+
+    tuples_phi = []
+    for i in range(num_phi_regions):
+        tuple = (min_phi + phi_step * (i), min_phi + phi_step * (i + 1))
+        tuples_phi.append(tuple)
+
+    # make regions
+    regions = []
+    for i in range(len(tuples_eta)):
+        for j in range(len(tuples_phi)):
+            regions.append((tuples_eta[i], tuples_phi[j]))
+
+    return regions
+
+
+def batch_event_into_regions(data, regions):
+    """
+    Given an event and a set of regions in eta,phi space, returns a binned version of the event.
+
+    Args
+        data: a Batch() object containing the event and its information
+        regions: a tuple of tuples containing the defined regions to bin an event (see define_regions)
+
+    Returns
+        data: a modified Batch() object of based on data, where data.batch seperates the events in the different bins
+    """
+    x = None
+    for region in range(len(regions)):
+        in_region_msk = (data.x[:, 2] > regions[region][0][0]) & (data.x[:, 2] < regions[region][0][1]) & (torch.arcsin(data.x[:, 3]) > regions[region][1][0]) & (torch.arcsin(data.x[:, 3]) < regions[region][1][1])
+
+        if in_region_msk.sum() != 0:  # if region is not empty
+            if x == None:
+                x = data.x[in_region_msk]
+                ygen = data.ygen[in_region_msk]
+                ygen_id = data.ygen_id[in_region_msk]
+                ycand = data.ycand[in_region_msk]
+                ycand_id = data.ycand_id[in_region_msk]
+                batch = region + torch.zeros([len(data.x[in_region_msk])])    # assumes events were already fed one at a time
+            else:
+                x = torch.cat([x, data.x[in_region_msk]])
+                ygen = torch.cat([ygen, data.ygen[in_region_msk]])
+                ygen_id = torch.cat([ygen_id, data.ygen_id[in_region_msk]])
+                ycand = torch.cat([ycand, data.ycand[in_region_msk]])
+                ycand_id = torch.cat([ycand_id, data.ycand_id[in_region_msk]])
+                batch = torch.cat([batch, region + torch.zeros([len(data.x[in_region_msk])])])    # assumes events were already fed one at a time
+
+    data = Batch(x=x,
+                 ygen=ygen,
+                 ygen_id=ygen_id,
+                 ycand=ycand,
+                 ycand_id=ycand_id,
+                 batch=batch.long(),    # assumes events were already fed one at a time
+                 )
+    return data
+
+
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -29,6 +102,7 @@ def compute_weights(device, target_ids, output_dim_id):
     weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
         weights[k] = 1.0 / math.sqrt(float(v))
+    # weights[2] = weights[2] * 3
     return weights
 
 
@@ -45,6 +119,7 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
     a training block over a given epoch...
     if optimizer is set to None, it freezes the model for a validation_run
     """
+    regions = define_regions(num_eta_regions=1, num_phi_regions=1)
 
     is_train = not (optimizer is None)
 
@@ -64,19 +139,36 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
 
     for i, batch in enumerate(loader):
 
+        # batch = batch_event_into_regions(batch, regions)
+
         if multi_gpu:
             X = batch   # a list (not torch) instance so can't be passed to device
+            # data = batch   # a list (not torch) instance so can't be passed to device
         else:
             X = batch.to(device)
+            # data = batch.to(device)  # a list (not torch) instance so can't be passed to device
+        #
+        # for region in range(len(regions)):
+        #     in_region_msk = (data.x[:, 2] > regions[region][0][0]) & (data.x[:, 2] < regions[region][0][1]) & (torch.arcsin(data.x[:, 3]) > regions[region][1][0]) & (torch.arcsin(data.x[:, 3]) < regions[region][1][1])
+        #
+        #     if in_region_msk.sum() != 0:  # if region is not empty
+        #         X = Batch(x=data.x[in_region_msk],
+        #                   ygen=data.ygen[in_region_msk],
+        #                   ygen_id=data.ygen_id[in_region_msk],
+        #                   ycand=data.ycand[in_region_msk],
+        #                   ycand_id=data.ycand[in_region_msk],
+        #                   batch=torch.zeros([len(data.x[in_region_msk])]).long(),    # assumes events were already fed one at a time
+        #                   )
 
         # run forward pass
         t0 = time.time()
-        pred, target = model(X)
+
+        pred, target, _, _ = model(X)
         t1 = time.time()
         t.append(t1 - t0)
 
-        pred_ids_one_hot = pred[:, :6]
-        pred_p4 = pred[:, 6:]
+        pred_ids_one_hot = pred[:, :output_dim_id]
+        pred_p4 = pred[:, output_dim_id:]
 
         # define target
         if target_type == 'gen':
@@ -114,7 +206,7 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
 
         conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                         pred_ids.detach().cpu().numpy(),
-                                                        labels=range(6))
+                                                        labels=range(output_dim_id))
 
     losses_clf = np.mean(losses_clf)
     losses_reg = np.mean(losses_reg)
@@ -130,7 +222,7 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(device, model, multi_gpu, train_loader, valid_loader, n_epochs, patience, optimizer, alpha, target, output_dim_id, outpath):
+def training_loop(data, device, model, multi_gpu, train_loader, valid_loader, n_epochs, patience, optimizer, alpha, target, output_dim_id, outpath):
     """
     Main function for training a model
     """
@@ -199,7 +291,12 @@ def training_loop(device, model, multi_gpu, train_loader, valid_loader, n_epochs
         cm_path = outpath + '/training_plots/confusion_matrix_plots/'
         if not os.path.exists(cm_path):
             os.makedirs(cm_path)
-        target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
+
+        if data == 'delphes':
+            target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
+        elif data == 'cms':
+            target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had"]
+
         plot_confusion_matrix(conf_matrix_train, target_names, epoch, cm_path, f'cmT_epoch_{str(epoch)}')
         plot_confusion_matrix(conf_matrix_val, target_names, epoch, cm_path, f'cmV_epoch_{str(epoch)}')
 

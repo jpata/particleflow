@@ -401,7 +401,11 @@ def plot_confusion_matrix(cm, target_names,
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
     cm[np.isnan(cm)] = 0.0
 
-    fig = plt.figure(figsize=(5, 4))
+    if len(target_names) > 6:
+        fig = plt.figure(figsize=(8, 6))
+    else:
+        fig = plt.figure(figsize=(5, 4))
+
     ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     if target == "rule-based":

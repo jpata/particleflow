@@ -21,6 +21,54 @@ import matplotlib
 matplotlib.use("Agg")
 
 
+pid_to_class_delphes = {0: 'null',
+                        1: 'chhadron',
+                        2: 'nhadron',
+                        3: 'photon',
+                        4: 'ele',
+                        5: 'mu',
+                        }
+
+pid_to_class_cms = {0: 'null',
+                    1: 'HFEM',
+                    2: 'HFHAD',
+                    3: 'ele',
+                    4: 'mu',
+                    5: 'photon',
+                    6: 'nhadron',
+                    7: 'chhadron',
+                    }
+
+
+features_delphes = ["Track|cluster", "$p_{T}|E_{T}$", r"$\eta$", r'$Sin(\phi)$', r'$Cos(\phi)$',
+                    "P|E", r"$\eta_\mathrm{out}|E_{em}$", r"$Sin(\(phi)_\mathrm{out}|E_{had}$", r"$Cos(\phi)_\mathrm{out}|E_{had}$",
+                    "charge", "is_gen_mu", "is_gen_el"]
+
+features_cms = [
+    "typ_idx", "pt", "eta", "phi", "e",
+    "layer", "depth", "charge", "trajpoint",
+    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
+    "px", "py", "pz", "deltap", "sigmadeltap",
+    "gsf_electronseed_trkorecal",
+    "gsf_electronseed_dnn1",
+    "gsf_electronseed_dnn2",
+    "gsf_electronseed_dnn3",
+    "gsf_electronseed_dnn4",
+    "gsf_electronseed_dnn5",
+    "num_hits", "cluster_flags", "corr_energy",
+    "corr_energy_err", "vx", "vy", "vz", "pterror", "etaerror", "phierror", "lambd", "lambdaerror", "theta", "thetaerror"
+]
+
+target_p4 = [
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "e",
+]
+
+
 def dataloader_ttbar(full_dataset, multi_gpu, n_train, n_valid, batch_size):
     """
     Builds training and validation dataloaders from a physics dataset for conveninet ML training
@@ -87,22 +135,19 @@ def dataloader_qcd(full_dataset, multi_gpu, n_test, batch_size):
     return test_loader
 
 
-def get_model_fname(dataset, model, n_train, n_epochs, target, alpha, title):
+def get_model_fname(dataset, model, data, n_train, n_epochs, target, title):
     """
     Get a unique directory name for the model
     """
-    if alpha == 0:
-        task = "clf"
-    else:
-        task = "clf_reg"
 
     model_name = type(model).__name__
-    model_fname = '{}_{}_ntrain_{}_nepochs_{}_{}'.format(
+    model_fname = '{}_{}_{}_{}files_{}epochs'.format(
         model_name,
+        data,
         target,
         n_train,
-        n_epochs,
-        task)
+        n_epochs
+    )
 
     if title:
         model_fname = model_fname + '_' + title

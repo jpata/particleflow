@@ -1,4 +1,4 @@
-from pytorch_delphes import PFGraphDataset, dataloader_qcd, load_model
+from pyg import PFGraphDataset, dataloader_qcd, load_model
 from lrp import MLPF, LRP_MLPF, make_Rmaps
 import argparse
 import pickle as pkl
@@ -28,8 +28,8 @@ from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 parser = argparse.ArgumentParser()
 
 # for saving the model
-parser.add_argument("--dataset_qcd",    type=str,           default='../data/test_tmp_delphes/data/pythia8_qcd',   help="testing dataset path")
-parser.add_argument("--outpath",        type=str,           default='../data/test_tmp_delphes/experiments/',       help="path to the trained model directory")
+parser.add_argument("--dataset_qcd",    type=str,           default='../data/delphes/pythia8_qcd',   help="testing dataset path")
+parser.add_argument("--outpath",        type=str,           default='../experiments/',       help="path to the trained model directory")
 parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
 parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load")
 parser.add_argument("--out_neuron",     type=int,           default=0,      help="the output neuron you wish to explain")
