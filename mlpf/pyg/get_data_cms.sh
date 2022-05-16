@@ -9,20 +9,20 @@ set -e
 # rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms data/
 
 # unzip the data
-for d in cms/* ; do
-  echo $d
-    mv $d/root $d/processed
-    cd $d/raw/
+for sample in cms/* ; do
+  echo $sample
+    mv $sample/root $sample/processed
+    cd $sample/raw/
     bzip2 -d *
     cd ../../../
 done
 
 # process the cms data
-for d in cms/* ; do
-  echo $d
+for sample in cms/* ; do
+  echo $sample
   #generate pytorch data files from pkl files
-  python3 preprocess_data.py --dataset $d \
-    --processed_dir $d/processed --num-files-merge 10 --num-proc 1
+  python3 preprocess_data.py --dataset $sample \
+    --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
 done
 
 mv cms ../../data/
