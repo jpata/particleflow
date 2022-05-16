@@ -191,6 +191,15 @@ def parse_args():
 
 if __name__ == "__main__":
 
+    """
+    e.g. to run for cms
+    python3 preprocess_data.py --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
+
+    e.g. to run for delphes
+    python3 preprocess_data.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
+
+    """
+
     args = parse_args()
 
     pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
