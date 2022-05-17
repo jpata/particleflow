@@ -3,7 +3,7 @@ The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283.
 
 To download and process the full DELPHES dataset:
 ```bash
-./get_data_delphes
+./get_data_delphes.sh
 ```
 
 This script will download and process the data under a directory called data/delphes under /particleflow.
@@ -18,7 +18,7 @@ python -u pyg_pipeline.py --data delphes --overwrite --target='gen'
 
 To download and process the full CMS dataset:
 ```bash
-./get_data_cms
+./get_data_cms.sh
 ```
 This script will download and process the data under a directory called data/cms under /particleflow.
 
