@@ -20,12 +20,16 @@ import matplotlib
 matplotlib.use("Agg")
 
 
+# Ignore divide by 0 errors
+np.seterr(divide='ignore', invalid='ignore')
+
+
 def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
     """
-    Defines regions in eta,phi space to make bins within an event and build graphs within these bins.
+    Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.
 
     Returns
-        regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max) and equivalenelty phi
+        regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max) that defines the limits of a region and equivalenelty phi
     """
     eta_step = (max_eta - min_eta) / num_eta_regions
     phi_step = (max_phi - min_phi) / num_phi_regions
@@ -51,7 +55,7 @@ def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5
 
 def batch_event_into_regions(data, regions):
     """
-    Given an event and a set of regions in eta,phi space, returns a binned version of the event.
+    Given an event and a set of regions in (eta,phi) space, returns a binned version of the event.
 
     Args
         data: a Batch() object containing the event and its information
@@ -60,44 +64,42 @@ def batch_event_into_regions(data, regions):
     Returns
         data: a modified Batch() object of based on data, where data.batch seperates the events in the different bins
     """
+
     x = None
     for region in range(len(regions)):
         in_region_msk = (data.x[:, 2] > regions[region][0][0]) & (data.x[:, 2] < regions[region][0][1]) & (torch.arcsin(data.x[:, 3]) > regions[region][1][0]) & (torch.arcsin(data.x[:, 3]) < regions[region][1][1])
 
         if in_region_msk.sum() != 0:  # if region is not empty
-            if x == None:
+            if x == None:   # first iteration
                 x = data.x[in_region_msk]
                 ygen = data.ygen[in_region_msk]
                 ygen_id = data.ygen_id[in_region_msk]
                 ycand = data.ycand[in_region_msk]
                 ycand_id = data.ycand_id[in_region_msk]
-                batch = region + torch.zeros([len(data.x[in_region_msk])])    # assumes events were already fed one at a time
+                batch = region + torch.zeros([len(data.x[in_region_msk])])    # assumes events were already fed one at a time (i.e. batch_size=1)
             else:
                 x = torch.cat([x, data.x[in_region_msk]])
                 ygen = torch.cat([ygen, data.ygen[in_region_msk]])
                 ygen_id = torch.cat([ygen_id, data.ygen_id[in_region_msk]])
                 ycand = torch.cat([ycand, data.ycand[in_region_msk]])
                 ycand_id = torch.cat([ycand_id, data.ycand_id[in_region_msk]])
-                batch = torch.cat([batch, region + torch.zeros([len(data.x[in_region_msk])])])    # assumes events were already fed one at a time
+                batch = torch.cat([batch, region + torch.zeros([len(data.x[in_region_msk])])])    # assumes events were already fed one at a time (i.e. batch_size=1)
 
     data = Batch(x=x,
                  ygen=ygen,
                  ygen_id=ygen_id,
                  ycand=ycand,
                  ycand_id=ycand_id,
-                 batch=batch.long(),    # assumes events were already fed one at a time
+                 batch=batch.long(),
                  )
     return data
-
-
-# Ignore divide by 0 errors
-np.seterr(divide='ignore', invalid='ignore')
 
 
 def compute_weights(device, target_ids, output_dim_id):
     """
     computes necessary weights to accomodate class imbalance in the loss function
     """
+
     vs, cs = torch.unique(target_ids, return_counts=True)
     weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
@@ -119,6 +121,7 @@ def train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type
     a training block over a given epoch...
     if optimizer is set to None, it freezes the model for a validation_run
     """
+
     regions = define_regions(num_eta_regions=1, num_phi_regions=1)
 
     is_train = not (optimizer is None)
@@ -297,8 +300,8 @@ def training_loop(data, device, model, multi_gpu, train_loader, valid_loader, n_
         elif data == 'cms':
             target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had"]
 
-        plot_confusion_matrix(conf_matrix_train, target_names, epoch, cm_path, f'cmT_epoch_{str(epoch)}')
-        plot_confusion_matrix(conf_matrix_val, target_names, epoch, cm_path, f'cmV_epoch_{str(epoch)}')
+        plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'cmT_epoch_{str(epoch)}')
+        plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'cmV_epoch_{str(epoch)}')
 
     # make loss plots
     make_plot(losses_clf_train, 'train loss_clf', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_clf_train')
