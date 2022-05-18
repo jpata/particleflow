@@ -53,9 +53,9 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0001
   num_events_validation: 1000
-  num_epochs: 100
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -65,6 +65,7 @@ setup:
 optimizer:
   adam:
     amsgrad: no
+    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
     pcgrad: yes
   adamw:
     amsgrad: yes
@@ -75,7 +76,7 @@ optimizer:
 
 # LR Schedules
 exponentialdecay:
-  decay_steps: 10000
+  decay_steps: 2000
   decay_rate: 0.99
   staircase: yes
 onecycle:
@@ -184,7 +185,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 4
+    batch_per_gpu: 1
     datasets:
       - cms_pf_ttbar
       - cms_pf_qcd
