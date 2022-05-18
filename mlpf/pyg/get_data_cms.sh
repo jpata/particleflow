@@ -22,7 +22,13 @@ for sample in cms/* ; do
   echo $sample
   #generate pytorch data files from pkl files
   python3 preprocess_data.py --data cms --dataset $sample \
-    --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
+    --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 done
 
 # mv cms ../../data/
+#
+# for sample in cms/* ; do
+#   echo $sample
+#   #generate pytorch data files from pkl files
+#   python3 preprocess_data.py --data cms --dataset ../../data/cms/$sample --processed_dir ../../data/cms/$sample/processed --num-files-merge 10 --num-proc 1
+# done
