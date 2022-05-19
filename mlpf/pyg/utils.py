@@ -37,6 +37,7 @@ pid_to_class_cms = {0: 'null',
                     5: 'photon',
                     6: 'nhadron',
                     7: 'chhadron',
+                    8: 'tau',
                     }
 
 

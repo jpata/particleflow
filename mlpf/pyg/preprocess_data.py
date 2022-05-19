@@ -1,3 +1,5 @@
+from utils import features_delphes, features_cms
+
 import pandas
 import pandas as pd
 import numpy as np
@@ -20,6 +22,7 @@ def relabel_indices(pid_array):
     """
     relabels classes for convenient ML operations/training
     """
+    pid_array[pid_array == 15] = 8  # taus
     pid_array[pid_array == 211] = 7
     pid_array[pid_array == 130] = 6
     pid_array[pid_array == 22] = 5
@@ -111,7 +114,7 @@ class PFGraphDataset(Dataset):
 
         batched_data = []
         if self.data == 'delphes':
-            num_classes = 6
+            num_classes = len(features_delphes)
             for i in range(len(data['X'])):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
@@ -123,7 +126,7 @@ class PFGraphDataset(Dataset):
                 )
                 batched_data.append(d)
         elif self.data == 'cms':
-            num_classes = 8
+            num_classes = len(features_cms)
             for i in range(len(data)):
                 Xelem = torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float)
                 ygen = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:]
