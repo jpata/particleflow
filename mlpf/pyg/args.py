@@ -26,15 +26,16 @@ def parse_args():
 
     # for training hyperparameters
     parser.add_argument("--n_epochs",       type=int,           default=3,      help="number of training epochs")
-    parser.add_argument("--batch_size",     type=int,           default=1,      help="Number of .pt files to load in parallel")
+    parser.add_argument("--batch_size",     type=int,           default=1,      help="number of events to run inference on before updating the loss")
     parser.add_argument("--patience",       type=int,           default=100,    help="patience before early stopping")
     parser.add_argument("--target",         type=str,           default="gen",  choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", )
     parser.add_argument("--lr",             type=float,         default=1e-4,   help="learning rate")
     parser.add_argument("--alpha",          type=float,         default=2e-4,   help="loss = clf + alpha*reg.. if set to 0 model only does trains for classification")
+    parser.add_argument("--batch_events",   dest='batch_events',        action='store_true', help="batches the event in eta,phi space to build the graphs")
 
     # for model architecture
     parser.add_argument("--hidden_dim1",    type=int,           default=126,    help="hidden dimension of layers before the graph convolutions")
-    parser.add_argument("--hidden_dim2",    type=int,           default=256,     help="hidden dimension of layers after the graph convolutions")
+    parser.add_argument("--hidden_dim2",    type=int,           default=256,    help="hidden dimension of layers after the graph convolutions")
     parser.add_argument("--embedding_dim",  type=int,           default=64,     help="encoded element dimension")
     parser.add_argument("--num_convs",      type=int,           default=2,      help="number of graph convolutions")
     parser.add_argument("--space_dim",      type=int,           default=4,      help="Spatial dimension for clustering in gravnet layer")

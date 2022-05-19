@@ -1,6 +1,7 @@
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot_particle_multiplicity
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
+from pyg.utils import define_regions, batch_event_into_regions
 
 import torch
 from torch_geometric.data import Batch
@@ -19,18 +20,24 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(data, output_dim_id, model, multi_gpu, test_loader, outpath, device, epoch):
+def make_predictions(data, batch_events, output_dim_id, model, multi_gpu, test_loader, outpath, device):
 
     print('Making predictions...')
-    t0 = time.time()
 
     gen_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
     pred_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
     cand_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
 
+    if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+        regions = define_regions(num_eta_regions=10, num_phi_regions=10)
+
     t = []
-    As = []
+    t0 = time.time()
     for i, batch in enumerate(test_loader):
+
+        if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+            batch = batch_event_into_regions(batch, regions)
+
         if multi_gpu:
             X = batch   # a list (not torch) instance so can't be passed to device
         else:
@@ -40,8 +47,7 @@ def make_predictions(data, output_dim_id, model, multi_gpu, test_loader, outpath
 
         ti = time.time()
 
-        pred, target, A, _ = model(X)
-        As.append(A)
+        pred, target, _, _ = model(X)
 
         gen_ids_one_hot = target['ygen_id']
         gen_p4 = target['ygen']
@@ -132,7 +138,7 @@ def make_predictions(data, output_dim_id, model, multi_gpu, test_loader, outpath
 
         if i == 4999:
             break
-    # torch.save(As, 'A.pth')
+
     print("Average Inference time per event is: ", round((sum(t) / len(t)), 2), 's')
 
     t1 = time.time()
@@ -163,7 +169,7 @@ def make_predictions(data, output_dim_id, model, multi_gpu, test_loader, outpath
     torch.save(predictions, outpath + '/predictions.pt')
 
 
-def make_plots(data, model, test_loader, outpath, target, device, epoch, tag):
+def make_plots(data, output_dim_id, model, test_loader, outpath, target, device, epoch, tag):
 
     print('Making plots...')
     t0 = time.time()
@@ -191,16 +197,16 @@ def make_plots(data, model, test_loader, outpath, target, device, epoch, tag):
 
     conf_matrix_mlpf = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
                                                         pred_ids.cpu(),
-                                                        labels=range(6), normalize="true")
+                                                        labels=range(output_dim_id), normalize="true")
 
-    plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch, outpath + '/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
+    plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, outpath + '/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
 
     # make confusion matrix for rule based PF
     conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
                                                         cand_ids.cpu(),
-                                                        labels=range(6), normalize="true")
+                                                        labels=range(output_dim_id), normalize="true")
 
-    plot_confusion_matrix(conf_matrix_cand, target_names, epoch, outpath + '/confusion_matrix_plots/', 'cm_cand', target="rule-based")
+    plot_confusion_matrix(conf_matrix_cand, target_names, epoch + 1, outpath + '/confusion_matrix_plots/', 'cm_cand', target="rule-based")
 
     # making all the other plots
     if 'QCD' in tag:

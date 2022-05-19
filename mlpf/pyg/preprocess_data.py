@@ -1,5 +1,3 @@
-from utils import features_delphes, features_cms
-
 import pandas
 import pandas as pd
 import numpy as np
@@ -114,7 +112,7 @@ class PFGraphDataset(Dataset):
 
         batched_data = []
         if self.data == 'delphes':
-            num_classes = len(features_delphes)
+            num_classes = 12
             for i in range(len(data['X'])):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
@@ -126,7 +124,7 @@ class PFGraphDataset(Dataset):
                 )
                 batched_data.append(d)
         elif self.data == 'cms':
-            num_classes = len(features_cms)
+            num_classes = 41
             for i in range(len(data)):
                 Xelem = torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float)
                 ygen = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:]

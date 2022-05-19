@@ -14,6 +14,12 @@ cd ../
 python -u pyg_pipeline.py --data delphes --overwrite --dataset=<path_to_delphes_data> --dataset_qcd=<path_to_delphes_data>
 ```
 
+To load a pretrained model which is stored in a directory under particleflow/experiments for evaluation:
+```bash
+cd ../
+python -u pyg_pipeline.py --data delphes --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_delphes_data> --dataset_qcd=<path_to_delphes_data>
+```
+
 ## CMS training
 
 To download and process the full CMS dataset:
@@ -26,6 +32,12 @@ To perform a quick training on the dataset:
 ```bash
 cd ../
 python -u pyg_pipeline.py --data cms --overwrite --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
+```
+
+To load a pretrained model which is stored in a directory under particleflow/experiments for evaluation:
+```bash
+cd ../
+python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
 
 ## Instructions to run LRP

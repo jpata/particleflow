@@ -1,5 +1,6 @@
+from pyg.preprocess_data import PFGraphDataset
 from pyg import parse_args
-from pyg import PFGraphDataset, dataloader_ttbar, dataloader_qcd
+from pyg import dataloader_ttbar, dataloader_qcd
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import pid_to_class_delphes, pid_to_class_cms, features_delphes, features_cms, target_p4
@@ -49,11 +50,17 @@ else:
 if __name__ == "__main__":
 
     """
-    e.g. to train locally run as:
-    python -u pyg_pipeline.py --title='ex' --overwrite --target='gen' --n_epochs=20 --n_train=1 --n_valid=1 --n_test=1 --batch_size=1 --dataset='../data/cms/data/SingleNeutronFlatPt0p7To1000_cfi' --dataset_qcd='../data/cms/data/SingleNeutronFlatPt0p7To1000_cfi'
+    e.g. to train on delphes locally run as:
+    python -u pyg_pipeline.py --data delphes --title='delphes' --overwrite --n_epochs=20 --dataset='../data/delphes/pythia8_ttbar' --dataset_qcd='../data/delphes/pythia8_ttbar'
 
-    e.g. to load and evaluate run as:
-    python -u pyg_pipeline.py --load --load_model='MLPF_gen_ntrain_1_nepochs_20_clf_reg' --load_epoch=19 --target='gen' --n_test=1 --batch_size=2
+    e.g. to train on cms locally run as:
+    python -u pyg_pipeline.py --data cms --title='cms' --overwrite --n_epochs=20 --dataset='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi' --dataset_qcd='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi'
+
+    e.g. to load and evaluate on delphes:
+    python -u pyg_pipeline.py --data delphes --load --load_model='MLPF_delphes_gen_1files_1epochs_delphes' --load_epoch=0 --dataset='../data/delphes/pythia8_ttbar' --dataset_qcd='../data/delphes/pythia8_ttbar'
+
+    e.g. to load and evaluate on cms:
+    python -u pyg_pipeline.py --data cms --load --load_model='MLPF_cms_gen_1files_20epochs_cms' --load_epoch=19 --dataset='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi' --dataset_qcd='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi'
     """
 
     args = parse_args()
@@ -123,7 +130,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         model.train()
-        training_loop(args.data, device, model, multi_gpu,
+        training_loop(args.data, device, model, multi_gpu, args.batch_events,
                       train_loader, valid_loader,
                       args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target,
@@ -134,18 +141,18 @@ if __name__ == "__main__":
     # evaluate on testing data..
     make_directories_for_plots(outpath, 'test_data')
     if args.load:
-        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.load_epoch)
-        make_plots(args.data, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
+        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device)
+        make_plots(args.data, output_dim_id, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
     else:
-        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device, args.n_epochs)
-        make_plots(args.data, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs, 'QCD')
+        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device)
+        make_plots(args.data, output_dim_id, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs - 1, 'QCD')
 
     # # evaluate on training data..
     # make_directories_for_plots(outpath, 'train_data')
-    # make_predictions(model, multi_gpu, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs)
-    # make_plots(args.data, model, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs, 'TTbar')
+    # make_predictions(args.data, output_dim_id, model, multi_gpu, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs)
+    # make_plots(args.data, output_dim_id, model, train_loader, outpath + '/train_data_plots', args.target, device, args.n_epochs, 'TTbar')
     #
     # # evaluate on validation data..
     # make_directories_for_plots(outpath, 'valid_data')
-    # make_predictions(model, multi_gpu, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs)
-    # make_plots(args.data, model, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs, 'TTbar')
+    # make_predictions(args.data, output_dim_id, model, multi_gpu, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs)
+    # make_plots(args.data, output_dim_id, model, valid_loader, outpath + '/valid_data_plots', args.target, device, args.n_epochs, 'TTbar')
