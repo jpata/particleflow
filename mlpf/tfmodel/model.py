@@ -1046,11 +1046,11 @@ class PFNetTransformer(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        key_dim = 64
+        key_dim = 128
         self.ffn = point_wise_feed_forward_network(key_dim, key_dim, "ffn", num_layers=1, activation="elu")
 
-        self.tf1 = Transformer(key_dim=key_dim, num_layers=5, name="tf1")
-        self.tf2 = Transformer(key_dim=key_dim, num_layers=5, name="tf2")
+        self.tf1 = Transformer(key_dim=key_dim, num_layers=10, name="tf1")
+        self.tf2 = Transformer(key_dim=key_dim, num_layers=10, name="tf2")
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes

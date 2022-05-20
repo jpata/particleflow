@@ -94,3 +94,6 @@ class PCGrad(optimizer.Optimizer):
 
     def get_weights(self):
         return self.optimizer.get_weights()
+
+    def set_weights(self, weights):
+        return self.optimizer.set_weights(weights)

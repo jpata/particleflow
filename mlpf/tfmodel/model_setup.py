@@ -723,15 +723,15 @@ def configure_model_weights(model, trainable_layers):
     if trainable_layers == "all":
         model.trainable = True
     elif trainable_layers == "regression":
-        for cg in model.cg:
+        for cg in model.cg_id:
             cg.trainable = False
-        for cg in model.cg_energy:
+        for cg in model.cg_reg:
             cg.trainable = True
         model.output_dec.set_trainable_regression()
     elif trainable_layers == "classification":
-        for cg in model.cg:
+        for cg in model.cg_id:
             cg.trainable = True
-        for cg in model.cg_energy:
+        for cg in model.cg_reg:
             cg.trainable = False
         model.output_dec.set_trainable_classification()
     else:

@@ -30,8 +30,8 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
-  sum_energy_loss_coef: 0.0
-  sum_pt_loss_coef: 0.0
+  sum_energy_loss_coef: 0.0000001
+  sum_pt_loss_coef: 0.0000001
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,9 +53,9 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.001
   num_events_validation: 1000
-  num_epochs: 100
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -94,8 +94,8 @@ parameters:
   node_encoding_hidden_dim: 128
 
   combined_graph_layer:
-    bin_size: 16
-    max_num_bins: 400
+    bin_size: 100
+    max_num_bins: 200
     distance_dim: 64
     layernorm: yes
     dropout: 0.0
@@ -121,18 +121,18 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
-      dist_norm: l1
+      dist_norm: l2
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 64
       activation: elu
       #if this is enabled, it will break float16 training
-      normalize_degrees: no
+      normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 1
-  num_graph_layers_reg: 1
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -219,7 +219,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 10
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
       - cms_pf_qcd
