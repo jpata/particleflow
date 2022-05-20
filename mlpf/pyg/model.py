@@ -78,7 +78,7 @@ class MLPF(nn.Module):
         )
 
     def forward(self, batch):
-        print(batch.device)
+        print(batch)
 
         # unfold the Batch object
         input = batch.x
