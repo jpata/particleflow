@@ -57,7 +57,7 @@ if __name__ == "__main__":
     python -u pyg_pipeline.py --data cms --title='cms' --overwrite --n_epochs=20 --dataset='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi' --dataset_qcd='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi'
 
     e.g. to load and evaluate on delphes:
-    python -u pyg_pipeline.py --data delphes --load --load_model='MLPF_delphes_gen_1files_6epochs_delphes' --load_epoch=5 --dataset='../data/delphes/pythia8_ttbar' --dataset_qcd='../data/delphes/pythia8_ttbar'
+    python -u pyg_pipeline.py --data delphes --load --load_model='MLPF_delphes_gen_1files_20epochs_delphes' --load_epoch=19 --dataset='../data/delphes/pythia8_ttbar' --dataset_qcd='../data/delphes/pythia8_ttbar'
 
     e.g. to load and evaluate on cms:
     python -u pyg_pipeline.py --data cms --load --load_model='MLPF_cms_gen_1files_20epochs_cms' --load_epoch=19 --dataset='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi' --dataset_qcd='../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi'
@@ -118,6 +118,7 @@ if __name__ == "__main__":
 
         if multi_gpu:
             print("Parallelizing the training..")
+            model.cuda()
             model = torch_geometric.nn.DataParallel(model)
 
         model.to(device)
