@@ -118,7 +118,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     config, config_file_stem = parse_config(
         config, nepochs=nepochs, weights=weights
     )
-    
+
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
@@ -146,8 +146,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     # Decide tf.distribute.strategy depending on number of available GPUs
     horovod_enabled = config["setup"]["horovod_enabled"]
     if horovod_enabled:
-        initialize_horovod()
-        num_gpus = hvd.size()
+        num_gpus = initialize_horovod()
     else:
         strategy, num_gpus = get_strategy()
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
@@ -181,21 +180,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         with strategy.scope():
             model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
     
-
-    #Set the optimizer weights
-    if loaded_opt:
-        def model_weight_setting():
-            grad_vars = model.trainable_weights
-            zero_grads = [tf.zeros_like(w) for w in grad_vars]
-            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
-                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
-            else:
-                model.optimizer.set_weights(loaded_opt["weights"])
-        try:
-            strategy.run(model_weight_setting)
-        except Exception as e:
-            print(e)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
@@ -317,6 +301,22 @@ def model_scope(config, total_steps, weights, horovod_enabled=False):
     )
 
     model.summary()
+
+    #Set the optimizer weights
+    if loaded_opt:
+        def model_weight_setting():
+            grad_vars = model.trainable_weights
+            zero_grads = [tf.zeros_like(w) for w in grad_vars]
+            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
+            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
+            else:
+                model.optimizer.set_weights(loaded_opt["weights"])
+        try:
+            strategy.run(model_weight_setting)
+        except Exception as e:
+            print(e)
+
     return model,optim_callbacks,initial_epoch
 
 def initialize_horovod():
@@ -326,6 +326,8 @@ def initialize_horovod():
         tf.config.experimental.set_memory_growth(gpu, True)
     if gpus:
         tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+
+    return hvd.size()
 
 
 
