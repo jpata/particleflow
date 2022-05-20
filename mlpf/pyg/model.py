@@ -53,7 +53,7 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv_LRP(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
 
         # (3) DNN layer: classifiying pid
         self.nn2 = nn.Sequential(
@@ -105,46 +105,12 @@ class MLPF(nn.Module):
         return torch.cat([preds_id, preds_p4], axis=-1), target, A, msg_activations
 
 
-class GravNetConv_LRP(MessagePassing):
+class GravNetConv_MLPF(MessagePassing):
     """
     Copied from pytorch_geometric source code, with the following edits
         - used reduce='sum' instead of reduce='mean' in the message passing
         - removed skip connection
-
-    The GravNet operator from the `"Learning Representations of Irregular
-    Particle-detector Geometry with Distance-weighted Graph
-    Networks" <https://arxiv.org/abs/1902.07987>`_ paper, where the graph is
-    dynamically constructed using nearest neighbors.
-    The neighbors are constructed in a learnable low-dimensional projection of
-    the feature space.
-    A second projection of the input feature space is then propagated from the
-    neighbors to each vertex using distance weights that are derived by
-    applying a Gaussian function to the distances.
-    Args:
-        in_channels (int): Size of each input sample, or :obj:`-1` to derive
-            the size from the first input(s) to the forward method.
-        out_channels (int): The number of output channels.
-        space_dimensions (int): The dimensionality of the space used to
-           construct the neighbors; referred to as :math:`S` in the paper.
-        propagate_dimensions (int): The number of features to be propagated
-           between the vertices; referred to as :math:`F_{\textrm{LR}}` in the
-           paper.
-        k (int): The number of nearest neighbors.
-        num_workers (int): Number of workers to use for k-NN computation.
-            Has no effect in case :obj:`batch` is not :obj:`None`, or the input
-            lies on the GPU. (default: :obj:`1`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch_geometric.nn.conv.MessagePassing`.
-    Shapes:
-        - **input:**
-          node features :math:`(|\mathcal{V}|, F_{in})` or
-          :math:`((|\mathcal{V_s}|, F_{in}), (|\mathcal{V_t}|, F_{in}))`
-          if bipartite,
-          batch vector :math:`(|\mathcal{V}|)` or
-          :math:`((|\mathcal{V}_s|), (|\mathcal{V}_t|))` if bipartite
-          *(optional)*
-        - **output:** node features :math:`(|\mathcal{V}|, F_{out})` or
-          :math:`(|\mathcal{V}_t|, F_{out})` if bipartite
+        - retrieve adjacency matrix and the activations before the message passing. Both are useful only for LRP purposes
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -203,8 +169,6 @@ class GravNetConv_LRP(MessagePassing):
             raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
 
         edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
-        # edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
-        # edge_index = knn_graph(s_l, self.k, b[0], b[1]).flip([0])
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
