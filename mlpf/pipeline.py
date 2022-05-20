@@ -118,7 +118,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     config, config_file_stem = parse_config(
         config, nepochs=nepochs, weights=weights
     )
-
+    
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
@@ -254,7 +254,7 @@ def model_save(outdir, fit_result, model, weights):
     print("Training done.")
 
 def model_scope(config, total_steps, weights, horovod_enabled=False):
-    lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
     opt = get_optimizer(config, lr_schedule)
 
     if config["setup"]["dtype"] == "float16":

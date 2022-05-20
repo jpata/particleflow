@@ -2,7 +2,7 @@
 
 # Walltime limit
 #SBATCH -t 02:00:00
-#SBATCH -N 2
+#SBATCH -N 8
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4
@@ -21,7 +21,7 @@ cat $0
 echo "################# End of job submission script. #########################"
 
 module --force purge; module load modules/1.49-20211101
-module load slurm gcc valgrind cmake nccl/2.9.9-1 cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
+module load slurm gcc cmake nccl/2.9.9-1 cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
 
 nvidia-smi
 
