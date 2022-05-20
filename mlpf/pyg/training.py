@@ -39,20 +39,33 @@ def compute_weights(device, target_ids, output_dim_id):
 
 
 @torch.no_grad()
-def validation_run(device, model, multi_gpu, batch_events, loader, epoch, alpha, target_type, output_dim_id, outpath):
+def validation_run(device, model, multi_gpu, batch_events, loader,
+                   alpha, target_type, output_dim_id, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, model, multi_gpu, loader, epoch, optimizer, alpha, target_type, output_dim_id, outpath)
+        ret = train(device, model, multi_gpu, batch_events, loader, optimizer, alpha, target_type, output_dim_id, outpath)
     return ret
 
 
-def train(device, model, multi_gpu, batch_events, loader, epoch, optimizer, alpha, target_type, output_dim_id, outpath):
+def train(device, model, multi_gpu, batch_events, loader, optimizer,
+          alpha, target_type, output_dim_id, outpath):
     """
-    a training block over a given epoch...
-    if optimizer is set to None, it freezes the model for a validation_run
+    A training/validation block over a given epoch. If optimizer is set to None, it freezes the model for a validation_run.
+
+    Args:
+        device: 'cpu' or cuda
+        model: pytorch model
+        multi_gpu: boolean for multi_gpu training (if multigpus are available)
+        batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
+        loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
+        optimizer: optimizer to use for training (by default: Adam). If set to None, it freezes the model for a validation_run.
+        alpha: the hyperparameter controlling the classification vs regression task balance (alpha=0 means pure regression, and greater positive values emphasize regression)
+        target_type: 'gen' or 'cand' training
+        output_dim_id: number of particle candidate classes to predict (6 for delphes, 9 for cms)
+        outpath: path to store the model weights and training plots
     """
 
-    if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+    if batch_events:
         regions = define_regions(num_eta_regions=10, num_phi_regions=10)
 
     is_train = not (optimizer is None)
@@ -62,14 +75,14 @@ def train(device, model, multi_gpu, batch_events, loader, epoch, optimizer, alph
     else:
         model.eval()
 
-    # initialize placeholders for loss and accuracy
-    losses_clf, losses_reg, losses_tot, accuracies = [], [], [], []
+    # initialize loss and accuracy
+    losses_clf, losses_reg, losses_tot, accuracies = 0, 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
     # to compute average inference time
-    t = []
+    t = 0
 
     for i, batch in enumerate(loader):
 
@@ -85,7 +98,7 @@ def train(device, model, multi_gpu, batch_events, loader, epoch, optimizer, alph
         t0 = time.time()
         pred, target, _, _ = model(X)
         t1 = time.time()
-        t.append(t1 - t0)
+        t = t + (t1 - t0)
 
         pred_ids_one_hot = pred[:, :output_dim_id]
         pred_p4 = pred[:, output_dim_id:]
@@ -118,33 +131,39 @@ def train(device, model, multi_gpu, batch_events, loader, epoch, optimizer, alph
             loss_tot.backward()
             optimizer.step()
 
-        losses_clf.append(loss_clf.detach().cpu().item())
-        losses_reg.append(loss_reg.detach().cpu().item())
-        losses_tot.append(loss_tot.detach().cpu().item())
+        losses_clf = losses_clf + loss_clf
+        losses_reg = losses_reg + loss_reg
+        losses_tot = losses_tot + loss_tot
 
-        accuracies.append(sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(), pred_ids[msk].detach().cpu().numpy()))
+        accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
+                                                                 pred_ids[msk].detach().cpu().numpy())
 
         conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                         pred_ids.detach().cpu().numpy(),
                                                         labels=range(output_dim_id))
 
-    losses_clf = np.mean(losses_clf)
-    losses_reg = np.mean(losses_reg)
-    losses_tot = np.mean(losses_tot)
+    losses_clf = (losses_clf / len(loader)).item()
+    losses_reg = (losses_reg / len(loader)).item()
+    losses_tot = (losses_tot / len(loader)).item()
 
-    accuracies = np.mean(accuracies)
+    accuracies = (accuracies / len(loader)).item()
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    avg_inference_time = sum(t) / len(t)
-    print(f'Average inference time per event is {round(avg_inference_time,3)}s')
+    print(f'Average inference time per event is {round((t / len(loader)),3)}s')
 
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(data, device, model, multi_gpu, batch_events, train_loader, valid_loader, n_epochs, patience, optimizer, alpha, target, output_dim_id, outpath):
+def training_loop(data, device, model, multi_gpu, batch_events,
+                  train_loader, valid_loader, n_epochs, patience,
+                  optimizer, alpha, target, output_dim_id, outpath):
     """
-    Main function for training a model
+    Main function for training a model. Will call the train() and validation_run() functions every epoch.
+
+    Args:
+        n_epochs: number of epochs for a full training
+        patience: number of stale epochs allowed before stopping the training
     """
 
     t0_initial = time.time()
@@ -167,7 +186,7 @@ def training_loop(data, device, model, multi_gpu, batch_events, train_loader, va
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, batch_events, train_loader, epoch, optimizer, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, batch_events, train_loader, optimizer, alpha, target, output_dim_id, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -177,7 +196,7 @@ def training_loop(data, device, model, multi_gpu, batch_events, train_loader, va
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, batch_events, valid_loader, epoch, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, batch_events, valid_loader, alpha, target, output_dim_id, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
@@ -234,7 +253,3 @@ def training_loop(data, device, model, multi_gpu, batch_events, train_loader, va
     make_plot(accuracies_valid, 'valid accuracy', 'Epochs', 'Accuracy', outpath + '/training_plots/accuracies/', 'accuracies_valid')
 
     print('Done with training.')
-    return
-
-
-multi = 'lol'

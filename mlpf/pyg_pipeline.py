@@ -70,7 +70,7 @@ if __name__ == "__main__":
     full_dataset_ttbar = PFGraphDataset(args.dataset, args.data)
     full_dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
-    # construct Dataloaders to facilitate looping over batches
+    # construct Dataloaders to facilitate looping over batches during training
     print('Building dataloaders..')
     train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
     test_loader = dataloader_qcd(full_dataset_qcd, multi_gpu, args.n_test, batch_size=args.batch_size)
