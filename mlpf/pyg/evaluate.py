@@ -1,6 +1,7 @@
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot_particle_multiplicity
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
+from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms
 from pyg.utils import define_regions, batch_event_into_regions
 
 import torch
@@ -24,14 +25,14 @@ def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu
 
     print('Making predictions...')
 
-    gen_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    pred_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    cand_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
+    gen_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "ele": [], "mu": []}
+    pred_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "ele": [], "mu": []}
+    cand_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "ele": [], "mu": []}
 
     if batch_events:    # batch events into eta,phi regions to build graphs only within regions
         regions = define_regions(num_eta_regions=10, num_phi_regions=10)
 
-    t = []
+    t = 0
     t0 = time.time()
     for i, batch in enumerate(test_loader):
 
@@ -43,74 +44,36 @@ def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu
         else:
             X = batch.to(device)
 
-        # X.x = torch.cat([X.x, X.x[:, np.r_[0, 5]], X.x[:, np.r_[0, 5]], X.x[:, np.r_[0, 5]], X.x[:, np.r_[0, 5]], X.x[:, np.r_[0, 5]]],  axis=1)
-
         ti = time.time()
-
         pred, target, _, _ = model(X)
-
-        gen_ids_one_hot = target['ygen_id']
-        gen_p4 = target['ygen']
-        cand_ids_one_hot = target['ycand_id']
-        cand_p4 = target['ycand']
-
-        pred_ids_one_hot = pred[:, :output_dim_id]
-        pred_p4 = pred[:, output_dim_id:]
-
         tf = time.time()
-        if i != 0:
-            t.append(round((tf - ti), 2))
+        t = t + (tf - ti)
 
+        # retrieve target
+        gen_ids_one_hot = target['ygen_id']
+        gen_p4 = target['ygen'].detach()
+        cand_ids_one_hot = target['ycand_id']
+        cand_p4 = target['ycand'].detach()
+
+        # retrieve predictions
+        pred_ids_one_hot = pred[:, :output_dim_id]
+        pred_p4 = pred[:, output_dim_id:].detach()
+
+        # revert on-hot encodings
         _, gen_ids = torch.max(gen_ids_one_hot.detach(), -1)
         _, pred_ids = torch.max(pred_ids_one_hot.detach(), -1)
         _, cand_ids = torch.max(cand_ids_one_hot.detach(), -1)
 
-        # msk = (gen_ids == 2)  # for neutrons
-        #
-        # if msk.sum() != 0:
-        #     print(f'{msk.sum()} misclassified neutrons')
-        #     print(f'{(X.x[msk][:, 6] == 0).sum()} have 0 Eem feature')  # print the Eem feature
-
-        # msk = (gen_ids == 3)  # for photons
-
-        # if msk.sum() != 0:
-        #     print(f'{msk.sum()} phtons')
-        #     print(f'{(X.x[msk][:, 7] != 0).sum()} have nonzero Ehm feature')  # print the Eem feature
-
-        # msk = (gen_ids == 2) & (pred_ids != 2)  # for misclassified neutrons
-        #
-        # if msk.sum() != 0:
-        #     print(f'{msk.sum()} total misclassified neutrons')
-        #     print(f'{(msk & (X.x[:, 6] != 0)).sum()} misclassified neutrons with nonzero Eem')
-        #     print(f'{(msk & (X.x[:, 6] != 0) & (pred_ids==3)).sum()} misclassified neutrons as photons with nonzero Eem')
-        #     print(f'{(msk & (X.x[:, 6] != 0) & (pred_ids==3) & (X.x[:, 7] == 0)).sum()} misclassified neutrons as photons with nonzero Eem and zero Ehm')
-
         # to make "num_gen vs num_pred" plots
         if data == 'delphes':
-            gen_list["null"].append((gen_ids == 0).sum().item())
-            gen_list["chhadron"].append((gen_ids == 1).sum().item())
-            gen_list["nhadron"].append((gen_ids == 2).sum().item())
-            gen_list["photon"].append((gen_ids == 3).sum().item())
-            gen_list["electron"].append((gen_ids == 4).sum().item())
-            gen_list["muon"].append((gen_ids == 5).sum().item())
+            dict = name_to_pid_delphes
+        elif data == 'cms':
+            dict = name_to_pid_cms
 
-            pred_list["null"].append((pred_ids == 0).sum().item())
-            pred_list["chhadron"].append((pred_ids == 1).sum().item())
-            pred_list["nhadron"].append((pred_ids == 2).sum().item())
-            pred_list["photon"].append((pred_ids == 3).sum().item())
-            pred_list["electron"].append((pred_ids == 4).sum().item())
-            pred_list["muon"].append((pred_ids == 5).sum().item())
-
-            cand_list["null"].append((cand_ids == 0).sum().item())
-            cand_list["chhadron"].append((cand_ids == 1).sum().item())
-            cand_list["nhadron"].append((cand_ids == 2).sum().item())
-            cand_list["photon"].append((cand_ids == 3).sum().item())
-            cand_list["electron"].append((cand_ids == 4).sum().item())
-            cand_list["muon"].append((cand_ids == 5).sum().item())
-
-        gen_p4 = gen_p4.detach()
-        pred_p4 = pred_p4.detach()
-        cand_p4 = cand_p4.detach()
+        for key, value in dict.items():
+            gen_list[key].append((gen_ids == value).sum().item())
+            pred_list[key].append((pred_ids == value).sum().item())
+            cand_list[key].append((cand_ids == value).sum().item())
 
         if i == 0:
             gen_ids_all = gen_ids
@@ -131,19 +94,14 @@ def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu
             cand_ids_all = torch.cat([cand_ids_all, cand_ids])
             cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
-        if len(test_loader) < 5000:
-            print(f'event #: {i+1}/{len(test_loader)}')
-        else:
-            print(f'event #: {i+1}/{5000}')
+        print(f'event #: {i+1}/{len(test_loader)}')
 
-        if i == 4999:
+        if i == 3:
             break
 
-    print("Average Inference time per event is: ", round((sum(t) / len(t)), 2), 's')
+    print(f'Average inference time per event is {round((t / len(test_loader)),3)}s')
 
-    t1 = time.time()
-
-    print('Time taken to make predictions is:', round(((t1 - t0) / 60), 2), 'min')
+    print('Time taken to make predictions is:', round(((time.time() - t0) / 60), 2), 'min')
 
     # store the 3 list dictionaries in a list (this is done only to compute the particle multiplicity plots)
     if data == 'delphes':
@@ -214,21 +172,21 @@ def make_plots(data, output_dim_id, model, test_loader, outpath, target, device,
     else:
         sample = "$t\\bar{t}$, 14 TeV, PU200"
 
-    # # make distribution plots
-    # plot_distributions_pid(1, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for chhadrons
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    # plot_distributions_pid(2, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for nhadrons
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    # plot_distributions_pid(3, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for photons
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    # plot_distributions_pid(4, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for electrons
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    # plot_distributions_pid(5, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for muons
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    #
-    # plot_distributions_all(gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for all together
-    #                        target, epoch, outpath, legend_title=sample + "\n")
-    #
+    # make distribution plots
+    plot_distributions_pid(1, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for chhadrons
+                           target, epoch, outpath, legend_title=sample + "\n")
+    plot_distributions_pid(2, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for nhadrons
+                           target, epoch, outpath, legend_title=sample + "\n")
+    plot_distributions_pid(3, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for photons
+                           target, epoch, outpath, legend_title=sample + "\n")
+    plot_distributions_pid(4, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for electrons
+                           target, epoch, outpath, legend_title=sample + "\n")
+    plot_distributions_pid(5, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for muons
+                           target, epoch, outpath, legend_title=sample + "\n")
+
+    plot_distributions_all(gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots for all together
+                           target, epoch, outpath, legend_title=sample + "\n")
+
     # plot particle multiplicity plots
     if data == 'delphes':
         list_for_multiplicities = torch.load(outpath + f'/list_for_multiplicities.pt', map_location=device)
@@ -258,13 +216,13 @@ def make_plots(data, output_dim_id, model, test_loader, outpath, target, device,
         plt.close(fig)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
-        ret_num_particles_electron = plot_particle_multiplicity(list_for_multiplicities, "electron", ax)
+        ret_num_particles_electron = plot_particle_multiplicity(list_for_multiplicities, "ele", ax)
         plt.savefig(outpath + "/multiplicity_plots/num_electron.png", bbox_inches="tight")
         plt.savefig(outpath + "/multiplicity_plots/num_electron.pdf", bbox_inches="tight")
         plt.close(fig)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
-        ret_num_particles_muon = plot_particle_multiplicity(list_for_multiplicities, "muon", ax)
+        ret_num_particles_muon = plot_particle_multiplicity(list_for_multiplicities, "mu", ax)
         plt.savefig(outpath + "/multiplicity_plots/num_muon.png", bbox_inches="tight")
         plt.savefig(outpath + "/multiplicity_plots/num_muon.pdf", bbox_inches="tight")
         plt.close(fig)

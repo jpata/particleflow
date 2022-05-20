@@ -20,25 +20,32 @@ import sklearn
 import matplotlib
 matplotlib.use("Agg")
 
+pid_to_name_delphes = {
+    0: "Null",
+    1: "Charged hadrons",
+    2: "Neutral hadrons",
+    3: "Photons",
+    4: "Electrons",
+    5: "Muons",
+}
+name_to_pid_delphes = {'null': 0,
+                       'chhadron': 1,
+                       'nhadron': 2,
+                       'photon': 3,
+                       'ele': 4,
+                       'mu': 5,
+                       }
 
-pid_to_class_delphes = {0: 'null',
-                        1: 'chhadron',
-                        2: 'nhadron',
-                        3: 'photon',
-                        4: 'ele',
-                        5: 'mu',
-                        }
-
-pid_to_class_cms = {0: 'null',
-                    1: 'HFEM',
-                    2: 'HFHAD',
-                    3: 'ele',
-                    4: 'mu',
-                    5: 'photon',
-                    6: 'nhadron',
-                    7: 'chhadron',
-                    8: 'tau',
-                    }
+pid_to_name_cms = {'null': 0,
+                   'HFEM': 1,
+                   'HFHAD': 2,
+                   'ele': 3,
+                   'mu': 4,
+                   'photon': 5,
+                   'nhadron': 6,
+                   'chhadron': 7,
+                   'tau': 8,
+                   }
 
 
 features_delphes = ["Track|cluster", "$p_{T}|E_{T}$", r"$\eta$", r'$Sin(\phi)$', r'$Cos(\phi)$',

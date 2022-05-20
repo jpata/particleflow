@@ -1,4 +1,11 @@
-## DELPHES training
+# Setup
+
+
+
+
+# Training
+
+### DELPHES training
 The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283.
 
 To download and process the full DELPHES dataset:
@@ -20,7 +27,7 @@ cd ../
 python -u pyg_pipeline.py --data delphes --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_delphes_data> --dataset_qcd=<path_to_delphes_data>
 ```
 
-## CMS training
+### CMS training
 
 To download and process the full CMS dataset:
 ```bash
@@ -40,7 +47,7 @@ cd ../
 python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
 
-## Instructions to run LRP
+### XAI and LRP studies on MLPF
 
 You must have a pre-trained model under `particleflow/experiments`:
 ```bash

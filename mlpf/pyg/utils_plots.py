@@ -10,8 +10,7 @@ import mplhep as hep
 
 plt.style.use(hep.style.ROOT)
 
-
-pid_names = {
+pid_to_name_delphes = {
     0: "Null",
     1: "Charged hadrons",
     2: "Neutral hadrons",
@@ -19,14 +18,25 @@ pid_names = {
     4: "Electrons",
     5: "Muons",
 }
-key_to_pid = {
-    "null": 0,
-    "chhadron": 1,
-    "nhadron": 2,
-    "photon": 3,
-    "electron": 4,
-    "muon": 5,
-}
+name_to_pid_delphes = {'null': 0,
+                       'chhadron': 1,
+                       'nhadron': 2,
+                       'photon': 3,
+                       'ele': 4,
+                       'mu': 5,
+                       }
+
+pid_to_name_cms = {'null': 0,
+                   'HFEM': 1,
+                   'HFHAD': 2,
+                   'ele': 3,
+                   'mu': 4,
+                   'photon': 5,
+                   'nhadron': 6,
+                   'chhadron': 7,
+                   'tau': 8,
+                   }
+
 var_names = {
     "pt": r"$p_\mathrm{T}$ [GeV]",
     "eta": r"$\eta$",
@@ -90,7 +100,7 @@ def plot_distribution(pid, target, mlpf, var_name, rng, target_type, fname, lege
     plt.xlabel(var_name)
 
     if pid != -1:
-        plt.legend(frameon=False, title=legend_title + pid_names[pid])
+        plt.legend(frameon=False, title=legend_title + pid_to_name_delphes[pid])
     else:
         plt.legend(frameon=False, title=legend_title)
 
@@ -125,12 +135,12 @@ def plot_distributions_pid(pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_
     e_true = true_p4[true_id == pid, 5].flatten().detach().cpu().numpy()
     e_pred = pred_p4[pred_id == pid, 5].flatten().detach().cpu().numpy()
 
-    figure = plot_distribution(pid, ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_charge_distribution', legend_title=legend_title)
-    figure = plot_distribution(pid, pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_pt_distribution', legend_title=legend_title)
-    figure = plot_distribution(pid, e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_energy_distribution', legend_title=legend_title)
-    figure = plot_distribution(pid, eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_eta_distribution', legend_title=legend_title)
-    figure = plot_distribution(pid, sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_sphi_distribution', legend_title=legend_title)
-    figure = plot_distribution(pid, cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname=outpath + '/distribution_plots/' + pid_names[pid] + '_cphi_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, ch_true, ch_pred, "charge", np.linspace(0, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_charge_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, pt_true, pt_pred, "pt", np.linspace(0, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_pt_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, e_true, e_pred, "E", np.linspace(-1, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_energy_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, eta_true, eta_pred, "eta", np.linspace(-5, 5, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_eta_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, sphi_true, sphi_pred, "sin phi", np.linspace(-2, 2, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_sphi_distribution', legend_title=legend_title)
+    figure = plot_distribution(pid, cphi_true, cphi_pred, "cos phi", np.linspace(-2, 2, 100), target, fname=outpath + '/distribution_plots/' + pid_to_name_delphes[pid] + '_cphi_distribution', legend_title=legend_title)
 
 
 def plot_distributions_all(true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""):
@@ -173,7 +183,7 @@ def plot_particle_multiplicity(list, key, ax=None, legend_title=""):
     """
     plt.style.use(hep.style.ROOT)
 
-    pid = key_to_pid[key]
+    pid = name_to_pid_delphes[key]
     if not ax:
         plt.figure(figsize=(4, 4))
         ax = plt.axes()
@@ -230,7 +240,7 @@ def plot_particle_multiplicity(list, key, ax=None, legend_title=""):
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     plt.tight_layout()
-    ax.legend(frameon=False, title=legend_title + pid_names[pid])
+    ax.legend(frameon=False, title=legend_title + pid_to_name_delphes[pid])
     ax.set_xlabel("Truth particles / event")
     ax.set_ylabel("Reconstructed particles / event")
     plt.title("Particle multiplicity")
@@ -258,7 +268,7 @@ def draw_efficiency_fakerate(ygen, ypred, ycand, pid, var, bins, outpath, both=T
         fig, ax1 = plt.subplots(1, 1, figsize=(8, 1 * 8))
         ax2 = None
 
-    #ax1.set_title("reco efficiency for {}".format(pid_names[pid]))
+    #ax1.set_title("reco efficiency for {}".format(pid_to_name_delphes[pid]))
     ax1.errorbar(
         midpoints(hist_gen[1]),
         divide_zero(hist_cand[0], hist_gen[0]),
@@ -269,7 +279,7 @@ def draw_efficiency_fakerate(ygen, ypred, ycand, pid, var, bins, outpath, both=T
         divide_zero(hist_pred[0], hist_gen[0]),
         divide_zero(np.sqrt(hist_gen[0]), hist_gen[0]) * divide_zero(hist_pred[0], hist_gen[0]),
         lw=0, label="MLPF", elinewidth=2, marker=".", markersize=10)
-    ax1.legend(frameon=False, loc=0, title=legend_title + pid_names[pid])
+    ax1.legend(frameon=False, loc=0, title=legend_title + pid_to_name_delphes[pid])
     ax1.set_ylim(0, 1.2)
     # if var=="energy":
     #     ax1.set_xlim(0,30)
@@ -288,7 +298,7 @@ def draw_efficiency_fakerate(ygen, ypred, ycand, pid, var, bins, outpath, both=T
 
     if both:
         # fake rate plot
-        #ax2.set_title("reco fake rate for {}".format(pid_names[pid]))
+        #ax2.set_title("reco fake rate for {}".format(pid_to_name_delphes[pid]))
         ax2.errorbar(
             midpoints(hist_cand2[1]),
             divide_zero(hist_cand_gen2[0], hist_cand2[0]),
@@ -299,7 +309,7 @@ def draw_efficiency_fakerate(ygen, ypred, ycand, pid, var, bins, outpath, both=T
             divide_zero(hist_pred_gen2[0], hist_pred2[0]),
             divide_zero(np.sqrt(hist_pred_gen2[0]), hist_pred2[0]),
             lw=0, label="MLPF", elinewidth=2, marker=".", markersize=10)
-        ax2.legend(frameon=False, loc=0, title=legend_title + pid_names[pid])
+        ax2.legend(frameon=False, loc=0, title=legend_title + pid_to_name_delphes[pid])
         ax2.set_ylim(0, 1.0)
         # plt.yscale("log")
         ax2.set_xlabel(var_names[var])
@@ -338,10 +348,10 @@ def plot_reso(ygen, ypred, ycand, pid, var, rng, ax=None, legend_title=""):
         plt.figure(figsize=(4, 4))
         ax = plt.axes()
 
-    #plt.title("{} resolution for {}".format(var_names_nounit[var], pid_names[pid]))
+    #plt.title("{} resolution for {}".format(var_names_nounit[var], pid_to_name_delphes[pid]))
     ax.hist(ratio_dpf, bins=bins, histtype="step", lw=2, label="Rule-based PF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_dpf))
     ax.hist(ratio_mlpf, bins=bins, histtype="step", lw=2, label="MLPF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_mlpf))
-    ax.legend(frameon=False, title=legend_title + pid_names[pid])
+    ax.legend(frameon=False, title=legend_title + pid_to_name_delphes[pid])
     ax.set_xlabel("{nounit} resolution, $({bare}^\prime - {bare})/{bare}$".format(nounit=var_names_nounit[var], bare=var_names_bare[var]))
     ax.set_ylabel("Particles")
     #plt.ylim(0, ax.get_ylim()[1]*2)
