@@ -12,15 +12,12 @@ from glob import glob
 import pickle
 import multiprocessing
 
-# assumes pkl files exist in /data/sample/raw
-# they are processed and saved as pt files in /data/sample/processed
-
 
 def relabel_indices(pid_array):
     """
     relabels classes for convenient ML operations/training
     """
-    pid_array[pid_array == 15] = 8  # taus
+    pid_array[pid_array == 15] = 8  # taus for now
     pid_array[pid_array == 211] = 7
     pid_array[pid_array == 130] = 6
     pid_array[pid_array == 22] = 5
@@ -96,14 +93,16 @@ class PFGraphDataset(Dataset):
 
     def process_single_file(self, raw_file_name):
         """
-        Loads a list of 100 events from a pkl file.
+        Loads a list of 100 events from a pkl file and generates pytorch geometric Data() objects and stores them in .pt format.
         For cms data, each element is assumed to be a dict('Xelem', 'ygen', ycand') of numpy rec_arrays with the first element in ygen/ycand is the pid
         For delphes data, each element is assumed to be a dict('X', 'ygen', ycand') of numpy standard arrays with the first element in ygen/ycand is the pid
 
         Args
-            pkl file
+            raw_file_name: a pkl file
         Returns
-            a list of Data objects of the form ~ Data(x=[#elem, 41], ygen=[#elem, 6], ygen_id=[#elem, 8], ycand=[#elem, 6], ycand_id=[#elem, 8])
+            batched_data: a list of Data() objects of the form
+             cms ~ Data(x=[#elem, 41], ygen=[#elem, 6], ygen_id=[#elem, 9], ycand=[#elem, 6], ycand_id=[#elem, 9])
+             delphes ~ Data(x=[#elem, 12], ygen=[#elem, 6], ygen_id=[#elem, 6], ycand=[#elem, 6], ycand_id=[#elem, 6])
         """
 
         # load the data pkl file
@@ -194,10 +193,10 @@ if __name__ == "__main__":
 
     """
     e.g. to run for cms
-    python3 preprocess_data.py --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
+    python3 preprocess_data.py --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     e.g. to run for delphes
-    python3 preprocess_data.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 10 --num-proc 1
+    python3 preprocess_data.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     """
 
@@ -209,4 +208,3 @@ if __name__ == "__main__":
         pfgraphdataset._processed_dir = args.processed_dir
 
     pfgraphdataset.process_parallel(args.num_files_merge, args.num_proc)
-    # pfgraphdataset.process(args.num_files_merge)

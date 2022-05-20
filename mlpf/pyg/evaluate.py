@@ -20,7 +20,7 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(data, batch_events, output_dim_id, model, multi_gpu, test_loader, outpath, device):
+def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu, test_loader, outpath):
 
     print('Making predictions...')
 

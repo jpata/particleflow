@@ -130,7 +130,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         model.train()
-        training_loop(args.data, device, model, multi_gpu, args.batch_events,
+        training_loop(device, args.data, model, multi_gpu, args.batch_events,
                       train_loader, valid_loader,
                       args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target,
@@ -141,10 +141,10 @@ if __name__ == "__main__":
     # evaluate on testing data..
     make_directories_for_plots(outpath, 'test_data')
     if args.load:
-        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device)
+        make_predictions(device, args.data, args.batch_events, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/')
         make_plots(args.data, output_dim_id, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.load_epoch, 'QCD')
     else:
-        make_predictions(args.data, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/', device)
+        make_predictions(device, args.data, args.batch_events, output_dim_id, model, multi_gpu, test_loader, outpath + '/test_data_plots/')
         make_plots(args.data, output_dim_id, model, test_loader, outpath + '/test_data_plots/', args.target, device, args.n_epochs - 1, 'QCD')
 
     # # evaluate on training data..

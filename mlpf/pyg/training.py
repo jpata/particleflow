@@ -155,7 +155,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(data, device, model, multi_gpu, batch_events,
+def training_loop(device, data, model, multi_gpu, batch_events,
                   train_loader, valid_loader, n_epochs, patience,
                   optimizer, alpha, target, output_dim_id, outpath):
     """
