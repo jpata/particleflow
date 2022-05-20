@@ -31,6 +31,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
+import keras
 
 
 from tfmodel.data import Dataset
@@ -110,6 +111,7 @@ def main():
 @click.option("--customize", help="customization function", type=str, default=None)
 def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
 
+    #tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
     config_file_path = config
@@ -123,10 +125,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if customize:
         config = customization_functions[customize](config)
 
-    if recreate or (weights is None):
-        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-    else:
-        outdir = str(Path(weights).parent.parent)
+    outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
 
     try:
         from comet_ml import Experiment
@@ -183,14 +182,20 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
     
 
-    #Load the optimizer weights
-    if weights:
+    #Set the optimizer weights
+    if loaded_opt:
         def model_weight_setting():
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            model.optimizer.set_weights(loaded_opt["weights"])
-        strategy.run(model_weight_setting)
+            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
+            else:
+                model.optimizer.set_weights(loaded_opt["weights"])
+        try:
+            strategy.run(model_weight_setting)
+        except Exception as e:
+            print(e)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
@@ -249,11 +254,8 @@ def model_save(outdir, fit_result, model, weights):
     print("Training done.")
 
 def model_scope(config, total_steps, weights, horovod_enabled=False):
-    lr_schedule, optim_callbacks,lr = get_lr_schedule(config, steps=total_steps)
+    lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
     opt = get_optimizer(config, lr_schedule)
-
-    if horovod_enabled:
-        opt = hvd.DistributedOptimizer(opt)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -278,7 +280,10 @@ def model_scope(config, total_steps, weights, horovod_enabled=False):
         # We need to load the weights in the same trainable configuration as the model was set up
         configure_model_weights(model, config["setup"].get("weights_config", "all"))
         model.load_weights(weights, by_name=True)
-        loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
+        opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+        if os.path.isfile(opt_weight_file):
+            loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+
         initial_epoch = int(weights.split("/")[-1].split("-")[1])
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
