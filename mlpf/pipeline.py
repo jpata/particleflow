@@ -26,6 +26,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
+import keras
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -235,8 +236,14 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            model.optimizer.set_weights(loaded_opt["weights"])
-        strategy.run(model_weight_setting)
+            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
+            else:
+                model.optimizer.set_weights(loaded_opt["weights"])
+        try:
+            strategy.run(model_weight_setting)
+        except Exception as e:
+            print(e)
 
     callbacks = prepare_callbacks(
         config["callbacks"],
