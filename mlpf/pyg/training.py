@@ -91,7 +91,6 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
         else:
             X = batch.to(device)
 
-        print(X.device)
         # run forward pass
         t0 = time.time()
         pred, target, _, _ = model(X)
