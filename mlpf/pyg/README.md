@@ -6,7 +6,7 @@ To download and process the full DELPHES dataset:
 ./get_data_delphes.sh
 ```
 
-This script will download and process the data under a directory called data/delphes under particleflow.
+This script will download and process the data under a directory called `data/delphes` under particleflow.
 
 To perform a quick training on the dataset:
 ```bash
