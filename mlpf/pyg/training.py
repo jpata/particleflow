@@ -34,8 +34,7 @@ def compute_weights(device, target_ids, output_dim_id):
     weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
         weights[k] = 1.0 / math.sqrt(float(v))
-    weights[0] = weights[0] * 3  # emphaisze nulls
-    weights[2] = weights[2] * 3  # ephasize nhadrons
+    # weights[2] = weights[2] * 3  # ephasize nhadrons
     return weights
 
 
@@ -92,6 +91,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
         else:
             X = batch.to(device)
 
+        print(X.device)
         # run forward pass
         t0 = time.time()
         pred, target, _, _ = model(X)
