@@ -1,7 +1,7 @@
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot_particle_multiplicity
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
-from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms
+from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
 
 import torch
@@ -50,19 +50,19 @@ def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu
         t = t + (tf - ti)
 
         # retrieve target
-        gen_ids_one_hot = target['ygen_id']
+        gen_ids_one_hot = target['ygen_id'].detach()
         gen_p4 = target['ygen'].detach()
-        cand_ids_one_hot = target['ycand_id']
+        cand_ids_one_hot = target['ycand_id'].detach()
         cand_p4 = target['ycand'].detach()
 
         # retrieve predictions
-        pred_ids_one_hot = pred[:, :output_dim_id]
+        pred_ids_one_hot = pred[:, :output_dim_id].detach()
         pred_p4 = pred[:, output_dim_id:].detach()
 
-        # revert on-hot encodings
-        _, gen_ids = torch.max(gen_ids_one_hot.detach(), -1)
-        _, pred_ids = torch.max(pred_ids_one_hot.detach(), -1)
-        _, cand_ids = torch.max(cand_ids_one_hot.detach(), -1)
+        # revert the one-hot encodings
+        _, gen_ids = torch.max(gen_ids_one_hot, -1)
+        _, pred_ids = torch.max(pred_ids_one_hot, -1)
+        _, cand_ids = torch.max(cand_ids_one_hot, -1)
 
         # to make "num_gen vs num_pred" plots
         if data == 'delphes':
@@ -119,10 +119,11 @@ def make_predictions(device, data, batch_events, output_dim_id, model, multi_gpu
     ypred = torch.cat([pred_ids_all.reshape(-1, 1).float(), pred_p4_all], axis=1)
     ycand = torch.cat([cand_ids_all.reshape(-1, 1).float(), cand_p4_all], axis=1)
 
+    print(ygen.shape)
     # store the actual predictions to make all the other plots
-    predictions = {"ygen": ygen.reshape(1, -1, 7).detach().cpu().numpy(),
-                   "ycand": ycand.reshape(1, -1, 7).detach().cpu().numpy(),
-                   "ypred": ypred.detach().reshape(1, -1, 7).cpu().numpy()}
+    predictions = {"ygen": ygen.reshape(1, -1, 7).cpu().numpy(),
+                   "ycand": ycand.reshape(1, -1, 7).cpu().numpy(),
+                   "ypred": ypred.reshape(1, -1, 7).cpu().numpy()}
 
     torch.save(predictions, outpath + '/predictions.pt')
 

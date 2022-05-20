@@ -18,6 +18,16 @@ pid_to_name_delphes = {
     4: "Electrons",
     5: "Muons",
 }
+pid_to_name_cms = {0: 'null',
+                   1: 'HFEM',
+                   2: 'HFHAD',
+                   3: 'ele',
+                   4: 'mu',
+                   5: 'photon',
+                   6: 'nhadron',
+                   7: 'chhadron',
+                   8: 'tau',
+                   }
 name_to_pid_delphes = {'null': 0,
                        'chhadron': 1,
                        'nhadron': 2,
@@ -26,7 +36,7 @@ name_to_pid_delphes = {'null': 0,
                        'mu': 5,
                        }
 
-pid_to_name_cms = {'null': 0,
+name_to_pid_cms = {'null': 0,
                    'HFEM': 1,
                    'HFHAD': 2,
                    'ele': 3,
