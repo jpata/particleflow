@@ -21,7 +21,7 @@ This script will download and process the data under a directory called `data/de
 To perform a quick training on the dataset:
 ```bash
 cd ../
-python -u pyg_pipeline.py --data delphes --overwrite --dataset=<path_to_delphes_data> --dataset_qcd=<path_to_delphes_data>
+python -u pyg_pipeline.py --data delphes --dataset=<path_to_delphes_data> --dataset_qcd=<path_to_delphes_data>
 ```
 
 To load a pretrained model which is stored in a directory under `particleflow/experiments` for evaluation:
@@ -41,7 +41,7 @@ This script will download and process the data under a directory called `data/cm
 To perform a quick training on the dataset:
 ```bash
 cd ../
-python -u pyg_pipeline.py --data cms --overwrite --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
+python -u pyg_pipeline.py --data cms --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
 
 To load a pretrained model which is stored in a directory under `particleflow/experiments` for evaluation:

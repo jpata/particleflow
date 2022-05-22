@@ -108,9 +108,9 @@ class MLPF(nn.Module):
 class GravNetConv_MLPF(MessagePassing):
     """
     Copied from pytorch_geometric source code, with the following edits
-        - used reduce='sum' instead of reduce='mean' in the message passing
-        - removed skip connection
-        - retrieved adjacency matrix and the activations before the message passing, both are useful only for LRP purposes
+        a. used reduce='sum' instead of reduce='mean' in the message passing
+        b. removed skip connection
+        c. retrieved adjacency matrix and the activations before the message passing, both are useful only for LRP purposes
     """
 
     def __init__(self, in_channels: int, out_channels: int,
