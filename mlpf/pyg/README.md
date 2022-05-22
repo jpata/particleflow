@@ -3,6 +3,7 @@
 Have conda installed.
 ```bash
 conda env create -f environment.yml
+conda activate mlpf
 ```
 
 # Training
