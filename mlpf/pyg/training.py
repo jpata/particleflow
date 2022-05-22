@@ -50,19 +50,8 @@ def validation_run(device, model, multi_gpu, batch_events, loader,
 def train(device, model, multi_gpu, batch_events, loader, optimizer,
           alpha, target_type, output_dim_id, outpath):
     """
-    A training/validation block over a given epoch. If optimizer is set to None, it freezes the model for a validation_run.
-
-    Args:
-        device: 'cpu' or cuda
-        model: pytorch model
-        multi_gpu: boolean for multi_gpu training (if multigpus are available)
-        batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
-        loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
-        optimizer: optimizer to use for training (by default: Adam). If set to None, it freezes the model for a validation_run.
-        alpha: the hyperparameter controlling the classification vs regression task balance (alpha=0 means pure regression, and greater positive values emphasize regression)
-        target_type: 'gen' or 'cand' training
-        output_dim_id: number of particle candidate classes to predict (6 for delphes, 9 for cms)
-        outpath: path to store the model weights and training plots
+    A training/validation run over a given epoch that gets called in the training_loop() function.
+    When optimizer is set to None, it freezes the model for a validation_run.
     """
 
     if batch_events:
@@ -156,11 +145,22 @@ def training_loop(device, data, model, multi_gpu, batch_events,
                   train_loader, valid_loader, n_epochs, patience,
                   optimizer, alpha, target, output_dim_id, outpath):
     """
-    Main function for training a model. Will call the train() and validation_run() functions every epoch.
+    Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
+        device: 'cpu' or cuda
+        data: data sepecefication ('cms' or 'delphes')
+        model: pytorch model
+        multi_gpu: boolean for multi_gpu training (if multigpus are available)
+        batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
+        loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
         n_epochs: number of epochs for a full training
         patience: number of stale epochs allowed before stopping the training
+        optimizer: optimizer to use for training (by default: Adam)
+        alpha: the hyperparameter controlling the classification vs regression task balance (alpha=0 means pure regression, and greater positive values emphasize regression)
+        target: 'gen' or 'cand' training
+        output_dim_id: number of particle candidate classes to predict (6 for delphes, 9 for cms)
+        outpath: path to store the model weights and training plots
     """
 
     t0_initial = time.time()

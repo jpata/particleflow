@@ -1,11 +1,11 @@
 from pyg import PFGraphDataset, dataloader_qcd, load_model
 from lrp import MLPF, LRP_MLPF, make_Rmaps
+
 import argparse
 import pickle as pkl
 import os.path as osp
 import os
 import sys
-from glob import glob
 
 import numpy as np
 import mplhep as hep
@@ -13,13 +13,6 @@ import pandas as pd
 
 import torch
 import torch_geometric
-from torch_geometric.nn import GravNetConv
-
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import Sequential as Seq, Linear as Lin, ReLU
-from sklearn.metrics import accuracy_score
-import matplotlib.pyplot as plt
 from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
 
 
@@ -29,12 +22,12 @@ parser = argparse.ArgumentParser()
 
 # for saving the model
 parser.add_argument("--dataset_qcd",    type=str,           default='../data/delphes/pythia8_qcd',   help="testing dataset path")
-parser.add_argument("--outpath",        type=str,           default='../experiments/',       help="path to the trained model directory")
-parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
-parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load")
-parser.add_argument("--out_neuron",     type=int,           default=0,      help="the output neuron you wish to explain")
-parser.add_argument("--pid",            type=str,           default="chhadron",     help="Which model to load")
-parser.add_argument("--n_test",         type=int,           default=50,      help="number of data files to use for testing.. each file contains 100 events")
+parser.add_argument("--outpath",        type=str,           default='../experiments/',               help="path to the trained model directory")
+parser.add_argument("--load_model",     type=str,           default="",          help="Which model to load")
+parser.add_argument("--load_epoch",     type=int,           default=0,           help="Which epoch of the model to load")
+parser.add_argument("--out_neuron",     type=int,           default=0,           help="the output neuron you wish to explain")
+parser.add_argument("--pid",            type=str,           default="chhadron",  help="Which model to load")
+parser.add_argument("--n_test",         type=int,           default=50,          help="number of data files to use for testing.. each file contains 100 events")
 parser.add_argument("--run_lrp",        dest='run_lrp',     action='store_true', help="runs lrp")
 parser.add_argument("--make_rmaps",     dest='make_rmaps',  action='store_true', help="makes rmaps")
 
@@ -42,13 +35,6 @@ args = parser.parse_args()
 
 
 if __name__ == "__main__":
-    """
-    e.g. to run lrp and make Rmaps
-    python -u lrp_pipeline.py --run_lrp --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --n_test=1 --pid='chhadron'
-
-    e.g. to only make Rmaps
-    python -u lrp_pipeline.py --make_rmaps --load_model='MLPF_gen_ntrain_1_nepochs_1_clf_reg' --load_epoch=0 --n_test=1 --out_neuron=0 --pid='chhadron'
-    """
 
     if args.run_lrp:
         # Check if the GPU configuration and define the global base device
@@ -71,23 +57,25 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
         model.to(device)
+        model.eval()
 
-        # run lrp
+        # initialize placeholders for Rscores, the event inputs, and the event predictions
         Rtensors_list, preds_list, inputs_list = [], [], []
 
+        # define the lrp instance
+        lrp_instance = LRP_MLPF(device, model, epsilon=1e-9)
+
+        # loop over events to explain them
         for i, event in enumerate(loader):
             print(f'Explaining event # {i}')
 
-            # run lrp on sample model
-            model.eval()
-            lrp_instance = LRP_MLPF(device, model, epsilon=1e-9)
+            # run lrp on the event
             Rtensor, pred, input = lrp_instance.explain(event, neuron_to_explain=args.out_neuron)
 
+            # store the Rscores, the event inputs, and the event predictions
             Rtensors_list.append(Rtensor.detach().to('cpu'))
             preds_list.append(pred.detach().to('cpu'))
             inputs_list.append(input.detach().to('cpu').to_dict())
-
-            break
 
         with open(f'{outpath}/Rtensors_list.pkl', 'wb') as f:
             pkl.dump(Rtensors_list, f)
