@@ -1,7 +1,9 @@
 # Setup
 
-
-
+Have conda installed.
+```bash
+conda env create -f environment.yml
+```
 
 # Training
 
