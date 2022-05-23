@@ -77,6 +77,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
                 for b in batch:
                     b = batch_event_into_regions(b, regions)
             X = batch   # a list (not torch) instance so can't be passed to device
+            print('mul', batch[0].batch)
         else:
             if batch_events:    # batch events into eta,phi regions to build graphs only within regions
                 batch = batch_event_into_regions(batch, regions)
