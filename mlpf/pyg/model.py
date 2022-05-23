@@ -93,6 +93,8 @@ class MLPF(nn.Module):
 
         # embed the inputs
         embedding = self.nn1(input)
+        print(embedding)
+        print(embedding.type)
 
         # preform a series of graph convolutions
         A = {}
@@ -104,7 +106,6 @@ class MLPF(nn.Module):
         embedding = self.conv(embedding)
 
         # predict the pid's
-        print(input)
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
 
         # predict the p4's
