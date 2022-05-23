@@ -54,6 +54,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
+    # batch events into eta,phi regions to build graphs only within regions
     if batch_events:
         regions = define_regions(num_eta_regions=10, num_phi_regions=10)
 
@@ -72,17 +73,13 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
 
     for i, batch in enumerate(loader):
 
-        if multi_gpu:
-            if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+        if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
+            if batch_events:
                 for i in range(len(batch)):
                     batch[i] = batch_event_into_regions(batch[i], regions)
             X = batch   # a list (not torch) instance so can't be passed to device
-            print('mul', batch)
-            print('mul', batch[0].batch)
-
-            print('mul', batch.batch)
         else:
-            if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+            if batch_events:
                 batch = batch_event_into_regions(batch, regions)
             X = batch.to(device)
 
