@@ -57,6 +57,8 @@ class MLPF(nn.Module):
         # for i in range(num_convs):
         #     self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
 
+        self.conv = GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k)
+
         # (3) DNN layer: classifiying pid
         self.nn2 = nn.Sequential(
             nn.Linear(input_dim + embedding_dim, hidden_dim2),
@@ -81,7 +83,6 @@ class MLPF(nn.Module):
 
     def forward(self, batch):
 
-        print(batch.x.device)
         # unfold the Batch object
         input = batch.x
         target = {'ygen_id': batch.ygen_id,
@@ -98,6 +99,8 @@ class MLPF(nn.Module):
         msg_activations = {}
         # for num, conv in enumerate(self.conv):
         #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
+
+        embedding = self.conv(embedding, batch.batch)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
