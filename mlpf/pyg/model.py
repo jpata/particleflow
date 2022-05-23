@@ -101,6 +101,7 @@ class MLPF(nn.Module):
         #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
 
         # embedding = self.conv(embedding, batch.batch)
+        embedding = self.conv(embedding)
 
         # predict the pid's
         print(input)
