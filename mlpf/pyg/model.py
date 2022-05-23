@@ -94,7 +94,6 @@ class MLPF(nn.Module):
         # embed the inputs
         embedding = self.nn1(input)
         print(embedding)
-        print(embedding.type)
 
         # preform a series of graph convolutions
         A = {}
@@ -104,6 +103,7 @@ class MLPF(nn.Module):
 
         embedding = self.conv(embedding, batch.batch)
         # embedding = self.conv(embedding)
+        print(embedding)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
@@ -190,7 +190,8 @@ class GravNetConv_MLPF(MessagePassing):
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_r.size(0)))
 
-        return self.lin_out(out), A, msg_activations
+        return self.lin_out(out)
+        # return self.lin_out(out), A, msg_activations
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
