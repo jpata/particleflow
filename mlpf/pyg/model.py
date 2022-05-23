@@ -101,7 +101,7 @@ class MLPF(nn.Module):
         # for num, conv in enumerate(self.conv):
         #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
 
-        embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = self.conv(embedding, batch.batch)
+        embedding, A[f'conv.1'], msg_activations[f'conv.1'] = self.conv(embedding, batch.batch)
         # embedding = self.conv(embedding)
         print(embedding)
 
