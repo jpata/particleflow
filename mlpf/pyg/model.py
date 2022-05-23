@@ -100,7 +100,7 @@ class MLPF(nn.Module):
         # for num, conv in enumerate(self.conv):
         #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
 
-        embedding = self.conv(embedding, batch.batch)
+        # embedding = self.conv(embedding, batch.batch)
 
         # predict the pid's
         print(embedding)

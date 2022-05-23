@@ -79,7 +79,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
             X = batch   # a list (not torch) instance so can't be passed to device
         else:
             X = batch.to(device)
-
+        print('X', X)
         # run forward pass
         t0 = time.time()
         pred, target, _, _ = model(X)
