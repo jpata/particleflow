@@ -31,11 +31,13 @@ class MLPF(nn.Module):
         target: dict() object containing gen and cand target information
     """
 
-    def __init__(self,
+    def __init__(self, device,
                  input_dim=12, output_dim_id=6, output_dim_p4=6,
                  embedding_dim=64, hidden_dim1=64, hidden_dim2=60,
                  num_convs=2, space_dim=4, propagate_dim=30, k=8):
         super(MLPF, self).__init__()
+
+        self.device = device
 
         # self.act = nn.ReLU
         self.act = nn.ELU
@@ -79,6 +81,7 @@ class MLPF(nn.Module):
 
     def forward(self, batch):
 
+        batch = batch.to(self.device)
         # unfold the Batch object
         input = batch.x
         target = {'ygen_id': batch.ygen_id,
