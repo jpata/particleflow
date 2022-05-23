@@ -86,12 +86,11 @@ class MLPF(nn.Module):
                   'ycand_id': batch.ycand_id,
                   'ycand': batch.ycand,
                   }
-        print(input.device)
 
         # embed the inputs
         embedding = self.nn1(input)
 
-        # preform a series of graph convolutions
+        # perform a series of graph convolutions
         for num, conv in enumerate(self.conv):
             embedding = conv(embedding, batch.batch)
 
