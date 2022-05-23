@@ -103,7 +103,7 @@ class MLPF(nn.Module):
         # embedding = self.conv(embedding, batch.batch)
 
         # predict the pid's
-        print(embedding)
+        print(input)
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
 
         # predict the p4's
