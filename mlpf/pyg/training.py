@@ -82,7 +82,7 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
 
         # run forward pass
         t0 = time.time()
-        pred, target, _, _ = model(X)
+        pred, target = model(X)
         t1 = time.time()
         t = t + (t1 - t0)
 

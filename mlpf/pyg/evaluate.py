@@ -64,7 +64,7 @@ def make_predictions(device, data, model, multi_gpu, batch_events, test_loader, 
             X = batch.to(device)
 
         ti = time.time()
-        pred, target, _, _ = model(X)
+        pred, target = model(X)
         tf = time.time()
         t = t + (tf - ti)
 

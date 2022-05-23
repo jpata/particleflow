@@ -98,8 +98,7 @@ if __name__ == "__main__":
 
     else:
         print('Instantiating a model..')
-        model_kwargs = {'device': device,
-                        'input_dim': input_dim,
+        model_kwargs = {'input_dim': input_dim,
                         'output_dim_id': output_dim_id,
                         'output_dim_p4': output_dim_p4,
                         'embedding_dim': args.embedding_dim,

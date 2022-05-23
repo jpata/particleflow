@@ -31,13 +31,11 @@ class MLPF(nn.Module):
         target: dict() object containing gen and cand target information
     """
 
-    def __init__(self, device,
+    def __init__(self,
                  input_dim=12, output_dim_id=6, output_dim_p4=6,
                  embedding_dim=64, hidden_dim1=64, hidden_dim2=60,
                  num_convs=2, space_dim=4, propagate_dim=30, k=8):
         super(MLPF, self).__init__()
-
-        self.device = device
 
         # self.act = nn.ReLU
         self.act = nn.ELU
@@ -53,11 +51,9 @@ class MLPF(nn.Module):
             nn.Linear(hidden_dim1, embedding_dim),
         )
 
-        # self.conv = nn.ModuleList()
-        # for i in range(num_convs):
-        #     self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
-
-        self.conv = GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k)
+        self.conv = nn.ModuleList()
+        for i in range(num_convs):
+            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
 
         # (3) DNN layer: classifiying pid
         self.nn2 = nn.Sequential(
@@ -93,17 +89,10 @@ class MLPF(nn.Module):
 
         # embed the inputs
         embedding = self.nn1(input)
-        print(embedding)
 
         # preform a series of graph convolutions
-        A = {}
-        msg_activations = {}
-        # for num, conv in enumerate(self.conv):
-        #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
-
-        embedding, A[f'conv.1'], msg_activations[f'conv.1'] = self.conv(embedding, batch.batch)
-        # embedding = self.conv(embedding)
-        print(embedding)
+        for num, conv in enumerate(self.conv):
+            embedding = conv(embedding, batch.batch)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
@@ -111,7 +100,7 @@ class MLPF(nn.Module):
         # predict the p4's
         preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
 
-        return torch.cat([preds_id, preds_p4], axis=-1), target, A, msg_activations
+        return torch.cat([preds_id, preds_p4], axis=-1), target
 
 
 class GravNetConv_MLPF(MessagePassing):
@@ -119,7 +108,6 @@ class GravNetConv_MLPF(MessagePassing):
     Copied from pytorch_geometric source code, with the following edits
         a. used reduce='sum' instead of reduce='mean' in the message passing
         b. removed skip connection
-        c. retrieved adjacency matrix and the activations before the message passing, both are useful only for LRP purposes
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -190,8 +178,7 @@ class GravNetConv_MLPF(MessagePassing):
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_r.size(0)))
 
-        # return self.lin_out(out)
-        return self.lin_out(out), A, msg_activations
+        return self.lin_out(out)
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
