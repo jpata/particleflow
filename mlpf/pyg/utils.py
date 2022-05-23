@@ -90,7 +90,7 @@ def dataloader_ttbar(full_dataset, multi_gpu, n_train, n_valid, batch_size):
 
 def dataloader_qcd(full_dataset, multi_gpu, n_test, batch_size):
     """
-    Builds a testing dataloader from a physics dataset for conveninet ML training
+    Builds a testing dataloader from a physics dataset for convenient ML training
 
     Args:
         full_dataset: a delphes dataset that is a list of lists that contain Data() objects
