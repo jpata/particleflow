@@ -102,8 +102,8 @@ class MLPF(nn.Module):
         # for num, conv in enumerate(self.conv):
         #     embedding, A[f'conv.{num}'], msg_activations[f'conv.{num}'] = conv(embedding, batch.batch)
 
-        # embedding = self.conv(embedding, batch.batch)
-        embedding = self.conv(embedding)
+        embedding = self.conv(embedding, batch.batch)
+        # embedding = self.conv(embedding)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
