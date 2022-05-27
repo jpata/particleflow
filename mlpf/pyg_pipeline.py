@@ -1,6 +1,6 @@
+from torch_geometric.loader import DataLoader, DataListLoader
 from pyg.preprocess_data import PFGraphDataset
 from pyg import parse_args
-from pyg import dataloader_ttbar, dataloader_qcd
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
@@ -67,13 +67,8 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
     print('Loading the data..')
-    full_dataset_ttbar = PFGraphDataset(args.dataset, args.data)
-    full_dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-
-    # construct Dataloaders to facilitate looping over batches during training
-    print('Building dataloaders..')
-    train_loader, valid_loader = dataloader_ttbar(full_dataset_ttbar, multi_gpu, args.n_train, args.n_valid, batch_size=args.batch_size)
-    test_loader = dataloader_qcd(full_dataset_qcd, multi_gpu, args.n_test, batch_size=args.batch_size)
+    dataset = PFGraphDataset(args.dataset, args.data)
+    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
     # retrieve the dimensions of the PF-elements & PF-candidates
     if args.data == 'delphes':
@@ -113,7 +108,7 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
 
         # get a directory name for the model to store the model's weights and plots
-        model_fname = get_model_fname(args.dataset, model, args.data, args.n_train, args.n_epochs, args.target, args.title)
+        model_fname = get_model_fname(model, args.data, args.n_train, args.n_epochs, args.target, args.title)
         outpath = osp.join(args.outpath, model_fname)
 
         if multi_gpu:
@@ -130,8 +125,9 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         model.train()
-        training_loop(device, args.data, model, multi_gpu, args.batch_events,
-                      train_loader, valid_loader,
+        training_loop(device, args.data, model, multi_gpu,
+                      dataset, args.n_train, args.n_valid,
+                      args.batch_size, args.batch_events,
                       args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target,
                       output_dim_id, outpath)
@@ -145,5 +141,5 @@ if __name__ == "__main__":
         epoch_on_plots = args.n_epochs - 1
 
     make_directories_for_plots(outpath, 'test_data')
-    make_predictions(device, args.data, model, multi_gpu, args.batch_events, test_loader, output_dim_id, outpath + '/test_data_plots/')
-    make_plots(device, args.data, model, test_loader, output_dim_id, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, output_dim_id, outpath + '/test_data_plots/')
+    make_plots(device, args.data, model, output_dim_id, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

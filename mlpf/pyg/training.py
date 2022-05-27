@@ -4,7 +4,8 @@ from pyg.utils import define_regions, batch_event_into_regions
 
 import torch
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
-from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
+from torch_geometric.data import Data, Batch
+from torch_geometric.loader import DataLoader, DataListLoader
 
 import mplhep as hep
 import matplotlib.pyplot as plt
@@ -39,16 +40,16 @@ def compute_weights(device, target_ids, output_dim_id):
 
 
 @torch.no_grad()
-def validation_run(device, model, multi_gpu, batch_events, loader,
+def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
                    alpha, target_type, output_dim_id, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, model, multi_gpu, batch_events, loader, optimizer, alpha, target_type, output_dim_id, outpath)
+        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target_type, output_dim_id, outpath)
     return ret
 
 
-def train(device, model, multi_gpu, batch_events, loader, optimizer,
-          alpha, target_type, output_dim_id, outpath):
+def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
+          optimizer, alpha, target_type, output_dim_id, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -62,8 +63,12 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
 
     if is_train:
         model.train()
+        start_file = 0
+        end_file = n_train
     else:
         model.eval()
+        start_file = n_train
+        end_file = n_train + n_valid
 
     # initialize loss and accuracy and time
     losses_clf, losses_reg, losses_tot, accuracies, t = 0, 0, 0, 0, 0
@@ -71,81 +76,87 @@ def train(device, model, multi_gpu, batch_events, loader, optimizer,
     # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
-    for i, batch in enumerate(loader):
-
-        if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
-            if batch_events:
-                for i in range(len(batch)):
-                    batch[i] = batch_event_into_regions(batch[i], regions)
-            X = batch   # a list (not torch) instance so can't be passed to device
+    for file in range(start_file, end_file):
+        if multi_gpu:
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
-            if batch_events:
-                batch = batch_event_into_regions(batch, regions)
-            X = batch.to(device)
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
-        # run forward pass
-        t0 = time.time()
-        pred, target = model(X)
-        t1 = time.time()
-        t = t + (t1 - t0)
+        for i, batch in enumerate(loader):
 
-        pred_ids_one_hot = pred[:, :output_dim_id]
-        pred_p4 = pred[:, output_dim_id:]
+            if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
+                if batch_events:
+                    for i in range(len(batch)):
+                        batch[i] = batch_event_into_regions(batch[i], regions)
+                X = batch   # a list (not torch) instance so can't be passed to device
+            else:
+                if batch_events:
+                    batch = batch_event_into_regions(batch, regions)
+                X = batch.to(device)
 
-        # define target
-        if target_type == 'gen':
-            target_ids_one_hot = target['ygen_id']
-            target_p4 = target['ygen']
-        elif target_type == 'cand':
-            target_ids_one_hot = target['ycand_id']
-            target_p4 = target['ycand']
+            # run forward pass
+            t0 = time.time()
+            pred, target = model(X)
+            t1 = time.time()
+            t = t + (t1 - t0)
 
-        # revert one hot encoding
-        _, target_ids = torch.max(target_ids_one_hot, -1)
-        _, pred_ids = torch.max(pred_ids_one_hot, -1)
+            pred_ids_one_hot = pred[:, :output_dim_id]
+            pred_p4 = pred[:, output_dim_id:]
 
-        # define some useful masks
-        msk = ((pred_ids != 0) & (target_ids != 0))
-        msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
+            # define target
+            if target_type == 'gen':
+                target_ids_one_hot = target['ygen_id']
+                target_p4 = target['ygen']
+            elif target_type == 'cand':
+                target_ids_one_hot = target['ycand_id']
+                target_p4 = target['ycand']
 
-        # computing loss
-        weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
-        loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-        loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
+            # revert one hot encoding
+            _, target_ids = torch.max(target_ids_one_hot, -1)
+            _, pred_ids = torch.max(pred_ids_one_hot, -1)
 
-        loss_tot = loss_clf + alpha * loss_reg
+            # define some useful masks
+            msk = ((pred_ids != 0) & (target_ids != 0))
+            msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
-        if is_train:
-            optimizer.zero_grad()
-            loss_tot.backward()
-            optimizer.step()
+            # computing loss
+            weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
+            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
-        losses_clf = losses_clf + loss_clf
-        losses_reg = losses_reg + loss_reg
-        losses_tot = losses_tot + loss_tot
+            loss_tot = loss_clf + alpha * loss_reg
 
-        accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
-                                                                 pred_ids[msk].detach().cpu().numpy())
+            if is_train:
+                optimizer.zero_grad()
+                loss_tot.backward()
+                optimizer.step()
 
-        conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
-                                                        pred_ids.detach().cpu().numpy(),
-                                                        labels=range(output_dim_id))
+            losses_clf = losses_clf + loss_clf
+            losses_reg = losses_reg + loss_reg
+            losses_tot = losses_tot + loss_tot
 
-    losses_clf = (losses_clf / len(loader)).item()
-    losses_reg = (losses_reg / len(loader)).item()
-    losses_tot = (losses_tot / len(loader)).item()
+            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
+                                                                     pred_ids[msk].detach().cpu().numpy())
 
-    accuracies = (accuracies / len(loader)).item()
+            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
+                                                            pred_ids.detach().cpu().numpy(),
+                                                            labels=range(output_dim_id))
+
+    losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
+    losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
+    losses_tot = (losses_tot / (len(loader) * (end_file - start_file))).item()
+
+    accuracies = (accuracies / (len(loader) * (end_file - start_file))).item()
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    print(f'Average inference time per event is {round((t / len(loader)),3)}s')
+    print(f'Average inference time per event is {round((t / (len(loader) * (end_file - start_file))), 3)}s')
 
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(device, data, model, multi_gpu, batch_events,
-                  train_loader, valid_loader, n_epochs, patience,
+def training_loop(device, data, model, multi_gpu,
+                  dataset, n_train, n_valid, batch_size, batch_events, n_epochs, patience,
                   optimizer, alpha, target, output_dim_id, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -186,7 +197,7 @@ def training_loop(device, data, model, multi_gpu, batch_events,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, batch_events, train_loader, optimizer, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target, output_dim_id, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -196,7 +207,7 @@ def training_loop(device, data, model, multi_gpu, batch_events,
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, batch_events, valid_loader, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, alpha, target, output_dim_id, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
