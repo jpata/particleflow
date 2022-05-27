@@ -51,7 +51,7 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
         pred_list[pfcand] = []
 
     if batch_events:    # batch events into eta,phi regions to build graphs only within regions
-        regions = define_regions(num_eta_regions=10, num_phi_regions=10)
+        regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
     t = 0
     t0 = time.time()

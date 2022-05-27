@@ -57,7 +57,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
     # batch events into eta,phi regions to build graphs only within regions
     if batch_events:
-        regions = define_regions(num_eta_regions=10, num_phi_regions=10)
+        regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
     is_train = not (optimizer is None)
 
