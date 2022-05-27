@@ -72,7 +72,6 @@ def get_model_fname(model, data, n_train, n_epochs, target, title):
 
 def save_model(args, model_fname, outpath, model_kwargs):
     if osp.isdir(outpath):
-        print(args.load_model)
         if args.overwrite:
             print("model {} already exists, deleting it".format(model_fname))
             shutil.rmtree(outpath)
