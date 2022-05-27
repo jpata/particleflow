@@ -21,7 +21,7 @@ set -e
 for sample in cms/* ; do
   echo $sample
   #generate pytorch data files from pkl files
-  python3 preprocess_data.py --data cms --dataset $sample \
+  python3 dataset.py --data cms --dataset $sample \
     --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 done
 

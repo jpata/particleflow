@@ -1,12 +1,12 @@
-from torch_geometric.loader import DataLoader, DataListLoader
-from pyg.preprocess_data import PFGraphDataset
 from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
+from pyg.dataset import PFGraphDataset
 
 import torch
 import torch_geometric
+from torch_geometric.loader import DataLoader, DataListLoader
 
 import mplhep as hep
 import matplotlib.pyplot as plt
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
-    print('Loading the data..')
+    print(f'Loading the {args.data} data..')
     dataset = PFGraphDataset(args.dataset, args.data)
     dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
