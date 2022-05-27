@@ -55,5 +55,5 @@ python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --loa
 You must have a pre-trained model under `particleflow/experiments`:
 ```bash
 cd ../
-python -u lrp_pipeline.py --run_lrp --make_rmaps --load_model=<your_model> --load_epoch=<your_epoch>
+python -u lrp_mlpf_pipeline.py --run_lrp --make_rmaps --load_model=<your_model> --load_epoch=<your_epoch>
 ```
