@@ -119,7 +119,7 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
 
             print(f'event #: {i+1}/{len(loader)}')
 
-    print(f'Average inference time per event is {round((t / (len(loader) * (end_file - start_file))), 3)}s')
+    print(f'Average inference time per event is {round((t / (len(loader) * (n_test))), 3)}s')
 
     print('Time taken to make predictions is:', round(((time.time() - t0) / 60), 2), 'min')
 
