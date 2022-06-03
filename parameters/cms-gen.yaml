@@ -55,7 +55,7 @@ setup:
   weights_config:
   lr: 0.001
   num_events_validation: 1000
-  num_epochs: 50
+  num_epochs: 200
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -125,7 +125,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 64
+      output_dim: 128
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: yes
