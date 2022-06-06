@@ -103,7 +103,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
             # run forward pass
             t0 = time.time()
-            print('X', X.device)
+            print('X', X.x.device)
             print('X', model.device)
             pred, target = model(X)
             t1 = time.time()
