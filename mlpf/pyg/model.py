@@ -115,9 +115,6 @@ class GravNetConv_MLPF(MessagePassing):
                  num_workers: int = 1, **kwargs):
         super().__init__(flow='source_to_target', **kwargs)
 
-        if knn is None:
-            raise ImportError('`GravNetConv` requires `torch-cluster`.')
-
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.k = k
