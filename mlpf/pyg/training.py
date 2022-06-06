@@ -77,12 +77,14 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
     for file in range(start_file, end_file):
+        print('file', file)
         if multi_gpu:
             loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
             loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
         for i, batch in enumerate(loader):
+            print('i', i)
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
