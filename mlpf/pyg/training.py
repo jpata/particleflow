@@ -104,7 +104,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             # run forward pass
             t0 = time.time()
             print('X', X.x.device)
-            print('X', model.device)
+            print('model', print(next(model.parameters()).device))
             pred, target = model(X)
             t1 = time.time()
             print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
