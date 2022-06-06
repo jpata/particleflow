@@ -150,6 +150,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(output_dim_id))
+            if i == 5:
+                break
+
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
     losses_tot = (losses_tot / (len(loader) * (end_file - start_file))).item()
