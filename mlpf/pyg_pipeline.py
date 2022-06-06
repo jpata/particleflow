@@ -89,8 +89,6 @@ if __name__ == "__main__":
         if multi_gpu:
             model = torch_geometric.nn.DataParallel(model)
 
-        model.to(device)
-
     else:
         print('Instantiating a model..')
         model_kwargs = {'input_dim': input_dim,
@@ -111,11 +109,11 @@ if __name__ == "__main__":
         model_fname = get_model_fname(model, args.data, args.n_train, args.n_epochs, args.target, args.title)
         outpath = osp.join(args.outpath, model_fname)
 
+        model.to(device)
+
         if multi_gpu:
             print("Parallelizing the training..")
             model = torch_geometric.nn.DataParallel(model)
-
-        model.to(device)
 
         save_model(args, model_fname, outpath, model_kwargs)
 
