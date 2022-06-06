@@ -17,7 +17,8 @@ import sklearn.metrics
 import matplotlib
 matplotlib.use("Agg")
 
-path = '../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/'
+# path = '../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/'
+path = '/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/'
 
 
 num_files = 499
