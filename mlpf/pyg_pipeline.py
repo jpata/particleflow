@@ -110,7 +110,7 @@ if __name__ == "__main__":
         outpath = osp.join(args.outpath, model_fname)
 
         model.to(device)
-        model.conv.to('cpu')
+
         if multi_gpu:
             print("Parallelizing the training..")
             model = torch_geometric.nn.DataParallel(model)
