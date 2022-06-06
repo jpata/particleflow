@@ -87,7 +87,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
         tt2 = time.time()
 
-        print(f'time to get file={round(tt2 - tt1, 3)}s')
+        print(f'time to get file = {round(tt2 - tt1, 3)}s')
 
         for i, batch in enumerate(loader):
 
@@ -105,7 +105,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             t0 = time.time()
             pred, target = model(X)
             t1 = time.time()
-            print(f'{i}, forward pass ={round(t1 - t0, 3)}s')
+            print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :output_dim_id]
