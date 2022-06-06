@@ -91,12 +91,9 @@ class MLPF(nn.Module):
         # embed the inputs
         embedding = self.nn1(input)
 
-        embedding = embedding.to('cuda')
         # perform a series of graph convolutions
         for num, conv in enumerate(self.conv):
-            embedding = conv(embedding, batch.batch)
-
-        embedding = embedding.to('cuda')
+            embedding = conv(embedding.to('cpu'), batch.batch.to('cpu')).to('cuda')
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
