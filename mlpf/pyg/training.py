@@ -84,9 +84,10 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
         for i, batch in enumerate(loader):
-            tt1 = time.time()
+
             if i != 0:
                 print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
+            tt1 = time.time()
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
