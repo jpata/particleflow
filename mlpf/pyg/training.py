@@ -80,9 +80,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         print(f'Loading file # {file}/{end_file-start_file}')
 
         if multi_gpu:
-            loader = DataListLoader(dataset, batch_size=batch_size, shuffle=True)
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
-            loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
         for i, batch in enumerate(loader):
             if i != 0:
