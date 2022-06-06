@@ -36,7 +36,7 @@ def parse_args():
     # for model architecture
     parser.add_argument("--hidden_dim1",    type=int,           default=126,    help="hidden dimension of layers before the graph convolutions")
     parser.add_argument("--hidden_dim2",    type=int,           default=256,    help="hidden dimension of layers after the graph convolutions")
-    parser.add_argument("--embedding_dim",  type=int,           default=64,     help="encoded element dimension")
+    parser.add_argument("--embedding_dim",  type=int,           default=24,     help="encoded element dimension")
     parser.add_argument("--num_convs",      type=int,           default=3,      help="number of graph convolutions")
     parser.add_argument("--space_dim",      type=int,           default=5,      help="Spatial dimension for clustering in gravnet layer")
     parser.add_argument("--propagate_dim",  type=int,           default=32,     help="The number of features to be propagated between the vertices")
