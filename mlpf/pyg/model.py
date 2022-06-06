@@ -93,7 +93,7 @@ class MLPF(nn.Module):
 
         # perform a series of graph convolutions
         for num, conv in enumerate(self.conv):
-            embedding = conv(embedding.to('cpu'), batch.batch.to('cpu')).to('cuda')
+            embedding = conv(embedding, batch.batch)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
