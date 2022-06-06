@@ -91,8 +91,8 @@ def train(device, model, multi_gpu, full_dataset, n_train, n_valid, batch_size, 
         else:
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+        print(f'will run inference on file {file}')
         for i, batch in enumerate(loader):
-            print(len(loader))
             if i != 0:
                 print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
             tt1 = time.time()
@@ -105,7 +105,6 @@ def train(device, model, multi_gpu, full_dataset, n_train, n_valid, batch_size, 
             else:
                 if batch_events:
                     batch = batch_event_into_regions(batch, regions)
-                print(batch)
                 X = batch.to(device)
 
             # run forward pass
