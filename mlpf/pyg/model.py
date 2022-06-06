@@ -1,3 +1,4 @@
+import scipy.spatial
 import pickle as pkl
 import os.path as osp
 import os
@@ -16,11 +17,10 @@ import torch.nn.functional as F
 from typing import Optional, Union
 from torch_geometric.typing import OptTensor, PairTensor, PairOptTensor
 
-try:
-    from torch_cluster import knn
-except ImportError:
-    knn = None
-from torch_cluster import knn_graph
+# try:
+#     from torch_cluster import knn
+# except ImportError:
+#     knn = None
 
 
 class MLPF(nn.Module):
@@ -165,7 +165,9 @@ class GravNetConv_MLPF(MessagePassing):
         if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
             raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
 
-        edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+        # edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+        import torch_cluster.knn_cuda
+        edge_index = torch_cluster.knn_cuda.knn(s_l, s_r, self.k, b[0], b[1])
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
@@ -192,3 +194,45 @@ class GravNetConv_MLPF(MessagePassing):
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}({self.in_channels}, '
                 f'{self.out_channels}, k={self.k})')
+
+#
+# def knn(x, y, k, batch_x=None, batch_y=None):
+#
+#     if batch_x is None:
+#         batch_x = x.new_zeros(x.size(0), dtype=torch.long)
+#
+#     if batch_y is None:
+#         batch_y = y.new_zeros(y.size(0), dtype=torch.long)
+#
+#     x = x.view(-1, 1) if x.dim() == 1 else x
+#     y = y.view(-1, 1) if y.dim() == 1 else y
+#
+#     assert x.dim() == 2 and batch_x.dim() == 1
+#     assert y.dim() == 2 and batch_y.dim() == 1
+#     assert x.size(1) == y.size(1)
+#     assert x.size(0) == batch_x.size(0)
+#     assert y.size(0) == batch_y.size(0)
+#
+#     if x.is_cuda:
+#
+#         # Rescale x and y.
+#     min_xy = min(x.min().item(), y.min().item())
+#     x, y = x - min_xy, y - min_xy
+#
+#     max_xy = max(x.max().item(), y.max().item())
+#     x, y, = x / max_xy, y / max_xy
+#
+#     # Concat batch/features to ensure no cross-links between examples exist.
+#     x = torch.cat([x, 2 * x.size(1) * batch_x.view(-1, 1).to(x.dtype)], dim=-1)
+#     y = torch.cat([y, 2 * y.size(1) * batch_y.view(-1, 1).to(y.dtype)], dim=-1)
+#
+#     tree = scipy.spatial.cKDTree(x.detach().numpy())
+#     dist, col = tree.query(
+#         y.detach().cpu(), k=k, distance_upper_bound=x.size(1))
+#     dist = torch.from_numpy(dist).to(x.dtype)
+#     col = torch.from_numpy(col).to(torch.long)
+#     row = torch.arange(col.size(0), dtype=torch.long).view(-1, 1).repeat(1, k)
+#     mask = 1 - torch.isinf(dist).view(-1)
+#     row, col = row.view(-1)[mask], col.view(-1)[mask]
+#
+#     return torch.stack([row, col], dim=0)
