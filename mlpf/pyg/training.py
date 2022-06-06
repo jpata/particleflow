@@ -48,7 +48,7 @@ def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_si
     return ret
 
 
-def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
+def train(device, model, multi_gpu, full_dataset, n_train, n_valid, batch_size, batch_events,
           optimizer, alpha, target_type, output_dim_id, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
@@ -76,96 +76,86 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
     # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=n_train))
-
-    # preprocessing the train_dataset in a good format for passing correct batches of events to the GNN
-    train_data = []
-    for i in range(len(train_dataset)):
-        train_data = train_data + train_dataset[i]
-
-    loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-
     # loader = DataLoader(dataset, batch_size=1, shuffle=True)
+    for file in range(start_file, end_file, 100):
+        print('file', file)
+        dataset_list = torch.utils.data.Subset(full_dataset, np.arange(start=file, stop=file + 100))
 
-    # for file in range(start_file, end_file):
-    #     print('file', file)
-    #     if multi_gpu:
-    #         loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
-    #     else:
-    #         loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+        # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
+        dataset = []
+        for i in range(len(dataset_list)):
+            dataset = dataset + dataset_list[i]
 
-    # for thing in loader:
-    # print('file', file)
-    # if multi_gpu:
-    #     loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
-    # else:
-    #     loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
-
-    for i, batch in enumerate(loader):
-        print(len(loader))
-        if i != 0:
-            print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
-        tt1 = time.time()
-
-        if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
-            if batch_events:
-                for i in range(len(batch)):
-                    batch[i] = batch_event_into_regions(batch[i], regions)
-            X = batch   # a list (not torch) instance so can't be passed to device
+        if multi_gpu:
+            loader = DataListLoader(dataset, batch_size=batch_size, shuffle=True)
         else:
-            if batch_events:
-                batch = batch_event_into_regions(batch, regions)
-            print(batch)
-            X = batch.to(device)
+            loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        # run forward pass
-        t0 = time.time()
-        pred, target = model(X)
-        t1 = time.time()
-        t = t + (t1 - t0)
+        for i, batch in enumerate(loader):
+            print(len(loader))
+            if i != 0:
+                print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
+            tt1 = time.time()
 
-        pred_ids_one_hot = pred[:, :output_dim_id]
-        pred_p4 = pred[:, output_dim_id:]
+            if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
+                if batch_events:
+                    for i in range(len(batch)):
+                        batch[i] = batch_event_into_regions(batch[i], regions)
+                X = batch   # a list (not torch) instance so can't be passed to device
+            else:
+                if batch_events:
+                    batch = batch_event_into_regions(batch, regions)
+                print(batch)
+                X = batch.to(device)
 
-        # define target
-        if target_type == 'gen':
-            target_ids_one_hot = target['ygen_id']
-            target_p4 = target['ygen']
-        elif target_type == 'cand':
-            target_ids_one_hot = target['ycand_id']
-            target_p4 = target['ycand']
+            # run forward pass
+            t0 = time.time()
+            pred, target = model(X)
+            t1 = time.time()
+            t = t + (t1 - t0)
 
-        # revert one hot encoding
-        _, target_ids = torch.max(target_ids_one_hot, -1)
-        _, pred_ids = torch.max(pred_ids_one_hot, -1)
+            pred_ids_one_hot = pred[:, :output_dim_id]
+            pred_p4 = pred[:, output_dim_id:]
 
-        # define some useful masks
-        msk = ((pred_ids != 0) & (target_ids != 0))
-        msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
+            # define target
+            if target_type == 'gen':
+                target_ids_one_hot = target['ygen_id']
+                target_p4 = target['ygen']
+            elif target_type == 'cand':
+                target_ids_one_hot = target['ycand_id']
+                target_p4 = target['ycand']
 
-        # computing loss
-        weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
-        loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-        loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
+            # revert one hot encoding
+            _, target_ids = torch.max(target_ids_one_hot, -1)
+            _, pred_ids = torch.max(pred_ids_one_hot, -1)
 
-        loss_tot = loss_clf + alpha * loss_reg
+            # define some useful masks
+            msk = ((pred_ids != 0) & (target_ids != 0))
+            msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
-        if is_train:
-            optimizer.zero_grad()
-            loss_tot.backward()
-            optimizer.step()
+            # computing loss
+            weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
+            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
-        losses_clf = losses_clf + loss_clf
-        losses_reg = losses_reg + loss_reg
-        losses_tot = losses_tot + loss_tot
+            loss_tot = loss_clf + alpha * loss_reg
 
-        accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
-                                                                 pred_ids[msk].detach().cpu().numpy())
+            if is_train:
+                optimizer.zero_grad()
+                loss_tot.backward()
+                optimizer.step()
 
-        conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
-                                                        pred_ids.detach().cpu().numpy(),
-                                                        labels=range(output_dim_id))
-        tt2 = time.time()
+            losses_clf = losses_clf + loss_clf
+            losses_reg = losses_reg + loss_reg
+            losses_tot = losses_tot + loss_tot
+
+            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
+                                                                     pred_ids[msk].detach().cpu().numpy())
+
+            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
+                                                            pred_ids.detach().cpu().numpy(),
+                                                            labels=range(output_dim_id))
+            tt2 = time.time()
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
     losses_tot = (losses_tot / (len(loader) * (end_file - start_file))).item()
