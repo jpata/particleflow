@@ -48,7 +48,7 @@ def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_si
     return ret
 
 
-def train(device, model, multi_gpu, full_dataset, n_train, n_valid, batch_size, batch_events,
+def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
           optimizer, alpha, target_type, output_dim_id, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
@@ -76,22 +76,14 @@ def train(device, model, multi_gpu, full_dataset, n_train, n_valid, batch_size, 
     # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
 
-    # loader = DataLoader(dataset, batch_size=1, shuffle=True)
-    for file in range(start_file, end_file, 100):
-        print('file', file)
-        dataset_list = torch.utils.data.Subset(full_dataset, np.arange(start=file, stop=file + 100))
-
-        # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
-        dataset = []
-        for i in range(len(dataset_list)):
-            dataset = dataset + dataset_list[i]
+    for file in range(start_file, end_file):
+        print(f'Loading file # {file}/{end_file-start_file}')
 
         if multi_gpu:
             loader = DataListLoader(dataset, batch_size=batch_size, shuffle=True)
         else:
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        print(f'will run inference on file {file}')
         for i, batch in enumerate(loader):
             if i != 0:
                 print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
