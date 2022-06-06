@@ -78,16 +78,18 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
     for file in range(start_file, end_file):
         print(f'Loading file # {file}/{end_file-start_file}')
+        tt1 = time.time()
 
         if multi_gpu:
             loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
             loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
+        tt2 = time.time()
+
+        print(f'time to get file={round(tt2 - tt1, 3)}s')
+
         for i, batch in enumerate(loader):
-            if i != 0:
-                print(f'i {i}/{len(loader)} - time={round(tt2 - tt1, 3)}s')
-            tt1 = time.time()
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
@@ -103,6 +105,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             t0 = time.time()
             pred, target = model(X)
             t1 = time.time()
+            print(f'{i}, forward pass ={round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :output_dim_id]
@@ -146,7 +149,6 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(output_dim_id))
-            tt2 = time.time()
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
     losses_tot = (losses_tot / (len(loader) * (end_file - start_file))).item()
