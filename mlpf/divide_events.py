@@ -25,11 +25,11 @@ num_files = 499
 
 c = 1
 for j in range(num_files):
+    print('file # {j}')
     data = list(torch.load(path + f'data_{j}.pt'))
+
     # divide the file into 10
     for i in range(10):
-        print(f'{i * 10}:{(i + 1) * 10}')
-
         if i == 0:
             torch.save(data[(i * 10):((i + 1) * 10)], path + f'processed2/data_{j}.pt')
         else:
