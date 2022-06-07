@@ -50,7 +50,7 @@ else:
 
 t1 = time.time()
 
-torch.load('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/data_18.pt')
+torch.load('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/data_18.pt')
 
 t2 = time.time()
 
