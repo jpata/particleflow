@@ -194,7 +194,7 @@ if torch.cuda.is_available():
     import torch_cluster.knn_cuda
 
 
-[docs]def knn(x, y, k, batch_x=None, batch_y=None):
+def knn(x, y, k, batch_x=None, batch_y=None):
     r"""Finds for each element in :obj:`y` the :obj:`k` nearest points in
     :obj:`x`.
 
