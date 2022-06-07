@@ -190,10 +190,6 @@ class GravNetConv_MLPF(MessagePassing):
                 f'{self.out_channels}, k={self.k})')
 
 
-if torch.cuda.is_available():
-    import torch_cluster.knn_cuda
-
-
 def knn(x, y, k, batch_x=None, batch_y=None):
     r"""Finds for each element in :obj:`y` the :obj:`k` nearest points in
     :obj:`x`.
@@ -241,9 +237,6 @@ def knn(x, y, k, batch_x=None, batch_y=None):
     assert x.size(1) == y.size(1)
     assert x.size(0) == batch_x.size(0)
     assert y.size(0) == batch_y.size(0)
-
-    if x.is_cuda:
-        return torch_cluster.knn_cuda.knn(x, y, k, batch_x, batch_y)
 
     # Rescale x and y.
     min_xy = min(x.min().item(), y.min().item())
