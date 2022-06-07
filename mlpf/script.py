@@ -47,11 +47,13 @@ if use_gpu:
 else:
     device = torch.device('cpu')
 
+t1 = time.time()
+dataset = PFGraphDataset(device, '/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
+t2 = time.time()
+print('data', t2 - t1, 's')
+
 
 t1 = time.time()
-
-torch.load('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/data_18.pt')
-
+loader = DataLoader(dataset, batch_size=1, pin_memory=True, num_workers=2)
 t2 = time.time()
-
-print(t2 - t1, 's')
+print('loader', t2 - t1, 's')
