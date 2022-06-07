@@ -118,33 +118,27 @@ class PFGraphDataset(Dataset):
                 d = Data(
                     x=torch.tensor(data['X'][i], dtype=torch.float),
                     ygen=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 1:],
-                    ygen_id=one_hot_embedding(torch.tensor(data['ygen'][i], dtype=torch.float)[:, 0].long(), num_classes),
+                    ygen_id=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 0].long(),
                     ycand=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 1:],
-                    ycand_id=one_hot_embedding(torch.tensor(data['ycand'][i], dtype=torch.float)[:, 0].long(), num_classes)
+                    ycand_id=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 0].long(),
                 )
+
                 batched_data.append(d)
+
         elif self.data == 'cms':
             num_classes = 41
             for i in range(len(data)):
-                Xelem = torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float)
-                ygen = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:]
-                ygen_id = torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()
-                ycand = torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:]
-                ycand_id = torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long()
-
-                ygen_id = one_hot_embedding(relabel_indices(ygen_id), num_classes)
-                ycand_id = one_hot_embedding(relabel_indices(ycand_id), num_classes)
-
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
-                    x=Xelem,
-                    ygen=ygen,
-                    ygen_id=ygen_id,
-                    ycand=ycand,
-                    ycand_id=ycand_id
+                    x=torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float),
+                    ygen=torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:],
+                    ygen_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()),
+                    ycand=torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:],
+                    ycand_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long())
                 )
 
                 batched_data.append(d)
+
         return batched_data
 
     def process_multiple_files(self, filenames, idx_file):

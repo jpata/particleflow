@@ -48,8 +48,8 @@ else:
     device = torch.device('cpu')
 
 path = '../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/'
-
 path = '/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/'
+
 
 t1 = time.time()
 dataset = PFGraphDataset(device, path, 'cms')
@@ -57,16 +57,11 @@ t2 = time.time()
 print('data', t2 - t1, 's')
 
 
-# t1 = time.time()
-# loader = DataLoader(dataset, batch_size=1, pin_memory=True, num_workers=0)
-# t2 = time.time()
-# print('loader', t2 - t1, 's')
+t1 = time.time()
+loader = DataLoader(dataset, batch_size=1, pin_memory=True, num_workers=0)
+t2 = time.time()
+print('loader', t2 - t1, 's')
 
-
-all = []
-for i in range(len(dataset)):
-    print(f'file # {i}')
-    all = all + dataset[i]
 
 # t1 = time.time()
 # loader = DataLoader(all, batch_size=1, pin_memory=True, num_workers=0)
