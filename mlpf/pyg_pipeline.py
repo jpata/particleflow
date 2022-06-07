@@ -1,3 +1,4 @@
+from torch_geometric.data import Data, Batch
 from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
@@ -67,8 +68,8 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
     print(f'Loading the {args.data} data..')
-    dataset = PFGraphDataset(args.dataset, args.data)
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+    dataset = PFGraphDataset(device, args.dataset, args.data)
+    dataset_qcd = PFGraphDataset(device, args.dataset_qcd, args.data)
 
     # retrieve the dimensions of the PF-elements & PF-candidates
     if args.data == 'delphes':

@@ -58,10 +58,11 @@ class PFGraphDataset(Dataset):
         root (str): path
     """
 
-    def __init__(self, root, data, transform=None, pre_transform=None):
+    def __init__(self, device, root, data, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
         self.data = data
+        self.device = device
 
     @property
     def raw_file_names(self):
@@ -170,7 +171,7 @@ class PFGraphDataset(Dataset):
 
     def get(self, idx):
         p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx))
-        data = torch.load(p)
+        data = torch.load(p, map_location=self.device)
         return data
 
     def __getitem__(self, idx):
@@ -180,6 +181,7 @@ class PFGraphDataset(Dataset):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--device", type=str, required=True, help="'cpu' or 'cuda'?")
     parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
@@ -193,16 +195,16 @@ if __name__ == "__main__":
 
     """
     e.g. to run for cms
-    python3 preprocess_data.py --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 preprocess_data.py --device cpu --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     e.g. to run for delphes
-    python3 preprocess_data.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 preprocess_data.py --device cpu --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     """
 
     args = parse_args()
 
-    pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
+    pfgraphdataset = PFGraphDataset(device=args.device, root=args.dataset, data=args.data)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
