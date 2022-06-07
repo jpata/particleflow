@@ -159,9 +159,9 @@ class GravNetConv_MLPF(MessagePassing):
         s_l: Tensor = self.lin_s(x[0])
         s_r: Tensor = self.lin_s(x[1]) if is_bipartite else s_l
 
-        # # add error message when trying to preform knn without enough neighbors in the region
-        # if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
-        #     raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
+        # add error message when trying to preform knn without enough neighbors in the region
+        if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
+            raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
 
         edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
 
