@@ -63,7 +63,9 @@ t2 = time.time()
 print('loader', t2 - t1, 's')
 
 print(len(loader))
-print(len(loader)[0])
+
+for file in loader:
+    print(file)
 
 
 # t1 = time.time()
