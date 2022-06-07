@@ -62,6 +62,9 @@ loader = DataLoader(dataset, batch_size=1, pin_memory=True, num_workers=0)
 t2 = time.time()
 print('loader', t2 - t1, 's')
 
+print(len(loader))
+print(len(loader)[0])
+
 
 # t1 = time.time()
 # loader = DataLoader(all, batch_size=1, pin_memory=True, num_workers=0)
@@ -70,3 +73,5 @@ print('loader', t2 - t1, 's')
 #
 #
 # len(loader)
+
+f
