@@ -175,7 +175,7 @@ class PFGraphDataset(Dataset):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, required=True, help="'cpu' or 'cuda'?")
+    parser.add_argument("--device", type=str, required=False, default='cpu', help="'cpu' or 'cuda'?")
     parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
