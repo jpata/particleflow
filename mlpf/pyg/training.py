@@ -81,14 +81,15 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         tt1 = time.time()
 
         tt21 = time.time()
-        dataset.get(file)
+        a = dataset.get(file)
         tt31 = time.time()
         print(f'tttt {round(tt31-tt21,3)}s')
 
         if multi_gpu:
             loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            # loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataLoader(a, batch_size=batch_size, shuffle=True)
 
         tt2 = time.time()
 
