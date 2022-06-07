@@ -168,9 +168,6 @@ class GravNetConv_MLPF(MessagePassing):
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
 
-        # return the adjacency matrix of the graph for lrp purposes
-        A = to_dense_adj(edge_index.to('cpu'), edge_attr=edge_weight.to('cpu'))[0]  # adjacency matrix
-
         # message passing
         out = self.propagate(edge_index, x=(msg_activations, None),
                              edge_weight=edge_weight,
