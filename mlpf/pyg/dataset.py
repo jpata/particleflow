@@ -1,3 +1,4 @@
+import h5py
 import pandas
 import pandas as pd
 import numpy as np
@@ -172,6 +173,23 @@ class PFGraphDataset(Dataset):
         return self.get(idx)
 
 
+class PFGraphDataset2(Dataset):
+    """Physics dataset."""
+
+    def __init__(self, pt_file):
+        """
+        Args:
+            pt_file (string): Path to the dataset
+        """
+        self.data = torch.load(pt_file)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
@@ -189,10 +207,10 @@ if __name__ == "__main__":
 
     """
     e.g. to run for cms
-    python3 preprocess_data.py --device cpu --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 dataset.py --device cpu --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     e.g. to run for delphes
-    python3 preprocess_data.py --device cpu --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 dataset.py --device cpu --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     """
 

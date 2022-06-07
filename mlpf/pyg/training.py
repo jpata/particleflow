@@ -103,7 +103,6 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
             # run forward pass
             t0 = time.time()
-            # model.conv.to('cpu')
             pred, target = model(X)
             t1 = time.time()
             print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
@@ -121,8 +120,8 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
                 target_p4 = target['ycand']
 
             # revert one hot encoding
-            _, target_ids = torch.max(target_ids_one_hot, -1)
-            _, pred_ids = torch.max(pred_ids_one_hot, -1)
+            target_ids = torch.argmax(target_ids_one_hot, axis=1)
+            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
             # define some useful masks
             msk = ((pred_ids != 0) & (target_ids != 0))
@@ -140,9 +139,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
                 loss_tot.backward()
                 optimizer.step()
 
-            losses_clf = losses_clf + loss_clf
-            losses_reg = losses_reg + loss_reg
-            losses_tot = losses_tot + loss_tot
+            losses_clf = losses_clf + loss_clf.detach().cpu()
+            losses_reg = losses_reg + loss_reg.detach().cpu()
+            losses_tot = losses_tot + loss_tot.detach().cpu()
 
             accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
                                                                      pred_ids[msk].detach().cpu().numpy())
@@ -150,8 +149,6 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(output_dim_id))
-            if i == 10:
-                break
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
@@ -256,7 +253,7 @@ def training_loop(device, data, model, multi_gpu,
         if data == 'delphes':
             target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
         elif data == 'cms':
-            target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had"]
+            target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had", "tau"]
 
         plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'cmT_epoch_{str(epoch)}')
         plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'cmV_epoch_{str(epoch)}')

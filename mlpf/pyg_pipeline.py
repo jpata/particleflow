@@ -77,7 +77,7 @@ if __name__ == "__main__":
         output_dim_id = 6   # we have 6 classes/pids for cms
     elif args.data == 'cms':
         input_dim = len(features_cms)
-        output_dim_id = 9   # we have 8 classes/pids for cms
+        output_dim_id = 9   # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
     if args.load:
