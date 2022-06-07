@@ -81,9 +81,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         tt1 = time.time()
 
         if multi_gpu:
-            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True, pin_memory=True)
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True, pin_memory=True)
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
         tt2 = time.time()
 
