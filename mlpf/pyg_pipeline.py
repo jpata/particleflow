@@ -124,6 +124,9 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         model.train()
+
+        torch.backends.cudnn.benchmark = True
+
         training_loop(device, args.data, model, multi_gpu,
                       dataset, args.n_train, args.n_valid,
                       args.batch_size, args.batch_events,

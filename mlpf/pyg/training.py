@@ -81,9 +81,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         tt1 = time.time()
 
         if multi_gpu:
-            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True, pin_memory=True)
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True, pin_memory=True)
 
         tt2 = time.time()
 
@@ -150,7 +150,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(output_dim_id))
-            if i == 3:
+            if i == 10:
                 break
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
