@@ -58,7 +58,7 @@ print('data', t2 - t1, 's')
 
 
 t1 = time.time()
-loader = DataLoader(dataset, batch_size=1, num_workers=2)
+loader = DataLoader(dataset, batch_size=1, num_workers=0)
 t2 = time.time()
 print('loader', t2 - t1, 's')
 
