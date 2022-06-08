@@ -71,7 +71,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         end_file = n_train + n_valid
 
     # initialize loss and accuracy and time
-    losses_clf, losses_reg, losses_tot, accuracies, t = 0, 0, 0, 0, 0
+    losses_clf, losses_reg, losses_tot, accuracies = 0, 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((output_dim_id, output_dim_id))
@@ -89,6 +89,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
         print(f'time to get file = {round(tt2 - tt1, 3)}s')
 
+        t = 0
         for i, batch in enumerate(loader):
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
@@ -150,6 +151,8 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(output_dim_id))
 
+        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
     losses_tot = (losses_tot / (len(loader) * (end_file - start_file))).item()
@@ -157,8 +160,6 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
     accuracies = (accuracies / (len(loader) * (end_file - start_file))).item()
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
-
-    print(f'Average inference time per event is {round((t / (len(loader) * (end_file - start_file))), 3)}s')
 
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
