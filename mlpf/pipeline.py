@@ -125,23 +125,28 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     try:
         if comet_offline:
             print("Using comet-ml OfflineExperiment, saving logs locally.")
-            from comet_ml import OfflineExperiment as Experiment
-            offline_dir = outdir + "/cometml"
+            from comet_ml import OfflineExperiment
+            experiment = OfflineExperiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+                offline_directory=outdir + "/cometml",
+            )
         else:
             print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
             from comet_ml import Experiment
             offline_dir = None
-        experiment = Experiment(
-            project_name="particleflow-tf",
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-            offline_directory=offline_dir,
-            #offline_directory=outdir,
-            #disabled=True
-        )
+            experiment = Experiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+            )
     except Exception as e:
         print("Failed to initialize comet-ml dashboard")
         experiment = None
