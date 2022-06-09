@@ -103,7 +103,8 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
+@click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline):
 
     #tf.debugging.enable_check_numerics()
 
@@ -122,7 +123,14 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
 
     try:
-        from comet_ml import Experiment
+        if comet_offline:
+            print("Using comet-ml OfflineExperiment, saving logs locally.")
+            from comet_ml import OfflineExperiment as Experiment
+            offline_dir = outdir + "/cometml"
+        else:
+            print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+            from comet_ml import Experiment
+            offline_dir = None
         experiment = Experiment(
             project_name="particleflow-tf",
             auto_metric_logging=True,
@@ -130,6 +138,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             auto_histogram_weight_logging=True,
             auto_histogram_gradient_logging=False,
             auto_histogram_activation_logging=False,
+            offline_directory=offline_dir,
             #offline_directory=outdir,
             #disabled=True
         )
