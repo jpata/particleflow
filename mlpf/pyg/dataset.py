@@ -14,16 +14,19 @@ import pickle
 import multiprocessing
 
 
+# CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
+# CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"]
+
 def relabel_indices(pid_array):
     """
     relabels classes for convenient ML operations/training
     """
     pid_array[pid_array == 15] = 8  # taus for now
-    pid_array[pid_array == 211] = 7
-    pid_array[pid_array == 130] = 6
-    pid_array[pid_array == 22] = 5
-    pid_array[pid_array == 13] = 4
-    pid_array[pid_array == 11] = 3
+    pid_array[pid_array == 211] = 7  # chhadrons
+    pid_array[pid_array == 130] = 6  # nhadrons
+    pid_array[pid_array == 22] = 5  # gamma
+    pid_array[pid_array == 13] = 4  # electrons
+    pid_array[pid_array == 11] = 3  # muons
     return pid_array
 
 

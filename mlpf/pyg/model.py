@@ -12,17 +12,12 @@ from torch import Tensor
 import torch.nn as nn
 from torch.nn import Linear
 from torch_scatter import scatter
-from torch_geometric.nn.conv import MessagePassing, GCNConv, GraphConv
+from torch_geometric.nn.conv import MessagePassing, GCNConv, GraphConv, DynamicEdgeConv
 from torch_geometric.utils import to_dense_adj
 import torch.nn.functional as F
 
 from typing import Optional, Union
 from torch_geometric.typing import OptTensor, PairTensor, PairOptTensor
-
-try:
-    from torch_cluster import knn
-except ImportError:
-    knn = None
 
 
 class MLPF(nn.Module):
@@ -55,7 +50,8 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            # self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
         # (3) DNN layer: classifiying pid
         self.nn2 = nn.Sequential(
@@ -103,6 +99,33 @@ class MLPF(nn.Module):
         preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
 
         return torch.cat([preds_id, preds_p4], axis=-1), target
+
+
+class EdgeConvBlock(nn.Module):
+    def __init__(self, in_size, layer_size, k):
+        super(EdgeConvBlock, self).__init__()
+
+        layers = []
+
+        layers.append(nn.Linear(in_size * 2, layer_size))
+        layers.append(nn.BatchNorm1d(layer_size))
+        layers.append(nn.ReLU())
+
+        # for i in range(2):
+        #     layers.append(nn.Linear(layer_size, layer_size))
+        #     layers.append(nn.BatchNorm1d(layer_size))
+        #     layers.append(nn.ReLU())
+
+        self.edge_conv = DynamicEdgeConv(nn.Sequential(*layers), k=k, aggr="mean")
+
+    def forward(self, x, batch):
+        return self.edge_conv(x, batch)
+
+
+try:
+    from torch_cluster import knn
+except ImportError:
+    knn = None
 
 
 class GravNetConv_MLPF(MessagePassing):
@@ -196,7 +219,7 @@ except ImportError:
     knn_graph = None
 
 
-class GravNetConv(MessagePassing):
+class GravNetConv_cmspepr(MessagePassing):
     r"""The GravNet operator from the `"Learning Representations of Irregular
     Particle-detector Geometry with Distance-weighted Graph
     Networks" <https://arxiv.org/abs/1902.07987>`_ paper, where the graph is
