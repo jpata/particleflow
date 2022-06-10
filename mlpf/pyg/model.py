@@ -219,7 +219,7 @@ except ImportError:
     knn_graph = None
 
 
-class GravNetConv_cmspepr(MessagePassing):
+class GravNetConv(MessagePassing):
     r"""The GravNet operator from the `"Learning Representations of Irregular
     Particle-detector Geometry with Distance-weighted Graph
     Networks" <https://arxiv.org/abs/1902.07987>`_ paper, where the graph is
