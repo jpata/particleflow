@@ -514,18 +514,6 @@ def prepare_callbacks(
     ):
 
     callbacks = []
-    tb = CustomTensorBoard(
-        log_dir=outdir + "/logs",
-        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
-        write_graph=False, write_images=False,
-        update_freq="epoch",
-        #profile_batch=(10,90),
-        profile_batch=0,
-        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
-    )
-    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
-    tb.__class__.__name__ = "TensorBoard"
-    callbacks += [tb]
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
 
@@ -564,6 +552,18 @@ def get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info
     )
 
     callbacks += [cb]
+    tb = CustomTensorBoard(
+        log_dir=outdir + "/logs",
+        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
+        write_graph=False, write_images=False,
+        update_freq="epoch",
+        #profile_batch=(10,90),
+        profile_batch=0,
+        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
+    )
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
+    callbacks += [tb]
 
     return callbacks
 

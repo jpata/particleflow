@@ -124,8 +124,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     if customize:
         config = customization_functions[customize](config)
-
-    outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+    
 
     try:
         from comet_ml import Experiment
@@ -149,6 +148,25 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         num_gpus = initialize_horovod()
     else:
         strategy, num_gpus = get_strategy()
+    outdir = ''
+    if horovod_enabled:
+        if hvd.rank() == 0:
+            outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+            if experiment:
+                experiment.set_name(outdir)
+                experiment.log_code("mlpf/tfmodel/model.py")
+                experiment.log_code("mlpf/tfmodel/utils.py")
+                experiment.log_code(config_file_path)
+                shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+    else:
+        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+        if experiment:
+            experiment.set_name(outdir)
+            experiment.log_code("mlpf/tfmodel/model.py")
+            experiment.log_code("mlpf/tfmodel/utils.py")
+            experiment.log_code(config_file_path)
+            shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
@@ -166,13 +184,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     total_steps = num_train_steps * config["setup"]["num_epochs"]
     print("total_steps", total_steps)
 
-    if experiment:
-        experiment.set_name(outdir)
-        experiment.log_code("mlpf/tfmodel/model.py")
-        experiment.log_code("mlpf/tfmodel/utils.py")
-        experiment.log_code(config_file_path)
+    
 
-    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+    
 
     if horovod_enabled :
         model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)

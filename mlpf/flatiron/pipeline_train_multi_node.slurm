@@ -2,11 +2,11 @@
 
 # Walltime limit
 #SBATCH -t 02:00:00
-#SBATCH -N 1
+#SBATCH -N 4
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4
-#SBATCH --constraint=a100
+#SBATCH --constraint=a100,sxm4
 
 # Job name
 #SBATCH -J pipetrain
@@ -20,11 +20,13 @@ echo "#################### Job submission script. #############################"
 cat $0
 echo "################# End of job submission script. #########################"
 
-module --force purge; module load modules/1.49-20211101
-module load slurm gcc cmake nccl/2.9.9-1 cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
+#module --force purge; module load modules/1.49-20211101
+#module load slurm gcc cmake nccl/2.9.9-1 cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
 
-nvidia-smi
+module --force purge; module load modules/2.0
+module load slurm gcc cmake nccl cuda cudnn openmpi/cuda 
 
+nvidia-smi 
 
 source ~/miniconda/bin/activate tf
 which python3
@@ -49,7 +51,6 @@ for str in ${nodes_array[@]}; do
   node_server=$node_server$str:4,
 done
 nod=${node_server: : -1}
-
 
 echo 'Starting training.'
 # Run the training of the base GNN model using e.g. 4 GPUs in a data-parallel mode
