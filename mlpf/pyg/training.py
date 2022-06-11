@@ -126,7 +126,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
             # define some useful masks
-            print('target['ygen_id']', target['ygen_id'].device)
+            print("target['ygen_id']", target['ygen_id'].device)
             print('target_ids_one_hot', target_ids_one_hot.device)
             print('target_ids', target_ids.device)
             print('pred_ids', pred_ids.device)
