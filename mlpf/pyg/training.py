@@ -115,10 +115,10 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
             # define target
             if target_type == 'gen':
-                target_ids_one_hot = one_hot_embedding(target['ygen_id'], num_classes)
+                target_ids_one_hot = one_hot_embedding(target['ygen_id'], num_classes).to(device)
                 target_p4 = target['ygen']
             elif target_type == 'cand':
-                target_ids_one_hot = one_hot_embedding(target['ycand_id'], num_classes)
+                target_ids_one_hot = one_hot_embedding(target['ycand_id'], num_classes).to(device)
                 target_p4 = target['ycand']
 
             # revert one hot encoding

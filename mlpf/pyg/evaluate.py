@@ -79,9 +79,9 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
             t = t + (tf - ti)
 
             # retrieve target
-            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes)
+            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes).to(device)
             gen_p4 = target['ygen'].detach()
-            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes)
+            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes).to(device)
             cand_p4 = target['ycand'].detach()
 
             # retrieve predictions
