@@ -1,6 +1,7 @@
 from pyg import make_plot
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions
+from pyg.dataset import one_hot_embedding
 
 import torch
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
@@ -26,13 +27,13 @@ matplotlib.use("Agg")
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def compute_weights(device, target_ids, output_dim_id):
+def compute_weights(device, target_ids, num_classes):
     """
     computes necessary weights to accomodate class imbalance in the loss function
     """
 
     vs, cs = torch.unique(target_ids, return_counts=True)
-    weights = torch.zeros(output_dim_id).to(device=device)
+    weights = torch.zeros(num_classes).to(device=device)
     for k, v in zip(vs, cs):
         weights[k] = 1.0 / math.sqrt(float(v))
     # weights[2] = weights[2] * 3  # ephasize nhadrons
@@ -41,15 +42,15 @@ def compute_weights(device, target_ids, output_dim_id):
 
 @torch.no_grad()
 def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
-                   alpha, target_type, output_dim_id, outpath):
+                   alpha, target_type, num_classes, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target_type, output_dim_id, outpath)
+        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target_type, num_classes, outpath)
     return ret
 
 
 def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
-          optimizer, alpha, target_type, output_dim_id, outpath):
+          optimizer, alpha, target_type, num_classes, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -74,7 +75,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
     losses_clf, losses_reg, losses_tot, accuracies = 0, 0, 0, 0
 
     # setup confusion matrix
-    conf_matrix = np.zeros((output_dim_id, output_dim_id))
+    conf_matrix = np.zeros((num_classes, num_classes))
 
     for file in range(start_file, end_file):
         print(f'Loading file # {file}/{end_file-start_file}')
@@ -109,15 +110,15 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
 
-            pred_ids_one_hot = pred[:, :output_dim_id]
-            pred_p4 = pred[:, output_dim_id:]
+            pred_ids_one_hot = pred[:, :num_classes]
+            pred_p4 = pred[:, num_classes:]
 
             # define target
             if target_type == 'gen':
-                target_ids_one_hot = target['ygen_id']
+                target_ids_one_hot = one_hot_embedding(target['ygen_id'], num_classes)
                 target_p4 = target['ygen']
             elif target_type == 'cand':
-                target_ids_one_hot = target['ycand_id']
+                target_ids_one_hot = one_hot_embedding(target['ycand_id'], num_classes)
                 target_p4 = target['ycand']
 
             # revert one hot encoding
@@ -129,7 +130,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
             # computing loss
-            weights = compute_weights(device, target_ids, output_dim_id)    # to accomodate class imbalance
+            weights = compute_weights(device, target_ids, num_classes)    # to accomodate class imbalance
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
@@ -149,7 +150,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
-                                                            labels=range(output_dim_id))
+                                                            labels=range(num_classes))
 
         print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
@@ -166,7 +167,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
 
 def training_loop(device, data, model, multi_gpu,
                   dataset, n_train, n_valid, batch_size, batch_events, n_epochs, patience,
-                  optimizer, alpha, target, output_dim_id, outpath):
+                  optimizer, alpha, target, num_classes, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
@@ -182,7 +183,7 @@ def training_loop(device, data, model, multi_gpu,
         optimizer: optimizer to use for training (by default: Adam)
         alpha: the hyperparameter controlling the classification vs regression task balance (alpha=0 means pure regression, and greater positive values emphasize regression)
         target: 'gen' or 'cand' training
-        output_dim_id: number of particle candidate classes to predict (6 for delphes, 9 for cms)
+        num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
         outpath: path to store the model weights and training plots
     """
 
@@ -206,7 +207,7 @@ def training_loop(device, data, model, multi_gpu,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -216,7 +217,7 @@ def training_loop(device, data, model, multi_gpu,
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, alpha, target, output_dim_id, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)

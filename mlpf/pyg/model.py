@@ -29,7 +29,7 @@ class MLPF(nn.Module):
     """
 
     def __init__(self,
-                 input_dim=12, output_dim_id=6, output_dim_p4=6,
+                 input_dim=12, num_classes=6, output_dim_p4=6,
                  embedding_dim=32, hidden_dim1=126, hidden_dim2=256,
                  num_convs=3, space_dim=4, propagate_dim=8, k=4):
         super(MLPF, self).__init__()
@@ -61,12 +61,12 @@ class MLPF(nn.Module):
             self.act(),
             nn.Linear(hidden_dim2, hidden_dim2),
             self.act(),
-            nn.Linear(hidden_dim2, output_dim_id),
+            nn.Linear(hidden_dim2, num_classes),
         )
 
         # (4) DNN layer: regressing p4
         self.nn3 = nn.Sequential(
-            nn.Linear(input_dim + output_dim_id, hidden_dim2),
+            nn.Linear(input_dim + num_classes, hidden_dim2),
             self.act(),
             nn.Linear(hidden_dim2, hidden_dim2),
             self.act(),
@@ -273,7 +273,7 @@ class GravNetConv(MessagePassing):
 
 class EdgeConvBlock(nn.Module):
     """
-    EdgeConv implementation as an alternative to GravnetConv
+    EdgeConv implementation as an alternative to GravnetConv.
     """
 
     def __init__(self, in_size, layer_size, k):

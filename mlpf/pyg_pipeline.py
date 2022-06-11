@@ -3,7 +3,7 @@ from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
-from pyg.dataset import PFGraphDataset
+from pyg.dataset import PFGraphDataset, one_hot_embedding
 
 import torch
 import torch_geometric
@@ -74,10 +74,10 @@ if __name__ == "__main__":
     # retrieve the dimensions of the PF-elements & PF-candidates
     if args.data == 'delphes':
         input_dim = len(features_delphes)
-        output_dim_id = 6   # we have 6 classes/pids for cms
+        num_classes = 6   # we have 6 classes/pids for cms
     elif args.data == 'cms':
         input_dim = len(features_cms)
-        output_dim_id = 9   # we have 9 classes/pids for cms (including taus)
+        num_classes = 9   # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
     if args.load:
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     else:
         print('Instantiating a model..')
         model_kwargs = {'input_dim': input_dim,
-                        'output_dim_id': output_dim_id,
+                        'num_classes': num_classes,
                         'output_dim_p4': output_dim_p4,
                         'embedding_dim': args.embedding_dim,
                         'hidden_dim1': args.hidden_dim1,
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                       args.batch_size, args.batch_events,
                       args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target,
-                      output_dim_id, outpath)
+                      num_classes, outpath)
 
     model.eval()
 
@@ -143,5 +143,5 @@ if __name__ == "__main__":
         epoch_on_plots = args.n_epochs - 1
 
     make_directories_for_plots(outpath, 'test_data')
-    make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, output_dim_id, outpath + '/test_data_plots/')
-    make_plots(device, args.data, model, output_dim_id, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+    make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

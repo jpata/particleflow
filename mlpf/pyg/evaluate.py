@@ -3,6 +3,7 @@ from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
+from pyg.dataset import one_hot_embedding
 
 import torch
 from torch_geometric.data import Batch
@@ -23,7 +24,7 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size, batch_events, output_dim_id, outpath):
+def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size, batch_events, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -32,7 +33,7 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
         model: pytorch model
         multi_gpu: boolean for multi_gpu training (if multigpus are available)
         batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
-        output_dim_id: number of particle candidate classes to predict (6 for delphes, 9 for cms)
+        num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
 
     print('Making predictions...')
@@ -78,14 +79,14 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
             t = t + (tf - ti)
 
             # retrieve target
-            gen_ids_one_hot = target['ygen_id'].detach()
+            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes)
             gen_p4 = target['ygen'].detach()
-            cand_ids_one_hot = target['ycand_id'].detach()
+            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes)
             cand_p4 = target['ycand'].detach()
 
             # retrieve predictions
-            pred_ids_one_hot = pred[:, :output_dim_id].detach()
-            pred_p4 = pred[:, output_dim_id:].detach()
+            pred_ids_one_hot = pred[:, :num_classes].detach()
+            pred_p4 = pred[:, num_classes:].detach()
 
             # revert the one-hot encodings
             _, gen_ids = torch.max(gen_ids_one_hot, -1)
@@ -146,7 +147,7 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
     torch.save(predictions, outpath + '/predictions.pt')
 
 
-def make_plots(device, data, model, output_dim_id, outpath, target, epoch, tag):
+def make_plots(device, data, model, num_classes, outpath, target, epoch, tag):
 
     print('Making plots...')
 
@@ -177,7 +178,7 @@ def make_plots(device, data, model, output_dim_id, outpath, target, epoch, tag):
     # make confusion matrix for mlpf
     conf_matrix_mlpf = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
                                                         pred_ids.cpu(),
-                                                        labels=range(output_dim_id),
+                                                        labels=range(num_classes),
                                                         normalize="true")
 
     plot_confusion_matrix(conf_matrix_mlpf, pfcands, epoch + 1, outpath + '/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
@@ -185,7 +186,7 @@ def make_plots(device, data, model, output_dim_id, outpath, target, epoch, tag):
     # make confusion matrix for rule based PF
     conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
                                                         cand_ids.cpu(),
-                                                        labels=range(output_dim_id),
+                                                        labels=range(num_classes),
                                                         normalize="true")
 
     plot_confusion_matrix(conf_matrix_cand, pfcands, epoch + 1, outpath + '/confusion_matrix_plots/', 'cm_cand', target="rule-based")
