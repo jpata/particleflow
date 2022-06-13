@@ -76,6 +76,7 @@ if __name__ == "__main__":
     print(f'Loading the {args.data} data..')
     t0 = time.time()
     dataset = PFGraphDataset2(pathhh)
+    print('num_files is ', len(dataset))
     print(f'time taken is {round(time.time()-t0, 3)}s')
 
     # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
@@ -85,9 +86,9 @@ if __name__ == "__main__":
     # trying to make a gigantic dataloader
     print(f'Construct the {args.data} loader..')
     t0 = time.time()
-    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     print(f'time taken is {round(time.time()-t0, 3)}s')
-    valid_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    valid_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
 
     # t0 = time.time()
     # train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
@@ -192,20 +193,3 @@ if __name__ == "__main__":
 # ax.legend(loc='best')
 # plt.savefig('batch_size.pdf')
 # plt.close(fig)
-
-
-#
-#
-#     train_loader = DataLoader('pyg/ttbar_train.pt', batch_size=1, shuffle=True)
-#     valid_loader = DataLoader('pyg/ttbar_valid.pt', batch_size=1, shuffle=True)
-#
-#
-#
-# for batch in train_loader:
-#
-# print(len(train_loader))
-#
-#
-# next(iter(train_loader))
-#
-# batch

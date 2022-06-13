@@ -178,18 +178,18 @@ class PFGraphDataset(Dataset):
 class PFGraphDataset2(Dataset):
     """Physics dataset."""
 
-    def __init__(self, pt_file):
+    def __init__(self, data_dir):
         """
         Args:
-            pt_file (string): Path to the dataset
+            data_dir (string): Path to the dataset
         """
-        self.pt_file = pt_file
+        self.data_dir = data_dir
 
     def __len__(self):
-        return 10
+        return len(glob(osp.join(self.data_dir, '*.pt')))
 
     def __getitem__(self, idx):
-        return torch.load(self.pt_file + f'/data_{idx}.pt')
+        return torch.load(self.data_dir + f'/data_{idx}.pt')
 
 
 def parse_args():
