@@ -151,8 +151,8 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            break
-        # print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+
+        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
