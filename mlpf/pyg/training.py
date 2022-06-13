@@ -45,7 +45,8 @@ def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_si
                    alpha, target_type, num_classes, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target_type, num_classes, outpath)
+        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
+                    optimizer, alpha, target_type, num_classes, outpath)
     return ret
 
 
@@ -131,7 +132,7 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
             msk = ((pred_ids != 0) & (target_ids != 0))
             msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
-            # computing loss
+            # compute the loss
             weights = compute_weights(device, target_ids, num_classes)    # to accomodate class imbalance
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
@@ -167,17 +168,21 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(device, data, model, multi_gpu,
-                  dataset, n_train, n_valid, batch_size, batch_events, n_epochs, patience,
+def training_loop(device, data, model, multi_gpu, dataset, n_train, n_valid,
+                  batch_size, batch_events, n_epochs, patience,
                   optimizer, alpha, target, num_classes, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
         device: 'cpu' or cuda
-        data: data sepecefication ('cms' or 'delphes')
+        data: data sepecification ('cms' or 'delphes')
         model: pytorch model
         multi_gpu: boolean for multi_gpu training (if multigpus are available)
+        dataset: a PFGraphDataset object
+        n_train: number of files to use for training
+        n_train: number of files to use for validation
+        batch_size: how many events to use for the forward pass at a time
         batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
         loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
         n_epochs: number of epochs for a full training
