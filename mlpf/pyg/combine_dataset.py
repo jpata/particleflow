@@ -14,7 +14,7 @@ import pickle
 import multiprocessing
 
 
-path_from = '../../data/cms/processed/'
+path_from = '../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/'
 path_to = '../../data/c/processed/'
 
 all = []
