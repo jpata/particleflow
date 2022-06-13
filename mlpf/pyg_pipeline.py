@@ -78,8 +78,12 @@ if __name__ == "__main__":
     # train_loader = DataLoader(torch.load('pyg/processed/ttbar_train.pt'), batch_size=args.batch_size, shuffle=True)
     # valid_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
 
+    t0 = time.time()
     train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    print(f'time taken is {round(time.time()-t0, 3)}s')
+    t0 = time.time()
     valid_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    print(f'time taken is {round(time.time()-t0, 3)}s')
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
