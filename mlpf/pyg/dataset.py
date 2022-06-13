@@ -169,7 +169,7 @@ class PFGraphDataset(Dataset):
 
     def get(self, idx):
         p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx))
-        data = torch.load(p, map_location=self.device)
+        data = torch.load(p, map_location='cpu')
         return data
 
     def __getitem__(self, idx):
