@@ -94,70 +94,71 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
     #     print(f'time to get file = {round(tt2 - tt1, 3)}s')
     #
     t = 0
-    for i, batch in enumerate(loader):
+    for load in loader:
+        for i, batch in enumerate(load):
 
-        if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
-            if batch_events:
-                for i in range(len(batch)):
-                    batch[i] = batch_event_into_regions(batch[i], regions)
-            X = batch   # a list (not torch) instance so can't be passed to device
-        else:
-            if batch_events:
-                batch = batch_event_into_regions(batch, regions)
-            X = batch.to(device)
+            if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
+                if batch_events:
+                    for i in range(len(batch)):
+                        batch[i] = batch_event_into_regions(batch[i], regions)
+                X = batch   # a list (not torch) instance so can't be passed to device
+            else:
+                if batch_events:
+                    batch = batch_event_into_regions(batch, regions)
+                X = batch.to(device)
 
-        # run forward pass
-        t0 = time.time()
-        pred, target = model(X)
-        t1 = time.time()
-        print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
-        t = t + (t1 - t0)
+            # run forward pass
+            t0 = time.time()
+            pred, target = model(X)
+            t1 = time.time()
+            print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
+            t = t + (t1 - t0)
 
-        pred_ids_one_hot = pred[:, :num_classes]
-        pred_p4 = pred[:, num_classes:]
+            pred_ids_one_hot = pred[:, :num_classes]
+            pred_p4 = pred[:, num_classes:]
 
-        # define target
-        if target_type == 'gen':
-            target_p4 = target['ygen']
-            target_ids = target['ygen_id']
-        elif target_type == 'cand':
-            target_p4 = target['ycand']
-            target_ids = target['ycand_id']
+            # define target
+            if target_type == 'gen':
+                target_p4 = target['ygen']
+                target_ids = target['ygen_id']
+            elif target_type == 'cand':
+                target_p4 = target['ycand']
+                target_ids = target['ycand_id']
 
-        # one hot encode the target
-        target_ids_one_hot = one_hot_embedding(target_ids, num_classes).to(device)
+            # one hot encode the target
+            target_ids_one_hot = one_hot_embedding(target_ids, num_classes).to(device)
 
-        # revert one hot encoding for the predictions
-        pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+            # revert one hot encoding for the predictions
+            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
-        # define some useful masks
-        msk = ((pred_ids != 0) & (target_ids != 0))
-        msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
+            # define some useful masks
+            msk = ((pred_ids != 0) & (target_ids != 0))
+            msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
-        # compute the loss
-        weights = compute_weights(device, target_ids, num_classes)    # to accomodate class imbalance
-        loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-        loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
+            # compute the loss
+            weights = compute_weights(device, target_ids, num_classes)    # to accomodate class imbalance
+            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
-        loss_tot = loss_clf + alpha * loss_reg
+            loss_tot = loss_clf + alpha * loss_reg
 
-        if is_train:
-            optimizer.zero_grad()
-            loss_tot.backward()
-            optimizer.step()
+            if is_train:
+                optimizer.zero_grad()
+                loss_tot.backward()
+                optimizer.step()
 
-        losses_clf = losses_clf + loss_clf.detach().cpu()
-        losses_reg = losses_reg + loss_reg.detach().cpu()
-        losses_tot = losses_tot + loss_tot.detach().cpu()
+            losses_clf = losses_clf + loss_clf.detach().cpu()
+            losses_reg = losses_reg + loss_reg.detach().cpu()
+            losses_tot = losses_tot + loss_tot.detach().cpu()
 
-        accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
-                                                                 pred_ids[msk].detach().cpu().numpy())
+            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
+                                                                     pred_ids[msk].detach().cpu().numpy())
 
-        conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
-                                                        pred_ids.detach().cpu().numpy(),
-                                                        labels=range(num_classes))
+            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
+                                                            pred_ids.detach().cpu().numpy(),
+                                                            labels=range(num_classes))
 
-    print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()

@@ -70,6 +70,8 @@ if __name__ == "__main__":
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     pathhh = 'pyg/processed/ttbar_valid.pt'
     pathhh = '/particleflowvol/ttbar_valid.pt'
+    pathhh = '../data/delphes/pythia8_ttbar/processed'
+    pathhh = '/particleflowvol/particleflow/data/delphes/pythia8_ttbar/processed'
 
     print(f'Loading the {args.data} data..')
     t0 = time.time()
@@ -85,6 +87,7 @@ if __name__ == "__main__":
     t0 = time.time()
     train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     print(f'time taken is {round(time.time()-t0, 3)}s')
+    valid_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
     # t0 = time.time()
     # train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)

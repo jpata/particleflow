@@ -183,13 +183,13 @@ class PFGraphDataset2(Dataset):
         Args:
             pt_file (string): Path to the dataset
         """
-        self.data = torch.load(pt_file)
+        self.pt_file = pt_file
 
     def __len__(self):
-        return len(self.data)
+        return 10
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        return torch.load(self.pt_file + f'/data_{idx}.pt')
 
 
 def parse_args():
