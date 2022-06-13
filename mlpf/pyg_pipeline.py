@@ -4,7 +4,7 @@ from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg.dataset import PFGraphDataset, one_hot_embedding
-
+from pyg.utils import construct_loaders
 import torch
 import torch_geometric
 from torch_geometric.loader import DataLoader, DataListLoader
@@ -72,25 +72,7 @@ if __name__ == "__main__":
     dataset_qcd = PFGraphDataset(device, args.dataset_qcd, args.data)
 
     # trying to make a gigantic dataloader
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
-    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
-
-    # preprocessing the train_dataset in a good format for passing correct batches of events to the GNN
-    train_data = []
-    for i in range(len(train_dataset)):
-        train_data = train_data + train_dataset[i]
-
-    # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
-    valid_data = []
-    for i in range(len(valid_dataset)):
-        valid_data = valid_data + valid_dataset[i]
-
-    if not multi_gpu:
-        train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-        valid_loader = DataLoader(valid_data, batch_size=args.batch_size, shuffle=True)
-    else:
-        train_loader = DataListLoader(train_data, batch_size=args.batch_size, shuffle=True)
-        valid_loader = DataListLoader(valid_data, batch_size=args.batch_size, shuffle=True)
+    train_loader, valid_loader = construct_loaders(dataset, args.n_train, args.n_valid, args.batch_size, multi_gpu)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
