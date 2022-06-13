@@ -51,6 +51,7 @@ class MLPF(nn.Module):
         self.conv = nn.ModuleList()
         for i in range(num_convs):
             self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
         # (3) DNN layer: classifiying pid
@@ -197,7 +198,7 @@ except ImportError:
     knn_graph = None
 
 
-class GravNetConv(MessagePassing):
+class GravNetConv_cmspepr(MessagePassing):
     """
     Gravnet implementation that uses an optimized version of knn.
     Copied from https://github.com/cms-pepr/pytorch_cmspepr/tree/main/torch_cmspepr
@@ -206,7 +207,7 @@ class GravNetConv(MessagePassing):
     def __init__(self, in_channels: int, out_channels: int,
                  space_dimensions: int, propagate_dimensions: int, k: int,
                  num_workers: int = 1, **kwargs):
-        super(GravNetConv, self).__init__(flow='target_to_source', **kwargs)
+        super(GravNetConv_cmspepr, self).__init__(flow='target_to_source', **kwargs)
 
         if knn_graph is None:
             raise ImportError('`GravNetConv` requires `torch-cluster`.')

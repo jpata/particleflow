@@ -62,11 +62,10 @@ class PFGraphDataset(Dataset):
         root (str): path
     """
 
-    def __init__(self, device, root, data, transform=None, pre_transform=None):
+    def __init__(self, root, data, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
         self.data = data
-        self.device = device
 
     @property
     def raw_file_names(self):
@@ -196,7 +195,6 @@ class PFGraphDataset2(Dataset):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, required=False, default='cpu', help="'cpu' or 'cuda'?")
     parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
@@ -210,16 +208,16 @@ if __name__ == "__main__":
 
     """
     e.g. to run for cms
-    python3 dataset.py --device cpu --data cms --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python dataset.py --data cms --dataset ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
 
     e.g. to run for delphes
-    python3 dataset.py --device cpu --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 dataset.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     """
 
     args = parse_args()
 
-    pfgraphdataset = PFGraphDataset(device=args.device, root=args.dataset, data=args.data)
+    pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir

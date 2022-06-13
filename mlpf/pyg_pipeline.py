@@ -4,12 +4,13 @@ from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg.dataset import PFGraphDataset, one_hot_embedding
-from pyg.utils import construct_loaders
+from pyg.utils import construct_train_loaders, construct_test_loader
 import torch
 import torch_geometric
 from torch_geometric.loader import DataLoader, DataListLoader
 
 import mplhep as hep
+import time
 import matplotlib.pyplot as plt
 from glob import glob
 import sys
@@ -68,11 +69,14 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     print(f'Loading the {args.data} data..')
-    dataset = PFGraphDataset(device, args.dataset, args.data)
-    dataset_qcd = PFGraphDataset(device, args.dataset_qcd, args.data)
+    dataset = PFGraphDataset(args.dataset, args.data)
+    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+
+    # train_loader, valid_loader = construct_train_loaders(dataset, args.n_train, args.n_valid, args.batch_size, multi_gpu)
 
     # trying to make a gigantic dataloader
-    train_loader, valid_loader = construct_loaders(dataset, args.n_train, args.n_valid, args.batch_size, multi_gpu)
+    train_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    valid_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -147,7 +151,9 @@ if __name__ == "__main__":
         epoch_on_plots = args.n_epochs - 1
 
     make_directories_for_plots(outpath, 'test_data')
-    make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+
+    test_loader = construct_test_loader(dataset_qcd, args.n_test, args.batch_size, multi_gpu)
+    make_predictions(device, args.data, model, multi_gpu, dataset, test_loader, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
     make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
 
 
@@ -168,4 +174,20 @@ if __name__ == "__main__":
 # ax.legend(loc='best')
 # plt.savefig('batch_size.pdf')
 # plt.close(fig)
-c
+
+
+#
+#
+#     train_loader = DataLoader('pyg/ttbar_train.pt', batch_size=1, shuffle=True)
+#     valid_loader = DataLoader('pyg/ttbar_valid.pt', batch_size=1, shuffle=True)
+#
+#
+#
+# for batch in train_loader:
+#
+# print(len(train_loader))
+#
+#
+# next(iter(train_loader))
+#
+# batch

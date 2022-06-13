@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size, batch_events, num_classes, outpath):
+def make_predictions(device, data, model, multi_gpu, dataset, loader, n_test, batch_size, batch_events, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -57,68 +57,68 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
     t = 0
     t0 = time.time()
 
-    for file in range(0, n_test):
+    # for file in range(0, n_test):
+    #     if multi_gpu:
+    #         loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+    #     else:
+    #         loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+
+    for i, batch in enumerate(loader):
+
+        if batch_events:    # batch events into eta,phi regions to build graphs only within regions
+            batch = batch_event_into_regions(batch, regions)
+
         if multi_gpu:
-            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            X = batch   # a list (not torch) instance so can't be passed to device
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            X = batch.to(device)
 
-        for i, batch in enumerate(loader):
+        ti = time.time()
+        pred, target = model(X)
+        tf = time.time()
+        t = t + (tf - ti)
 
-            if batch_events:    # batch events into eta,phi regions to build graphs only within regions
-                batch = batch_event_into_regions(batch, regions)
+        # retrieve target
+        gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes).to(device)
+        gen_p4 = target['ygen'].detach()
+        cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes).to(device)
+        cand_p4 = target['ycand'].detach()
 
-            if multi_gpu:
-                X = batch   # a list (not torch) instance so can't be passed to device
-            else:
-                X = batch.to(device)
+        # retrieve predictions
+        pred_ids_one_hot = pred[:, :num_classes].detach()
+        pred_p4 = pred[:, num_classes:].detach()
 
-            ti = time.time()
-            pred, target = model(X)
-            tf = time.time()
-            t = t + (tf - ti)
+        # revert the one-hot encodings
+        _, gen_ids = torch.max(gen_ids_one_hot, -1)
+        _, pred_ids = torch.max(pred_ids_one_hot, -1)
+        _, cand_ids = torch.max(cand_ids_one_hot, -1)
 
-            # retrieve target
-            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes).to(device)
-            gen_p4 = target['ygen'].detach()
-            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes).to(device)
-            cand_p4 = target['ycand'].detach()
+        # to make "num_gen vs num_pred" plots
+        for key, value in name_to_pid.items():
+            gen_list[key].append((gen_ids == value).sum().item())
+            pred_list[key].append((pred_ids == value).sum().item())
+            cand_list[key].append((cand_ids == value).sum().item())
 
-            # retrieve predictions
-            pred_ids_one_hot = pred[:, :num_classes].detach()
-            pred_p4 = pred[:, num_classes:].detach()
+        if i == 0:
+            gen_ids_all = gen_ids
+            gen_p4_all = gen_p4
 
-            # revert the one-hot encodings
-            _, gen_ids = torch.max(gen_ids_one_hot, -1)
-            _, pred_ids = torch.max(pred_ids_one_hot, -1)
-            _, cand_ids = torch.max(cand_ids_one_hot, -1)
+            pred_ids_all = pred_ids
+            pred_p4_all = pred_p4
 
-            # to make "num_gen vs num_pred" plots
-            for key, value in name_to_pid.items():
-                gen_list[key].append((gen_ids == value).sum().item())
-                pred_list[key].append((pred_ids == value).sum().item())
-                cand_list[key].append((cand_ids == value).sum().item())
+            cand_ids_all = cand_ids
+            cand_p4_all = cand_p4
+        else:
+            gen_ids_all = torch.cat([gen_ids_all, gen_ids])
+            gen_p4_all = torch.cat([gen_p4_all, gen_p4])
 
-            if i == 0:
-                gen_ids_all = gen_ids
-                gen_p4_all = gen_p4
+            pred_ids_all = torch.cat([pred_ids_all, pred_ids])
+            pred_p4_all = torch.cat([pred_p4_all, pred_p4])
 
-                pred_ids_all = pred_ids
-                pred_p4_all = pred_p4
+            cand_ids_all = torch.cat([cand_ids_all, cand_ids])
+            cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
-                cand_ids_all = cand_ids
-                cand_p4_all = cand_p4
-            else:
-                gen_ids_all = torch.cat([gen_ids_all, gen_ids])
-                gen_p4_all = torch.cat([gen_p4_all, gen_p4])
-
-                pred_ids_all = torch.cat([pred_ids_all, pred_ids])
-                pred_p4_all = torch.cat([pred_p4_all, pred_p4])
-
-                cand_ids_all = torch.cat([cand_ids_all, cand_ids])
-                cand_p4_all = torch.cat([cand_p4_all, cand_p4])
-
-            print(f'event #: {i+1}/{len(loader)}')
+        print(f'event #: {i+1}/{len(loader)}')
 
     print(f'Average inference time per event is {round((t / (len(loader) * (n_test))), 3)}s')
 
