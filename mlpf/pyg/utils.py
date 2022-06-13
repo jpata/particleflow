@@ -144,56 +144,6 @@ def make_directories_for_plots(outpath, tag):
         os.makedirs(f'{outpath}/{tag}_plots/confusion_matrix_plots')
 
 
-def construct_train_loaders(dataset, n_train, n_valid, batch_size, multi_gpu):
-    print(f'Constructing dataloaders for training..')
-    t0 = time.time()
-
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=n_train))
-    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=n_train, stop=n_train + n_valid))
-
-    # preprocessing the train_dataset in a good format for passing correct batches of events to the GNN
-    train_data = []
-    for i in range(len(train_dataset)):
-        train_data = train_data + train_dataset[i]
-
-    # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
-    valid_data = []
-    for i in range(len(valid_dataset)):
-        valid_data = valid_data + valid_dataset[i]
-
-    if not multi_gpu:
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-        valid_loader = DataLoader(valid_data, batch_size=batch_size, shuffle=True)
-    else:
-        train_loader = DataListLoader(train_data, batch_size=batch_size, shuffle=True)
-        valid_loader = DataListLoader(valid_data, batch_size=batch_size, shuffle=True)
-
-    print(f'time taken is {round(time.time()-t0, 3)}s')
-
-    return train_loader, valid_loader
-
-
-def construct_test_loader(dataset, n_test, batch_size, multi_gpu):
-    print(f'Constructing dataloader for testing..')
-    t0 = time.time()
-
-    test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=n_test))
-
-    # preprocessing the test_dataset in a good format for passing correct batches of events to the GNN
-    test_data = []
-    for i in range(len(test_dataset)):
-        test_data = test_data + test_dataset[i]
-
-    if not multi_gpu:
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
-    else:
-        test_loader = DataListLoader(test_data, batch_size=batch_size, shuffle=True)
-
-    print(f'time taken is {round(time.time()-t0, 3)}s')
-
-    return test_loader
-
-
 def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
     """
     Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.

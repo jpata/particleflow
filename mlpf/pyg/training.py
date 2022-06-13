@@ -41,16 +41,16 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train, n_valid, batch_size, batch_events,
+def validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
                    alpha, target_type, num_classes, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train, n_valid, batch_size, batch_events,
+        ret = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
                     optimizer, alpha, target_type, num_classes, outpath)
     return ret
 
 
-def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train, n_valid, batch_size, batch_events,
+def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events,
           optimizer, alpha, target_type, num_classes, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
@@ -67,12 +67,10 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
         model.train()
         start_file = 0
         end_file = n_train
-        loader = train_loader
     else:
         model.eval()
         start_file = n_train
         end_file = n_train + n_valid
-        loader = valid_loader
 
     # initialize loss and accuracy and time
     losses_clf, losses_reg, losses_tot, accuracies = 0, 0, 0, 0
@@ -80,26 +78,19 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
-    # for file in range(start_file, end_file):
-    #     print(f'Loading file # {file}/{end_file-start_file}')
-    #     tt1 = time.time()
-    #
-    #     if multi_gpu:
-    #         loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
-    #     else:
-    #         loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
-    #
-    #     tt2 = time.time()
-    #
-    #     print(f'time to get file = {round(tt2 - tt1, 3)}s')
-    #
-    t = 0
-    t0 = time.time()
+    for file in range(start_file, end_file):
+        print(f'Loading file # {file}/{end_file-start_file}')
+        t0 = time.time()
 
-    for load in loader:
-        print(f'time taken is {round(time.time()-t0, 3)}s')
+        if multi_gpu:
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+        else:
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
 
-        for i, batch in enumerate(load):
+        print(f'time to get file = {round(time.time() - t0, 3)}s')
+
+        t = 0
+        for i, batch in enumerate(loader):
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
                     for i in range(len(batch)):
@@ -160,11 +151,8 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            if i == 3:
-                t0 = time.time()
-                break
-
-        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+            break
+        # print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
     losses_reg = (losses_reg / (len(loader) * (end_file - start_file))).item()
@@ -177,7 +165,7 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop(device, data, model, multi_gpu, train_loader, valid_loader, dataset, n_train, n_valid,
+def training_loop(device, data, model, multi_gpu, dataset, n_train, n_valid,
                   batch_size, batch_events, n_epochs, patience,
                   optimizer, alpha, target, num_classes, outpath):
     """
@@ -223,7 +211,7 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader, da
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -233,7 +221,7 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader, da
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train, n_valid, batch_size, batch_events, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch_events, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
