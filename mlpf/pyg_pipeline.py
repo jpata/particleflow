@@ -71,7 +71,7 @@ if __name__ == "__main__":
     pathhh = 'pyg/processed/ttbar_valid.pt'
     pathhh = '/particleflowvol/ttbar_valid.pt'
     pathhh = '../data/delphes/pythia8_ttbar/processed'
-    pathhh = '/particleflowvol/particleflow/data/delphes/pythia8_ttbar/processed'
+    pathhh = '/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed'
 
     print(f'Loading the {args.data} data..')
     t0 = time.time()
