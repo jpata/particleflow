@@ -16,7 +16,7 @@ def parse_args():
     parser.add_argument("--n_valid",        type=int,           default=1,      help="number of data files to use for validation.. each file contains 100 events")
     parser.add_argument("--n_test",         type=int,           default=1,      help="number of data files to use for testing.. each file contains 100 events")
 
-    parser.add_argument("--title",          type=str,           default=None,   help="Appends this title to the model's name")
+    parser.add_argument("--title",          type=str,           default='',   help="Appends this title to the model's name")
     parser.add_argument("--overwrite",      dest='overwrite',   action='store_true', help="Overwrites the model if True")
 
     # for loading a pre-trained model
