@@ -3,7 +3,7 @@ from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
-from pyg.dataset import PFGraphDataset, one_hot_embedding
+from pyg.dataset import PFGraphDataset, PFGraphDataset2, one_hot_embedding
 from pyg.utils import construct_train_loaders, construct_test_loader
 import torch
 import torch_geometric
@@ -69,21 +69,26 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     print(f'Loading the {args.data} data..')
-    dataset = PFGraphDataset(args.dataset, args.data)
+    t0 = time.time()
+    dataset = PFGraphDataset2('pyg/processed/ttbar_valid.pt')
+    print(f'time taken is {round(time.time()-t0, 3)}s')
+
     # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
     # train_loader, valid_loader = construct_train_loaders(dataset, args.n_train, args.n_valid, args.batch_size, multi_gpu)
 
     # trying to make a gigantic dataloader
-    # train_loader = DataLoader(torch.load('pyg/processed/ttbar_train.pt'), batch_size=args.batch_size, shuffle=True)
-    # valid_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    print(f'Construct the {args.data} loader..')
+    t0 = time.time()
+    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    print(f'time taken is {round(time.time()-t0, 3)}s')
 
-    t0 = time.time()
-    train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
-    print(f'time taken is {round(time.time()-t0, 3)}s')
-    t0 = time.time()
-    valid_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
-    print(f'time taken is {round(time.time()-t0, 3)}s')
+    # t0 = time.time()
+    # train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    # print(f'time taken is {round(time.time()-t0, 3)}s')
+    # t0 = time.time()
+    # valid_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    # print(f'time taken is {round(time.time()-t0, 3)}s')
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
