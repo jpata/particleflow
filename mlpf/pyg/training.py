@@ -94,8 +94,11 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
     #     print(f'time to get file = {round(tt2 - tt1, 3)}s')
     #
     t = 0
+    print('1')
     for load in loader:
+        print('2')
         for i, batch in enumerate(load):
+            print('3')
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
@@ -157,7 +160,8 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-
+            if i == 3:
+                break
         print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
