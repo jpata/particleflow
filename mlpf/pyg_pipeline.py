@@ -66,21 +66,42 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    # load the dataset (assumes the data exists as .pt files under args.dataset/processed)
+    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     print(f'Loading the {args.data} data..')
     dataset = PFGraphDataset(device, args.dataset, args.data)
     dataset_qcd = PFGraphDataset(device, args.dataset_qcd, args.data)
 
-    # retrieve the dimensions of the PF-elements & PF-candidates
+    # trying to make a gigantic dataloader
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
+    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
+
+    # preprocessing the train_dataset in a good format for passing correct batches of events to the GNN
+    train_data = []
+    for i in range(len(train_dataset)):
+        train_data = train_data + train_dataset[i]
+
+    # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
+    valid_data = []
+    for i in range(len(valid_dataset)):
+        valid_data = valid_data + valid_dataset[i]
+
+    if not multi_gpu:
+        train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
+        valid_loader = DataLoader(valid_data, batch_size=args.batch_size, shuffle=True)
+    else:
+        train_loader = DataListLoader(train_data, batch_size=args.batch_size, shuffle=True)
+        valid_loader = DataListLoader(valid_data, batch_size=args.batch_size, shuffle=True)
+
+    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
         input_dim = len(features_delphes)
-        num_classes = 6   # we have 6 classes/pids for cms
+        num_classes = 6   # we have 6 classes/pids for delphes
     elif args.data == 'cms':
         input_dim = len(features_cms)
         num_classes = 9   # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
-    if args.load:
+    if args.load:  # load a pre-trained specified model
         outpath = args.outpath + args.load_model
         state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
 
@@ -127,7 +148,8 @@ if __name__ == "__main__":
 
         torch.backends.cudnn.benchmark = True
 
-        training_loop(device, args.data, model, multi_gpu,
+        # run a training of the model
+        training_loop(device, args.data, model, multi_gpu, train_loader, valid_loader,
                       dataset, args.n_train, args.n_valid,
                       args.batch_size, args.batch_events,
                       args.n_epochs, args.patience,
@@ -145,3 +167,23 @@ if __name__ == "__main__":
     make_directories_for_plots(outpath, 'test_data')
     make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
     make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+
+
+# x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+# y = [0.022, 0.029, 0.035, 0.041, 0.051, 0.06, 0.067, 0.074, 0.076, 0.091]
+# z = [0.022, 0.022 * 2, 0.022 * 3, 0.022 * 4, 0.022 * 5, 0.022 * 6, 0.022 * 7, 0.022 * 8, 0.022 * 9, 0.022 * 10]
+#
+#
+# plt.style.use(hep.style.ROOT)
+#
+# fig, ax = plt.subplots()
+# ax.plot(x, y, label='mlpf')
+# ax.plot(x, z, label='linear scaling', linestyle='--')
+# ax.set_xlabel('batch size')
+# ax.set_ylabel('forward pass runtime')
+# ax.set_xticks(x)
+#
+# ax.legend(loc='best')
+# plt.savefig('batch_size.pdf')
+# plt.close(fig)
+c
