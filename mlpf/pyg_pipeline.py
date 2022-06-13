@@ -85,9 +85,9 @@ if __name__ == "__main__":
     # trying to make a gigantic dataloader
     print(f'Construct the {args.data} loader..')
     t0 = time.time()
-    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     print(f'time taken is {round(time.time()-t0, 3)}s')
-    valid_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    valid_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
     # t0 = time.time()
     # train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
