@@ -68,9 +68,12 @@ if __name__ == "__main__":
     args = parse_args()
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    pathhh = 'pyg/processed/ttbar_valid.pt'
+    pathhh = '/particleflowvol/ttbar_valid.pt'
+
     print(f'Loading the {args.data} data..')
     t0 = time.time()
-    dataset = PFGraphDataset2('pyg/processed/ttbar_valid.pt')
+    dataset = PFGraphDataset2(pathhh)
     print(f'time taken is {round(time.time()-t0, 3)}s')
 
     # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
