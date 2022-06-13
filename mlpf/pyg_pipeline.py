@@ -70,13 +70,16 @@ if __name__ == "__main__":
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     print(f'Loading the {args.data} data..')
     dataset = PFGraphDataset(args.dataset, args.data)
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+    # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
 
     # train_loader, valid_loader = construct_train_loaders(dataset, args.n_train, args.n_valid, args.batch_size, multi_gpu)
 
     # trying to make a gigantic dataloader
-    train_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
-    valid_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    # train_loader = DataLoader(torch.load('pyg/processed/ttbar_train.pt'), batch_size=args.batch_size, shuffle=True)
+    # valid_loader = DataLoader(torch.load('pyg/processed/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+
+    train_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
+    valid_loader = DataLoader(torch.load('/particleflowvol/ttbar_valid.pt'), batch_size=args.batch_size, shuffle=True)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
