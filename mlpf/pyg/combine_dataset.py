@@ -14,12 +14,21 @@ import pickle
 import multiprocessing
 
 
-path = '../../data/cms_ttbar_raw/processed/'
+path_from = '../../data/cms/processed/'
+path_to = '../../data/c/processed/'
 
 all = []
-for i in range(50):
+c = 0
+j = 0
+for i in range(500):
     print(f'file # {i}')
-    a = torch.load(path + f'data_{450+i}.pt')
+    a = torch.load(path_from + f'data_{i}.pt')
     all = all + a
+    c = c + 1
 
-torch.save(all, 'ttbar_valid.pt')
+    if c == 10:
+        print(f'SAVING FILE # {j}')
+        torch.save(all, path_to + f'data_{j}.pt')
+        c = 0
+        all = []
+        j = j + 1
