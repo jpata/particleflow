@@ -94,12 +94,12 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
     #     print(f'time to get file = {round(tt2 - tt1, 3)}s')
     #
     t = 0
-    print('1')
-    for load in loader:
-        print('2')
-        for i, batch in enumerate(load):
-            print('3')
+    t0 = time.time()
 
+    for load in loader:
+        print(f'time taken is {round(time.time()-t0, 3)}s')
+
+        for i, batch in enumerate(load):
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
                     for i in range(len(batch)):
@@ -161,7 +161,9 @@ def train(device, model, multi_gpu, dataset, train_loader, valid_loader, n_train
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
             if i == 3:
+                t0 = time.time()
                 break
+
         print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
 
     losses_clf = (losses_clf / (len(loader) * (end_file - start_file))).item()
