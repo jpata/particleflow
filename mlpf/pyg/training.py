@@ -83,9 +83,9 @@ def train(device, model, multi_gpu, dataset, n_train, n_valid, batch_size, batch
         t0 = time.time()
 
         if multi_gpu:
-            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True, prefetch_factor=8)
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True, prefetch_factor=8)
 
         print(f'time to get file = {round(time.time() - t0, 3)}s')
 
