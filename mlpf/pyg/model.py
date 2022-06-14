@@ -252,12 +252,10 @@ class GravNetConv_cmspepr(MessagePassing):
         out = self.propagate(edge_index, x=(h_l, None),
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_l.size(0)))
-
+        print(out)
         return self.lin(torch.cat([out, x], dim=-1))
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
-        print(x_j)
-        print(edge_weight)
         return x_j * edge_weight.unsqueeze(1)
 
     def aggregate(self, inputs: Tensor, index: Tensor,
