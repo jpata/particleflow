@@ -50,8 +50,8 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            # self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
-            self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
         # (3) DNN layer: classifiying pid
@@ -166,7 +166,9 @@ class GravNetConv_MLPF(MessagePassing):
         if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
             raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
 
-        edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+        # edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+
+        edge_index = knn_graph(s_l, self.k, b[0])
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
@@ -252,7 +254,7 @@ class GravNetConv_cmspepr(MessagePassing):
         out = self.propagate(edge_index, x=(h_l, None),
                              edge_weight=edge_weight,
                              size=(s_l.size(0), s_l.size(0)))
-        print(out)
+
         return self.lin(torch.cat([out, x], dim=-1))
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
