@@ -60,8 +60,8 @@ if __name__ == "__main__":
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=0, prefetch_factor=2)
-    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=0, prefetch_factor=2)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=2, prefetch_factor=8)
+    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=2, prefetch_factor=8)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
