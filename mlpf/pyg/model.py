@@ -166,9 +166,8 @@ class GravNetConv_MLPF(MessagePassing):
         if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
             raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
 
-        # edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
-
-        edge_index = knn_graph(s_l, self.k, b[0])
+        edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
+        # edge_index = knn_graph(s_l, self.k, b[0])     # cmspepr
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
