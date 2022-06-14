@@ -140,12 +140,12 @@ if __name__ == "__main__":
     make_directories_for_plots(outpath, 'test_data')
     make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
     make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
-#
-#
+
+
 # dataset = PFGraphDataset('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
 # len(dataset)
 #
-# loader = DataLoader(dataset, batch_size=5, shuffle=True, num_workers=0, prefetch_factor=2)
+# loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, prefetch_factor=2)
 #
 # len(loader)
 # for file in loader:
@@ -153,4 +153,4 @@ if __name__ == "__main__":
 #
 # len(file)
 #
-# file
+#

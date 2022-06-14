@@ -76,20 +76,13 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
-    t, num_forward_passes = 0, 0
+    t = 0
+
     t0 = time.time()
     for num, batches_list in enumerate(loader):
         print(f'time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
-        batches_to_loop_over = []
-        if multi_gpu:
-            num_gpus = 2    # TODO: will fail for more gpus
-            for i in range(0, len(l), num_gpus):
-                batch_to_loop_over.append([batches_list[i], batches_list[i + 1]])
-        else:
-            batches_to_loop_over = batches_list
-
-        for i, batch in enumerate(batches_to_loop_over):
+        for i, batch in enumerate(batches_list):
 
             if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
                 if batch_events:
@@ -105,9 +98,8 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
             t0 = time.time()
             pred, target = model(X)
             t1 = time.time()
-            print(f'batch {i}/{len(batches_to_loop_over)}, forward pass = {round(t1 - t0, 3)}s')
+            print(f'batch {i}/{len(batches_list)}, forward pass = {round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
-            num_forward_passes = num_forward_passes + 1
 
             pred_ids_one_hot = pred[:, :num_classes]
             pred_p4 = pred[:, num_classes:]
@@ -154,14 +146,14 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
                                                             labels=range(num_classes))
             if i == 3:
                 break
-        t0 = 0
-    print(f'Average inference time per event is {round((t / num_forward_passes), 3)}s')
+        print(f'Average inference time per event is {round((t / len(batches_list)), 3)}s')
+        t0 = time.time()
 
-    losses_clf = (losses_clf / (len(loader) * len(batches_to_loop_over))).item()
-    losses_reg = (losses_reg / (len(loader) * len(batches_to_loop_over))).item()
-    losses_tot = (losses_tot / (len(loader) * len(batches_to_loop_over))).item()
+    losses_clf = (losses_clf / (len(loader) * len(batches_list))).item()
+    losses_reg = (losses_reg / (len(loader) * len(batches_list))).item()
+    losses_tot = (losses_tot / (len(loader) * len(batches_list))).item()
 
-    accuracies = (accuracies / (len(loader) * len(batches_to_loop_over))).item()
+    accuracies = (accuracies / (len(loader) * len(batches_list))).item()
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
