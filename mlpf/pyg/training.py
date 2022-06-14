@@ -142,8 +142,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            if i == 3:
-                break
+
         print(f'Average inference time per event is {round((t / len(batches_list)), 3)}s')
         t0 = time.time()
 
