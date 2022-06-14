@@ -50,8 +50,8 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
-            # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            # self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
         # (3) DNN layer: classifiying pid
@@ -256,6 +256,8 @@ class GravNetConv_cmspepr(MessagePassing):
         return self.lin(torch.cat([out, x], dim=-1))
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
+        print(x_j)
+        print(edge_weight)
         return x_j * edge_weight.unsqueeze(1)
 
     def aggregate(self, inputs: Tensor, index: Tensor,
