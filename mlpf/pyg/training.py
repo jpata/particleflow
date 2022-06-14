@@ -79,7 +79,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
     t, num_forward_passes = 0, 0
     t0 = time.time()
     for num, batches_list in enumerate(loader):
-        print(f'time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}')
+        print(f'time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
         batches_to_loop_over = []
         if multi_gpu:
@@ -152,6 +152,8 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
+            if i == 3:
+                break
         t0 = 0
     print(f'Average inference time per event is {round((t / num_forward_passes), 3)}s')
 
