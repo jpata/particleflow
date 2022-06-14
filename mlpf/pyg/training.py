@@ -71,20 +71,18 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_events,
         loader = valid_loader
 
     # initialize loss and accuracy and time
-    losses_clf, losses_reg, losses_tot, accuracies = 0, 0, 0, 0
+    losses_clf, losses_reg, losses_tot, accuracies, t = 0, 0, 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
-    t = 0
-
     t0 = time.time()
     for num, batches_list in enumerate(loader):
-        print(f'time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
+        print(f'Time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
         for i, batch in enumerate(batches_list):
 
-            if multi_gpu:   # batch will be a list of Batch() objects so that each element is forwarded to a different gpu
+            if multi_gpu:
                 if batch_events:
                     for i in range(len(batch)):
                         batch[i] = batch_event_into_regions(batch[i], regions)
