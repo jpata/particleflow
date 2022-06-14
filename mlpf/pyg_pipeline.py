@@ -60,8 +60,8 @@ if __name__ == "__main__":
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=2, prefetch_factor=8)
-    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=2, prefetch_factor=8)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=0, prefetch_factor=2)
+    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=0, prefetch_factor=2)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -127,25 +127,25 @@ if __name__ == "__main__":
                       optimizer, args.alpha, args.target,
                       num_classes, outpath)
 
-    model.eval()
-
-    # evaluate on testing data..
-    if args.load:
-        epoch_on_plots = args.load_epoch
-    else:
-        epoch_on_plots = args.n_epochs - 1
-
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-
-    make_directories_for_plots(outpath, 'test_data')
-    make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
-    make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
-
+    # model.eval()
+    #
+    # # evaluate on testing data..
+    # if args.load:
+    #     epoch_on_plots = args.load_epoch
+    # else:
+    #     epoch_on_plots = args.n_epochs - 1
+    #
+    # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+    #
+    # make_directories_for_plots(outpath, 'test_data')
+    # make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+    # make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    #
 
 # dataset = PFGraphDataset('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
 # len(dataset)
 #
-# loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, prefetch_factor=2)
+# loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1, prefetch_factor=1)
 #
 # len(loader)
 # for file in loader:
@@ -154,3 +154,5 @@ if __name__ == "__main__":
 # len(file)
 #
 #
+# for batch in file:
+#     break
