@@ -80,7 +80,11 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
-        loader = DataLoader(file, batch_size=batch_size)
+
+        if multi_gpu:
+            loader = DataListLoader(file, batch_size=batch_size)
+        else:
+            loader = DataLoader(file, batch_size=batch_size)
 
         t = 0
         for i, batch in enumerate(loader):
