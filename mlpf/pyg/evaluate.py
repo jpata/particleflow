@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size, batch_events, num_classes, outpath):
+def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_events, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -37,6 +37,7 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
     """
 
     print('Making predictions...')
+    tt0 = 0
 
     if data == 'delphes':
         name_to_pid = name_to_pid_delphes
@@ -54,19 +55,17 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
     if batch_events:    # batch events into eta,phi regions to build graphs only within regions
         regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
-    t = 0
-    for file in range(0, n_test):
-        print(f'Loading file # {file}/{n_test}')
-
-        t0 = time.time()
+    t0 = 0
+    for num, file in enumerate(loader):
+        print(f'Time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
+        file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         if multi_gpu:
-            loader = DataListLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataListLoader(file, batch_size=batch_size)
         else:
-            loader = DataLoader(dataset.get(file), batch_size=batch_size, shuffle=True)
+            loader = DataLoader(file, batch_size=batch_size)
 
-        print(f'time to get file = {round(time.time() - t0, 3)}s')
-
+        t = 0
         for i, batch in enumerate(loader):
 
             if batch_events:    # batch events into eta,phi regions to build graphs only within regions
@@ -124,9 +123,9 @@ def make_predictions(device, data, model, multi_gpu, dataset, n_test, batch_size
 
             print(f'event #: {i+1}/{len(loader)}')
 
-    print(f'Average inference time per event is {round((t / (len(loader) * (n_test))), 3)}s')
-
-    print('Time taken to make predictions is:', round(((time.time() - t0) / 60), 2), 'min')
+        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+        t0 = 0
+    print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
 
     # store the 3 dictionaries in a list (this is done only to compute the particle multiplicity plots)
     list_dict = [pred_list, gen_list, cand_list]

@@ -129,18 +129,23 @@ if __name__ == "__main__":
                       optimizer, args.alpha, args.target,
                       num_classes, outpath)
 
-    # model.eval()
-    #
-    # # evaluate on testing data..
-    # if args.load:
-    #     epoch_on_plots = args.load_epoch
-    # else:
-    #     epoch_on_plots = args.n_epochs - 1
-    #
-    # dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-    #
-    # make_directories_for_plots(outpath, 'test_data')
-    # make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
-    # make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    model.eval()
 
-    # dataset = PFGraphDataset('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi', 'cms')
+    # evaluate on testing data..
+    if args.load:
+        epoch_on_plots = args.load_epoch
+    else:
+        epoch_on_plots = args.n_epochs - 1
+
+    make_directories_for_plots(outpath, 'test_data')
+
+    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+
+    test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
+
+    file_loader_test = make_file_loaders(test_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+
+    make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+    make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+
+    dataset = PFGraphDataset('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi', 'cms')
