@@ -103,7 +103,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
             t0 = time.time()
             pred, target = model(X)
             t1 = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
+            # print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :num_classes]
@@ -149,8 +149,6 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            # if i == 3:
-            #     break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
