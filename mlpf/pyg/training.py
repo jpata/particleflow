@@ -241,10 +241,10 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader,
         t1 = time.time()
 
         epochs_remaining = n_epochs - (epoch + 1)
-        time_per_epoch = (t1 - t0_initial) / (epoch + 1)
+        time_per_epoch = (t1 - t0) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
-        print(f"epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} eta={round(eta, 1)}m")
+        print(f"epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
 
         # save the model's weights
         torch.save(model.state_dict(), f'{outpath}/epoch_{epoch}_weights.pth')
