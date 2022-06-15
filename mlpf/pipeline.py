@@ -349,20 +349,13 @@ def compute_validation_loss(config, train_dir, weights):
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-def evaluate(config, train_dir, weights, evaluation_dir):
+def evaluate(config, train_dir, weights):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
 
-    if evaluation_dir is None:
-        eval_dir = str(Path(train_dir) / "evaluation")
-    else:
-        eval_dir = evaluation_dir
-
-    Path(eval_dir).mkdir(parents=True, exist_ok=True)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -377,12 +370,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     #for dev in physical_devices:
     #    tf.config.experimental.set_memory_growth(dev, True)
 
-    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
-    ds_test = ds_test.batch(5)
-
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
+    
     # need to load the weights in the same trainable configuration as the model was set up
     configure_model_weights(model, config["setup"].get("weights_config", "all"))
     if weights:
@@ -391,8 +381,14 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    
-    eval_model(model, ds_test, config, eval_dir)
+
+    for dsname in config["validation_datasets"]:
+        ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
+        ds_test = ds_test.batch(5)
+        eval_dir = str(Path(train_dir) / "evaluation" / dsname)
+        Path(eval_dir).mkdir(parents=True, exist_ok=True)
+        eval_model(model, ds_test, config, eval_dir)
+
     freeze_model(model, config, train_dir)
 
 @main.command()

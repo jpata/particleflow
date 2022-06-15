@@ -55,7 +55,7 @@ setup:
   weights_config:
   lr: 0.001
   num_events_validation: 1000
-  num_epochs: 200
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -225,7 +225,10 @@ train_test_datasets:
       - cms_pf_qcd
       - cms_pf_ztt
 
-validation_dataset: cms_pf_ttbar
+validation_datasets:
+  - cms_pf_ttbar
+  - cms_pf_qcd
+  - cms_pf_ztt
 
 datasets: 
   cms_pf_ttbar:
