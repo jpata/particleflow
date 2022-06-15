@@ -14,13 +14,13 @@ import pickle
 import multiprocessing
 
 
-path_from = '../../data/cms/QCDForPF_13TeV_TuneCUETP8M1_cfi/processed/'
-path_to = '../../data/c/QCDForPF_13TeV_TuneCUETP8M1_cfi/processed/'
+path_from = '../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed/'
+path_to = '../../data/10/processed/'
 
 all = []
 c = 0
 j = 0
-for i in range(10):
+for i in range(500):
     print(f'file # {i}')
     a = torch.load(path_from + f'data_{i}.pt')
     all = all + a
