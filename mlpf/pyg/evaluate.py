@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_events, num_classes, outpath):
+def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, batch_events, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -56,8 +56,8 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_e
         regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
     t0 = time.time()
-    for num, file in enumerate(loader):
-        print(f'Time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
+    for num, file in enumerate(file_loader):
+        print(f'Time to load file {num}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         if multi_gpu:
