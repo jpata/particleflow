@@ -103,7 +103,7 @@ if __name__ == "__main__":
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
     # construct file loaders
-    num_files = 5
+    num_files = 1
     file_loader_train = make_file_loaders(train_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
     file_loader_valid = make_file_loaders(valid_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
