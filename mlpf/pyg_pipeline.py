@@ -89,7 +89,7 @@ def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
         a torch iterable() that returns a list of 100 elements, each element is a tuple of size=num_files containing Data() objects
     """
 
-    return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater())
+    return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
 
 
 if __name__ == "__main__":
