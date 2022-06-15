@@ -84,6 +84,8 @@ if __name__ == "__main__":
         if multi_gpu:
             model = torch_geometric.nn.DataParallel(model)
 
+        model.to(device)
+
     else:
         print('Instantiating a model..')
         model_kwargs = {'input_dim': input_dim,

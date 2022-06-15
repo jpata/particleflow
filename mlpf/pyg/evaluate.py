@@ -37,7 +37,7 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_e
     """
 
     print('Making predictions...')
-    tt0 = 0
+    tt0 = time.time()
 
     if data == 'delphes':
         name_to_pid = name_to_pid_delphes
@@ -55,7 +55,7 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_e
     if batch_events:    # batch events into eta,phi regions to build graphs only within regions
         regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
-    t0 = 0
+    t0 = time.time()
     for num, file in enumerate(loader):
         print(f'Time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
@@ -124,7 +124,7 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, batch_e
             print(f'event #: {i+1}/{len(loader)}')
 
         print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
-        t0 = 0
+        t0 = time.time()
     print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
 
     # store the 3 dictionaries in a list (this is done only to compute the particle multiplicity plots)
