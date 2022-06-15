@@ -258,6 +258,3 @@ def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
     """
 
     return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
-
-
-file_loader = make_file_loaders(train_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
