@@ -27,6 +27,7 @@ def parse_args():
     parser.add_argument("--load",           dest='load',        action='store_true', help="Load the model (no training)")
     parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
     parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load for evaluation")
+    parser.add_argument("--DataParallel_load",      dest='DataParallel_load',   action='store_true', help="loads a model saved by nn.DataParallel")
 
     # for training hyperparameters
     parser.add_argument("--n_epochs",       type=int,           default=3,      help="number of training epochs")

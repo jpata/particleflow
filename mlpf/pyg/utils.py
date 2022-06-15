@@ -92,7 +92,7 @@ def save_model(args, model_fname, outpath, model_kwargs):
         json.dump({'lr': args.lr, 'batch_size': args.batch_size, 'alpha': args.alpha, 'nearest': args.nearest}, fp)
 
 
-def load_model(device, outpath, model_directory, load_epoch):
+def load_model(device, outpath, model_directory, load_epoch, DataParallel_load):
     PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
 
     print('Loading a previously trained model..')
@@ -101,7 +101,7 @@ def load_model(device, outpath, model_directory, load_epoch):
 
     state_dict = torch.load(PATH, map_location=device)
 
-    if "DataParallel" in model_directory:   # if the model was trained using DataParallel then we do this
+    if DataParallel_load:   # if the model was trained using DataParallel then we do this
         state_dict = torch.load(PATH, map_location=device)
         from collections import OrderedDict
         new_state_dict = OrderedDict()
@@ -258,3 +258,6 @@ def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
     """
 
     return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
+
+
+file_loader = make_file_loaders(train_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)

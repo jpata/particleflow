@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     if args.load:  # load a pre-trained specified model
         outpath = args.outpath + args.load_model
-        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch, args.DataParallel_load)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
