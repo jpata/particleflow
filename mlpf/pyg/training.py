@@ -82,6 +82,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataLoader(file, batch_size=batch_size)
 
+        t = 0
         for i, batch in enumerate(loader):
 
             if multi_gpu:
