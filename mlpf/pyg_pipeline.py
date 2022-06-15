@@ -53,26 +53,43 @@ else:
 
 
 class Collater:
-    def __init__(self, follow_batch, exclude_keys):
-        self.follow_batch = follow_batch
-        self.exclude_keys = exclude_keys
+    """
+    This function was copied from torch_geometric.loader.Dataloader() source code.
+    Edits were made such that the function can collate samples as lists of tuples of Data() objects instead of Batch() objects.
+    This is needed becase pyg Dataloaders do not handle num_workers>0.
+    """
+
+    def __init__(self):
+        pass
 
     def __call__(self, batch):
         elem = batch[0]
         if isinstance(elem, BaseData):
-            return elem
-
-        elif isinstance(elem, torch.Tensor):
-            print('torch.Tensor')
-            return default_collate(batch)
+            return batch
 
         elif isinstance(elem, Sequence) and not isinstance(elem, str):
             return [self(s) for s in zip(*batch)]
 
         raise TypeError(f'DataLoader found invalid type: {type(elem)}')
 
-    def collate(self, batch):  # Deprecated...
-        return self(batch)
+
+def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
+    """
+    This function is only one line, but it's worth explaining why it's needed and what it's doing.
+    It uses native torch Dataloaders with a custom collate_fn that allows loading Data() objects from pt files in a fast way.
+    It is needed because pyg Dataloaders do not handle num_workers>0.
+
+    Args:
+        dataset: custom dataset
+        num_files: number of files to load with a single get() call
+        num_workers: number of workers to use for fetching files
+        prefetch_factor: number of files to fetch in advance
+
+    Returns:
+        a torch iterable() that returns a list of 100 elements, each element is a tuple of size=num_files containing Data() objects
+    """
+
+    return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater())
 
 
 if __name__ == "__main__":
@@ -82,16 +99,13 @@ if __name__ == "__main__":
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
 
-    # create dataloaders
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
-    print('len(train_dataset)', len(train_dataset))
 
-    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    # valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-
-    file_loader_train = torch.utils.data.DataLoader(train_dataset, batch_size=1, collate_fn=Collater(None, None), num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = torch.utils.data.DataLoader(valid_dataset, batch_size=1, collate_fn=Collater(None, None), num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    # construct file loaders
+    num_files = 5
+    file_loader_train = make_file_loaders(train_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_valid = make_file_loaders(valid_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -171,13 +185,4 @@ if __name__ == "__main__":
     # make_predictions(device, args.data, model, multi_gpu, dataset, args.n_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
     # make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
 
-
-#
-#
-# train_loader = torch.utils.data.DataLoader(dataset, batch_size=2, collate_fn=Collater(None, None), num_workers=2, prefetch_factor=3)
-#
-#
-# for b in train_loader:
-#     break
-#
-# b
+    # dataset = PFGraphDataset('../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi', 'cms')

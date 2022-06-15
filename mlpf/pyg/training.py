@@ -76,15 +76,10 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
-    # for num, batches_list in enumerate(loader):
-    #     print(f'Time to load file {num}/{len(loader)} is {round(time.time() - t0, 3)}s')
-    #
-    #     for i, batch in enumerate(batches_list):
-    # for num, batches_list in enumerate(loader):
-
     t0 = time.time()
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataLoader(file, batch_size=batch_size)
 
         for i, batch in enumerate(loader):
@@ -149,17 +144,17 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            if i == 2:
+            if i == 3:
                 break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
 
-    losses_clf = (losses_clf / (len(loader) * len(loader))).item()
-    losses_reg = (losses_reg / (len(loader) * len(loader))).item()
-    losses_tot = (losses_tot / (len(loader) * len(loader))).item()
+    losses_clf = (losses_clf / (len(loader) * len(file_loader))).item()
+    losses_reg = (losses_reg / (len(loader) * len(file_loader))).item()
+    losses_tot = (losses_tot / (len(loader) * len(file_loader))).item()
 
-    accuracies = (accuracies / (len(loader) * len(loader))).item()
+    accuracies = (accuracies / (len(loader) * len(file_loader))).item()
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
