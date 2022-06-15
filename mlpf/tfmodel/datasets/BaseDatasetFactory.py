@@ -5,16 +5,36 @@ import heptfds
 #Unpacks a flat target array along the feature axis to a feature dict
 #the feature order is defined in the data prep stage (postprocessing2.py)
 def unpack_target(y, num_output_classes):
+    from tfmodel.utils import histogram_2d
+    pt = y[..., 2:3]
+    energy = y[..., 6:7]
+    eta = y[..., 3:4]
+    phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])
+
+    pt_hist = histogram_2d(
+        tf.squeeze(eta, axis=-1),
+        tf.squeeze(phi, axis=-1),
+        tf.squeeze(pt, axis=-1),
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
+    energy_hist = histogram_2d(
+        tf.squeeze(eta, axis=-1),
+        tf.squeeze(phi, axis=-1),
+        tf.squeeze(energy, axis=-1),
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
     return {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
         "charge": y[..., 1:2],
-        "pt": y[..., 2:3],
-        "eta": y[..., 3:4],
+        "pt": pt,
+        "eta": eta,
         "sin_phi": y[..., 4:5],
         "cos_phi": y[..., 5:6],
-        "energy": y[..., 6:7],
-        "sum_energy": tf.reduce_sum(y[..., 6:7], axis=-2),
-        "sum_pt": tf.reduce_sum(y[..., 2:3], axis=-2)
+        "energy": energy,
+        "sum_energy": tf.reduce_sum(energy, axis=-2),
+        "sum_pt": tf.reduce_sum(pt, axis=-2),
+        "pt_hist": pt_hist,
+        "energy_hist": energy_hist,
     }
 
 class BaseDatasetFactory:

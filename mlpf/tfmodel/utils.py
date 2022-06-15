@@ -18,6 +18,19 @@ from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleSchedu
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 
+@tf.function
+def histogram_2d(x, y, weights, x_range, y_range, nbins, bin_dtype=tf.float32):
+    x_bins = tf.histogram_fixed_width_bins(x, x_range, nbins=nbins, dtype=bin_dtype)
+    y_bins = tf.histogram_fixed_width_bins(y, y_range, nbins=nbins, dtype=bin_dtype)
+    hist = tf.zeros((nbins, nbins), dtype=weights.dtype)
+    indices = tf.transpose(tf.stack([y_bins, x_bins]))
+    hist = tf.tensor_scatter_nd_add(hist, indices, weights)
+    return hist
+
+@tf.function
+def batched_histogram_2d(x, y, w, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.vectorized_map(lambda a: histogram_2d(a[0], a[1], a[2], x_range, y_range, nbins, bin_dtype), (x,y,w))
+
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
         cfg = yaml.load(ymlfile, Loader=yaml.FullLoader)
@@ -392,7 +405,7 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     steps = []
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-        #ds = ds.take(500)
+        ds = ds.take(1000)
         num_steps = ds.cardinality().numpy()
         assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
@@ -507,6 +520,8 @@ def get_loss_dict(config):
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
         "sum_energy": tf.keras.losses.MeanSquaredError(),
         "sum_pt": tf.keras.losses.MeanSquaredError(),
+        "pt_hist": tf.keras.losses.MeanSquaredError(),
+        "energy_hist": tf.keras.losses.MeanSquaredError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -518,5 +533,7 @@ def get_loss_dict(config):
         "energy": config["dataset"]["energy_loss_coef"],
         "sum_energy": config["dataset"]["sum_energy_loss_coef"],
         "sum_pt": config["dataset"]["sum_pt_loss_coef"],
+        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        "energy_hist": config["dataset"]["energy_hist_loss_coef"],
     }
     return loss_dict, loss_weights

@@ -236,7 +236,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+            if model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1":
                 model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
             else:
                 model.optimizer.set_weights(loaded_opt["weights"])

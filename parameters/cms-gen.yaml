@@ -32,6 +32,8 @@ dataset:
   energy_loss_coef: 1.0
   sum_energy_loss_coef: 0.0000001
   sum_pt_loss_coef: 0.0000001
+  pt_hist_loss_coef: 0.0000001
+  energy_hist_loss_coef: 0.0000001
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,7 +55,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0001
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32

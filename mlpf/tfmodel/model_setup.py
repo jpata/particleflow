@@ -65,9 +65,9 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     def on_epoch_end(self, epoch, logs=None):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
         weightfile_path = self.opt_path.format(epoch=epoch+1, **logs)
-        try:
+        try:        
             #PCGrad is derived from the legacy optimizer
-            if isinstance(self.model.optimizer, keras.optimizer_v1.TFOptimizer):
+            if self.model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1":
                 #lr = self.model.optimizer.optimizer.optimizer.lr
                 weights = self.model.optimizer.optimizer.optimizer.get_weights()
             else:
@@ -82,7 +82,8 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
                 )
         except Exception as e:
             print("Could not save optimizer state: {}".format(e))
-            os.remove(weightfile_path)
+            if os.path.isfile(weightfile_path):
+                os.remove(weightfile_path)
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
