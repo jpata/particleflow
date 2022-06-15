@@ -88,7 +88,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
 
         t = 0
         for i, batch in enumerate(loader):
-
+            print(len(loader))
             if multi_gpu:
                 if batch_events:
                     for j in range(len(batch)):
