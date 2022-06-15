@@ -1,11 +1,9 @@
-from torch.utils.data.dataloader import default_collate
-from collections.abc import Mapping, Sequence
-from torch_geometric.data.data import BaseData
 from torch_geometric.data import Data, Batch
 from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
+from pyg import make_file_loaders
 from pyg.dataset import PFGraphDataset, one_hot_embedding
 
 import torch
@@ -50,46 +48,6 @@ if use_gpu:
     print("GPU model:", torch.cuda.get_device_name(0))
 else:
     device = torch.device('cpu')
-
-
-class Collater:
-    """
-    This function was copied from torch_geometric.loader.Dataloader() source code.
-    Edits were made such that the function can collate samples as lists of tuples of Data() objects instead of Batch() objects.
-    This is needed becase pyg Dataloaders do not handle num_workers>0.
-    """
-
-    def __init__(self):
-        pass
-
-    def __call__(self, batch):
-        elem = batch[0]
-        if isinstance(elem, BaseData):
-            return batch
-
-        elif isinstance(elem, Sequence) and not isinstance(elem, str):
-            return [self(s) for s in zip(*batch)]
-
-        raise TypeError(f'DataLoader found invalid type: {type(elem)}')
-
-
-def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
-    """
-    This function is only one line, but it's worth explaining why it's needed and what it's doing.
-    It uses native torch Dataloaders with a custom collate_fn that allows loading Data() objects from pt files in a fast way.
-    It is needed because pyg Dataloaders do not handle num_workers>0.
-
-    Args:
-        dataset: custom dataset
-        num_files: number of files to load with a single get() call
-        num_workers: number of workers to use for fetching files
-        prefetch_factor: number of files to fetch in advance
-
-    Returns:
-        a torch iterable() that returns a list of 100 elements, each element is a tuple of size=num_files containing Data() objects
-    """
-
-    return torch.utils.data.DataLoader(dataset, num_files, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
 
 
 if __name__ == "__main__":

@@ -80,6 +80,7 @@ class MLPF(nn.Module):
 
         # unfold the Batch object
         input = batch.x
+        print(input.device)
         target = {'ygen_id': batch.ygen_id,
                   'ygen': batch.ygen,
                   'ycand_id': batch.ycand_id,
