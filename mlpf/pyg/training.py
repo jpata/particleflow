@@ -152,9 +152,10 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            # if i == 2:
-            #     break
+            if i == 2:
+                break
         print(f'Average inference time per batch is {round((t / len(loader)), 3)}s')
+        t0 = time.time()
 
     print(f'Average time to load a file {round((tf / len(file_loader)), 3)}s')
 
