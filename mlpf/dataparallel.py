@@ -67,7 +67,7 @@ def training_loop():
     device = torch.device('cuda:0')
 
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=2))
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=10))
     # construct file loaders
     loader = make_file_loaders(train_dataset)
 
@@ -82,7 +82,7 @@ def training_loop():
         print(f'Time to load file {num+1}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
-        loader = DataListLoader(file, batch_size=4)
+        loader = DataListLoader(file, batch_size=100)
 
         for i, batch in enumerate(loader):
             tb = time.time()
