@@ -252,7 +252,7 @@ class Collater:
         raise TypeError(f'DataLoader found invalid type: {type(elem)}')
 
 
-def make_file_loaders(dataset, num_files, num_workers, prefetch_factor):
+def make_file_loaders(dataset, num_files=1, num_workers=0, prefetch_factor=2):
     """
     This function is only one line, but it's worth explaining why it's needed and what it's doing.
     It uses native torch Dataloaders with a custom collate_fn that allows loading Data() objects from pt files in a fast way.
