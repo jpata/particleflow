@@ -78,8 +78,8 @@ def training_loop():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     t0, tt0, t = time.time(), time.time(), 0
-    for num, file in enumerate(loader):
-        print(f'Time to load file {num+1}/{len(loader)} is {round(time.time() - t0, 3)}s')
+    for num, file in enumerate(file_loader):
+        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataListLoader(file, batch_size=100)

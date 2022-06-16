@@ -82,7 +82,7 @@ def training_loop(rank, world_size):
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * 5, stop=rank * 5 + 5))
     # construct file loaders
-    loader = make_file_loaders(train_dataset, num_workers=2, prefetch_factor=10)
+    file_loader = make_file_loaders(train_dataset, num_workers=2, prefetch_factor=10)
 
     # create model and move it to GPU with id rank
     model = MLPF(input_dim=len(features_cms), num_classes=9).to(rank)
@@ -92,8 +92,8 @@ def training_loop(rank, world_size):
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
     t0, tt0 = time.time(), time.time()
-    for num, file in enumerate(loader):
-        print(f'Time to load file {num+1}/{len(loader)} is {round(time.time() - t0, 3)}s')
+    for num, file in enumerate(file_loader):
+        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataLoader(file, batch_size=50)
