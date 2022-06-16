@@ -82,7 +82,7 @@ def training_loop(rank, world_size):
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=1))
     # construct file loaders
-    file_loader_train = make_file_loaders(train_dataset)
+    file_loader = make_file_loaders(train_dataset)
 
     # create model and move it to GPU with id rank
     model = MLPF().to(rank)
