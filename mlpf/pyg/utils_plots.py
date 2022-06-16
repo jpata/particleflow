@@ -459,10 +459,9 @@ def plot_confusion_matrix(cm, target_names,
     plt.xlabel('Predicted label')
     # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
-    plt.savefig(outpath + save_as + '.png')
     plt.savefig(outpath + save_as + '.pdf')
     plt.close(fig)
 
-    torch.save(cm, outpath + save_as + '.pt')
+    # torch.save(cm, outpath + save_as + '.pt')
 
     return fig, ax

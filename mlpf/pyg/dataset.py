@@ -132,20 +132,12 @@ class PFGraphDataset(Dataset):
             num_classes = 41
             for i in range(len(data)):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
-                # d = Data(
-                #     x=torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float),
-                #     ygen=torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:],
-                #     ygen_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()),
-                #     ycand=torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:],
-                #     ycand_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long())
-                # )
-                #
-                d = dict(
-                    x=torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float).squeeze(0),
-                    ygen=torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:].squeeze(0),
-                    ygen_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()).squeeze(0),
-                    ycand=torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:].squeeze(0),
-                    ycand_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long()).squeeze(0)
+                d = Data(
+                    x=torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float),
+                    ygen=torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:],
+                    ygen_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()),
+                    ycand=torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:],
+                    ycand_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long())
                 )
 
                 batched_data.append(d)

@@ -1,7 +1,7 @@
 from torch_geometric.data import Data, Batch
 from pyg import parse_args
 from pyg import MLPF, training_loop, make_predictions, make_plots
-from pyg import get_model_fname, save_model, load_model, make_directories_for_plots
+from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
 from pyg.dataset import PFGraphDataset, one_hot_embedding
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     if args.load:  # load a pre-trained specified model
         outpath = args.outpath + args.load_model
-        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch, args.DataParallel_load)
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
@@ -102,20 +102,19 @@ if __name__ == "__main__":
 
         model = MLPF(**model_kwargs)
 
-        # get a directory name for the model to store the model's weights and plots
-        model_fname = get_model_fname(model, args.data, args.n_train, args.n_epochs, args.target, args.title)
-        outpath = osp.join(args.outpath, model_fname)
-
         model.to(device)
+
+        # get directory to store the model
+        outpath = osp.join(args.outpath, args.model_prefix)
 
         if multi_gpu:
             print("Parallelizing the training..")
             model = torch_geometric.nn.DataParallel(model)
 
-        save_model(args, model_fname, outpath, model_kwargs)
+        save_model(args, args.model_prefix, outpath, model_kwargs)
 
         print(model)
-        print(model_fname)
+        print(args.model_prefix)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 

@@ -11,6 +11,7 @@ def parse_args():
 
     # for saving the model
     parser.add_argument("--outpath",        type=str,           default='../experiments/',         help="output folder")
+    parser.add_argument("--model_prefix",   type=str,           default='MLPF_model',   help="directory to hold the model and all plots under args.outpath/args.model_prefix")
 
     # for loading the data
     parser.add_argument("--data",           type=str,           required=True,   help="cms or delphes?")
@@ -20,14 +21,12 @@ def parse_args():
     parser.add_argument("--n_valid",        type=int,           default=1,      help="number of data files to use for validation.. each file contains 100 events")
     parser.add_argument("--n_test",         type=int,           default=1,      help="number of data files to use for testing.. each file contains 100 events")
 
-    parser.add_argument("--title",          type=str,           default='',   help="Appends this title to the model's name")
     parser.add_argument("--overwrite",      dest='overwrite',   action='store_true', help="Overwrites the model if True")
 
     # for loading a pre-trained model
     parser.add_argument("--load",           dest='load',        action='store_true', help="Load the model (no training)")
-    parser.add_argument("--load_model",     type=str,           default="",     help="Which model to load")
     parser.add_argument("--load_epoch",     type=int,           default=0,      help="Which epoch of the model to load for evaluation")
-    parser.add_argument("--DataParallel_load",      dest='DataParallel_load',   action='store_true', help="loads a model saved by nn.DataParallel")
+    # parser.add_argument("--DataParallel_load",      dest='DataParallel_load',   action='store_true', help="loads a model saved by nn.DataParallel")
 
     # for training hyperparameters
     parser.add_argument("--n_epochs",       type=int,           default=3,      help="number of training epochs")

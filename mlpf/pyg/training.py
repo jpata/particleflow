@@ -150,8 +150,8 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            # if i == 0:
-            #     break
+            if i == 10:
+                break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
@@ -247,7 +247,11 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader,
         print(f"epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
 
         # save the model's weights
-        torch.save(model.state_dict(), f'{outpath}/epoch_{epoch}_weights.pth')
+        try:
+            state_dict = model.module.state_dict()
+        except AttributeError:
+            state_dict = model.state_dict()
+        torch.save(state_dict, f'{outpath}/epoch_{epoch}_weights.pth')
 
         # create directory to hold training plots
         if not os.path.exists(outpath + '/training_plots/'):
@@ -263,20 +267,39 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader,
         elif data == 'cms':
             target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had", "tau"]
 
-        plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'cmT_epoch_{str(epoch)}')
-        plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'cmV_epoch_{str(epoch)}')
+        plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmTrain')
+        plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmValid')
 
-    # make loss plots
-    make_plot(losses_clf_train, 'train loss_clf', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_clf_train')
-    make_plot(losses_reg_train, 'train loss_reg', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_reg_train')
-    make_plot(losses_tot_train, 'train loss_tot', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_tot_train')
+        # make loss plots
+        make_plot('Classification loss',
+                  'Epochs', 'Loss', 'loss_clf',
+                  [losses_clf_train, losses_clf_valid],
+                  ['training', 'validation'],
+                  ['clf_losses_train', 'clf_losses_valid'],
+                  outpath + '/training_plots/losses/'
+                  )
+        make_plot('Regression loss',
+                  'Epochs', 'Loss', 'loss_reg',
+                  [losses_reg_train, losses_reg_valid],
+                  ['training', 'validation'],
+                  ['reg_losses_train', 'reg_losses_valid'],
+                  outpath + '/training_plots/losses/'
+                  )
+        make_plot('Total loss',
+                  'Epochs', 'Loss', 'loss_tot',
+                  [losses_tot_train, losses_tot_valid],
+                  ['training', 'validation'],
+                  ['tot_losses_train', 'tot_losses_valid'],
+                  outpath + '/training_plots/losses/'
+                  )
 
-    make_plot(losses_clf_valid, 'valid loss_clf', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_clf_valid')
-    make_plot(losses_reg_valid, 'valid loss_reg', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_reg_valid')
-    make_plot(losses_tot_valid, 'valid loss_tot', 'Epochs', 'Loss', outpath + '/training_plots/losses/', 'losses_tot_valid')
-
-    # make accuracy plots
-    make_plot(accuracies_train, 'train accuracy', 'Epochs', 'Accuracy', outpath + '/training_plots/accuracies/', 'accuracies_train')
-    make_plot(accuracies_valid, 'valid accuracy', 'Epochs', 'Accuracy', outpath + '/training_plots/accuracies/', 'accuracies_valid')
+        # make accuracy plots
+        make_plot('Accuracy',
+                  'Epochs', 'Accuracy', 'acc',
+                  [accuracies_train, accuracies_valid],
+                  ['training', 'validation'],
+                  ['acc_train', 'acc_valid'],
+                  outpath + '/training_plots/accuracies/'
+                  )
 
     print('Done with training.')

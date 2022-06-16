@@ -55,26 +55,6 @@ target_p4 = [
 ]
 
 
-def get_model_fname(model, data, n_train, n_epochs, target, title):
-    """
-    Get a unique directory name for the model
-    """
-
-    model_name = type(model).__name__
-    model_fname = '{}_{}_{}_{}files_{}epochs'.format(
-        model_name,
-        data,
-        target,
-        n_train,
-        n_epochs
-    )
-
-    if title:
-        model_fname = model_fname + '_' + title
-
-    return model_fname
-
-
 def save_model(args, model_fname, outpath, model_kwargs):
     if osp.isdir(outpath):
         if args.overwrite:
@@ -89,10 +69,26 @@ def save_model(args, model_fname, outpath, model_kwargs):
         pkl.dump(model_kwargs, f,  protocol=pkl.HIGHEST_PROTOCOL)
 
     with open(f'{outpath}/hyperparameters.json', 'w') as fp:  # dump hyperparameters
-        json.dump({'lr': args.lr, 'batch_size': args.batch_size, 'alpha': args.alpha, 'nearest': args.nearest}, fp)
+        json.dump({'data': args.data,
+                   'target': args.target,
+                   'n_train': args.n_train,
+                   'n_valid': args.n_valid,
+                   'n_test': args.n_test,
+                   'n_epochs': args.n_epochs,
+                   'lr': args.lr,
+                   'batch_size': args.batch_size,
+                   'alpha': args.alpha,
+                   'nearest': args.nearest,
+                   'num_convs': args.num_convs,
+                   'space_dim': args.space_dim,
+                   'propagate_dim': args.propagate_dim,
+                   'embedding_dim': args.embedding_dim,
+                   'hidden_dim1': args.hidden_dim1,
+                   'hidden_dim2': args.hidden_dim2,
+                   }, fp)
 
 
-def load_model(device, outpath, model_directory, load_epoch, DataParallel_load):
+def load_model(device, outpath, model_directory, load_epoch):
     PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
 
     print('Loading a previously trained model..')
@@ -101,21 +97,21 @@ def load_model(device, outpath, model_directory, load_epoch, DataParallel_load):
 
     state_dict = torch.load(PATH, map_location=device)
 
-    if DataParallel_load:   # if the model was trained using DataParallel then we do this
-        state_dict = torch.load(PATH, map_location=device)
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k[7:]  # remove module.
-            new_state_dict[name] = v
-        state_dict = new_state_dict
+    # if DataParallel_load:   # if the model was trained using DataParallel then we do this
+    #     state_dict = torch.load(PATH, map_location=device)
+    #     from collections import OrderedDict
+    #     new_state_dict = OrderedDict()
+    #     for k, v in state_dict.items():
+    #         name = k[7:]  # remove module.
+    #         new_state_dict[name] = v
+    #     state_dict = new_state_dict
 
     return state_dict, model_kwargs, outpath
 
 
-def make_plot(X, label, xlabel, ylabel, outpath, save_as):
+def make_plot(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
     """
-    Given a list X, makes a scatter plot of it and saves it
+    Given a list A of lists B, makes a scatter plot of each list B and saves it.
     """
     plt.style.use(hep.style.ROOT)
 
@@ -123,15 +119,18 @@ def make_plot(X, label, xlabel, ylabel, outpath, save_as):
         os.makedirs(outpath)
 
     fig, ax = plt.subplots()
-    ax.plot(range(len(X)), X, label=label)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    for i, var in enumerate(X):
+        ax.plot(range(len(var)), var, label=Xlabel[i])
+    ax.set_xlabel(xaxis)
+    ax.set_ylabel(yaxis)
     ax.legend(loc='best')
-    plt.savefig(outpath + save_as + '.png')
+    ax.set_title(title)
+    plt.savefig(outpath + save_as + '.pdf')
     plt.close(fig)
 
-    with open(outpath + save_as + '.pkl', 'wb') as f:
-        pkl.dump(X, f)
+    for i, var in enumerate(X):
+        with open(outpath + X_save_as[i] + '.pkl', 'wb') as f:
+            pkl.dump(var, f)
 
 
 def make_directories_for_plots(outpath, tag):

@@ -1,6 +1,6 @@
 from pyg.args import parse_args
 from pyg.dataset import PFGraphDataset, one_hot_embedding
-from pyg.utils import get_model_fname, save_model, load_model
+from pyg.utils import save_model, load_model
 from pyg.utils import make_plot, make_directories_for_plots
 from pyg.utils import features_delphes, features_cms, target_p4
 from pyg.utils import make_file_loaders
