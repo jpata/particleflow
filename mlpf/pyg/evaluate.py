@@ -21,7 +21,6 @@ import pandas as pd
 import sklearn
 import matplotlib
 matplotlib.use("Agg")
-matplotlib.rcParams['pdf.fonttype'] = 42
 
 
 def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, batch_events, num_classes, outpath):

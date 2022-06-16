@@ -22,7 +22,6 @@ import sklearn.metrics
 import matplotlib
 matplotlib.use("Agg")
 
-
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -150,7 +149,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            # if i == 10:
+            # if i == 0:
             #     break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 

@@ -25,7 +25,6 @@ import sklearn
 import matplotlib
 matplotlib.use("Agg")
 
-
 features_delphes = ["Track|cluster", "$p_{T}|E_{T}$", r"$\eta$", r'$Sin(\phi)$', r'$Cos(\phi)$',
                     "P|E", r"$\eta_\mathrm{out}|E_{em}$", r"$Sin(\(phi)_\mathrm{out}|E_{had}$", r"$Cos(\phi)_\mathrm{out}|E_{had}$",
                     "charge", "is_gen_mu", "is_gen_el"]
@@ -127,7 +126,6 @@ def make_plot(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
     """
     Given a list A of lists B, makes a scatter plot of each list B and saves it.
     """
-    plt.style.use(hep.style.ROOT)
 
     if not os.path.exists(outpath):
         os.makedirs(outpath)
