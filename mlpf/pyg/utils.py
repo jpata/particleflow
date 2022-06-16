@@ -111,13 +111,13 @@ def load_model(device, outpath, model_directory, load_epoch):
     state_dict = torch.load(PATH, map_location=device)
 
     # if the model was trained using DataParallel then we do this
-    state_dict = torch.load(PATH, map_location=device)
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:]  # remove module.
-        new_state_dict[name] = v
-    state_dict = new_state_dict
+    # state_dict = torch.load(PATH, map_location=device)
+    # from collections import OrderedDict
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]  # remove module.
+    #     new_state_dict[name] = v
+    # state_dict = new_state_dict
 
     return state_dict, model_kwargs, outpath
 
@@ -136,7 +136,7 @@ def make_plot(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
     ax.set_xlabel(xaxis)
     ax.set_ylabel(yaxis)
     ax.legend(loc='best')
-    ax.set_title(title)
+    ax.set_title(title, fontsize=20)
     plt.savefig(outpath + save_as + '.pdf')
     plt.close(fig)
 
