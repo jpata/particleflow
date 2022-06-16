@@ -147,7 +147,9 @@ if __name__ == "__main__":
     file_loader_test = make_file_loaders(test_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # make predictions on the testing dataset
-    make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+    if args.make_predictions:
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
 
-    # load the predictions and make plots
-    make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    # load the predictions and make plots (must have ran make_predictions before)
+    if args.make_plots:
+        make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

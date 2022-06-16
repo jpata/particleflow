@@ -46,6 +46,10 @@ def parse_args():
     parser.add_argument("--propagate_dim",  type=int,           default=8,     help="The number of features to be propagated between the vertices")
     parser.add_argument("--nearest",        type=int,           default=4,     help="k nearest neighbors in gravnet layer")
 
+    # for testing the model
+    parser.add_argument("--make_predictions",   dest='make_predictions',        action='store_true', help="run inference on the test data")
+    parser.add_argument("--make_plots",   dest='make_plots',        action='store_true', help="makes plots of the test predictions")
+
     args = parser.parse_args()
 
     return args
