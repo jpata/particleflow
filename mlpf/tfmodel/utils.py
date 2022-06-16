@@ -405,7 +405,7 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     steps = []
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-        #ds = ds.take(1000)
+        ds = ds.take(1000)
         num_steps = ds.cardinality().numpy()
         assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
@@ -518,10 +518,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "sum_energy": tf.keras.losses.MeanSquaredError(),
-        "sum_pt": tf.keras.losses.MeanSquaredError(),
+        "met": tf.keras.losses.MeanSquaredError(),
         "pt_hist": tf.keras.losses.MeanSquaredError(),
-        "energy_hist": tf.keras.losses.MeanSquaredError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -531,9 +529,7 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
-        "sum_energy": config["dataset"]["sum_energy_loss_coef"],
-        "sum_pt": config["dataset"]["sum_pt_loss_coef"],
+        "met": config["dataset"]["met_loss_coef"],
         "pt_hist": config["dataset"]["pt_hist_loss_coef"],
-        "energy_hist": config["dataset"]["energy_hist_loss_coef"],
     }
     return loss_dict, loss_weights

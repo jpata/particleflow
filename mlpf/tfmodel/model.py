@@ -647,12 +647,6 @@ class OutputDecoding(tf.keras.Model):
             tf.squeeze(pred_pt*msk_input_outtype*msk_output, axis=-1),
             tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
         )
-        energy_hist = batched_histogram_2d(
-            tf.squeeze(pred_eta, axis=-1),
-            tf.squeeze(pred_phi, axis=-1),
-            tf.squeeze(pred_energy*msk_input_outtype*msk_output, axis=-1),
-            tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-        )
         if self.mask_reg_cls0:
             out_charge = out_charge*msk_output
             pred_pt = pred_pt*msk_output
@@ -660,6 +654,13 @@ class OutputDecoding(tf.keras.Model):
             pred_sin_phi = pred_sin_phi*msk_output
             pred_cos_phi = pred_cos_phi*msk_output
             pred_energy = pred_energy*msk_output
+
+        px = tf.squeeze(pred_pt*pred_cos_phi*msk_output, axis=-1)
+        py = tf.squeeze(pred_pt*pred_sin_phi*msk_output, axis=-1)
+        
+        sum_px = tf.math.reduce_sum(px, axis=-1)
+        sum_py = tf.math.reduce_sum(py, axis=-1)
+        met = tf.math.sqrt(sum_px**2 + sum_py**2)
 
         ret = {
             "cls": out_id_softmax,
@@ -670,12 +671,8 @@ class OutputDecoding(tf.keras.Model):
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
 
-            #per-event sum of energy and pt
-            "sum_energy": tf.reduce_sum(pred_energy*msk_input_outtype*msk_output, axis=-2),
-            "sum_pt": tf.reduce_sum(pred_pt*msk_input_outtype*msk_output, axis=-2),
-
             "pt_hist": pt_hist,
-            "energy_hist": energy_hist,
+            "met": met,
         }
 
         return ret

@@ -207,7 +207,10 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
 
-validation_dataset: cms_pf_ttbar
+validation_datasets:
+ - cms_pf_ttbar
+ - cms_pf_ztt
+ - cms_pf_qcd
 
 datasets: 
   cms_pf_ttbar:

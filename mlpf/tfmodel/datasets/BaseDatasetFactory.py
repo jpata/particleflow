@@ -5,24 +5,35 @@ import heptfds
 #Unpacks a flat target array along the feature axis to a feature dict
 #the feature order is defined in the data prep stage (postprocessing2.py)
 def unpack_target(y, num_output_classes):
-    from tfmodel.utils import histogram_2d
+    from tfmodel.utils import batched_histogram_2d, histogram_2d
     pt = y[..., 2:3]
     energy = y[..., 6:7]
     eta = y[..., 3:4]
     phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])
+  
+    if len(y.shape)==3:
+        pt_hist = batched_histogram_2d(
+            tf.squeeze(eta, axis=-1),
+            tf.squeeze(phi, axis=-1),
+            tf.squeeze(pt, axis=-1),
+            tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+        )
+    else:
+        pt_hist = histogram_2d(
+            tf.squeeze(eta, axis=-1),
+            tf.squeeze(phi, axis=-1),
+            tf.squeeze(pt, axis=-1),
+            tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+        )
 
-    pt_hist = histogram_2d(
-        tf.squeeze(eta, axis=-1),
-        tf.squeeze(phi, axis=-1),
-        tf.squeeze(pt, axis=-1),
-        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-    )
-    energy_hist = histogram_2d(
-        tf.squeeze(eta, axis=-1),
-        tf.squeeze(phi, axis=-1),
-        tf.squeeze(energy, axis=-1),
-        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-    )
+    msk_pid = tf.cast(y[..., 0:1]!=0, tf.float32)
+    px = tf.squeeze(pt*y[..., 5:6]*msk_pid, axis=-1)
+    py = tf.squeeze(pt*y[..., 4:5]*msk_pid, axis=-1)
+    
+    sum_px = tf.math.reduce_sum(px, axis=-1)
+    sum_py = tf.math.reduce_sum(py, axis=-1)
+    met = tf.math.sqrt(sum_px**2 + sum_py**2)
+
     return {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
         "charge": y[..., 1:2],
@@ -31,10 +42,8 @@ def unpack_target(y, num_output_classes):
         "sin_phi": y[..., 4:5],
         "cos_phi": y[..., 5:6],
         "energy": energy,
-        "sum_energy": tf.reduce_sum(energy, axis=-2),
-        "sum_pt": tf.reduce_sum(pt, axis=-2),
         "pt_hist": pt_hist,
-        "energy_hist": energy_hist,
+        "met": met
     }
 
 class BaseDatasetFactory:
