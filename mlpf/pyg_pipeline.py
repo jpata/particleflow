@@ -34,19 +34,17 @@ matplotlib.use("Agg")
 np.seterr(divide='ignore', invalid='ignore')
 
 # Check if the GPU configuration has been provided
-use_gpu = torch.cuda.device_count() > 0
+world_size = torch.cuda.device_count()
 multi_gpu = torch.cuda.device_count() > 1
 
-if multi_gpu or use_gpu:
+# define the global base device
+if world_size:
     print(f'Will use {torch.cuda.device_count()} gpu(s)')
+    for i in range(world_size):
+        print("GPU model:", torch.cuda.get_device_name(i))
+    device = torch.device('cuda:0')
 else:
     print('Will use cpu')
-
-# define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-    print("GPU model:", torch.cuda.get_device_name(0))
-else:
     device = torch.device('cpu')
 
 
