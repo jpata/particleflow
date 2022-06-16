@@ -53,6 +53,7 @@ class ToyModel(nn.Module):
         self.net2 = nn.Linear(10, 5)
 
     def forward(self, x):
+        print(x.device)
         return self.net2(self.relu(self.net1(x)))
 
 
