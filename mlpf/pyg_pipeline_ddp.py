@@ -46,23 +46,6 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
-# # Check if the GPU configuration has been provided
-use_gpu = torch.cuda.device_count() > 0
-multi_gpu = torch.cuda.device_count() > 1
-#
-# if multi_gpu or use_gpu:
-#     print(f'Will use {torch.cuda.device_count()} gpu(s)')
-# else:
-#     print('Will use cpu')
-#
-# # define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-#     print("GPU model:", torch.cuda.get_device_name(0))
-# else:
-#     device = torch.device('cpu')
-#
-
 
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -124,7 +107,7 @@ def train(rank, world_size, args):
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
-    training_loop_ddp(rank, device, args.data, model, multi_gpu, file_loader_train, file_loader_valid,
+    training_loop_ddp(rank, args.data, model, file_loader_train, file_loader_valid,
                       args.batch_size, args.batch_events, args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target, num_classes, outpath)
 

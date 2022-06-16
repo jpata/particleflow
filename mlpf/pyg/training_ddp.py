@@ -25,13 +25,13 @@ matplotlib.use("Agg")
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def compute_weights(device, target_ids, num_classes):
+def compute_weights(rank, target_ids, num_classes):
     """
     computes necessary weights to accomodate class imbalance in the loss function
     """
 
     vs, cs = torch.unique(target_ids, return_counts=True)
-    weights = torch.zeros(num_classes).to(device=device)
+    weights = torch.zeros(num_classes).to(device=rank)
     for k, v in zip(vs, cs):
         weights[k] = 1.0 / math.sqrt(float(v))
     # weights[2] = weights[2] * 3  # ephasize nhadrons
@@ -39,16 +39,16 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size, batch_events,
+def validation_run(rank, model, train_loader, valid_loader, batch_size, batch_events,
                    alpha, target_type, num_classes, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size, batch_events,
+        ret = train(rank, model, train_loader, valid_loader, batch_size, batch_events,
                     optimizer, alpha, target_type, num_classes, outpath)
     return ret
 
 
-def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size, batch_events,
+def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
           optimizer, alpha, target_type, num_classes, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
@@ -62,7 +62,7 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
     is_train = not (optimizer is None)
 
     if is_train:
-        print('Training run')
+        print('Training run') if rank == 0
         model.train()
         file_loader = train_loader
     else:
@@ -79,7 +79,7 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
     t0 = time.time()
 
     for num, file in enumerate(file_loader):
-        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
@@ -107,7 +107,7 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
                 target_ids = target['ycand_id']
 
             # one hot encode the target
-            target_ids_one_hot = one_hot_embedding(target_ids, num_classes).to(device)
+            target_ids_one_hot = one_hot_embedding(target_ids, num_classes).to(rank)
 
             # revert one hot encoding for the predictions
             pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
@@ -117,7 +117,7 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
             msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
             # compute the loss
-            weights = compute_weights(device, target_ids, num_classes)    # to accomodate class imbalance
+            weights = compute_weights(rank, target_ids, num_classes)    # to accomodate class imbalance
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
@@ -139,9 +139,9 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-        print(f'Average inference time per batch is {round((t / len(loader)), 3)}s')
+        print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
-    print(f'Average time to load a file {round((tf / len(file_loader)), 3)}s')
+    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
 
@@ -156,7 +156,7 @@ def train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size
     return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
 
 
-def training_loop_ddp(rank, device, data, model, multi_gpu, train_loader, valid_loader,
+def training_loop_ddp(rank, data, model, train_loader, valid_loader,
                       batch_size, batch_events, n_epochs, patience,
                       optimizer, alpha, target, num_classes, outpath):
     """
@@ -166,7 +166,6 @@ def training_loop_ddp(rank, device, data, model, multi_gpu, train_loader, valid_
         device: 'cpu' or cuda
         data: data sepecification ('cms' or 'delphes')
         model: pytorch model
-        multi_gpu: boolean for multi_gpu training (if multigpus are available)
         dataset: a PFGraphDataset object
         n_train: number of files to use for training
         n_train: number of files to use for validation
@@ -202,7 +201,7 @@ def training_loop_ddp(rank, device, data, model, multi_gpu, train_loader, valid_
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -212,7 +211,7 @@ def training_loop_ddp(rank, device, data, model, multi_gpu, train_loader, valid_
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, device, model, multi_gpu, train_loader, valid_loader, batch_size, batch_events, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader, batch_size, batch_events, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
