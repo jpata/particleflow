@@ -432,9 +432,9 @@ def plot_confusion_matrix(cm, target_names,
     ax = plt.axes()
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     if target == "rule-based":
-        plt.title(title + ' for rule-based PF')
+        plt.title(title + ' for rule-based PF', fontsize=20)
     else:
-        plt.title(title + ' for MLPF at epoch ' + str(epoch))
+        plt.title(title + ' for MLPF at epoch ' + str(epoch), fontsize=20)
 
     plt.colorbar()
 
