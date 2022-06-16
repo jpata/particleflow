@@ -138,13 +138,18 @@ if __name__ == "__main__":
     else:
         epoch_on_plots = args.n_epochs - 1
 
+    # make directories to hold testing plots
     make_directories_for_plots(outpath, 'test_data')
 
+    # initialize the test dataset
     dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-
     test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
 
+    # construct the test dataloader
     file_loader_test = make_file_loaders(test_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
+    # make predictions on the testing dataset
     make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+
+    # load the predictions and make plots
     make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

@@ -150,8 +150,8 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            if i == 10:
-                break
+            # if i == 10:
+            #     break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
