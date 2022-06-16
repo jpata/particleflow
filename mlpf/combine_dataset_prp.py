@@ -31,7 +31,7 @@ all = []
 c = 0
 j = 0
 
-for file in loader:
+for i, file in enumerate(loader):
     print(f'file # {i}')
     all = all + file
     c = c + 1
