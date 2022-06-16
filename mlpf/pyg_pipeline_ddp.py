@@ -109,7 +109,7 @@ def train(rank, world_size, args):
 
 def run_demo(demo_fn, world_size, args):
     mp.spawn(demo_fn,
-             args=args,
+             args=(world_size, args),
              nprocs=world_size,
              join=True)
 
