@@ -63,21 +63,25 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
     is_train = not (optimizer is None)
 
     if is_train:
+        print('Training run')
         model.train()
         file_loader = train_loader
     else:
+        print('Validation run')
         model.eval()
         file_loader = valid_loader
 
     # initialize loss and accuracy and time
-    losses_clf, losses_reg, losses_tot, accuracies, t = 0, 0, 0, 0, 0
+    losses_clf, losses_reg, losses_tot, accuracies, t, tf = 0, 0, 0, 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
     t0 = time.time()
+
     for num, file in enumerate(file_loader):
-        print(f'Time to load file {num}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        tf = tf + (time.time() - t0)
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         if multi_gpu:
@@ -149,11 +153,13 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            # if i == 0:
+            # if i == 2:
             #     break
         print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
 
-        t0 = time.time()
+    print(f'Average time to load a file {round((tf / len(file_loader)), 3)}s')
+
+    t0 = time.time()
 
     losses_clf = (losses_clf / (len(loader) * len(file_loader))).item()
     losses_reg = (losses_reg / (len(loader) * len(file_loader))).item()
