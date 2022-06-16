@@ -64,14 +64,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def training_loop():
-    print(f"Running training_loop DDP example on rank {rank}.")
 
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=1))
     # construct file loaders
     file_loader = make_file_loaders(train_dataset)
 
-    # create model and move it to GPU with id rank
     model = MLPF(input_dim=len(features_cms), num_classes=9)
     model = torch_geometric.nn.DataParallel(model)
 
