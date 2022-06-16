@@ -89,7 +89,7 @@ def training_loop(rank, world_size):
             print(f'batch  # {i}')
             pred, target = model(batch)
 
-            loss_clf = torch.nn.functional.cross_entropy(pred[:, :num_classes], target['ygen_id'])  # for classifying PID
+            loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
 
             optimizer.zero_grad()
             loss_clf.backward()
