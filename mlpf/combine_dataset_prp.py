@@ -14,7 +14,7 @@ import pickle
 import multiprocessing
 
 from pyg import make_file_loaders
-from pyg.dataset import PFGraphDataset, one_hot_embedding
+from pyg import PFGraphDataset, one_hot_embedding
 
 #
 # path_from = '/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/'
