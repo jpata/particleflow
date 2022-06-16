@@ -62,7 +62,8 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
     is_train = not (optimizer is None)
 
     if is_train:
-        print('Training run') if rank == 0
+        # print('Training run') if rank == 0
+        print('Training run')
         model.train()
         file_loader = train_loader
     else:
