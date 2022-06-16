@@ -63,7 +63,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-def training_loop(rank, world_size):
+def training_loop():
     print(f"Running training_loop DDP example on rank {rank}.")
 
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
@@ -77,7 +77,7 @@ def training_loop(rank, world_size):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    t0 = time.time()
+    t0, tt0 = time.time(), time.time()
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
@@ -86,7 +86,7 @@ def training_loop(rank, world_size):
         loader = DataListLoader(file, batch_size=4)
 
         for i, batch in enumerate(loader):
-            print(f'batch  # {i}')
+            print(f'batch # {i+1}/{len(loader)}')
             pred, target = model(batch)
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
@@ -97,11 +97,12 @@ def training_loop(rank, world_size):
 
         t0 = time.time()
 
+    print(f'total time is {round(time.time()-tt0,3)}s')
+
 
 if __name__ == "__main__":
     n_gpus = torch.cuda.device_count()
     assert n_gpus >= 2, f"Requires at least 2 GPUs to run, but got {n_gpus}"
     world_size = n_gpus
 
-    run_demo(training_loop, world_size)
-    # run_demo(demo_checkpoint, world_size)
+    training_loop()
