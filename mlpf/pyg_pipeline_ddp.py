@@ -75,7 +75,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def train(rank, world_size, model_kwargs):
+def train(rank, world_size):
     print(f"Running training_loop DDP example on rank {rank}.")
     setup(rank, world_size)
 
