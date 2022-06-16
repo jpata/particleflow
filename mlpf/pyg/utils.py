@@ -122,7 +122,7 @@ def load_model(device, outpath, model_directory, load_epoch):
     return state_dict, model_kwargs, outpath
 
 
-def make_plot(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
+def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
     """
     Given a list A of lists B, makes a scatter plot of each list B and saves it.
     """

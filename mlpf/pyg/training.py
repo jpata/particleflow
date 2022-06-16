@@ -1,7 +1,6 @@
-from pyg import make_plot
+from pyg import make_plot_from_lists
 from pyg.utils_plots import plot_confusion_matrix
-from pyg.utils import define_regions, batch_event_into_regions
-from pyg.utils import one_hot_embedding
+from pyg.utils import define_regions, batch_event_into_regions, one_hot_embedding
 
 import torch
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
@@ -276,35 +275,35 @@ def training_loop(device, data, model, multi_gpu, train_loader, valid_loader,
         plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmValid')
 
         # make loss plots
-        make_plot('Classification loss',
-                  'Epochs', 'Loss', 'loss_clf',
-                  [losses_clf_train, losses_clf_valid],
-                  ['training', 'validation'],
-                  ['clf_losses_train', 'clf_losses_valid'],
-                  outpath + '/training_plots/losses/'
-                  )
-        make_plot('Regression loss',
-                  'Epochs', 'Loss', 'loss_reg',
-                  [losses_reg_train, losses_reg_valid],
-                  ['training', 'validation'],
-                  ['reg_losses_train', 'reg_losses_valid'],
-                  outpath + '/training_plots/losses/'
-                  )
-        make_plot('Total loss',
-                  'Epochs', 'Loss', 'loss_tot',
-                  [losses_tot_train, losses_tot_valid],
-                  ['training', 'validation'],
-                  ['tot_losses_train', 'tot_losses_valid'],
-                  outpath + '/training_plots/losses/'
-                  )
+        make_plot_from_lists('Classification loss',
+                             'Epochs', 'Loss', 'loss_clf',
+                             [losses_clf_train, losses_clf_valid],
+                             ['training', 'validation'],
+                             ['clf_losses_train', 'clf_losses_valid'],
+                             outpath + '/training_plots/losses/'
+                             )
+        make_plot_from_lists('Regression loss',
+                             'Epochs', 'Loss', 'loss_reg',
+                             [losses_reg_train, losses_reg_valid],
+                             ['training', 'validation'],
+                             ['reg_losses_train', 'reg_losses_valid'],
+                             outpath + '/training_plots/losses/'
+                             )
+        make_plot_from_lists('Total loss',
+                             'Epochs', 'Loss', 'loss_tot',
+                             [losses_tot_train, losses_tot_valid],
+                             ['training', 'validation'],
+                             ['tot_losses_train', 'tot_losses_valid'],
+                             outpath + '/training_plots/losses/'
+                             )
 
         # make accuracy plots
-        make_plot('Accuracy',
-                  'Epochs', 'Accuracy', 'acc',
-                  [accuracies_train, accuracies_valid],
-                  ['training', 'validation'],
-                  ['acc_train', 'acc_valid'],
-                  outpath + '/training_plots/accuracies/'
-                  )
+        make_plot_from_lists('Accuracy',
+                             'Epochs', 'Accuracy', 'acc',
+                             [accuracies_train, accuracies_valid],
+                             ['training', 'validation'],
+                             ['acc_train', 'acc_valid'],
+                             outpath + '/training_plots/accuracies/'
+                             )
 
     print('Done with training.')
