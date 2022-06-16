@@ -74,8 +74,9 @@ if __name__ == "__main__":
         num_classes = 9   # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
+    outpath = osp.join(args.outpath, args.model_prefix)
+
     if args.load:  # load a pre-trained specified model
-        outpath = args.outpath + args.load_model
         state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
@@ -103,9 +104,6 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
 
         model.to(device)
-
-        # get directory to store the model
-        outpath = osp.join(args.outpath, args.model_prefix)
 
         if multi_gpu:
             print("Parallelizing the training..")
