@@ -80,10 +80,10 @@ var_indices = {
 
 bins = {'charge': np.linspace(0, 5, 100),
         'pt': np.linspace(0, 5, 100),
-        'E': np.linspace(-1, 5, 100),
         'eta': np.linspace(-5, 5, 100),
         'sin phi': np.linspace(-2, 2, 100),
         'cos phi': np.linspace(-2, 2, 100),
+        'E': np.linspace(-1, 5, 100),
         }
 
 
