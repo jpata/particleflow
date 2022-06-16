@@ -95,6 +95,17 @@ def train(rank, world_size, args):
 
     # create model and move it to GPU with id rank
     print('Instantiating a model..')
+    model_kwargs = {'input_dim': input_dim,
+                    'num_classes': num_classes,
+                    'output_dim_p4': output_dim_p4,
+                    'embedding_dim': args.embedding_dim,
+                    'hidden_dim1': args.hidden_dim1,
+                    'hidden_dim2': args.hidden_dim2,
+                    'num_convs': args.num_convs,
+                    'space_dim': args.space_dim,
+                    'propagate_dim': args.propagate_dim,
+                    'k': args.nearest,
+                    }
     model = MLPF(**model_kwargs).to(rank)
     ddp_model = DDP(model, device_ids=[rank])
 
@@ -128,18 +139,6 @@ if __name__ == "__main__":
     output_dim_p4 = len(target_p4)
 
     outpath = osp.join(args.outpath, args.model_prefix)
-
-    model_kwargs = {'input_dim': input_dim,
-                    'num_classes': num_classes,
-                    'output_dim_p4': output_dim_p4,
-                    'embedding_dim': args.embedding_dim,
-                    'hidden_dim1': args.hidden_dim1,
-                    'hidden_dim2': args.hidden_dim2,
-                    'num_convs': args.num_convs,
-                    'space_dim': args.space_dim,
-                    'propagate_dim': args.propagate_dim,
-                    'k': args.nearest,
-                    }
 
     world_size = torch.cuda.device_count()
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {n_gpus}"
