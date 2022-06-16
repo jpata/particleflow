@@ -102,6 +102,7 @@ def training_loop(rank, world_size):
         for i, batch in enumerate(loader):
             tb = time.time()
             pred, target = ddp_model(batch.to(rank))
+            print(f'batch {i}/{len(loader)}, forward pass = {round(time.time() - tb, 3)}s')
             t = t + (time.time() - tb)
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
