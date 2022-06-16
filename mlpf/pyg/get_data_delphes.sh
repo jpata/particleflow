@@ -2,7 +2,7 @@
 
 set -e
 
-# make directory to hold datafiles in home directory of the repo
+# make data/ directory to hold the delphes/ directory of datafiles under particleflow/
 mkdir -p ../../data
 
 # make delphes directories
