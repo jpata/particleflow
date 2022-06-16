@@ -93,7 +93,7 @@ def training_loop(rank, world_size):
 
     for num, file in enumerate(file_loader):
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
-        loader = DataListLoader(file, batch_size=batch_size)
+        loader = DataListLoader(file, batch_size=4)
 
         for i, batch in enumerate(loader):
 
