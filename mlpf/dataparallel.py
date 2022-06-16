@@ -78,7 +78,6 @@ def training_loop():
     t0, tt0 = time.time(), time.time()
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
-        tf = tf + (time.time() - t0)
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataListLoader(file, batch_size=4)
