@@ -75,7 +75,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def train(rank, world_size):
+def train(rank, world_size, args):
     print(f"Running training_loop DDP example on rank {rank}.")
     setup(rank, world_size)
 
@@ -107,9 +107,9 @@ def train(rank, world_size):
     cleanup()
 
 
-def run_demo(demo_fn, world_size):
+def run_demo(demo_fn, world_size, args):
     mp.spawn(demo_fn,
-             args=(world_size,),
+             args=args,
              nprocs=world_size,
              join=True)
 
@@ -144,4 +144,4 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {n_gpus}"
 
-    run_demo(train, world_size)
+    run_demo(train, world_size, args)
