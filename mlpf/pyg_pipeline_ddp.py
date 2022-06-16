@@ -77,7 +77,8 @@ def cleanup():
 
 
 def train(rank, world_size, args):
-    print(f"Running training loop on rank {rank}.")
+    print(f"Running training loop on rank {rank}: {torch.cuda.get_device_name(rank)}")
+
     setup(rank, world_size)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
