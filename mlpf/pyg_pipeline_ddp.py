@@ -46,21 +46,22 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
-# Check if the GPU configuration has been provided
-use_gpu = torch.cuda.device_count() > 0
-multi_gpu = torch.cuda.device_count() > 1
-
-if multi_gpu or use_gpu:
-    print(f'Will use {torch.cuda.device_count()} gpu(s)')
-else:
-    print('Will use cpu')
-
-# define the global base device
-if use_gpu:
-    device = torch.device('cuda:0')
-    print("GPU model:", torch.cuda.get_device_name(0))
-else:
-    device = torch.device('cpu')
+# # Check if the GPU configuration has been provided
+# use_gpu = torch.cuda.device_count() > 0
+# multi_gpu = torch.cuda.device_count() > 1
+#
+# if multi_gpu or use_gpu:
+#     print(f'Will use {torch.cuda.device_count()} gpu(s)')
+# else:
+#     print('Will use cpu')
+#
+# # define the global base device
+# if use_gpu:
+#     device = torch.device('cuda:0')
+#     print("GPU model:", torch.cuda.get_device_name(0))
+# else:
+#     device = torch.device('cpu')
+#
 
 
 def setup(rank, world_size):
@@ -94,8 +95,8 @@ def train(rank, world_size, args):
     dataset = PFGraphDataset(args.dataset, args.data)
 
     # give each gpu a subset of the data
-    hyper_train = args.n_train / world_size
-    hyper_valid = args.n_valid / world_size
+    hyper_train = int(args.n_train / world_size)
+    hyper_valid = int(args.n_valid / world_size)
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
