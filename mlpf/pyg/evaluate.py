@@ -3,7 +3,7 @@ from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
-from pyg.dataset import one_hot_embedding
+from pyg.utils import one_hot_embedding
 
 import torch
 from torch_geometric.data import Batch

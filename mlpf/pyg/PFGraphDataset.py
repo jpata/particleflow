@@ -19,7 +19,7 @@ import multiprocessing
 
 def relabel_indices(pid_array):
     """
-    relabels classes for convenient ML operations/training
+    relabels classes for the CMS dataset for convenient ML operations (e.g. one-hot encoding)
     """
     pid_array[pid_array == 15] = 8  # taus for now
     pid_array[pid_array == 211] = 7  # chhadrons
@@ -28,20 +28,6 @@ def relabel_indices(pid_array):
     pid_array[pid_array == 13] = 4  # electrons
     pid_array[pid_array == 11] = 3  # muons
     return pid_array
-
-
-def one_hot_embedding(labels, num_classes):
-    """
-    Embedding labels to one-hot form.
-
-    Args:
-      labels: (LongTensor) class labels, sized [N,].
-      num_classes: (int) number of classes.
-    Returns:
-      (tensor) encoded labels, sized [N, #classes].
-    """
-    y = torch.eye(num_classes)
-    return y[labels]
 
 
 def process_func(args):

@@ -1,10 +1,10 @@
 from torch_geometric.data import Data, Batch
 from pyg import parse_args
+from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
-from pyg.dataset import PFGraphDataset, one_hot_embedding
 
 import torch
 import torch_geometric

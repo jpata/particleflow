@@ -1,7 +1,7 @@
 from pyg import make_plot
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions
-from pyg.dataset import one_hot_embedding
+from pyg.utils import one_hot_embedding
 
 import torch
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
