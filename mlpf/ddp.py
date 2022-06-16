@@ -85,7 +85,7 @@ def training_loop(rank, world_size):
     file_loader = make_file_loaders(train_dataset)
 
     # create model and move it to GPU with id rank
-    model = MLPF().to(rank)
+    model = MLPF(input_dim=len(features_cms), num_classes=9).to(rank)
 
     ddp_model = DDP(model, device_ids=[rank])
 

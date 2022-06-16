@@ -72,6 +72,7 @@ def training_loop(rank, world_size):
     file_loader = make_file_loaders(train_dataset)
 
     # create model and move it to GPU with id rank
+    model = MLPF(input_dim=len(features_cms), num_classes=9)
     model = torch_geometric.nn.DataParallel(model)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
