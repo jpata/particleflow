@@ -9,4 +9,6 @@ from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_nam
 from pyg.model import MLPF
 
 from pyg.training import training_loop
+from pyg.training_ddp import training_loop_ddp
+
 from pyg.evaluate import make_predictions, make_plots
