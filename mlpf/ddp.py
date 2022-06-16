@@ -108,6 +108,8 @@ def training_loop(rank, world_size):
             loss_clf.backward()
             optimizer.step()
 
+        t0 = time.time()
+
     print(f'total time is {round(time.time()-tt0,3)}s')
 
     cleanup()
