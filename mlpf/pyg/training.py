@@ -155,7 +155,7 @@ def train(device, model, multi_gpu, train_loader, valid_loader, batch_size, batc
 
             # if i == 2:
             #     break
-        print(f'Average inference time per event is {round((t / len(loader)), 3)}s')
+        print(f'Average inference time per batch is {round((t / len(loader)), 3)}s')
 
     print(f'Average time to load a file {round((tf / len(file_loader)), 3)}s')
 

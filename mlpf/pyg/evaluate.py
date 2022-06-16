@@ -124,7 +124,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, ba
 
             print(f'event #: {i+1}/{len(loader)}')
 
-        print(f'Average inference time per event is {round((t / (len(loader))), 3)}s')
+        print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
         t0 = time.time()
 
     print(f'Average time to load a file {round((tff / len(file_loader)), 3)}s')
