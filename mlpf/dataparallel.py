@@ -69,7 +69,7 @@ def training_loop():
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=10))
     # construct file loaders
-    loader = make_file_loaders(train_dataset)
+    file_loader = make_file_loaders(train_dataset)
 
     model = MLPF(input_dim=len(features_cms), num_classes=9)
     model.to(device)
