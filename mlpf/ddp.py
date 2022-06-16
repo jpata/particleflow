@@ -96,8 +96,8 @@ def training_loop(rank, world_size):
         loader = DataLoader(file, batch_size=4)
 
         for i, batch in enumerate(loader):
-
-            pred, target = ddp_model(batch)
+            print(rank)
+            pred, target = ddp_model(batch.to(rank))
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :num_classes], target['ygen_id'])  # for classifying PID
 
