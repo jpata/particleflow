@@ -75,6 +75,38 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def train(rank, world_size, model_kwargs):
+    print(f"Running training_loop DDP example on rank {rank}.")
+    setup(rank, world_size)
+
+    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    dataset = PFGraphDataset(args.dataset, args.data)
+
+    # give each gpu a subset of the data
+    hyper_train = args.n_train / world_size
+    hyper_valid = args.n_valid / world_size
+
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
+    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
+
+    # construct file loaders
+    file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+
+    # create model and move it to GPU with id rank
+    print('Instantiating a model..')
+    model = MLPF(**model_kwargs).to(rank)
+    ddp_model = DDP(model, device_ids=[rank])
+
+    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
+
+    training_loop_ddp(rank, device, args.data, model, multi_gpu, file_loader_train, file_loader_valid,
+                      args.batch_size, args.batch_events, args.n_epochs, args.patience,
+                      optimizer, args.alpha, args.target, num_classes, outpath)
+
+    cleanup()
+
+
 def run_demo(demo_fn, world_size):
     mp.spawn(demo_fn,
              args=(world_size,),
@@ -113,35 +145,3 @@ if __name__ == "__main__":
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {n_gpus}"
 
     run_demo(train, world_size)
-
-
-def train(rank, world_size, model_kwargs):
-    print(f"Running training_loop DDP example on rank {rank}.")
-    setup(rank, world_size)
-
-    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-    dataset = PFGraphDataset(args.dataset, args.data)
-
-    # give each gpu a subset of the data
-    hyper_train = args.n_train / world_size
-    hyper_valid = args.n_valid / world_size
-
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
-    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
-
-    # construct file loaders
-    file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-
-    # create model and move it to GPU with id rank
-    print('Instantiating a model..')
-    model = MLPF(**model_kwargs).to(rank)
-    ddp_model = DDP(model, device_ids=[rank])
-
-    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
-
-    training_loop_ddp(rank, device, args.data, model, multi_gpu, file_loader_train, file_loader_valid,
-                      args.batch_size, args.batch_events, args.n_epochs, args.patience,
-                      optimizer, args.alpha, args.target, num_classes, outpath)
-
-    cleanup()
