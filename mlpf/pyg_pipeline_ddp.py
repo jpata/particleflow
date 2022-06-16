@@ -79,6 +79,17 @@ def train(rank, world_size, args):
     print(f"Running training_loop DDP example on rank {rank}.")
     setup(rank, world_size)
 
+    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
+    if args.data == 'delphes':
+        input_dim = len(features_delphes)
+        num_classes = 6   # we have 6 classes/pids for delphes
+    elif args.data == 'cms':
+        input_dim = len(features_cms)
+        num_classes = 9   # we have 9 classes/pids for cms (including taus)
+    output_dim_p4 = len(target_p4)
+
+    outpath = osp.join(args.outpath, args.model_prefix)
+
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
 
@@ -128,17 +139,6 @@ def run_demo(demo_fn, world_size, args):
 if __name__ == "__main__":
 
     args = parse_args()
-
-    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
-    if args.data == 'delphes':
-        input_dim = len(features_delphes)
-        num_classes = 6   # we have 6 classes/pids for delphes
-    elif args.data == 'cms':
-        input_dim = len(features_cms)
-        num_classes = 9   # we have 9 classes/pids for cms (including taus)
-    output_dim_p4 = len(target_p4)
-
-    outpath = osp.join(args.outpath, args.model_prefix)
 
     world_size = torch.cuda.device_count()
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {n_gpus}"
