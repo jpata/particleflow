@@ -48,7 +48,7 @@ np.seterr(divide='ignore', invalid='ignore')
 
 # # Check if the GPU configuration has been provided
 use_gpu = torch.cuda.device_count() > 0
-# multi_gpu = torch.cuda.device_count() > 1
+multi_gpu = torch.cuda.device_count() > 1
 #
 # if multi_gpu or use_gpu:
 #     print(f'Will use {torch.cuda.device_count()} gpu(s)')
@@ -77,7 +77,7 @@ def cleanup():
 
 
 def train(rank, world_size, args):
-    print(f"Running training_loop DDP example on rank {rank}.")
+    print(f"Running training loop on rank {rank}.")
     setup(rank, world_size)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
