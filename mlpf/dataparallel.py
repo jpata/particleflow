@@ -69,7 +69,7 @@ def training_loop():
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=2))
     # construct file loaders
-    file_loader = make_file_loaders(train_dataset)
+    loader = make_file_loaders(train_dataset)
 
     model = MLPF(input_dim=len(features_cms), num_classes=9)
     model.to(device)
@@ -77,22 +77,25 @@ def training_loop():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    t0, tt0 = time.time(), time.time()
-    for num, file in enumerate(file_loader):
-        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+    t0, tt0, t = time.time(), time.time(), 0
+    for num, file in enumerate(loader):
+        print(f'Time to load file {num+1}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataListLoader(file, batch_size=4)
 
         for i, batch in enumerate(loader):
-            print(f'batch # {i+1}/{len(loader)}')
+            tb = time.time()
             pred, target = model(batch)
+            t = t + (time.time() - tb)
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
 
             optimizer.zero_grad()
             loss_clf.backward()
             optimizer.step()
+
+        print(f'Average inference time per batch is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
 
