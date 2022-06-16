@@ -91,12 +91,15 @@ def training_loop(rank, world_size):
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
+    t0, tt0 = time.time(), time.time()
     for num, file in enumerate(file_loader):
+        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
         loader = DataLoader(file, batch_size=4)
 
         for i, batch in enumerate(loader):
-            print(rank)
+            print(f'batch # {i+1}/{len(loader)}')
             pred, target = ddp_model(batch.to(rank))
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
@@ -104,6 +107,8 @@ def training_loop(rank, world_size):
             optimizer.zero_grad()
             loss_clf.backward()
             optimizer.step()
+
+    print(f'total time is {round(time.time()-tt0,3)}s')
 
     cleanup()
 
