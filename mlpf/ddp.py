@@ -80,9 +80,9 @@ def training_loop(rank, world_size):
     setup(rank, world_size)
 
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank + 0, stop=rank + 1))
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * 5, stop=rank * 5 + 5))
     # construct file loaders
-    file_loader = make_file_loaders(train_dataset)
+    file_loader = make_file_loaders(train_dataset, num_workers=2, prefetch_factor=10)
 
     # create model and move it to GPU with id rank
     model = MLPF(input_dim=len(features_cms), num_classes=9).to(rank)
@@ -100,7 +100,6 @@ def training_loop(rank, world_size):
 
         for i, batch in enumerate(loader):
             print(f'batch # {i+1}/{len(loader)}')
-            print(rank)
             pred, target = ddp_model(batch.to(rank))
 
             loss_clf = torch.nn.functional.cross_entropy(pred[:, :9], target['ygen_id'])  # for classifying PID
