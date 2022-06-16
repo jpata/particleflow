@@ -67,7 +67,7 @@ def training_loop():
     device = torch.device('cuda:0')
 
     dataset = PFGraphDataset('/particleflowvol/particleflow/data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/', 'cms')
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=1))
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=2))
     # construct file loaders
     file_loader = make_file_loaders(train_dataset)
 
