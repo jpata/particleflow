@@ -96,7 +96,7 @@ def training_loop(rank, world_size):
         print(f'Time to load file {num+1}/{len(loader)} is {round(time.time() - t0, 3)}s')
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
-        loader = DataLoader(file, batch_size=4)
+        loader = DataLoader(file, batch_size=50)
 
         t = 0
         for i, batch in enumerate(loader):
