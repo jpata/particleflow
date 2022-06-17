@@ -52,6 +52,13 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
+    mp.spawn(demo_fn,
+             args=(world_size, args, model, num_classes, outpath),
+             nprocs=world_size,
+             join=True)
+
+
 def train(rank, world_size, args, model, num_classes, outpath):
     print(f"Running training loop on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
@@ -90,11 +97,37 @@ def train(rank, world_size, args, model, num_classes, outpath):
     cleanup()
 
 
-def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
-    mp.spawn(demo_fn,
-             args=(world_size, args, model, num_classes, outpath),
-             nprocs=world_size,
-             join=True)
+def inference(rank, world_size, args, model, num_classes, outpath):
+    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
+
+    setup(rank, world_size)
+
+    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+
+    # give each gpu a subset of the data
+    hyper_test = int(args.n_test / world_size)
+    test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
+
+    # construct file loaders
+    file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+
+    # create model and move it to GPU with id rank
+    print(f'Copying the model on rank {rank}..')
+    model = model.to(rank)
+    model.eval()
+    ddp_model = DDP(model, device_ids=[rank])
+
+    # make predictions on the testing dataset
+    multi_gpu = False
+    if args.make_predictions:
+        make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+
+    # load the predictions and make plots (must have ran make_predictions before)
+    if args.make_plots:
+        make_plots(rank, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+
+    cleanup()
 
 
 if __name__ == "__main__":
@@ -152,18 +185,4 @@ if __name__ == "__main__":
     # make directories to hold testing plots
     make_directories_for_plots(outpath, 'test_data')
 
-    # initialize the test dataset
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-    test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
-
-    # construct the test dataloader
-    file_loader_test = make_file_loaders(test_dataset, num_files=1, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-
-    # make predictions on the testing dataset
-    multi_gpu = False
-    if args.make_predictions:
-        make_predictions(torch.device('cuda:0'), args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
-
-    # load the predictions and make plots (must have ran make_predictions before)
-    if args.make_plots:
-        make_plots(torch.device('cuda:0'), args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    run_demo(inference, world_size, args, model, num_classes, outpath)
