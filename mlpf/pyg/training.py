@@ -119,7 +119,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
-            loss_tot = loss_clf + alpha * loss_reg
+            loss_tot = loss_clf + (alpha * loss_reg)
 
             if is_train:
                 optimizer.zero_grad()
@@ -164,7 +164,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        rank: int representing the gpu device id or str=='cpu'
+        rank: int representing the gpu device id, or str=='cpu' (both work, trust me)
         data: data sepecification ('cms' or 'delphes')
         model: a pytorch model wrapped by DistributedDataParallel (DDP)
         dataset: a PFGraphDataset object
@@ -200,7 +200,8 @@ def training_loop(rank, data, model, train_loader, valid_loader,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader,
+                                                                                  batch_size, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -210,7 +211,8 @@ def training_loop(rank, data, model, train_loader, valid_loader,
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader, batch_size, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader,
+                                                                                         batch_size, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
