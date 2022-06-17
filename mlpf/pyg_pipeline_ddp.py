@@ -1,7 +1,7 @@
 from pyg import parse_args
 from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop_ddp, make_predictions, make_plots
-from pyg import save_model, load_model, make_directory_for_predictions, make_directories_for_plots
+from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
 
@@ -181,7 +181,8 @@ if __name__ == "__main__":
 
     # run the inference
     if args.make_predictions:
-        make_directory_for_predictions(outpath, 'test_data')
+        if not osp.isdir(f'{outpath}/test_data'):
+            os.makedirs(f'{outpath}/test_data')
 
         # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
         dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)

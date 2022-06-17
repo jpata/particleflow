@@ -177,13 +177,6 @@ def make_directories_for_plots(outpath, tag):
         os.makedirs(f'{outpath}/{tag}/plots/confusion_matrix_plots')
 
 
-def make_directory_for_predictions(outpath, tag):
-    if not osp.isdir(f'{outpath}/{tag}'):
-        os.makedirs(f'{outpath}/{tag}')
-    if not osp.isdir(f'{outpath}/{tag}/predictions'):
-        os.makedirs(f'{outpath}/{tag}/predictions')
-
-
 def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
     """
     Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.
