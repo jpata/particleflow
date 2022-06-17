@@ -229,6 +229,7 @@ if __name__ == "__main__":
             batch_size = args.batch_size * world_size
         else:
             batch_size = args.batch_size
+        batch_size = args.batch_size
 
         make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data/')
 
