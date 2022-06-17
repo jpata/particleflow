@@ -132,10 +132,22 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {world_size}"
 
-    # save model_kwargs and hyperparameters
-    save_model(args, args.model_prefix, outpath, model_kwargs)
-
     # run_demo(train, world_size, args)
+
+    # save model_kwargs and hyperparameters
+    model_kwargs = {'input_dim': input_dim,
+                    'num_classes': num_classes,
+                    'output_dim_p4': output_dim_p4,
+                    'embedding_dim': args.embedding_dim,
+                    'hidden_dim1': args.hidden_dim1,
+                    'hidden_dim2': args.hidden_dim2,
+                    'num_convs': args.num_convs,
+                    'space_dim': args.space_dim,
+                    'propagate_dim': args.propagate_dim,
+                    'k': args.nearest,
+                    }
+    outpath = osp.join(args.outpath, args.model_prefix)
+    save_model(args, args.model_prefix, outpath, model_kwargs)
 
     if args.load:
         # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
@@ -148,7 +160,6 @@ if __name__ == "__main__":
         output_dim_p4 = len(target_p4)
 
         device = torch.device('cuda:0')
-        outpath = osp.join(args.outpath, args.model_prefix)
 
         state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
