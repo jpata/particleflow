@@ -23,7 +23,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, batch_events, num_classes, outpath):
+def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -31,7 +31,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, ba
         data: data specification ('cms' or 'delphes')
         model: pytorch model
         multi_gpu: boolean for multi_gpu training (if multigpus are available)
-        batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
 
@@ -51,9 +50,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, ba
         cand_list[pfcand] = []
         pred_list[pfcand] = []
 
-    if batch_events:    # batch events into eta,phi regions to build graphs only within regions
-        regions = define_regions(num_eta_regions=5, num_phi_regions=5)
-
     t0, tff = time.time(), 0
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
@@ -68,9 +64,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, ba
 
         t = 0
         for i, batch in enumerate(loader):
-
-            if batch_events:    # batch events into eta,phi regions to build graphs only within regions
-                batch = batch_event_into_regions(batch, regions)
 
             if multi_gpu:
                 X = batch   # a list (not torch) instance so can't be passed to device
@@ -122,10 +115,10 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, ba
                 cand_ids_all = torch.cat([cand_ids_all, cand_ids])
                 cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
-            print(f'event #: {i+1}/{len(loader)}')
+            print(f'batch #: {i+1}/{len(loader)}')
 
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
-        if num == 3:
+        if num == 5:
             break
         t0 = time.time()
 
@@ -169,7 +162,6 @@ def make_plots(device, data, model, num_classes, outpath, target, epoch, tag):
 
     t0 = time.time()
 
-    device = torch.device(device)
     # load the necessary predictions to make the plots
     gen_ids = torch.load(outpath + f'/gen_ids.pt', map_location=device)
     gen_p4 = torch.load(outpath + f'/gen_p4.pt', map_location=device)

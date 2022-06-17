@@ -42,27 +42,29 @@ np.seterr(divide='ignore', invalid='ignore')
 
 def setup(rank, world_size):
     """
-    Necessary setup function that initializes the process group
-
-
-
-    Environment variables which need to be
-    # set
-
+    Necessary setup function that sets up environment variables and initializes the process group to use the DistributedDataParallel (DDP) module.
     DDP relies on c10d ProcessGroup for communications. Hence, applications must create ProcessGroup instances before constructing DDP.
     """
+
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
 
-    #
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
 def cleanup():
+    """
+    Necessary function that destroys the spawned process group at the end.
+    """
+
     dist.destroy_process_group()
 
 
 def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
+    """
+    Necessary function that spawns process group on each gpu device (indexed by 'rank') and runs a demo_fn.
+    """
+
     mp.spawn(demo_fn,
              args=(world_size, args, model, num_classes, outpath),
              nprocs=world_size,
@@ -70,7 +72,15 @@ def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
 
 
 def train(rank, world_size, args, model, num_classes, outpath):
-    print(f"Running training loop on rank {rank}: {torch.cuda.get_device_name(rank)}")
+    """
+    A train() function that will be passed as a demo_fn to run_demo().
+
+    It divides and distributes the training dataset appropriately among devices, copies the model among devices,
+    instantiates a DDP model on each device to allow sychning of gradients, and finally,
+    invokes the training_loop_ddp() to run synchronized training among devices.
+    """
+
+    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     setup(rank, world_size)
 
@@ -101,13 +111,20 @@ def train(rank, world_size, args, model, num_classes, outpath):
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
     training_loop_ddp(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
-                      args.batch_size, args.batch_events, args.n_epochs, args.patience,
+                      args.batch_size, args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target, num_classes, outpath)
 
     cleanup()
 
 
 def inference(rank, world_size, args, model, num_classes, outpath):
+    """
+    An inference() function that will be passed as a demo_fn to run_demo().
+
+    It divides and distributes the testing dataset appropriately among devices, copies the model among devices,
+    and invokes the make_predictions() to run inference on each device.
+    """
+
     print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     setup(rank, world_size)
@@ -126,11 +143,11 @@ def inference(rank, world_size, args, model, num_classes, outpath):
     print(f'Copying the model on rank {rank}..')
     model = model.to(rank)
     model.eval()
-    ddp_model = DDP(model, device_ids=[rank])
+    # ddp_model = DDP(model, device_ids=[rank])
 
     # make predictions on the testing dataset
     multi_gpu = False
-    make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+    make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data_plots/')
 
     cleanup()
 

@@ -39,25 +39,21 @@ def compute_weights(rank, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, batch_events,
+def validation_run(rank, model, train_loader, valid_loader, batch_size,
                    alpha, target_type, num_classes, outpath):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, batch_events,
+        ret = train(rank, model, train_loader, valid_loader, batch_size,
                     optimizer, alpha, target_type, num_classes, outpath)
     return ret
 
 
-def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
+def train(rank, model, train_loader, valid_loader, batch_size,
           optimizer, alpha, target_type, num_classes, outpath):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
-
-    # batch events into eta,phi regions to build graphs only within regions
-    if batch_events:
-        regions = define_regions(num_eta_regions=5, num_phi_regions=5)
 
     is_train = not (optimizer is None)
 
@@ -141,10 +137,9 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-            if i == 0:
-                break
+
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
-        if num == 0:
+        if num == 3:
             break
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
@@ -162,20 +157,19 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
 
 
 def training_loop_ddp(rank, data, model, train_loader, valid_loader,
-                      batch_size, batch_events, n_epochs, patience,
+                      batch_size, n_epochs, patience,
                       optimizer, alpha, target, num_classes, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        device: 'cpu' or cuda
+        rank: integer representing the gpu device id
         data: data sepecification ('cms' or 'delphes')
-        model: pytorch model
+        model: a pytorch model wrapped by DistributedDataParallel (DDP)
         dataset: a PFGraphDataset object
-        n_train: number of files to use for training
-        n_train: number of files to use for validation
+        train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method
+        valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method
         batch_size: how many events to use for the forward pass at a time
-        batch_events: boolean to batch the event into eta,phi regions so that the graphs are only built within the regions
         loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
         n_epochs: number of epochs for a full training
         patience: number of stale epochs allowed before stopping the training
@@ -206,7 +200,7 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader, batch_size, batch_events, optimizer, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
@@ -216,7 +210,7 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader, batch_size, batch_events, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader, batch_size, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
