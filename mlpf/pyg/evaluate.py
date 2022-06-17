@@ -73,6 +73,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             ti = time.time()
             pred, target = model(X)
             tf = time.time()
+            print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
             t = t + (tf - ti)
 
             # retrieve target
@@ -114,8 +115,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
                 cand_ids_all = torch.cat([cand_ids_all, cand_ids])
                 cand_p4_all = torch.cat([cand_p4_all, cand_p4])
-
-            print(f'batch #: {i+1}/{len(loader)}')
 
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
         if num == 1:
