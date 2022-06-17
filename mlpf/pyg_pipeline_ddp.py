@@ -77,12 +77,10 @@ def train(rank, world_size, args, model, num_classes, outpath):
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
-    print(len(valid_dataset))
 
     # construct file loaders
     file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
     file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    print(len(file_loader_valid))
 
     # create model and move it to GPU with id rank
     print(f'Copying the model on rank {rank}..')

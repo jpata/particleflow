@@ -63,15 +63,16 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
 
     if is_train:
         # print('Training run') if rank == 0
-        print('Training run')
+        if rank == 0:
+            print('Training run')
         model.train()
         file_loader = train_loader
     else:
-        print('Validation run')
+        if rank == 0:
+            print('Validation run')
         model.eval()
         file_loader = valid_loader
 
-    print(len(file_loader))
     # initialize loss and accuracy and time
     losses_clf, losses_reg, losses_tot, accuracies, t, tf = 0, 0, 0, 0, 0, 0
 
@@ -145,7 +146,7 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
         if num == 0:
             break
-    # print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
+    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
 
@@ -236,7 +237,7 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
         time_per_epoch = (t1 - t0) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
-        print(f"epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
+        print(f"Rank {rank}: epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
 
         # save the model's weights
         try:
@@ -294,4 +295,4 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
                              outpath + '/training_plots/accuracies/'
                              )
 
-    print(f'Done with training. Total training time is {round((time.time() - t0_initial)/60),3}min')
+    print(f'Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60),3}min')
