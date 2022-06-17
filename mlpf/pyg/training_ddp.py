@@ -190,7 +190,8 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
     best_val_loss = 99999.9
     stale_epochs = 0
 
-    print("Training over {} epochs".format(n_epochs))
+    if rank == 0:
+        print("Training over {} epochs".format(n_epochs))
     for epoch in range(n_epochs):
         t0 = time.time()
 
