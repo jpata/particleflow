@@ -1,7 +1,7 @@
 from pyg import parse_args
 from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop_ddp, make_predictions, make_plots
-from pyg import save_model, load_model, make_directories_for_plots
+from pyg import save_model, load_model, make_directory_for_predictions, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
 
@@ -42,14 +42,14 @@ np.seterr(divide='ignore', invalid='ignore')
 # define the global base device
 if torch.cuda.device_count():
     device = torch.device('cuda:0')
+    multi_gpu = torch.cuda.device_count() > 1
 else:
     device = torch.device('cpu')
-multi_gpu = torch.cuda.device_count() > 1
 
 
 def setup(rank, world_size):
     """
-    Necessary setup function that sets up environment variables and initializes the process group to use the DistributedDataParallel (DDP) module.
+    Necessary setup function that sets up environment variables and initializes the process group to training using DistributedDataParallel (DDP).
     DDP relies on c10d ProcessGroup for communications. Hence, applications must create ProcessGroup instances before constructing DDP.
     """
 
@@ -129,7 +129,6 @@ if __name__ == "__main__":
     args = parse_args()
 
     world_size = torch.cuda.device_count()
-    assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {world_size}"
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -155,6 +154,7 @@ if __name__ == "__main__":
         model.eval()
 
     else:
+
         model_kwargs = {'input_dim': input_dim,
                         'num_classes': num_classes,
                         'output_dim_p4': output_dim_p4,
@@ -176,13 +176,12 @@ if __name__ == "__main__":
         print(args.model_prefix)
 
         # run the training using DDP
+        assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {world_size}"
         run_demo(train, world_size, args, model, num_classes, outpath)
-
-    # make directories to hold testing plots
-    make_directories_for_plots(outpath, 'test_data')
 
     # run the inference
     if args.make_predictions:
+        make_directory_for_predictions(outpath, 'test_data')
 
         # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
         dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
@@ -194,12 +193,14 @@ if __name__ == "__main__":
         model.eval()
 
         # make predictions on the testing dataset
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size * world_size, num_classes, outpath + '/test_data_plots/')
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size * world_size, num_classes, outpath + '/test_data/predictions/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
+        make_directories_for_plots(outpath, 'test_data')
+
         if args.load:
             epoch_on_plots = args.load_epoch
         else:
             epoch_on_plots = args.n_epochs - 1
-        make_plots('cpu', args.data, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+        make_plots('cpu', args.data, num_classes, outpath + '/test_data/plots/', args.target, epoch_on_plots, 'QCD')
