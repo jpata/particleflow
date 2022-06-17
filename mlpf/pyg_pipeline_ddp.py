@@ -10,6 +10,12 @@ import torch
 import torch_geometric
 from torch_geometric.loader import DataLoader, DataListLoader
 
+import torch.distributed as dist
+import torch.nn as nn
+import torch.optim as optim
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 import mplhep as hep
 import time
 import matplotlib.pyplot as plt
@@ -27,18 +33,6 @@ import numpy as np
 import pandas as pd
 import sklearn
 import matplotlib
-
-import os
-import sys
-import tempfile
-import torch
-import torch.distributed as dist
-import torch.nn as nn
-import torch.optim as optim
-import torch.multiprocessing as mp
-
-from torch.nn.parallel import DistributedDataParallel as DDP
-
 
 matplotlib.use("Agg")
 
@@ -185,10 +179,11 @@ if __name__ == "__main__":
     test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
 
     # construct the test dataloader
-    file_loader_test = make_file_loaders(test_dataset, num_files, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_test = make_file_loaders(test_dataset, num_files=1, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # make predictions on the testing dataset
     if args.make_predictions:
+        multi_gpu = False
         make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
 
     # load the predictions and make plots (must have ran make_predictions before)
