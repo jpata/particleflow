@@ -135,6 +135,15 @@ if __name__ == "__main__":
     # run_demo(train, world_size, args)
 
     # save model_kwargs and hyperparameters
+    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
+    if args.data == 'delphes':
+        input_dim = len(features_delphes)
+        num_classes = 6   # we have 6 classes/pids for delphes
+    elif args.data == 'cms':
+        input_dim = len(features_cms)
+        num_classes = 9   # we have 9 classes/pids for cms (including taus)
+    output_dim_p4 = len(target_p4)
+
     model_kwargs = {'input_dim': input_dim,
                     'num_classes': num_classes,
                     'output_dim_p4': output_dim_p4,
@@ -150,14 +159,6 @@ if __name__ == "__main__":
     save_model(args, args.model_prefix, outpath, model_kwargs)
 
     if args.load:
-        # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
-        if args.data == 'delphes':
-            input_dim = len(features_delphes)
-            num_classes = 6   # we have 6 classes/pids for delphes
-        elif args.data == 'cms':
-            input_dim = len(features_cms)
-            num_classes = 9   # we have 9 classes/pids for cms (including taus)
-        output_dim_p4 = len(target_p4)
 
         device = torch.device('cuda:0')
 
