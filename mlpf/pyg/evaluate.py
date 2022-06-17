@@ -120,23 +120,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
                 cand_ids_all = torch.cat([cand_ids_all, cand_ids])
                 cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
-                print(cand_p4_all.device)
-                print(cand_ids_all.device)
-                print(pred_p4_all.device)
-                print(pred_ids_all.device)
-                print(gen_p4_all.device)
-                print(gen_ids_all.device)
-                print(cand_ids.device)
-                print(pred_ids.device)
-                print(gen_ids.device)
-                print(gen_ids_one_hot.device)
-                print(cand_ids_one_hot.device)
-                print(cand_ids_one_hot.device)
-                print(cand_p4_all.device)
-                print(cand_p4.device)
-                print(gen_p4.device)
-                print(pred_ids_one_hot.device)
-
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
         if num == 10:
             break
