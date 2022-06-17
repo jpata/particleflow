@@ -58,11 +58,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     is_train = not (optimizer is None)
 
     if is_train:
-        print(f'Initiating a training run on rank {rank}')
+        print(f'---->Initiating a training run on rank {rank}')
         model.train()
         file_loader = train_loader
     else:
-        print(f'Initiating a validation run rank {rank}')
+        print(f'---->Initiating a validation run rank {rank}')
         model.eval()
         file_loader = valid_loader
 
@@ -288,5 +288,5 @@ def training_loop(rank, data, model, train_loader, valid_loader,
                              ['acc_train', 'acc_valid'],
                              outpath + '/training_plots/accuracies/'
                              )
-
+        print('----------------------------------------------------------')
     print(f'Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min')
