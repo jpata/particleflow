@@ -42,6 +42,7 @@ np.seterr(divide='ignore', invalid='ignore')
 # define the global base device
 if torch.cuda.device_count():
     device = 0
+    device_cuda = torch.device('cuda:0')
 else:
     device = 'cpu'
 multi_gpu = torch.cuda.device_count() > 1
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     outpath = osp.join(args.outpath, args.model_prefix)
 
     if args.load:  # load a pre-trained specified model
-        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
+        state_dict, model_kwargs, outpath = load_model(device_cuda, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
