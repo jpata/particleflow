@@ -64,8 +64,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
         t = 0
         for i, batch in enumerate(loader):
-            print(len(batch))
-            print(batch)
+
             if multi_gpu:
                 X = batch   # a list (not torch) instance so can't be passed to device
             else:
@@ -78,14 +77,14 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             t = t + (tf - ti)
 
             # retrieve target
-            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach(), num_classes).to(device)
-            gen_p4 = target['ygen'].detach()
-            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach(), num_classes).to(device)
-            cand_p4 = target['ycand'].detach()
+            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach().to('cpu'), num_classes)
+            gen_p4 = target['ygen'].detach().to('cpu')
+            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach().to('cpu'), num_classes)
+            cand_p4 = target['ycand'].detach().to('cpu')
 
             # retrieve predictions
-            pred_ids_one_hot = pred[:, :num_classes].detach()
-            pred_p4 = pred[:, num_classes:].detach()
+            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
+            pred_p4 = pred[:, num_classes:].detach().to('cpu')
 
             # revert the one-hot encodings
             _, gen_ids = torch.max(gen_ids_one_hot, -1)
