@@ -69,7 +69,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
+def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     """
     Necessary function that spawns a process group to run a demo_fn on each gpu device that will be indexed by 'rank'.
 
@@ -79,7 +79,7 @@ def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
     """
 
     mp.spawn(demo_fn,
-             args=(world_size, args, model, num_classes, outpath),
+             args=(world_size, args, dataset, model, num_classes, outpath),
              nprocs=world_size,
              join=True)
 
