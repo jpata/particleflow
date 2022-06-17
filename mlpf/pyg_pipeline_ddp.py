@@ -41,10 +41,20 @@ np.seterr(divide='ignore', invalid='ignore')
 
 
 def setup(rank, world_size):
+    """
+    Necessary setup function that initializes the process group
+
+
+
+    Environment variables which need to be
+    # set
+
+    DDP relies on c10d ProcessGroup for communications. Hence, applications must create ProcessGroup instances before constructing DDP.
+    """
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
 
-    # initialize the process group
+    #
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
@@ -119,18 +129,8 @@ def inference(rank, world_size, args, model, num_classes, outpath):
     ddp_model = DDP(model, device_ids=[rank])
 
     # make predictions on the testing dataset
-    if args.load:
-        epoch_on_plots = args.load_epoch
-    else:
-        epoch_on_plots = args.n_epochs - 1
-
     multi_gpu = False
-    if args.make_predictions:
-        make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
-
-    # load the predictions and make plots (must have ran make_predictions before)
-    if args.make_plots:
-        make_plots(rank, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+    make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
 
     cleanup()
 
@@ -186,4 +186,13 @@ if __name__ == "__main__":
     make_directories_for_plots(outpath, 'test_data')
 
     # run the inference using DDP
-    run_demo(inference, world_size, args, model, num_classes, outpath)
+    if args.make_predictions:
+        run_demo(inference, world_size, args, model, num_classes, outpath)
+
+    # load the predictions and make plots (must have ran make_predictions before)
+    if args.make_plots:
+        if args.load:
+            epoch_on_plots = args.load_epoch
+        else:
+            epoch_on_plots = args.n_epochs - 1
+        make_plots('cpu', args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
