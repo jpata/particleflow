@@ -71,6 +71,7 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
         model.eval()
         file_loader = valid_loader
 
+    len(file_loader)
     # initialize loss and accuracy and time
     losses_clf, losses_reg, losses_tot, accuracies, t, tf = 0, 0, 0, 0, 0, 0
 
