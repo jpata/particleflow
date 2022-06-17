@@ -169,6 +169,7 @@ def make_plots(device, data, model, num_classes, outpath, target, epoch, tag):
 
     t0 = time.time()
 
+    device = torch.device(device)
     # load the necessary predictions to make the plots
     gen_ids = torch.load(outpath + f'/gen_ids.pt', map_location=device)
     gen_p4 = torch.load(outpath + f'/gen_p4.pt', map_location=device)
