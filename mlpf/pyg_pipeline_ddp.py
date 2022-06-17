@@ -203,4 +203,4 @@ if __name__ == "__main__":
             epoch_on_plots = args.load_epoch
         else:
             epoch_on_plots = args.n_epochs - 1
-        make_plots('cpu', args.data, num_classes, outpath + '/test_data/plots/', args.target, epoch_on_plots, 'QCD')
+        make_plots('cpu', args.data, num_classes, outpath + '/test_data/', args.target, epoch_on_plots, 'QCD')

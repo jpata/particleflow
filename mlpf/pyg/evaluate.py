@@ -184,7 +184,7 @@ def make_plots(device, data, num_classes, outpath, target, epoch, tag):
                                                         labels=range(num_classes),
                                                         normalize="true")
 
-    plot_confusion_matrix(conf_matrix_mlpf, pfcands, epoch + 1, outpath + '/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
+    plot_confusion_matrix(conf_matrix_mlpf, pfcands, epoch + 1, outpath + 'plots/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
 
     # make confusion matrix for rule based PF
     conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
@@ -192,7 +192,7 @@ def make_plots(device, data, num_classes, outpath, target, epoch, tag):
                                                         labels=range(num_classes),
                                                         normalize="true")
 
-    plot_confusion_matrix(conf_matrix_cand, pfcands, epoch + 1, outpath + '/confusion_matrix_plots/', 'cm_cand', target="rule-based")
+    plot_confusion_matrix(conf_matrix_cand, pfcands, epoch + 1, outpath + 'plots/confusion_matrix_plots/', 'cm_cand', target="rule-based")
 
     # making all the other plots
     if 'QCD' in tag:
@@ -204,31 +204,31 @@ def make_plots(device, data, num_classes, outpath, target, epoch, tag):
     for key, value in name_to_pid.items():
         if key != 'null':
             plot_distributions_pid(data, value, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,
-                                   target, epoch, outpath, legend_title=sample + "\n")
+                                   target, epoch, outpath + 'plots/', legend_title=sample + "\n")
 
     plot_distributions_all(data, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots combining all classes together
-                           target, epoch, outpath, legend_title=sample + "\n")
+                           target, epoch, outpath + 'plots/', legend_title=sample + "\n")
 
     # plot particle multiplicity plots
-    list_for_multiplicities = torch.load(outpath + f'/list_for_multiplicities.pt', map_location=device)
+    list_for_multiplicities = torch.load(outpath + f'plots/list_for_multiplicities.pt', map_location=device)
 
     for pfcand in pfcands:
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
         ret_num_particles_null = plot_particle_multiplicity(data, list_for_multiplicities, pfcand, ax)
-        plt.savefig(outpath + f"/multiplicity_plots/num_{pfcand}.png", bbox_inches="tight")
-        plt.savefig(outpath + f"/multiplicity_plots/num_{pfcand}.pdf", bbox_inches="tight")
+        plt.savefig(outpath + f"plots/multiplicity_plots/num_{pfcand}.png", bbox_inches="tight")
+        plt.savefig(outpath + f"plots/multiplicity_plots/num_{pfcand}.pdf", bbox_inches="tight")
         plt.close(fig)
 
     # make efficiency and fake rate plots for charged hadrons and neutral hadrons
     for pfcand in pfcands:
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "pt", np.linspace(0, 3, 61), outpath + f"/efficiency_plots/eff_fake_{pfcand}_pt.png", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "eta", np.linspace(-3, 3, 61), outpath + f"/efficiency_plots/eff_fake_{pfcand}_eta.png", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "energy", np.linspace(0, 50, 75), outpath + f"/efficiency_plots/eff_fake_{pfcand}_energy.png", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "pt", np.linspace(0, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_pt.png", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "eta", np.linspace(-3, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_eta.png", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "energy", np.linspace(0, 50, 75), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_energy.png", both=True, legend_title=sample + "\n")
 
     # make pt, eta, and energy resolution plots
     for var in ['pt', 'eta', 'energy']:
         for pfcand in pfcands:
-            plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=sample + "\n")
+            plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath + 'plots/', legend_title=sample + "\n")
 
     t1 = time.time()
     print('Time taken to make plots is:', round(((t1 - t0) / 60), 2), 'min')
