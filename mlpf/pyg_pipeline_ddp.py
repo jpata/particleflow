@@ -41,9 +41,10 @@ np.seterr(divide='ignore', invalid='ignore')
 
 # define the global base device
 if torch.cuda.device_count():
-    device = torch.device('cuda:0')
+    device = 0
 else:
     device = torch.device('cpu')
+    device = 'cpu'
 multi_gpu = torch.cuda.device_count() > 1
 
 
@@ -128,7 +129,7 @@ def train(device, args, model, num_classes, outpath):
     A train() function that will get the training dataset and starts a raining_loop on a single device (cuda or cpu).
     """
 
-    if device == torch.device('cpu'):
+    if device == 'cpu':
         print(f"Running training on cpu")
     else:
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
