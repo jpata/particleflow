@@ -64,7 +64,8 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
         t = 0
         for i, batch in enumerate(loader):
-
+            print(len(batch))
+            print(batch)
             if multi_gpu:
                 X = batch   # a list (not torch) instance so can't be passed to device
             else:
