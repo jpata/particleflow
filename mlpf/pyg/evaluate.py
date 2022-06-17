@@ -58,6 +58,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         if multi_gpu:
+            print('multi')
             loader = DataListLoader(file, batch_size=batch_size)
         else:
             loader = DataLoader(file, batch_size=batch_size)
@@ -70,6 +71,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             else:
                 X = batch.to(device)
 
+            print(len(X))
             ti = time.time()
             pred, target = model(X)
             tf = time.time()
