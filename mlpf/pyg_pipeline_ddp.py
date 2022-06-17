@@ -44,6 +44,7 @@ if torch.cuda.device_count():
     device = torch.device('cuda:0')
 else:
     device = torch.device('cpu')
+multi_gpu = torch.cuda.device_count() > 1
 
 
 def setup(rank, world_size):
@@ -86,7 +87,7 @@ def train(rank, world_size, args, model, num_classes, outpath):
     A train() function that will be passed as a demo_fn to run_demo().
 
     It divides and distributes the training dataset appropriately among devices, copies the model among devices,
-    instantiates a DDP model on each device to allow sychning of gradients, and finally,
+    instantiates a DDP model on each device to allow synching of gradients, and finally,
     invokes the training_loop_ddp() to run synchronized training among devices.
     """
 
@@ -119,41 +120,6 @@ def train(rank, world_size, args, model, num_classes, outpath):
     training_loop_ddp(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
                       args.batch_size, args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target, num_classes, outpath)
-
-    cleanup()
-
-
-def inference(rank, world_size, args, model, num_classes, outpath):
-    """
-    An inference() function that will be passed as a demo_fn to run_demo().
-
-    It divides and distributes the testing dataset appropriately among devices, copies the model among devices,
-    and invokes the make_predictions() to run inference on each device.
-    """
-
-    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
-
-    setup(rank, world_size)
-
-    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-
-    # give each gpu a subset of the data
-    hyper_test = int(args.n_test / world_size)
-    test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
-
-    # construct file loaders
-    file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-
-    # create model and move it to GPU with id rank
-    print(f'Copying the model on rank {rank}..')
-    model = model.to(rank)
-    model.eval()
-    # ddp_model = DDP(model, device_ids=[rank])
-
-    # make predictions on the testing dataset
-    multi_gpu = False
-    make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data_plots/')
 
     cleanup()
 
@@ -209,9 +175,22 @@ if __name__ == "__main__":
     # make directories to hold testing plots
     make_directories_for_plots(outpath, 'test_data')
 
-    # run the inference using DDP
+    # run the inference
     if args.make_predictions:
-        run_demo(inference, world_size, args, model, num_classes, outpath)
+
+        # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+        dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+        test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
+
+        # construct file loaders
+        file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+
+        # create model and move it to GPU with id rank
+        model = model.to(device)
+        model.eval()
+
+        # make predictions on the testing dataset
+        make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data_plots/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
