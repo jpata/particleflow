@@ -11,4 +11,4 @@ from pyg.model import MLPF
 from pyg.training import training_loop
 from pyg.training_ddp import training_loop_ddp
 
-from pyg.evaluate import make_predictions, make_plots
+from pyg.inference import make_predictions, make_plots

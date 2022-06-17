@@ -1,4 +1,3 @@
-from torch_geometric.data import Data, Batch
 from pyg import parse_args
 from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop, training_loop_ddp, make_predictions, make_plots
@@ -9,6 +8,7 @@ from pyg import make_file_loaders
 import torch
 import torch_geometric
 from torch_geometric.loader import DataLoader, DataListLoader
+from torch_geometric.data import Data, Batch
 
 import torch.distributed as dist
 import torch.nn as nn
