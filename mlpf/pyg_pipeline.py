@@ -58,7 +58,7 @@ def setup(rank, world_size):
     os.environ['MASTER_PORT'] = '12355'
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -124,7 +124,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
 
 def train(device, args, dataset, model, num_classes, outpath):
     """
-    A train() function that will get the training dataset and starts a training_loop on a single device (cuda or cpu).
+    A train() function that will setup the training dataset and starts a training_loop on a single device (cuda or cpu).
     """
 
     if device == 'cpu':
