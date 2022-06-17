@@ -190,7 +190,7 @@ if __name__ == "__main__":
         model.eval()
 
         # make predictions on the testing dataset
-        make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data_plots/')
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data_plots/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
