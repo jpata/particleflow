@@ -76,48 +76,48 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
             t = t + (tf - ti)
 
-            # # retrieve predictions
-            # pred_p4 = pred[:, num_classes:].detach().to('cpu')
-            # pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
-            # pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
-            #
-            # # retrieve target
-            # gen_p4 = target['ygen'].detach().to('cpu')
-            # gen_ids = target['ygen_id'].detach().to('cpu')
-            # cand_p4 = target['ycand'].detach().to('cpu')
-            # cand_ids = target['ycand_id'].detach().to('cpu')
-            #
-            # # one hot encode the target
-            # gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
-            # cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
-            #
-            # # to make "num_gen vs num_pred" plots
-            # for key, value in name_to_pid.items():
-            #     gen_list[key].append((gen_ids == value).sum().item())
-            #     pred_list[key].append((pred_ids == value).sum().item())
-            #     cand_list[key].append((cand_ids == value).sum().item())
-            #
-            # if i == 0:
-            #     gen_ids_all = gen_ids
-            #     gen_p4_all = gen_p4
-            #
-            #     pred_ids_all = pred_ids
-            #     pred_p4_all = pred_p4
-            #
-            #     cand_ids_all = cand_ids
-            #     cand_p4_all = cand_p4
-            # else:
-            #     gen_ids_all = torch.cat([gen_ids_all, gen_ids])
-            #     gen_p4_all = torch.cat([gen_p4_all, gen_p4])
-            #
-            #     pred_ids_all = torch.cat([pred_ids_all, pred_ids])
-            #     pred_p4_all = torch.cat([pred_p4_all, pred_p4])
-            #
-            #     cand_ids_all = torch.cat([cand_ids_all, cand_ids])
-            #     cand_p4_all = torch.cat([cand_p4_all, cand_p4])
+            # retrieve predictions
+            pred_p4 = pred[:, num_classes:].detach().to('cpu')
+            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
+            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+
+            # retrieve target
+            gen_p4 = target['ygen'].detach().to('cpu')
+            gen_ids = target['ygen_id'].detach().to('cpu')
+            cand_p4 = target['ycand'].detach().to('cpu')
+            cand_ids = target['ycand_id'].detach().to('cpu')
+
+            # one hot encode the target
+            gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
+            cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
+
+            # to make "num_gen vs num_pred" plots
+            for key, value in name_to_pid.items():
+                gen_list[key].append((gen_ids == value).sum().item())
+                pred_list[key].append((pred_ids == value).sum().item())
+                cand_list[key].append((cand_ids == value).sum().item())
+
+            if i == 0:
+                gen_ids_all = gen_ids
+                gen_p4_all = gen_p4
+
+                pred_ids_all = pred_ids
+                pred_p4_all = pred_p4
+
+                cand_ids_all = cand_ids
+                cand_p4_all = cand_p4
+            else:
+                gen_ids_all = torch.cat([gen_ids_all, gen_ids])
+                gen_p4_all = torch.cat([gen_p4_all, gen_p4])
+
+                pred_ids_all = torch.cat([pred_ids_all, pred_ids])
+                pred_p4_all = torch.cat([pred_p4_all, pred_p4])
+
+                cand_ids_all = torch.cat([cand_ids_all, cand_ids])
+                cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
-        if num == 1:
+        if num == 10:
             break
         t0 = time.time()
 

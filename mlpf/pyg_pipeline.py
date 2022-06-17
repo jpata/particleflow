@@ -224,14 +224,8 @@ if __name__ == "__main__":
 
         model.eval()
 
-        # make predictions on the testing dataset
-        if world_size >= 2:
-            batch_size = args.batch_size * world_size
-        else:
-            batch_size = args.batch_size
-        batch_size = args.batch_size
-
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data/')
+        # make predictions on the testing dataset (note: for DataParallel, batch size will be distributed among the number of gpus available)
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, num_classes, outpath + '/test_data/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
