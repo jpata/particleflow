@@ -76,20 +76,20 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
             t = t + (tf - ti)
 
-            # retrieve target
-            gen_ids_one_hot = one_hot_embedding(target['ygen_id'].detach().to('cpu'), num_classes)
-            gen_p4 = target['ygen'].detach().to('cpu')
-            cand_ids_one_hot = one_hot_embedding(target['ycand_id'].detach().to('cpu'), num_classes)
-            cand_p4 = target['ycand'].detach().to('cpu')
-
             # retrieve predictions
-            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
             pred_p4 = pred[:, num_classes:].detach().to('cpu')
+            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
+            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
-            # revert the one-hot encodings
-            _, gen_ids = torch.max(gen_ids_one_hot, -1)
-            _, pred_ids = torch.max(pred_ids_one_hot, -1)
-            _, cand_ids = torch.max(cand_ids_one_hot, -1)
+            # retrieve target
+            gen_p4 = target['ygen'].detach().to('cpu')
+            gen_ids = target['ygen_id'].detach().to('cpu')
+            cand_p4 = target['ycand'].detach().to('cpu')
+            cand_ids = target['ycand_id'].detach().to('cpu')
+
+            # one hot encode the target
+            gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
+            cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
 
             # to make "num_gen vs num_pred" plots
             for key, value in name_to_pid.items():
