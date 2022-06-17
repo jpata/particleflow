@@ -148,6 +148,12 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
 
+        if multi_gpu:
+            model = torch_geometric.nn.DataParallel(model)
+
+        model.to(device)
+        model.eval()
+
     else:
         model_kwargs = {'input_dim': input_dim,
                         'num_classes': num_classes,
@@ -185,8 +191,6 @@ if __name__ == "__main__":
         # construct file loaders
         file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
-        # create model and move it to GPU with id rank
-        model = model.to(device)
         model.eval()
 
         # make predictions on the testing dataset
@@ -198,4 +202,4 @@ if __name__ == "__main__":
             epoch_on_plots = args.load_epoch
         else:
             epoch_on_plots = args.n_epochs - 1
-        make_plots('cpu', args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+        make_plots('cpu', args.data, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

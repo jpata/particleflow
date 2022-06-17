@@ -84,6 +84,7 @@ if __name__ == "__main__":
             model = torch_geometric.nn.DataParallel(model)
 
         model.to(device)
+        model.eval()
 
     else:
         print('Instantiating a model..')
@@ -151,4 +152,4 @@ if __name__ == "__main__":
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
-        make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+        make_plots(device, args.data, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

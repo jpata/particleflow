@@ -149,7 +149,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
     torch.save(predictions, outpath + '/predictions.pt')
 
 
-def make_plots(device, data, model, num_classes, outpath, target, epoch, tag):
+def make_plots(device, data, num_classes, outpath, target, epoch, tag):
 
     print('Making plots...')
 
