@@ -33,8 +33,12 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
         multi_gpu: boolean for multi_gpu training (if multigpus are available)
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
+    if device == 'cpu':
+        print(f"Running inference on cpu")
+    else:
+        for i in range(torch.cuda.device_count()):
+            print(f"Running inference on: {torch.cuda.get_device_name(i)}")
 
-    print('Making predictions...')
     tt0 = time.time()
 
     if data == 'delphes':
