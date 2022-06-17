@@ -151,7 +151,6 @@ if __name__ == "__main__":
             model = torch_geometric.nn.DataParallel(model)
 
         model.to(device)
-        model.eval()
 
     else:
 
@@ -204,4 +203,5 @@ if __name__ == "__main__":
             epoch_on_plots = args.load_epoch
         else:
             epoch_on_plots = args.n_epochs - 1
+
         make_plots(args.data, num_classes, outpath + '/test_data/', args.target, epoch_on_plots, 'QCD')
