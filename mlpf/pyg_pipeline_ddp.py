@@ -39,6 +39,12 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
 
+# define the global base device
+if torch.cuda.device_count():
+    device = torch.device('cuda:0')
+else:
+    device = torch.device('cpu')
+
 
 def setup(rank, world_size):
     """
@@ -62,7 +68,11 @@ def cleanup():
 
 def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
     """
-    Necessary function that spawns process group on each gpu device (indexed by 'rank') and runs a demo_fn.
+    Necessary function that spawns a process group to run a demo_fn on each gpu device that will be indexed by 'rank'.
+
+    Args:
+    demo_fn: function you wish to run on each gpu
+    world_size: number of gpus available
     """
 
     mp.spawn(demo_fn,
@@ -83,10 +93,6 @@ def train(rank, world_size, args, model, num_classes, outpath):
     print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     setup(rank, world_size)
-
-    if rank == 0:
-        print(model)
-        print(args.model_prefix)
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
@@ -171,12 +177,10 @@ if __name__ == "__main__":
     outpath = osp.join(args.outpath, args.model_prefix)
 
     if args.load:  # load a pre-trained specified model
-        state_dict, model_kwargs, outpath = load_model(torch.device('cuda:0'), outpath, args.model_prefix, args.load_epoch)
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
-
-        model.to(torch.device('cuda:0'))
 
     else:
         model_kwargs = {'input_dim': input_dim,
@@ -195,6 +199,9 @@ if __name__ == "__main__":
 
         # save model_kwargs and hyperparameters
         save_model(args, args.model_prefix, outpath, model_kwargs)
+
+        print(model)
+        print(args.model_prefix)
 
         # run the training using DDP
         run_demo(train, world_size, args, model, num_classes, outpath)

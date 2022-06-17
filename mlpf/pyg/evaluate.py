@@ -118,7 +118,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             print(f'batch #: {i+1}/{len(loader)}')
 
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
-        if num == 5:
+        if num == 1:
             break
         t0 = time.time()
 
