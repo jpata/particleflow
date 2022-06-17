@@ -36,8 +36,8 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
     if device == 'cpu':
         print(f"Running inference on cpu")
     else:
-        for i in range(torch.cuda.device_count()):
-            print(f"Running inference on: {torch.cuda.get_device_name(i)}")
+        for rank in range(torch.cuda.device_count()):
+            print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     tt0 = time.time()
 
