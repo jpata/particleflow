@@ -110,14 +110,14 @@ def load_model(device, outpath, model_directory, load_epoch):
 
     state_dict = torch.load(PATH, map_location=device)
 
-    # if the model was trained using DataParallel then we do this
-    state_dict = torch.load(PATH, map_location=device)
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:]  # remove module.
-        new_state_dict[name] = v
-    state_dict = new_state_dict
+    # # if the model was trained using DataParallel then we do this
+    # state_dict = torch.load(PATH, map_location=device)
+    # from collections import OrderedDict
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]  # remove module.
+    #     new_state_dict[name] = v
+    # state_dict = new_state_dict
 
     return state_dict, model_kwargs, outpath
 
