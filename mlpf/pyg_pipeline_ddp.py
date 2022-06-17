@@ -1,6 +1,6 @@
 from pyg import parse_args
 from pyg import PFGraphDataset, one_hot_embedding
-from pyg import MLPF, training_loop_ddp, make_predictions, make_plots
+from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
@@ -42,9 +42,9 @@ np.seterr(divide='ignore', invalid='ignore')
 # define the global base device
 if torch.cuda.device_count():
     device = torch.device('cuda:0')
-    multi_gpu = torch.cuda.device_count() > 1
 else:
     device = torch.device('cpu')
+multi_gpu = torch.cuda.device_count() > 1
 
 
 def setup(rank, world_size):
@@ -82,13 +82,12 @@ def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
              join=True)
 
 
-def train(rank, world_size, args, model, num_classes, outpath):
+def train_ddp(rank, world_size, args, model, num_classes, outpath):
     """
-    A train() function that will be passed as a demo_fn to run_demo().
+    A train_ddp() function that will be passed as a demo_fn to run_demo() to perform training over multiple gpus using DDP.
 
-    It divides and distributes the training dataset appropriately among devices, copies the model among devices,
-    instantiates a DDP model on each device to allow synching of gradients, and finally,
-    invokes the training_loop_ddp() to run synchronized training among devices.
+    It divides and distributes the training dataset appropriately, copies the model, and wraps the model with DDP
+    on each device to allow synching of gradients, and finally, invokes the training_loop_ddp() to run synchronized training among devices.
     """
 
     print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
@@ -117,11 +116,42 @@ def train(rank, world_size, args, model, num_classes, outpath):
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
-    training_loop_ddp(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
-                      args.batch_size, args.n_epochs, args.patience,
-                      optimizer, args.alpha, args.target, num_classes, outpath)
+    training_loop(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
+                  args.batch_size, args.n_epochs, args.patience,
+                  optimizer, args.alpha, args.target, num_classes, outpath)
 
     cleanup()
+
+
+def train(device, args, model, num_classes, outpath):
+    """
+    A train() function that will get the training dataset and starts a raining_loop on a single device (cuda or cpu).
+    """
+
+    if device == torch.device('cpu'):
+        print(f"Running training on cpu")
+    else:
+        print(f"Running training on: {torch.cuda.get_device_name(device)}")
+
+    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    dataset = PFGraphDataset(args.dataset, args.data)
+
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
+    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
+
+    # construct file loaders
+    file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+
+    # create model and move it to GPU with id rank
+    model = model.to(device)
+    model.train()
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    training_loop(device, args.data, model, file_loader_train, file_loader_valid,
+                  args.batch_size, args.n_epochs, args.patience,
+                  optimizer, args.alpha, args.target, num_classes, outpath)
 
 
 if __name__ == "__main__":
@@ -147,11 +177,6 @@ if __name__ == "__main__":
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
 
-        if multi_gpu:
-            model = torch_geometric.nn.DataParallel(model)
-
-        model.to(device)
-
     else:
 
         model_kwargs = {'input_dim': input_dim,
@@ -174,9 +199,13 @@ if __name__ == "__main__":
         print(model)
         print(args.model_prefix)
 
-        # run the training using DDP
-        assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {world_size}"
-        run_demo(train, world_size, args, model, num_classes, outpath)
+        print("Training over {} epochs".format(args.n_epochs))
+
+        # run the training using DDP if more than one gpu is available
+        if world_size >= 2:
+            run_demo(train_ddp, world_size, args, model, num_classes, outpath)
+        else:
+            train(device, args, model, num_classes, outpath)
 
     # run the inference
     if args.make_predictions:
@@ -190,10 +219,18 @@ if __name__ == "__main__":
         # construct file loaders
         file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
+        if multi_gpu:
+            model = torch_geometric.nn.DataParallel(model)
+
+        model.to(device)
         model.eval()
 
         # make predictions on the testing dataset
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size * world_size, num_classes, outpath + '/test_data/')
+        if world_size >= 2:
+            batch_size = args.batch_size * world_size
+        else:
+            batch_size = args.batch_size
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
