@@ -1,6 +1,6 @@
 from pyg import parse_args
 from pyg import PFGraphDataset, one_hot_embedding
-from pyg import MLPF, training_loop, training_loop_ddp, make_predictions, make_plots
+from pyg import MLPF, training_loop_ddp, make_predictions, make_plots
 from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
@@ -52,7 +52,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def train(rank, world_size, args):
+def train(rank, world_size, args, model, num_classes, outpath):
     print(f"Running training loop on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     setup(rank, world_size)
@@ -60,17 +60,6 @@ def train(rank, world_size, args):
     if rank == 0:
         print(model)
         print(args.model_prefix)
-
-    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
-    if args.data == 'delphes':
-        input_dim = len(features_delphes)
-        num_classes = 6   # we have 6 classes/pids for delphes
-    elif args.data == 'cms':
-        input_dim = len(features_cms)
-        num_classes = 9   # we have 9 classes/pids for cms (including taus)
-    output_dim_p4 = len(target_p4)
-
-    outpath = osp.join(args.outpath, args.model_prefix)
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
@@ -87,34 +76,23 @@ def train(rank, world_size, args):
     file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # create model and move it to GPU with id rank
-    print('Instantiating a model..')
-    model_kwargs = {'input_dim': input_dim,
-                    'num_classes': num_classes,
-                    'output_dim_p4': output_dim_p4,
-                    'embedding_dim': args.embedding_dim,
-                    'hidden_dim1': args.hidden_dim1,
-                    'hidden_dim2': args.hidden_dim2,
-                    'num_convs': args.num_convs,
-                    'space_dim': args.space_dim,
-                    'propagate_dim': args.propagate_dim,
-                    'k': args.nearest,
-                    }
-    model = MLPF(**model_kwargs).to(rank)
+    print(f'Copying the model on rank {rank}..')
+    model = model.to(rank)
     model.train()
     ddp_model = DDP(model, device_ids=[rank])
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
 
-    training_loop_ddp(rank, args.data, model, file_loader_train, file_loader_valid,
+    training_loop_ddp(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
                       args.batch_size, args.batch_events, args.n_epochs, args.patience,
                       optimizer, args.alpha, args.target, num_classes, outpath)
 
     cleanup()
 
 
-def run_demo(demo_fn, world_size, args):
+def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
     mp.spawn(demo_fn,
-             args=(world_size, args),
+             args=(world_size, args, model, num_classes, outpath),
              nprocs=world_size,
              join=True)
 
@@ -126,9 +104,6 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
     assert world_size >= 2, f"Requires at least 2 GPUs to run, but got {world_size}"
 
-    # run_demo(train, world_size, args)
-
-    # save model_kwargs and hyperparameters
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
         input_dim = len(features_delphes)
@@ -138,32 +113,35 @@ if __name__ == "__main__":
         num_classes = 9   # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
-    model_kwargs = {'input_dim': input_dim,
-                    'num_classes': num_classes,
-                    'output_dim_p4': output_dim_p4,
-                    'embedding_dim': args.embedding_dim,
-                    'hidden_dim1': args.hidden_dim1,
-                    'hidden_dim2': args.hidden_dim2,
-                    'num_convs': args.num_convs,
-                    'space_dim': args.space_dim,
-                    'propagate_dim': args.propagate_dim,
-                    'k': args.nearest,
-                    }
     outpath = osp.join(args.outpath, args.model_prefix)
-    save_model(args, args.model_prefix, outpath, model_kwargs)
 
-    if args.load:
-
-        device = torch.device('cuda:0')
-
-        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
+    if args.load:  # load a pre-trained specified model
+        state_dict, model_kwargs, outpath = load_model(torch.device('cuda:0'), outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
 
-        model.to(device)
+        model.to(torch.device('cuda:0'))
 
-        model.eval()
+    else:
+        model_kwargs = {'input_dim': input_dim,
+                        'num_classes': num_classes,
+                        'output_dim_p4': output_dim_p4,
+                        'embedding_dim': args.embedding_dim,
+                        'hidden_dim1': args.hidden_dim1,
+                        'hidden_dim2': args.hidden_dim2,
+                        'num_convs': args.num_convs,
+                        'space_dim': args.space_dim,
+                        'propagate_dim': args.propagate_dim,
+                        'k': args.nearest,
+                        }
+
+        model = MLPF(**model_kwargs)
+
+        # save model_kwargs and hyperparameters
+        save_model(args, args.model_prefix, outpath, model_kwargs)
+
+        run_demo(train, world_size, args, model, num_classes, outpath)
 
     # evaluate on testing data..
     if args.load:
@@ -182,10 +160,10 @@ if __name__ == "__main__":
     file_loader_test = make_file_loaders(test_dataset, num_files=1, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # make predictions on the testing dataset
+    multi_gpu = False
     if args.make_predictions:
-        multi_gpu = False
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
+        make_predictions(torch.device('cuda:0'), args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
-        make_plots(device, args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')
+        make_plots(torch.device('cuda:0'), args.data, model, num_classes, outpath + '/test_data_plots/', args.target, epoch_on_plots, 'QCD')

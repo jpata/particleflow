@@ -139,9 +139,11 @@ def train(rank, model, train_loader, valid_loader, batch_size, batch_events,
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
-
+            if i == 10:
+                break
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
-
+        if num == 2:
+            break
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
