@@ -58,13 +58,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     is_train = not (optimizer is None)
 
     if is_train:
-        if rank == 0 or 'cpu':
-            print('Training run')
+        print(f'Initiating a training run on rank {rank}')
         model.train()
         file_loader = train_loader
     else:
-        if rank == 0 or 'cpu':
-            print('Validation run')
+        print(f'Initiating a validation run rank {rank}')
         model.eval()
         file_loader = valid_loader
 
