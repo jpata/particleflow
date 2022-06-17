@@ -135,11 +135,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
 
-            if i == 1:
-                break
+            # if i == 1:
+            #     break
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
-        if num == 1:
-            break
+        # if num == 1:
+        #     break
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
