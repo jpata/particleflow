@@ -56,7 +56,8 @@ def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
 
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 
 def cleanup():
@@ -82,7 +83,7 @@ def run_demo(demo_fn, world_size, args, model, num_classes, outpath):
              join=True)
 
 
-def train_ddp(rank, world_size, args, model, num_classes, outpath):
+def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     """
     A train_ddp() function that will be passed as a demo_fn to run_demo() to perform training over multiple gpus using DDP.
 
@@ -93,9 +94,6 @@ def train_ddp(rank, world_size, args, model, num_classes, outpath):
     print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     setup(rank, world_size)
-
-    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-    dataset = PFGraphDataset(args.dataset, args.data)
 
     # give each gpu a subset of the data
     hyper_train = int(args.n_train / world_size)
@@ -114,7 +112,7 @@ def train_ddp(rank, world_size, args, model, num_classes, outpath):
     model.train()
     ddp_model = DDP(model, device_ids=[rank])
 
-    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=args.lr)
 
     training_loop(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
                   args.batch_size, args.n_epochs, args.patience,
@@ -123,7 +121,7 @@ def train_ddp(rank, world_size, args, model, num_classes, outpath):
     cleanup()
 
 
-def train(device, args, model, num_classes, outpath):
+def train(device, args, dataset, model, num_classes, outpath):
     """
     A train() function that will get the training dataset and starts a training_loop on a single device (cuda or cpu).
     """
@@ -132,9 +130,6 @@ def train(device, args, model, num_classes, outpath):
         print(f"Running training on cpu")
     else:
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
-
-    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-    dataset = PFGraphDataset(args.dataset, args.data)
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
@@ -147,7 +142,7 @@ def train(device, args, model, num_classes, outpath):
     model = model.to(device)
     model.train()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     training_loop(device, args.data, model, file_loader_train, file_loader_valid,
                   args.batch_size, args.n_epochs, args.patience,
@@ -159,6 +154,9 @@ if __name__ == "__main__":
     args = parse_args()
 
     world_size = torch.cuda.device_count()
+
+    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    dataset = PFGraphDataset(args.dataset, args.data)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -202,9 +200,9 @@ if __name__ == "__main__":
 
         # run the training using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(train_ddp, world_size, args, model, num_classes, outpath)
+            run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
-            train(device, args, model, num_classes, outpath)
+            train(device, args, dataset, model, num_classes, outpath)
 
     # run the inference
     if args.make_predictions:
