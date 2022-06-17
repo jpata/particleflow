@@ -119,6 +119,11 @@ def inference(rank, world_size, args, model, num_classes, outpath):
     ddp_model = DDP(model, device_ids=[rank])
 
     # make predictions on the testing dataset
+    if args.load:
+        epoch_on_plots = args.load_epoch
+    else:
+        epoch_on_plots = args.n_epochs - 1
+
     multi_gpu = False
     if args.make_predictions:
         make_predictions(rank, args.data, model, multi_gpu, file_loader_test, args.batch_size, args.batch_events, num_classes, outpath + '/test_data_plots/')
@@ -174,15 +179,11 @@ if __name__ == "__main__":
         # save model_kwargs and hyperparameters
         save_model(args, args.model_prefix, outpath, model_kwargs)
 
+        # run the training using DDP
         run_demo(train, world_size, args, model, num_classes, outpath)
-
-    # evaluate on testing data..
-    if args.load:
-        epoch_on_plots = args.load_epoch
-    else:
-        epoch_on_plots = args.n_epochs - 1
 
     # make directories to hold testing plots
     make_directories_for_plots(outpath, 'test_data')
 
+    # run the inference using DDP
     run_demo(inference, world_size, args, model, num_classes, outpath)
