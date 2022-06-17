@@ -217,10 +217,11 @@ if __name__ == "__main__":
         # construct file loaders
         file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
+        model.to(device)
+
         if multi_gpu:
             model = torch_geometric.nn.DataParallel(model)
 
-        model.to(device)
         model.eval()
 
         # make predictions on the testing dataset

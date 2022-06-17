@@ -61,7 +61,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             loader = DataListLoader(file, batch_size=batch_size)
         else:
             loader = DataLoader(file, batch_size=batch_size)
-        print('multi_gpu', multi_gpu)
+
         t = 0
         for i, batch in enumerate(loader):
 
@@ -75,7 +75,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             tf = time.time()
             print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
             t = t + (tf - ti)
-            #
+
             # # retrieve predictions
             # pred_p4 = pred[:, num_classes:].detach().to('cpu')
             # pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
