@@ -79,6 +79,8 @@ class MLPF(nn.Module):
     def forward(self, batch):
 
         # unfold the Batch object
+        print(len(batch.x))
+        print(batch.x.device)
         input = batch.x
         target = {'ygen_id': batch.ygen_id,
                   'ygen': batch.ygen,
