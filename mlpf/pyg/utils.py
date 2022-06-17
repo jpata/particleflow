@@ -69,14 +69,14 @@ def one_hot_embedding(labels, num_classes):
 
 
 def save_model(args, model_fname, outpath, model_kwargs):
-    if osp.isdir(outpath):
-        if args.overwrite:
-            print("model {} already exists, deleting it".format(model_fname))
-            shutil.rmtree(outpath)
-        else:
-            print("model {} already exists, please delete it".format(model_fname))
-            sys.exit(0)
-    os.makedirs(outpath)
+    # if osp.isdir(outpath):
+    #     if args.overwrite:
+    #         print("model {} already exists, deleting it".format(model_fname))
+    #         shutil.rmtree(outpath)
+    #     else:
+    #         print("model {} already exists, please delete it".format(model_fname))
+    #         sys.exit(0)
+    # os.makedirs(outpath)
 
     with open(f'{outpath}/model_kwargs.pkl', 'wb') as f:  # dump model architecture
         pkl.dump(model_kwargs, f,  protocol=pkl.HIGHEST_PROTOCOL)

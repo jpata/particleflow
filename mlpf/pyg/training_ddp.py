@@ -291,4 +291,4 @@ def training_loop_ddp(rank, data, model, train_loader, valid_loader,
                              outpath + '/training_plots/accuracies/'
                              )
 
-    print('Done with training.')
+    print(f'Done with training. Total training time is {round((time.time() - t0_initial)/60),3}min')
