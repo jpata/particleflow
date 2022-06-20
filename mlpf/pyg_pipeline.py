@@ -215,7 +215,7 @@ if __name__ == "__main__":
             os.makedirs(f'{outpath}/test_data')
 
         # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-        dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+        dataset_qcd = PFGraphDataset(world_size, args.dataset_qcd, args.data)
         test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
 
         # construct file loaders
