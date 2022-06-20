@@ -82,7 +82,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
         loader = DataLoader(file, batch_size=batch_size)
 
         t = 0
-        p = p + len(loader)
+        # p = p + len(loader)
         for i, X in enumerate(loader):
 
             # run forward pass
