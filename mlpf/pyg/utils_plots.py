@@ -132,7 +132,7 @@ def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname
         plt.legend(frameon=False, title=legend_title)
 
     plt.ylim(0, 1.5)
-    plt.savefig(fname + '.png')
+    plt.savefig(fname + '.pdf')
     plt.close(fig)
 
     return fig
@@ -368,7 +368,6 @@ def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
     ax.set_ylabel("Particles")
     ax.set_ylim(1, 1e10)
     ax.set_yscale("log")
-    plt.savefig(outpath + f"/resolution_plots/res_{pfcand}_{var}.png", bbox_inches="tight")
     plt.savefig(outpath + f"/resolution_plots/res_{pfcand}_{var}.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
