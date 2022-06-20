@@ -45,6 +45,7 @@ if torch.cuda.device_count():
     device_cuda = torch.device('cuda:0')
 else:
     device = 'cpu'
+    device_cuda = 'cpu'
 multi_gpu = torch.cuda.device_count() > 1
 
 
@@ -215,11 +216,11 @@ if __name__ == "__main__":
             os.makedirs(f'{outpath}/test_data')
 
         # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-        dataset_qcd = PFGraphDataset(world_size, args.dataset_qcd, args.data)
+        dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
         test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
 
         # construct file loaders
-        file_loader_test = make_file_loaders(test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        file_loader_test = make_file_loaders(world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
         if multi_gpu:
             model = torch_geometric.nn.DataParallel(model)
