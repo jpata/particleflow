@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
-        model = torch.jit.script(model)
+        # model = torch.jit.script(model)
 
     else:   # instantiates and train a model
         model_kwargs = {'input_dim': input_dim,

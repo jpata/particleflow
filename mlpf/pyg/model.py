@@ -51,6 +51,7 @@ class MLPF(nn.Module):
         self.conv = nn.ModuleList()
         for i in range(num_convs):
             self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k).jittable())
+            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
@@ -107,6 +108,8 @@ try:
 except ImportError:
     knn = None
 
+    # propagate_type: (x: Tensor, edge_weight: Optional[Tensor])
+
 
 class GravNetConv_MLPF(MessagePassing):
     """
@@ -130,8 +133,6 @@ class GravNetConv_MLPF(MessagePassing):
         self.lin_out = Linear(propagate_dimensions, out_channels)
 
         self.reset_parameters()
-
-        # propagate_type: (x: Tensor, edge_weight: Optional[Tensor])
 
     def reset_parameters(self):
         self.lin_s.reset_parameters()
