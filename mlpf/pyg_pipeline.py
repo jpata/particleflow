@@ -105,8 +105,8 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
 
     # construct file loaders
-    file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # create model and move it to GPU with id rank
     print(f'Copying the model on rank {rank}..')
@@ -123,7 +123,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     cleanup()
 
 
-def train(device, args, dataset, model, num_classes, outpath):
+def train(device, world_size, args, dataset, model, num_classes, outpath):
     """
     A train() function that will setup the training dataset and starts a training_loop on a single device (cuda or cpu).
     """
@@ -137,8 +137,8 @@ def train(device, args, dataset, model, num_classes, outpath):
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
     # construct file loaders
-    file_loader_train = make_file_loaders(train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
 
     # create model and move it to GPU with id rank
     model = model.to(device)
@@ -152,6 +152,8 @@ def train(device, args, dataset, model, num_classes, outpath):
 
 
 if __name__ == "__main__":
+
+    torch.autograd.set_detect_anomaly(False)
 
     args = parse_args()
 
@@ -176,6 +178,7 @@ if __name__ == "__main__":
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
+        model = torch.jit.script(model)
 
     else:   # instantiates and train a model
         model_kwargs = {'input_dim': input_dim,
@@ -205,7 +208,7 @@ if __name__ == "__main__":
             print('demo')
             run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
-            train(device, args, dataset, model, num_classes, outpath)
+            train(device, world_size, args, dataset, model, num_classes, outpath)
 
     # run the inference
     if args.make_predictions:

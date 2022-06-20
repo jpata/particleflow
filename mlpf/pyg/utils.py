@@ -72,16 +72,16 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
     if not osp.isdir(outpath):
         os.makedirs(outpath)
-    else:
-        if not args.overwrite:
-            print("model {} already exists, please delete it".format(model_fname))
+
+    else:  # if directory already exists
+        if not args.overwrite:   # if not overwrite then exit
+            print(f'model {model_fname} already exists, please delete it')
             sys.exit(0)
 
-        print("model {} already exists, deleting it".format(model_fname))
+        print(f'model {model_fname} already exists, deleting it')
 
-        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]
+        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]   # don't remove the newly created logs.txt
         for f in filelist:
-            print(f)
             try:
                 os.remove(os.path.join(outpath, f))
             except:

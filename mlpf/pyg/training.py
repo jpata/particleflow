@@ -120,7 +120,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             loss_tot = loss_clf + (alpha * loss_reg)
 
             if is_train:
-                optimizer.zero_grad()
+                for param in model.parameters():    # better than calling optimizer.zero_grad() according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+                    param.grad = None
                 loss_tot.backward()
                 optimizer.step()
 
