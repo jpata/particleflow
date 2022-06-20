@@ -73,7 +73,7 @@ def save_model(args, model_fname, outpath, model_kwargs):
         if args.overwrite:
             print("model {} already exists, deleting it".format(model_fname))
 
-            filelist = [f for f in os.listdir(mydir) if not f.endswith(".txt")]
+            filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]
             for f in filelist:
                 os.remove(os.path.join(outpath, f))
             # shutil.rmtree(outpath)
