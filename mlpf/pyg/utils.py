@@ -82,6 +82,7 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
         filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]
         for f in filelist:
+            print(f)
             try:
                 os.remove(os.path.join(outpath, f))
             except:
