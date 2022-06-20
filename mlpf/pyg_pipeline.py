@@ -46,6 +46,7 @@ if torch.cuda.device_count():
 else:
     device = 'cpu'
 multi_gpu = torch.cuda.device_count() > 1
+multi_gpu = 0
 
 
 def setup(rank, world_size):
@@ -200,7 +201,8 @@ if __name__ == "__main__":
         print("Training over {} epochs".format(args.n_epochs))
 
         # run the training using DDP if more than one gpu is available
-        if world_size >= 2:
+        if world_size >= 2 or False:
+            print('demo')
             run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
             train(device, args, dataset, model, num_classes, outpath)
