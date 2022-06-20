@@ -201,7 +201,7 @@ if __name__ == "__main__":
         print("Training over {} epochs".format(args.n_epochs))
 
         # run the training using DDP if more than one gpu is available
-        if world_size >= 2 or False:
+        if world_size >= 2 and False:
             print('demo')
             run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
