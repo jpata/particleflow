@@ -75,8 +75,10 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
             filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]
             for f in filelist:
-                os.remove(os.path.join(outpath, f))
-            # shutil.rmtree(outpath)
+                try:
+                    os.remove(os.path.join(outpath, f))
+                except:
+                    shutil.rmtree(os.path.join(outpath, f)
         else:
             print("model {} already exists, please delete it".format(model_fname))
             sys.exit(0)
@@ -106,13 +108,13 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
 
 def load_model(device, outpath, model_directory, load_epoch):
-    PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
+    PATH=outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
 
     print('Loading a previously trained model..')
     with open(outpath + '/model_kwargs.pkl', 'rb') as f:
-        model_kwargs = pkl.load(f)
+        model_kwargs=pkl.load(f)
 
-    state_dict = torch.load(PATH, map_location=device)
+    state_dict=torch.load(PATH, map_location=device)
 
     # # if the model was trained using DataParallel then we do this
     # state_dict = torch.load(PATH, map_location=device)
@@ -134,7 +136,7 @@ def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, out
     if not os.path.exists(outpath):
         os.makedirs(outpath)
 
-    fig, ax = plt.subplots()
+    fig, ax=plt.subplots()
     for i, var in enumerate(X):
         ax.plot(range(len(var)), var, label=Xlabel[i])
     ax.set_xlabel(xaxis)
@@ -188,21 +190,21 @@ def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5
     Returns
         regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max) that defines the limits of a region and equivalenelty phi
     """
-    eta_step = (max_eta - min_eta) / num_eta_regions
-    phi_step = (max_phi - min_phi) / num_phi_regions
+    eta_step=(max_eta - min_eta) / num_eta_regions
+    phi_step=(max_phi - min_phi) / num_phi_regions
 
-    tuples_eta = []
+    tuples_eta=[]
     for j in range(num_eta_regions):
-        tuple = (min_eta + eta_step * (j), min_eta + eta_step * (j + 1))
+        tuple=(min_eta + eta_step * (j), min_eta + eta_step * (j + 1))
         tuples_eta.append(tuple)
 
-    tuples_phi = []
+    tuples_phi=[]
     for i in range(num_phi_regions):
-        tuple = (min_phi + phi_step * (i), min_phi + phi_step * (i + 1))
+        tuple=(min_phi + phi_step * (i), min_phi + phi_step * (i + 1))
         tuples_phi.append(tuple)
 
     # make regions
-    regions = []
+    regions=[]
     for i in range(len(tuples_eta)):
         for j in range(len(tuples_phi)):
             regions.append((tuples_eta[i], tuples_phi[j]))
@@ -222,27 +224,27 @@ def batch_event_into_regions(data, regions):
         data: a modified Batch() object of based on data, where data.batch seperates the events in the different bins
     """
 
-    x = None
+    x=None
     for region in range(len(regions)):
-        in_region_msk = (data.x[:, 2] > regions[region][0][0]) & (data.x[:, 2] < regions[region][0][1]) & (torch.arcsin(data.x[:, 3]) > regions[region][1][0]) & (torch.arcsin(data.x[:, 3]) < regions[region][1][1])
+        in_region_msk=(data.x[:, 2] > regions[region][0][0]) & (data.x[:, 2] < regions[region][0][1]) & (torch.arcsin(data.x[:, 3]) > regions[region][1][0]) & (torch.arcsin(data.x[:, 3]) < regions[region][1][1])
 
         if in_region_msk.sum() != 0:  # if region is not empty
             if x == None:   # first iteration
-                x = data.x[in_region_msk]
-                ygen = data.ygen[in_region_msk]
-                ygen_id = data.ygen_id[in_region_msk]
-                ycand = data.ycand[in_region_msk]
-                ycand_id = data.ycand_id[in_region_msk]
-                batch = region + torch.zeros([len(data.x[in_region_msk])])    # assumes events were already fed one at a time (i.e. batch_size=1)
+                x=data.x[in_region_msk]
+                ygen=data.ygen[in_region_msk]
+                ygen_id=data.ygen_id[in_region_msk]
+                ycand=data.ycand[in_region_msk]
+                ycand_id=data.ycand_id[in_region_msk]
+                batch=region + torch.zeros([len(data.x[in_region_msk])])    # assumes events were already fed one at a time (i.e. batch_size=1)
             else:
-                x = torch.cat([x, data.x[in_region_msk]])
-                ygen = torch.cat([ygen, data.ygen[in_region_msk]])
-                ygen_id = torch.cat([ygen_id, data.ygen_id[in_region_msk]])
-                ycand = torch.cat([ycand, data.ycand[in_region_msk]])
-                ycand_id = torch.cat([ycand_id, data.ycand_id[in_region_msk]])
-                batch = torch.cat([batch, region + torch.zeros([len(data.x[in_region_msk])])])    # assumes events were already fed one at a time (i.e. batch_size=1)
+                x=torch.cat([x, data.x[in_region_msk]])
+                ygen=torch.cat([ygen, data.ygen[in_region_msk]])
+                ygen_id=torch.cat([ygen_id, data.ygen_id[in_region_msk]])
+                ycand=torch.cat([ycand, data.ycand[in_region_msk]])
+                ycand_id=torch.cat([ycand_id, data.ycand_id[in_region_msk]])
+                batch=torch.cat([batch, region + torch.zeros([len(data.x[in_region_msk])])])    # assumes events were already fed one at a time (i.e. batch_size=1)
 
-    data = Batch(x=x,
+    data=Batch(x=x,
                  ygen=ygen,
                  ygen_id=ygen_id,
                  ycand=ycand,
@@ -263,7 +265,7 @@ class Collater:
         pass
 
     def __call__(self, batch):
-        elem = batch[0]
+        elem=batch[0]
         if isinstance(elem, BaseData):
             return batch
 
