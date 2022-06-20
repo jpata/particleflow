@@ -25,7 +25,7 @@ os.makedirs(path_to, exist_ok=True)
 dataset = PFGraphDataset(path_from, 'cms')
 
 dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=500))
-loader = make_file_loaders(dataset, 1, num_workers=2, prefetch_factor=4)
+loader = make_file_loaders(0, dataset, 1, num_workers=2, prefetch_factor=4)
 
 all = []
 c = 0
