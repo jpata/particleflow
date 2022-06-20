@@ -55,7 +55,7 @@ def setup(rank, world_size):
     """
 
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12354'
+    os.environ['MASTER_PORT'] = '12355'
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
     dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
@@ -151,8 +151,6 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
 
 
 if __name__ == "__main__":
-
-    torch.autograd.set_detect_anomaly(False)
 
     args = parse_args()
 
