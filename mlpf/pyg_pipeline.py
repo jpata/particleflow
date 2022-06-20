@@ -58,8 +58,8 @@ def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
 
-    # dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -79,7 +79,7 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     world_size: number of gpus available
     """
 
-    mp.set_start_method('forkserver')
+    # mp.set_start_method('forkserver')
 
     mp.spawn(demo_fn,
              args=(world_size, args, dataset, model, num_classes, outpath),

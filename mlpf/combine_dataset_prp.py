@@ -39,6 +39,7 @@ from pyg import PFGraphDataset, one_hot_embedding
 #     if c == 2:
 #         print(f'SAVING FILE # {j}')
 #         torch.save(all, path_to + f'data_{j}.pt')
+#         torch.save([x for t in all for x in t], path_to + f'data_{i}.pt')
 #         c = 0
 #         all = []
 #         j = j + 1
