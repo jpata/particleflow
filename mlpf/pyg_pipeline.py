@@ -79,7 +79,7 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     world_size: number of gpus available
     """
 
-    mp.set_start_method('forkserver')
+    # mp.set_start_method('forkserver')
 
     mp.spawn(demo_fn,
              args=(world_size, args, dataset, model, num_classes, outpath),
