@@ -88,7 +88,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             t0 = time.time()
             pred, target = model(X.to(rank))
             t1 = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass = {round(t1 - t0, 3)}s')
+            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :num_classes]
