@@ -73,22 +73,23 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     conf_matrix = np.zeros((num_classes, num_classes))
 
     t0 = time.time()
-
+    p = 0
     for num, file in enumerate(file_loader):
-        print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
+        # print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         loader = DataLoader(file, batch_size=batch_size)
 
         t = 0
+        p = p + len(loader)
         for i, X in enumerate(loader):
 
             # run forward pass
             t0 = time.time()
             pred, target = model(X.to(rank))
             t1 = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
+            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :num_classes]
@@ -138,9 +139,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
             # if i == 1:
             #     break
-        print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
+
+        # print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
         # if num == 1:
         #     break
+    print(f'Average inference time per batch on rank {rank} is {round((t / p), 3)}s')
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
