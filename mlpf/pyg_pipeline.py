@@ -78,10 +78,10 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     world_size: number of gpus available
     """
 
-    mp.spawn(demo_fn,
-             args=(world_size, args, dataset, model, num_classes, outpath),
-             nprocs=world_size,
-             join=True)
+    mp.forkserver(demo_fn,
+                  args=(world_size, args, dataset, model, num_classes, outpath),
+                  nprocs=world_size,
+                  join=True)
 
 
 def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
