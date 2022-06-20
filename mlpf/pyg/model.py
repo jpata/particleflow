@@ -108,6 +108,8 @@ try:
 except ImportError:
     knn = None
 
+# propagate_type: (x: Tensor, edge_weight: Optional[Tensor])
+
 
 class GravNetConv_MLPF(MessagePassing):
     """
