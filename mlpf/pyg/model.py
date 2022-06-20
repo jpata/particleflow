@@ -50,7 +50,7 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k).jittable())
+            # self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k).jittable())
             self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
