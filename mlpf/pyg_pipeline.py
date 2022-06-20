@@ -55,7 +55,7 @@ def setup(rank, world_size):
     """
 
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '123556'
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
     dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
@@ -71,7 +71,7 @@ def cleanup():
 
 def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     """
-    Necessary function that spawns a process group to run a demo_fn on each gpu device that will be indexed by 'rank'.
+    Necessary function that spawns a process group of size=world_size processes to run a demo_fn on each gpu device that will be indexed by 'rank'.
 
     Args:
     demo_fn: function you wish to run on each gpu
