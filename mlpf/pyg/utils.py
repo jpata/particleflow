@@ -72,7 +72,11 @@ def save_model(args, model_fname, outpath, model_kwargs):
     if osp.isdir(outpath):
         if args.overwrite:
             print("model {} already exists, deleting it".format(model_fname))
-            shutil.rmtree(outpath)
+
+            filelist = [f for f in os.listdir(mydir) if not f.endswith(".txt")]
+            for f in filelist:
+                os.remove(os.path.join(outpath, f))
+            # shutil.rmtree(outpath)
         else:
             print("model {} already exists, please delete it".format(model_fname))
             sys.exit(0)
@@ -269,13 +273,14 @@ class Collater:
         raise TypeError(f'DataLoader found invalid type: {type(elem)}')
 
 
-def make_file_loaders(dataset, num_files=1, num_workers=0, prefetch_factor=2):
+def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2):
     """
     This function is only one line, but it's worth explaining why it's needed and what it's doing.
     It uses native torch Dataloaders with a custom collate_fn that allows loading Data() objects from pt files in a fast way.
     This is needed becase pyg Dataloaders do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
 
     Args:
+        world_size: number of gpus available
         dataset: custom dataset
         num_files: number of files to load with a single get() call
         num_workers: number of workers to use for fetching files
@@ -284,5 +289,7 @@ def make_file_loaders(dataset, num_files=1, num_workers=0, prefetch_factor=2):
     Returns:
         a torch iterable() that returns a list of 100 elements, each element is a tuple of size=num_files containing Data() objects
     """
-
-    return torch.utils.data.DataLoader(dataset, num_files, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
+    if world_size > 0:
+        return torch.utils.data.DataLoader(dataset, num_files, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
+    else:
+        return torch.utils.data.DataLoader(dataset, num_files, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=False)
