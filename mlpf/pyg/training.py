@@ -81,6 +81,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
         loader = DataLoader(file, batch_size=batch_size)
 
+        tp = time.time()
+
         t = 0
         # p = p + len(loader)
         for i, X in enumerate(loader):
@@ -141,6 +143,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
+        print(f'Time for next file: {round((time.time()-tp), 3)}s')
+
         # if num == 1:
         #     break
     # print(f'Average inference time per batch on rank {rank} is {round((t / p), 3)}s')
