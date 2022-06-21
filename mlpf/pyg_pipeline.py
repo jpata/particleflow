@@ -212,6 +212,8 @@ if __name__ == "__main__":
     if args.make_predictions:
         if not osp.isdir(f'{outpath}/test_data'):
             os.makedirs(f'{outpath}/test_data')
+        if not osp.isdir(f'{outpath}/test_data/predictions'):
+            os.makedirs(f'{outpath}/test_data/predictions')
 
         # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
         dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)

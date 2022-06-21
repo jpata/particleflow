@@ -132,14 +132,14 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
     # store the 3 dictionaries in a list (this is done only to compute the particle multiplicity plots)
     list_dict = [pred_list, gen_list, cand_list]
-    torch.save(list_dict, outpath + '/list_for_multiplicities.pt')
+    torch.save(list_dict, outpath + 'predictions/list_for_multiplicities.pt')
 
-    torch.save(gen_ids_all, outpath + 'gen_ids.pt')
-    torch.save(gen_p4_all, outpath + 'gen_p4.pt')
-    torch.save(pred_ids_all, outpath + 'pred_ids.pt')
-    torch.save(pred_p4_all, outpath + 'pred_p4.pt')
-    torch.save(cand_ids_all, outpath + 'cand_ids.pt')
-    torch.save(cand_p4_all, outpath + 'cand_p4.pt')
+    torch.save(gen_ids_all, outpath + 'predictions/gen_ids.pt')
+    torch.save(gen_p4_all, outpath + 'predictions/gen_p4.pt')
+    torch.save(pred_ids_all, outpath + 'predictions/pred_ids.pt')
+    torch.save(pred_p4_all, outpath + 'predictions/pred_p4.pt')
+    torch.save(cand_ids_all, outpath + 'predictions/cand_ids.pt')
+    torch.save(cand_p4_all, outpath + 'predictions/cand_p4.pt')
 
     ygen = torch.cat([gen_ids_all.reshape(-1, 1).float(), gen_p4_all], axis=1)
     ypred = torch.cat([pred_ids_all.reshape(-1, 1).float(), pred_p4_all], axis=1)
@@ -150,7 +150,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
                    "ycand": ycand.reshape(1, -1, 7).cpu().numpy(),
                    "ypred": ypred.reshape(1, -1, 7).cpu().numpy()}
 
-    torch.save(predictions, outpath + 'predictions.pt')
+    torch.save(predictions, outpath + 'predictions/predictions.pt')
 
 
 def make_plots(data, num_classes, outpath, target, epoch, tag):
@@ -167,14 +167,14 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     t0 = time.time()
 
     # load the necessary predictions to make the plots
-    gen_ids = torch.load(outpath + f'gen_ids.pt', map_location='cpu')
-    gen_p4 = torch.load(outpath + f'gen_p4.pt', map_location='cpu')
-    pred_ids = torch.load(outpath + f'pred_ids.pt', map_location='cpu')
-    pred_p4 = torch.load(outpath + f'pred_p4.pt', map_location='cpu')
-    cand_ids = torch.load(outpath + f'cand_ids.pt', map_location='cpu')
-    cand_p4 = torch.load(outpath + f'cand_p4.pt', map_location='cpu')
+    gen_ids = torch.load(outpath + f'predictions/gen_ids.pt', map_location='cpu')
+    gen_p4 = torch.load(outpath + f'predictions/gen_p4.pt', map_location='cpu')
+    pred_ids = torch.load(outpath + f'predictions/pred_ids.pt', map_location='cpu')
+    pred_p4 = torch.load(outpath + f'predictions/pred_p4.pt', map_location='cpu')
+    cand_ids = torch.load(outpath + f'predictions/cand_ids.pt', map_location='cpu')
+    cand_p4 = torch.load(outpath + f'predictions/cand_p4.pt', map_location='cpu')
 
-    predictions = torch.load(outpath + f'predictions.pt', map_location='cpu')
+    predictions = torch.load(outpath + f'predictions/predictions.pt', map_location='cpu')
 
     # reformat a bit
     ygen = predictions["ygen"].reshape(-1, 7)
@@ -213,7 +213,7 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
                            target, epoch, outpath + 'plots/', legend_title=sample + "\n")
 
     # plot particle multiplicity plots
-    list_for_multiplicities = torch.load(outpath + f'list_for_multiplicities.pt', map_location='cpu')
+    list_for_multiplicities = torch.load(outpath + f'predictions/list_for_multiplicities.pt', map_location='cpu')
 
     for pfcand in pfcands:
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))

@@ -50,7 +50,7 @@ target_p4 = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
 ]
 
 
