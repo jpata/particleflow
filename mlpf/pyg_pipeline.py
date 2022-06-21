@@ -56,8 +56,9 @@ def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
 
-    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    # dist.init_process_group("gloo", rank=rank, world_size=world_size)
     # dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
+    dist.init_process_group("mpi", rank=rank, world_size=world_size)
 
 
 def cleanup():
