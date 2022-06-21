@@ -75,13 +75,18 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     t0 = time.time()
     # p = 0
     for num, file in enumerate(file_loader):
+        tp = time.time()
+
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
+
+        t122 = time.time()
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
+        print(f'unpack took {time.time()-t122}')
 
+        t1223 = time.time()
         loader = DataLoader(file, batch_size=batch_size)
-
-        tp = time.time()
+        print(f'dataloader took {time.time()-t1223}')
 
         t = 0
         # p = p + len(loader)
@@ -93,6 +98,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             t1 = time.time()
             # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
             t = t + (t1 - t0)
+
+            t1224 = time.time()
 
             pred_ids_one_hot = pred[:, :num_classes]
             pred_p4 = pred[:, num_classes:]
@@ -138,6 +145,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
                                                             pred_ids.detach().cpu().numpy(),
                                                             labels=range(num_classes))
+            print(f'after stuff took {time.time()-t1224}')
 
             # if i == 1:
             #     break
