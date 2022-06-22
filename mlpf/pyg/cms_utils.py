@@ -49,12 +49,14 @@ def relabel_indices(pid_array):
     """
     relabels classes for the CMS dataset for convenient ML operations (e.g. one-hot encoding)
     """
+
     pid_array[pid_array == 15] = 8  # taus for now
     pid_array[pid_array == 211] = 7  # chhadrons
     pid_array[pid_array == 130] = 6  # nhadrons
     pid_array[pid_array == 22] = 5  # gamma
     pid_array[pid_array == 13] = 4  # electrons
     pid_array[pid_array == 11] = 3  # muons
+
     return pid_array
 
 
