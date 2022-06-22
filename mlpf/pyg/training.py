@@ -10,6 +10,7 @@ from torch_geometric.loader import DataLoader, DataListLoader
 
 import mplhep as hep
 import matplotlib.pyplot as plt
+import json
 import os
 import pickle as pkl
 import math
@@ -91,7 +92,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             t0 = time.time()
             pred, target = model(X.to(rank))
             t1 = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
+            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
             t = t + (t1 - t0)
 
             pred_ids_one_hot = pred[:, :num_classes]
@@ -218,6 +219,16 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         if losses_tot < best_val_loss:
             best_val_loss = losses_tot
             stale_epochs = 0
+
+            try:
+                state_dict = model.module.state_dict()
+            except AttributeError:
+                state_dict = model.state_dict()
+            torch.save(state_dict, f'{outpath}/best_epoch_weights.pth')
+
+            with open(f'{outpath}/best_epoch.json', 'w') as fp:  # dump best epoch
+                json.dump({'best_epoch': epoch
+                           }, fp)
         else:
             stale_epochs += 1
 

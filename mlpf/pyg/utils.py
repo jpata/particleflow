@@ -111,7 +111,10 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
 
 def load_model(device, outpath, model_directory, load_epoch):
-    PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
+    if load_epoch == -1:
+        PATH = outpath + '/best_epoch_weights.pth'
+    else:
+        PATH = outpath + '/epoch_' + str(load_epoch) + '_weights.pth'
 
     print('Loading a previously trained model..')
     with open(outpath + '/model_kwargs.pkl', 'rb') as f:
