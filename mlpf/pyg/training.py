@@ -66,8 +66,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
         model.eval()
         file_loader = valid_loader
 
-    # initialize loss and accuracy and time
-    losses_clf, losses_reg, losses_tot, accuracies, t, tf = 0, 0, 0, 0, 0, 0
+    # initialize loss counters
+    losses_clf, losses_reg, losses_tot, t, tf = 0, 0, 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
@@ -134,9 +134,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             losses_reg = losses_reg + loss_reg.detach()
             losses_tot = losses_tot + loss_tot.detach()
 
-            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach(), pred_ids[msk].detach())
-
-            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach(), pred_ids.detach(), labels=range(num_classes))
+            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -148,11 +146,9 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     losses_reg = losses_reg / (len(loader) * len(file_loader))
     losses_tot = losses_tot / (len(loader) * len(file_loader))
 
-    accuracies = accuracies / (len(loader) * len(file_loader))
-
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), accuracies.cpu().item(), conf_matrix_norm.cpu().item()
+    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), conf_matrix_norm.cpu().item()
 
 
 def training_loop(rank, data, model, train_loader, valid_loader,
@@ -184,8 +180,6 @@ def training_loop(rank, data, model, train_loader, valid_loader,
     losses_clf_train, losses_reg_train, losses_tot_train = [], [], []
     losses_clf_valid, losses_reg_valid, losses_tot_valid = [], [], []
 
-    accuracies_train, accuracies_valid = [], []
-
     best_val_loss = 99999.9
     stale_epochs = 0
 
@@ -198,25 +192,21 @@ def training_loop(rank, data, model, train_loader, valid_loader,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_train = train(rank, model, train_loader, valid_loader,
-                                                                                  batch_size, optimizer, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, conf_matrix_train = train(rank, model, train_loader, valid_loader,
+                                                                      batch_size, optimizer, alpha, target, num_classes, outpath)
 
         losses_clf_train.append(losses_clf)
         losses_reg_train.append(losses_reg)
         losses_tot_train.append(losses_tot)
 
-        accuracies_train.append(accuracies)
-
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader,
-                                                                                         batch_size, alpha, target, num_classes, outpath)
+        losses_clf, losses_reg, losses_tot, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader,
+                                                                             batch_size, alpha, target, num_classes, outpath)
 
         losses_clf_valid.append(losses_clf)
         losses_reg_valid.append(losses_reg)
         losses_tot_valid.append(losses_tot)
-
-        accuracies_valid.append(accuracies)
 
         # early-stopping
         if losses_tot < best_val_loss:
@@ -231,7 +221,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         time_per_epoch = (t1 - t0) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
-        print(f"Rank {rank}: epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} train_acc={round(accuracies_train[epoch], 4)} valid_acc={round(accuracies_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
+        print(f"Rank {rank}: epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
 
         # save the model's weights
         try:
@@ -280,13 +270,5 @@ def training_loop(rank, data, model, train_loader, valid_loader,
                              outpath + '/training_plots/losses/'
                              )
 
-        # make accuracy plots
-        make_plot_from_lists('Accuracy',
-                             'Epochs', 'Accuracy', 'acc',
-                             [accuracies_train, accuracies_valid],
-                             ['training', 'validation'],
-                             ['acc_train', 'acc_valid'],
-                             outpath + '/training_plots/accuracies/'
-                             )
         print('----------------------------------------------------------')
     print(f'Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min')
