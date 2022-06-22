@@ -1,3 +1,10 @@
+try:
+    from pyg.cms_utils import prepare_data_cms
+except:
+    from cms_utils import prepare_data_cms
+
+from numpy.lib.recfunctions import append_fields
+import bz2
 import h5py
 import pandas
 import pandas as pd
@@ -12,22 +19,6 @@ from glob import glob
 
 import pickle
 import multiprocessing
-
-
-# CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
-# CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"]
-
-def relabel_indices(pid_array):
-    """
-    relabels classes for the CMS dataset for convenient ML operations (e.g. one-hot encoding)
-    """
-    pid_array[pid_array == 15] = 8  # taus for now
-    pid_array[pid_array == 211] = 7  # chhadrons
-    pid_array[pid_array == 130] = 6  # nhadrons
-    pid_array[pid_array == 22] = 5  # gamma
-    pid_array[pid_array == 13] = 4  # electrons
-    pid_array[pid_array == 11] = 3  # muons
-    return pid_array
 
 
 def process_func(args):
@@ -95,13 +86,14 @@ class PFGraphDataset(Dataset):
              delphes ~ Data(x=[#elem, 12], ygen=[#elem, 6], ygen_id=[#elem, 6], ycand=[#elem, 6], ycand_id=[#elem, 6])
         """
 
-        # load the data pkl file
-        with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-            data = pickle.load(fi, encoding='iso-8859-1')
+        if self.data == 'cms':
+            return prepare_data_cms(osp.join(self.raw_dir, raw_file_name))
 
-        batched_data = []
-        if self.data == 'delphes':
-            num_classes = 12
+        elif self.data == 'delphes':
+            # load the data pkl file
+            with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
+                data = pickle.load(fi, encoding='iso-8859-1')
+
             for i in range(len(data['X'])):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
@@ -110,20 +102,6 @@ class PFGraphDataset(Dataset):
                     ygen_id=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 0].long(),
                     ycand=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 1:],
                     ycand_id=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 0].long(),
-                )
-
-                batched_data.append(d)
-
-        elif self.data == 'cms':
-            num_classes = 41
-            for i in range(len(data)):
-                # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
-                d = Data(
-                    x=torch.tensor(pd.DataFrame(data[i]['Xelem']).to_numpy(), dtype=torch.float),
-                    ygen=torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 1:],
-                    ygen_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ygen']).to_numpy(), dtype=torch.float)[:, 0].long()),
-                    ycand=torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 1:],
-                    ycand_id=relabel_indices(torch.tensor(pd.DataFrame(data[i]['ycand']).to_numpy(), dtype=torch.float)[:, 0].long())
                 )
 
                 batched_data.append(d)
@@ -177,10 +155,10 @@ if __name__ == "__main__":
 
     """
     e.g. to run for cms
-    python dataset.py --data cms --dataset ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
+    python PFGraphDataset.py --data cms --dataset ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
 
     e.g. to run for delphes
-    python3 dataset.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+    python3 PFGraphDataset.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 
     """
 
