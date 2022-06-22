@@ -3,7 +3,7 @@ from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
-from pyg import make_file_loaders, dataloader_ttbar
+from pyg import make_file_loaders, dataloader_ttbar, dataloader_qcd
 
 import torch
 import torch_geometric
@@ -108,7 +108,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     # construct data loaders
     t0 = time.time()
     train_loader, valid_loader = dataloader_ttbar(train_dataset, valid_dataset, args.batch_size)
-    print(f'Took {round(time.time()-t0,3)}s constructing dataloaders')
+    print(f'Took {round(time.time()-t0,3)}s constructing dataloaders on rank {rank}')
 
     # create model and move it to GPU with id rank
     print(f'Copying the model on rank {rank}..')

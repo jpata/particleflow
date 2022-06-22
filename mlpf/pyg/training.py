@@ -1,6 +1,7 @@
 from pyg import make_plot_from_lists
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions, one_hot_embedding
+from pyg.cms_utils import CLASS_NAMES_CMS
 
 import torch
 import torch_geometric
@@ -126,8 +127,8 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
         conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
 
-    #     if i == 2:
-    #         break
+        if i == 2:
+            break
 
     print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -241,7 +242,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         if data == 'delphes':
             target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
         elif data == 'cms':
-            target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had", "tau"]
+            target_names = CLASS_NAMES_CMS
 
         plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmTrain')
         plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmValid')

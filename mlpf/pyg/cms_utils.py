@@ -45,21 +45,6 @@ Y_FEATURES = [
 ]
 
 
-def relabel_indices(pid_array):
-    """
-    relabels classes for the CMS dataset for convenient ML operations (e.g. one-hot encoding)
-    """
-
-    pid_array[pid_array == 15] = 8  # taus for now
-    pid_array[pid_array == 211] = 7  # chhadrons
-    pid_array[pid_array == 130] = 6  # nhadrons
-    pid_array[pid_array == 22] = 5  # gamma
-    pid_array[pid_array == 13] = 4  # electrons
-    pid_array[pid_array == 11] = 3  # muons
-
-    return pid_array
-
-
 def prepare_data_cms(fn):
 
     batched_data = []
@@ -128,9 +113,9 @@ def prepare_data_cms(fn):
         d = Data(
             x=torch.tensor(Xelem_flat),
             ygen=torch.tensor(ygen_flat[:, 1:]),
-            ygen_id=relabel_indices(torch.tensor(ygen_flat[:, 0]).long()),
+            ygen_id=torch.tensor(ygen_flat[:, 0]).long(),
             ycand=torch.tensor(ycand_flat[:, 1:]),
-            ycand_id=relabel_indices(torch.tensor(ycand_flat[:, 0]).long()),
+            ycand_id=torch.tensor(ycand_flat[:, 0]).long(),
         )
         batched_data.append(d)
 
