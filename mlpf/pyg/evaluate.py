@@ -125,11 +125,14 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
                 cand_ids_all = torch.cat([cand_ids_all, cand_ids])
                 cand_p4_all = torch.cat([cand_p4_all, cand_p4])
-            if i == 3:
-                break
-        print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
-        # if num == 10:
+
+        #     if i == 2:
+        #         break
+        # if num == 2:
         #     break
+
+        print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
+
         t0 = time.time()
 
     print(f'Average time to load a file {round((tff / len(file_loader)), 3)}s')

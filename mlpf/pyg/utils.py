@@ -155,21 +155,6 @@ def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, out
 
 
 def make_directories_for_plots(outpath, tag):
-    if not osp.isdir(f'{outpath}/{tag}_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots')
-    if not osp.isdir(f'{outpath}/{tag}_plots/resolution_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots/resolution_plots')
-    if not osp.isdir(f'{outpath}/{tag}_plots/distribution_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots/distribution_plots')
-    if not osp.isdir(f'{outpath}/{tag}_plots/multiplicity_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots/multiplicity_plots')
-    if not osp.isdir(f'{outpath}/{tag}_plots/efficiency_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots/efficiency_plots')
-    if not osp.isdir(f'{outpath}/{tag}_plots/confusion_matrix_plots'):
-        os.makedirs(f'{outpath}/{tag}_plots/confusion_matrix_plots')
-
-
-def make_directories_for_plots(outpath, tag):
     if not osp.isdir(f'{outpath}/{tag}'):
         os.makedirs(f'{outpath}/{tag}')
     if not osp.isdir(f'{outpath}/{tag}/plots'):
