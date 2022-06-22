@@ -119,10 +119,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             # compute the loss
             weights = compute_weights(rank, target_ids, num_classes)    # to accomodate class imbalance
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
-
-            # TODO: add mse weights for scales to match? huber?
-            # TODO: test_data folder per epoch
+            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4 # TODO: add mse weights for scales to match? huber?
 
             loss_tot = loss_clf + (alpha * loss_reg)
 
@@ -235,7 +232,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         t1 = time.time()
 
         epochs_remaining = n_epochs - (epoch + 1)
-        time_per_epoch = (t1 - t0) / (epoch + 1)
+        time_per_epoch = (t1 - t0_initial) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
         print(f"Rank {rank}: epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m")
