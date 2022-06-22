@@ -73,7 +73,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     conf_matrix = np.zeros((num_classes, num_classes))
 
     t0 = time.time()
-    # p = 0
+
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
@@ -83,7 +83,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
         loader = DataLoader(file, batch_size=batch_size)
 
         t = 0
-        # p = p + len(loader)
+
         for i, X in enumerate(loader):
 
             # run forward pass
@@ -105,7 +105,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
                 target_ids = target['ycand_id']
 
             # one hot encode the target
-            target_ids_one_hot = one_hot_embedding(target_ids, num_classes).to(rank)
+            target_ids_one_hot = one_hot_embedding(target_ids, num_classes)
 
             # revert one hot encoding for the predictions
             pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
@@ -119,6 +119,9 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4
 
+            # TODO: add mse weights for scales to match? huber?
+            # TODO: test_data folder per epoch
+
             loss_tot = loss_clf + (alpha * loss_reg)
 
             if is_train:
@@ -127,38 +130,29 @@ def train(rank, model, train_loader, valid_loader, batch_size,
                 loss_tot.backward()
                 optimizer.step()
 
-            losses_clf = losses_clf + loss_clf.detach().cpu()
-            losses_reg = losses_reg + loss_reg.detach().cpu()
-            losses_tot = losses_tot + loss_tot.detach().cpu()
+            losses_clf = losses_clf + loss_clf.detach()
+            losses_reg = losses_reg + loss_reg.detach()
+            losses_tot = losses_tot + loss_tot.detach()
 
-            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach().cpu().numpy(),
-                                                                     pred_ids[msk].detach().cpu().numpy())
+            accuracies = accuracies + sklearn.metrics.accuracy_score(target_ids[msk].detach(), pred_ids[msk].detach())
 
-            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu().numpy(),
-                                                            pred_ids.detach().cpu().numpy(),
-                                                            labels=range(num_classes))
-
-            # if i == 1:
-            #     break
+            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach(), pred_ids.detach(), labels=range(num_classes))
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
-        # if num == 1:
-        #     break
-    # print(f'Average inference time per batch on rank {rank} is {round((t / p), 3)}s')
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     t0 = time.time()
 
-    losses_clf = (losses_clf / (len(loader) * len(file_loader))).item()
-    losses_reg = (losses_reg / (len(loader) * len(file_loader))).item()
-    losses_tot = (losses_tot / (len(loader) * len(file_loader))).item()
+    losses_clf = losses_clf / (len(loader) * len(file_loader))
+    losses_reg = losses_reg / (len(loader) * len(file_loader))
+    losses_tot = losses_tot / (len(loader) * len(file_loader))
 
-    accuracies = (accuracies / (len(loader) * len(file_loader))).item()
+    accuracies = accuracies / (len(loader) * len(file_loader))
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    return losses_clf, losses_reg, losses_tot, accuracies, conf_matrix_norm
+    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), accuracies.cpu().item(), conf_matrix_norm.cpu().item()
 
 
 def training_loop(rank, data, model, train_loader, valid_loader,
