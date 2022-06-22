@@ -315,23 +315,19 @@ def dataloader_ttbar(train_dataset, valid_dataset, batch_size):
     return train_loader, valid_loader
 
 
-def dataloader_qcd(full_dataset, multi_gpu, n_test, batch_size):
+def dataloader_qcd(multi_gpu, test_dataset, batch_size):
     """
     Builds a testing dataloader from a physics dataset for conveninet ML training
     Args:
-        full_dataset: a delphes dataset that is a list of lists that contain Data() objects
-        multi_gpu: boolean for multigpu batching
-        n_test: number of files to use for testing
+        test_dataset: a PFGraphDataset dataset that is a list of lists that contain Data() objects
     Returns:
         test_loader: a pyg iterable DataLoader() that contains Batch objects for testing
     """
 
-    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=n_test))
-
     # preprocessing the test_dataset in a good format for passing correct batches of events to the GNN
     test_data = []
-    for i in range(len(test_dataset)):
-        test_data = test_data + test_dataset[i]
+    for data in test_dataset:
+        test_data = test_data + data
 
     if not multi_gpu:
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)

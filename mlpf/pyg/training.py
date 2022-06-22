@@ -83,7 +83,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
         t0 = time.time()
         pred, target = model(X.to(rank))
         t1 = time.time()
-        print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
+        # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
         t = t + (t1 - t0)
 
         pred_ids_one_hot = pred[:, :num_classes]
@@ -128,14 +128,12 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
     #     if i == 2:
     #         break
-    # if num == 2:
-    #     break
 
     print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
-    losses_clf = losses_clf / (len(loader) * len(file_loader))
-    losses_reg = losses_reg / (len(loader) * len(file_loader))
-    losses_tot = losses_tot / (len(loader) * len(file_loader))
+    losses_clf = losses_clf / len(loader)
+    losses_reg = losses_reg / len(loader)
+    losses_tot = losses_tot / len(loader)
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
