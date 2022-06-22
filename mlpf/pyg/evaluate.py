@@ -218,15 +218,14 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     for pfcand in pfcands:
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
         ret_num_particles_null = plot_particle_multiplicity(data, list_for_multiplicities, pfcand, ax)
-        plt.savefig(outpath + f"plots/multiplicity_plots/num_{pfcand}.png", bbox_inches="tight")
         plt.savefig(outpath + f"plots/multiplicity_plots/num_{pfcand}.pdf", bbox_inches="tight")
         plt.close(fig)
 
     # make efficiency and fake rate plots for charged hadrons and neutral hadrons
     for pfcand in pfcands:
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "pt", np.linspace(0, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_pt.png", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "eta", np.linspace(-3, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_eta.png", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "energy", np.linspace(0, 50, 75), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_energy.png", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "pt", np.linspace(0, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_pt.pdf", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "eta", np.linspace(-3, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_eta.pdf", both=True, legend_title=sample + "\n")
+        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "energy", np.linspace(0, 50, 75), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_energy.pdf", both=True, legend_title=sample + "\n")
 
     # make pt, eta, and energy resolution plots
     for var in ['pt', 'eta', 'energy']:
