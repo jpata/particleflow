@@ -241,10 +241,10 @@ if __name__ == "__main__":
             batch_size = args.batch_size * world_size
         else:
             batch_size = args.batch_size
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data_{epoch_on_plots}/')
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + f'/test_data_{epoch_on_plots}/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
         make_directories_for_plots(outpath, f'test_data_{epoch_on_plots}')
 
-        make_plots(args.data, num_classes, outpath + '/test_data_{epoch_on_plots}/', args.target, epoch_on_plots, 'QCD')
+        make_plots(args.data, num_classes, outpath + f'/test_data_{epoch_on_plots}/', args.target, epoch_on_plots, 'QCD')
