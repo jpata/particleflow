@@ -158,6 +158,8 @@ if __name__ == "__main__":
 
     world_size = torch.cuda.device_count()
 
+    torch.backends.cudnn.benchmark = True
+
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
 
@@ -208,10 +210,15 @@ if __name__ == "__main__":
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
+    if args.load:
+        epoch_on_plots = args.load_epoch
+    else:
+        epoch_on_plots = args.n_epochs - 1
+
     # run the inference
     if args.make_predictions:
-        if not osp.isdir(f'{outpath}/test_data'):
-            os.makedirs(f'{outpath}/test_data')
+        if not osp.isdir(f'{outpath}/test_data_{epoch_on_plots}'):
+            os.makedirs(f'{outpath}/test_data_{epoch_on_plots}')
         if not osp.isdir(f'{outpath}/test_data/predictions'):
             os.makedirs(f'{outpath}/test_data/predictions')
 
@@ -234,15 +241,10 @@ if __name__ == "__main__":
             batch_size = args.batch_size * world_size
         else:
             batch_size = args.batch_size
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data/')
+        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + '/test_data_{epoch_on_plots}/')
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
-        make_directories_for_plots(outpath, 'test_data')
+        make_directories_for_plots(outpath, f'test_data_{epoch_on_plots}')
 
-        if args.load:
-            epoch_on_plots = args.load_epoch
-        else:
-            epoch_on_plots = args.n_epochs - 1
-
-        make_plots(args.data, num_classes, outpath + '/test_data/', args.target, epoch_on_plots, 'QCD')
+        make_plots(args.data, num_classes, outpath + '/test_data_{epoch_on_plots}/', args.target, epoch_on_plots, 'QCD')
