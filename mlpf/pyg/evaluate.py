@@ -13,6 +13,8 @@ import mplhep as hep
 import matplotlib
 import matplotlib.pyplot as plt
 import pickle as pkl
+import os
+import os.path as osp
 import math
 import time
 import tqdm
@@ -39,6 +41,9 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
         torch.cuda.empty_cache()
         for rank in range(torch.cuda.device_count()):
             print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
+
+    if not osp.isdir(f'{outpath}/predictions'):
+        os.makedirs(f'{outpath}/predictions')
 
     tt0 = time.time()
 
@@ -120,7 +125,8 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
                 cand_ids_all = torch.cat([cand_ids_all, cand_ids])
                 cand_p4_all = torch.cat([cand_p4_all, cand_p4])
-
+            if i == 3:
+                break
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
         # if num == 10:
         #     break
