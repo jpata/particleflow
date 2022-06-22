@@ -286,3 +286,56 @@ def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_
         return torch.utils.data.DataLoader(dataset, num_files, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=True)
     else:
         return torch.utils.data.DataLoader(dataset, num_files, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor, collate_fn=Collater(), pin_memory=False)
+
+
+def dataloader_ttbar(train_dataset, valid_dataset, batch_size):
+    """
+    Builds training and validation dataloaders from a physics dataset for conveninet ML training
+    Args:
+        train_dataset: a PFGraphDataset dataset that is a list of lists that contain Data() objects
+        valid_dataset: a PFGraphDataset dataset that is a list of lists that contain Data() objects
+    Returns:
+        train_loader: a pyg iterable DataLoader() that contains Batch objects for training
+        valid_loader: a pyg iterable DataLoader() that contains Batch objects for validation
+    """
+
+    # preprocessing the train_dataset in a good format for passing correct batches of events to the GNN
+    train_data = []
+    for data in train_dataset:
+        train_data = train_data + data
+
+    # preprocessing the valid_dataset in a good format for passing correct batches of events to the GNN
+    valid_data = []
+    for data in valid_dataset:
+        valid_data = valid_data + data
+
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(valid_data, batch_size=batch_size, shuffle=True)
+
+    return train_loader, valid_loader
+
+
+def dataloader_qcd(full_dataset, multi_gpu, n_test, batch_size):
+    """
+    Builds a testing dataloader from a physics dataset for conveninet ML training
+    Args:
+        full_dataset: a delphes dataset that is a list of lists that contain Data() objects
+        multi_gpu: boolean for multigpu batching
+        n_test: number of files to use for testing
+    Returns:
+        test_loader: a pyg iterable DataLoader() that contains Batch objects for testing
+    """
+
+    test_dataset = torch.utils.data.Subset(full_dataset, np.arange(start=0, stop=n_test))
+
+    # preprocessing the test_dataset in a good format for passing correct batches of events to the GNN
+    test_data = []
+    for i in range(len(test_dataset)):
+        test_data = test_data + test_dataset[i]
+
+    if not multi_gpu:
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
+    else:
+        test_loader = DataListLoader(test_data, batch_size=batch_size, shuffle=True)
+
+    return test_loader

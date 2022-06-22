@@ -62,11 +62,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     if is_train:
         print(f'---->Initiating a training run on rank {rank}')
         model.train()
-        file_loader = train_loader
+        loader = train_loader
     else:
         print(f'---->Initiating a validation run rank {rank}')
         model.eval()
-        file_loader = valid_loader
+        loader = valid_loader
 
     # initialize loss counters
     losses_clf, losses_reg, losses_tot, t, tf = 0, 0, 0, 0, 0
@@ -75,76 +75,63 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     conf_matrix = np.zeros((num_classes, num_classes))
 
     t0 = time.time()
+    t = 0
 
-    for num, file in enumerate(file_loader):
-        print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
-        tf = tf + (time.time() - t0)
+    for i, X in enumerate(loader):
 
-        file = [x for t in file for x in t]     # unpack the list of tuples to a list
+        # run forward pass
+        t0 = time.time()
+        pred, target = model(X.to(rank))
+        t1 = time.time()
+        print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
+        t = t + (t1 - t0)
 
-        loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
+        pred_ids_one_hot = pred[:, :num_classes]
+        pred_p4 = pred[:, num_classes:]
 
-        t = 0
+        # define target
+        if target_type == 'gen':
+            target_p4 = target['ygen']
+            target_ids = target['ygen_id']
+        elif target_type == 'cand':
+            target_p4 = target['ycand']
+            target_ids = target['ycand_id']
 
-        for i, X in enumerate(loader):
+        # one hot encode the target
+        target_ids_one_hot = one_hot_embedding(target_ids, num_classes)
 
-            # run forward pass
-            t0 = time.time()
-            pred, target = model(X.to(rank))
-            t1 = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {X.num_nodes} nodes')
-            t = t + (t1 - t0)
+        # revert one hot encoding for the predictions
+        pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
-            pred_ids_one_hot = pred[:, :num_classes]
-            pred_p4 = pred[:, num_classes:]
+        # define some useful masks
+        msk = ((pred_ids != 0) & (target_ids != 0))
+        msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
 
-            # define target
-            if target_type == 'gen':
-                target_p4 = target['ygen']
-                target_ids = target['ygen_id']
-            elif target_type == 'cand':
-                target_p4 = target['ycand']
-                target_ids = target['ycand_id']
+        # compute the loss
+        weights = compute_weights(rank, target_ids, num_classes)    # to accomodate class imbalance
+        loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+        loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4 # TODO: add mse weights for scales to match? huber?
 
-            # one hot encode the target
-            target_ids_one_hot = one_hot_embedding(target_ids, num_classes)
+        loss_tot = loss_clf + (alpha * loss_reg)
 
-            # revert one hot encoding for the predictions
-            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+        if is_train:
+            for param in model.parameters():    # better than calling optimizer.zero_grad() according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+                param.grad = None
+            loss_tot.backward()
+            optimizer.step()
 
-            # define some useful masks
-            msk = ((pred_ids != 0) & (target_ids != 0))
-            msk2 = ((pred_ids != 0) & (pred_ids == target_ids))
+        losses_clf = losses_clf + loss_clf.detach()
+        losses_reg = losses_reg + loss_reg.detach()
+        losses_tot = losses_tot + loss_tot.detach()
 
-            # compute the loss
-            weights = compute_weights(rank, target_ids, num_classes)    # to accomodate class imbalance
-            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-            loss_reg = torch.nn.functional.mse_loss(pred_p4[msk2], target_p4[msk2])  # for regressing p4 # TODO: add mse weights for scales to match? huber?
+        conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
 
-            loss_tot = loss_clf + (alpha * loss_reg)
+    #     if i == 2:
+    #         break
+    # if num == 2:
+    #     break
 
-            if is_train:
-                for param in model.parameters():    # better than calling optimizer.zero_grad() according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
-                    param.grad = None
-                loss_tot.backward()
-                optimizer.step()
-
-            losses_clf = losses_clf + loss_clf.detach()
-            losses_reg = losses_reg + loss_reg.detach()
-            losses_tot = losses_tot + loss_tot.detach()
-
-            conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
-
-        #     if i == 2:
-        #         break
-        # if num == 2:
-        #     break
-
-        print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
-
-    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
-
-    t0 = time.time()
+    print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
     losses_clf = losses_clf / (len(loader) * len(file_loader))
     losses_reg = losses_reg / (len(loader) * len(file_loader))

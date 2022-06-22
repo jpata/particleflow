@@ -3,7 +3,7 @@ from pyg import PFGraphDataset, one_hot_embedding
 from pyg import MLPF, training_loop, make_predictions, make_plots
 from pyg import save_model, load_model, make_directories_for_plots
 from pyg import features_delphes, features_cms, target_p4
-from pyg import make_file_loaders
+from pyg import make_file_loaders, dataloader_ttbar
 
 import torch
 import torch_geometric
@@ -105,9 +105,8 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
 
-    # construct file loaders
-    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    # construct data loaders
+    train_loader, valid_loader = dataloader_ttbar(train_dataset, valid_dataset, args.batch_size)
 
     # create model and move it to GPU with id rank
     print(f'Copying the model on rank {rank}..')
@@ -117,7 +116,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=args.lr)
 
-    training_loop(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
+    training_loop(rank, args.data, ddp_model, train_loader, valid_loader,
                   args.batch_size, args.n_epochs, args.patience,
                   optimizer, args.alpha, args.target, num_classes, outpath)
 
@@ -138,8 +137,9 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
     # construct file loaders
-    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    t0 = time.time()
+    train_loader, valid_loader = dataloader_ttbar(train_dataset, valid_dataset, args.batch_size)
+    print(f'Took {round(time.time()-t0,3)}s constructing dataloaders')
 
     # create model and move it to GPU with id rank
     model = model.to(device)
@@ -147,7 +147,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    training_loop(device, args.data, model, file_loader_train, file_loader_valid,
+    training_loop(device, args.data, model, train_loader, valid_loader,
                   args.batch_size, args.n_epochs, args.patience,
                   optimizer, args.alpha, args.target, num_classes, outpath)
 
@@ -210,39 +210,39 @@ if __name__ == "__main__":
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
-    if args.load:
-        epoch_on_plots = args.load_epoch
-    else:
-        epoch_on_plots = args.n_epochs - 1
-
-    # run the inference
-    if args.make_predictions:
-        if not osp.isdir(f'{outpath}/testing_epoch_{epoch_on_plots}'):
-            os.makedirs(f'{outpath}/testing_epoch_{epoch_on_plots}')
-
-        # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-        dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
-        test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
-
-        # construct file loaders
-        file_loader_test = make_file_loaders(world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-
-        if multi_gpu:
-            model = torch_geometric.nn.DataParallel(model)
-
-        model.to(device)
-
-        model.eval()
-
-        # make predictions on the testing dataset (note: for DataParallel, batch size will be distributed among the number of gpus available)
-        if world_size >= 2:
-            batch_size = args.batch_size * world_size
-        else:
-            batch_size = args.batch_size
-        make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + f'/testing_epoch_{epoch_on_plots}/')
-
-    # load the predictions and make plots (must have ran make_predictions before)
-    if args.make_plots:
-        make_directories_for_plots(outpath, f'testing_epoch_{epoch_on_plots}')
-
-        make_plots(args.data, num_classes, outpath + f'/testing_epoch_{epoch_on_plots}/', args.target, epoch_on_plots, 'QCD')
+    # if args.load:
+    #     epoch_on_plots = args.load_epoch
+    # else:
+    #     epoch_on_plots = args.n_epochs - 1
+    #
+    # # run the inference
+    # if args.make_predictions:
+    #     if not osp.isdir(f'{outpath}/testing_epoch_{epoch_on_plots}'):
+    #         os.makedirs(f'{outpath}/testing_epoch_{epoch_on_plots}')
+    #
+    #     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
+    #     dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+    #     test_dataset = torch.utils.data.Subset(dataset_qcd, np.arange(start=0, stop=args.n_test))
+    #
+    #     # construct file loaders
+    #     file_loader_test = make_file_loaders(world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    #
+    #     if multi_gpu:
+    #         model = torch_geometric.nn.DataParallel(model)
+    #
+    #     model.to(device)
+    #
+    #     model.eval()
+    #
+    #     # make predictions on the testing dataset (note: for DataParallel, batch size will be distributed among the number of gpus available)
+    #     if world_size >= 2:
+    #         batch_size = args.batch_size * world_size
+    #     else:
+    #         batch_size = args.batch_size
+    #     make_predictions(device, args.data, model, multi_gpu, file_loader_test, batch_size, num_classes, outpath + f'/testing_epoch_{epoch_on_plots}/')
+    #
+    # # load the predictions and make plots (must have ran make_predictions before)
+    # if args.make_plots:
+    #     make_directories_for_plots(outpath, f'testing_epoch_{epoch_on_plots}')
+    #
+    #     make_plots(args.data, num_classes, outpath + f'/testing_epoch_{epoch_on_plots}/', args.target, epoch_on_plots, 'QCD')
