@@ -3,6 +3,7 @@ from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions, one_hot_embedding
 
 import torch
+import torch_geometric
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader, DataListLoader
@@ -80,7 +81,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
-        loader = DataLoader(file, batch_size=batch_size)
+        loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
         t = 0
 
@@ -136,6 +137,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
 
+        #     if i == 2:
+        #         break
+        # if num == 2:
+        #     break
+
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
@@ -148,7 +154,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
 
-    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), conf_matrix_norm.cpu().item()
+    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), conf_matrix_norm
 
 
 def training_loop(rank, data, model, train_loader, valid_loader,
