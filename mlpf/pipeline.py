@@ -26,6 +26,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
+import keras
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -102,8 +103,10 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
+@click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline):
 
+    #tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
     config_file_path = config
@@ -117,23 +120,33 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if customize:
         config = customization_functions[customize](config)
 
-    if recreate or (weights is None):
-        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-    else:
-        outdir = str(Path(weights).parent.parent)
+    outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
 
     try:
-        from comet_ml import Experiment
-        experiment = Experiment(
-            project_name="particleflow-tf",
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-            #offline_directory=outdir,
-            #disabled=True
-        )
+        if comet_offline:
+            print("Using comet-ml OfflineExperiment, saving logs locally.")
+            from comet_ml import OfflineExperiment
+            experiment = OfflineExperiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+                offline_directory=outdir + "/cometml",
+            )
+        else:
+            print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+            from comet_ml import Experiment
+            offline_dir = None
+            experiment = Experiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+            )
     except Exception as e:
         print("Failed to initialize comet-ml dashboard")
         experiment = None
@@ -193,7 +206,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             # We need to load the weights in the same trainable configuration as the model was set up
             configure_model_weights(model, config["setup"].get("weights_config", "all"))
             model.load_weights(weights, by_name=True)
-            loaded_opt = pickle.load(open(weights.replace("hdf5", "pkl").replace("/weights-", "/opt-"), "rb"))
+            opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+            if os.path.isfile(opt_weight_file):
+                loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+
             initial_epoch = int(weights.split("/")[-1].split("-")[1])
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
@@ -228,14 +244,20 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
         model.summary()
 
-    #Load the optimizer weights
-    if weights:
+    #Set the optimizer weights
+    if loaded_opt:
         def model_weight_setting():
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            model.optimizer.set_weights(loaded_opt["weights"])
-        strategy.run(model_weight_setting)
+            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
+            else:
+                model.optimizer.set_weights(loaded_opt["weights"])
+        try:
+            strategy.run(model_weight_setting)
+        except Exception as e:
+            print(e)
 
     callbacks = prepare_callbacks(
         config["callbacks"],

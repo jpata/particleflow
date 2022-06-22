@@ -32,6 +32,7 @@ from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
+import keras
 
 def plot_confusion_matrix(cm):
     fig = plt.figure(figsize=(5,5))
@@ -63,12 +64,25 @@ def plot_to_image(figure):
 class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     def on_epoch_end(self, epoch, logs=None):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
-        with open(self.opt_path.format(epoch=epoch+1, **logs), "wb") as fi:
-            pickle.dump({
-                #"lr": self.model.optimizer.lr,
-                #"weights": self.model.optimizer.get_weights()
-                }, fi
-            )
+        weightfile_path = self.opt_path.format(epoch=epoch+1, **logs)
+        try:
+            #PCGrad is derived from the legacy optimizer
+            if isinstance(self.model.optimizer, keras.optimizer_v1.TFOptimizer):
+                #lr = self.model.optimizer.optimizer.optimizer.lr
+                weights = self.model.optimizer.optimizer.optimizer.get_weights()
+            else:
+                #lr = self.model.optimizer.lr
+                weights = self.model.optimizer.get_weights()
+
+            with open(weightfile_path, "wb") as fi:
+                pickle.dump({
+                    #"lr": lr,
+                    "weights": weights
+                    }, fi
+                )
+        except Exception as e:
+            print("Could not save optimizer state: {}".format(e))
+            os.remove(weightfile_path)
 
 class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
@@ -418,7 +432,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
             json.dump(logs, fi)
 
-        if self.plot_freq==0:
+        if self.plot_freq<=0:
             return
         if self.plot_freq>1:
             if epoch%self.plot_freq!=0 or epoch==1:
@@ -485,8 +499,10 @@ def prepare_callbacks(
 
     callbacks = []
     tb = CustomTensorBoard(
-        log_dir=outdir + "/logs", histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"], write_graph=False, write_images=False,
-        update_freq='epoch',
+        log_dir=outdir + "/logs",
+        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
+        write_graph=False, write_images=False,
+        update_freq="epoch",
         #profile_batch=(10,90),
         profile_batch=0,
         dump_history=callbacks_cfg["tensorboard"]["dump_history"],
@@ -563,8 +579,8 @@ def make_gnn_dense(config, dtype):
         "node_encoding_hidden_dim",
         "dropout",
         "activation",
-        "num_graph_layers_common",
-        "num_graph_layers_energy",
+        "num_graph_layers_id",
+        "num_graph_layers_reg",
         "input_encoding",
         "skip_connection",
         "output_decoding",
@@ -707,15 +723,15 @@ def configure_model_weights(model, trainable_layers):
     if trainable_layers == "all":
         model.trainable = True
     elif trainable_layers == "regression":
-        for cg in model.cg:
+        for cg in model.cg_id:
             cg.trainable = False
-        for cg in model.cg_energy:
+        for cg in model.cg_reg:
             cg.trainable = True
         model.output_dec.set_trainable_regression()
     elif trainable_layers == "classification":
-        for cg in model.cg:
+        for cg in model.cg_id:
             cg.trainable = True
-        for cg in model.cg_energy:
+        for cg in model.cg_reg:
             cg.trainable = False
         model.output_dec.set_trainable_classification()
     else:
