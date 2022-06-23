@@ -84,13 +84,13 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     # mp.set_start_method('forkserver')
 
     mp.spawn(demo_fn,
-             args=(world_size, args, dataset, model, num_classes, outpath),
+             args=(world_size, args, dataset, model, num_classes, outpath, epoch_to_load),
              nprocs=world_size,
              join=True,
              )
 
 
-def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
+def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
     """
     A train_ddp() function that will be passed as a demo_fn to run_demo() to perform training over multiple gpus using DDP.
 
@@ -128,7 +128,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     cleanup()
 
 
-def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
+def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
     """
     An inference_ddp() function that will be passed as a demo_fn to run_demo() to perform inference over multiple gpus using DDP.
 
@@ -153,12 +153,12 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath, epoch_on_plots)
+    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
 
     cleanup()
 
 
-def train(device, world_size, args, dataset, model, num_classes, outpath):
+def train(device, world_size, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
     """
     A train() function that will load the training dataset and start a training_loop on a single device (cuda or cpu).
     """
@@ -186,7 +186,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
                   optimizer, args.alpha, args.target, num_classes, outpath)
 
 
-def inference(device, world_size, args, dataset, model, num_classes, outpath):
+def inference(device, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
     """
     An inference() function that will load the testing dataset and start running inference on a single device (cuda or cpu).
     """
@@ -205,7 +205,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath):
     model = model.to(device)
     model.eval()
 
-    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_on_plots)
+    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
 
 
 if __name__ == "__main__":
@@ -271,22 +271,22 @@ if __name__ == "__main__":
         model.load_state_dict(state_dict)
 
     if args.load and args.load_epoch != -1:
-        epoch_on_plots = args.load_epoch
+        epoch_to_load = args.load_epoch
     else:
         import json
-        epoch_on_plots = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
+        epoch_to_load = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
 
-    pred_path = f'{outpath}/testing_epoch_{epoch_on_plots}/predictions/'
-    plot_path = f'{outpath}/testing_epoch_{epoch_on_plots}/plots/'
+    pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
+    plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
 
     # run the inference
     if args.make_predictions:
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath)
+            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
         else:
-            inference(device, world_size, args, dataset_qcd, model, num_classes, outpath)
+            inference(device, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
@@ -294,4 +294,4 @@ if __name__ == "__main__":
         if not osp.isdir(plot_path):
             os.makedirs(plot_path)
 
-        make_plots(args.data, num_classes, pred_path, plot_path, args.target, epoch_on_plots, 'QCD')
+        make_plots(args.data, num_classes, pred_path, plot_path, args.target, epoch_to_load, 'QCD')

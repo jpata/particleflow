@@ -39,6 +39,8 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
 
+    ti = time.time()
+
     PATH = f'{outpath}/testing_epoch_{epoch}/'
     if not os.path.exists(f'{PATH}/predictions/'):
         os.makedirs(f'{PATH}/predictions/')
@@ -46,12 +48,12 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     conf_matrix_mlpf = np.zeros((num_classes, num_classes))
     conf_matrix_pf = np.zeros((num_classes, num_classes))
 
-    tt0, t0, tff = time.time(), time.time(), 0
-
+    tf = 0
     ibatch = 0
+    t0 = time.time()
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
-        tff = tff + (time.time() - t0)
+        tf = tf + (time.time() - t0)
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
@@ -61,11 +63,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         for i, batch in enumerate(loader):
             np_outfile = f"{PATH}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
-            ti = time.time()
+            t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
-            tf = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(tf - ti, 3)}s, for batch with {batch.num_nodes} nodes')
-            t = t + (tf - ti)
+            t1 = time.time()
+            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            t = t + (t1 - t0)
 
             conf_matrix_mlpf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), torch.argmax(pred_ids_one_hot, axis=1).detach().cpu(), labels=range(num_classes))
             conf_matrix_pf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), batch.ycand_id.detach().to('cpu'), labels=range(num_classes))
@@ -138,7 +140,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
-    print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - tt0) / 60), 2)} min')
+    print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min')
 
     # make confusion_matrix plots
     conf_matrix_mlpf = conf_matrix_mlpf / conf_matrix_mlpf.sum(axis=1)[:, np.newaxis]

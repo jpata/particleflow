@@ -70,11 +70,12 @@ def train(rank, model, train_loader, valid_loader, batch_size,
         file_loader = valid_loader
 
     # initialize loss counters
-    losses_clf, losses_reg, losses_tot, t, tf = 0, 0, 0, 0, 0
+    losses_clf, losses_reg, losses_tot = 0, 0, 0
 
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
+    tf = 0
     t0 = time.time()
 
     for num, file in enumerate(file_loader):
@@ -136,9 +137,9 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
-    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
+        t0 = time.time()
 
-    t0 = time.time()
+    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     losses_clf = losses_clf / (len(loader) * len(file_loader))
     losses_reg = losses_reg / (len(loader) * len(file_loader))
