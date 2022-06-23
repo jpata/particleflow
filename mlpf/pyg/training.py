@@ -93,7 +93,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (t1 - t0)
 
             # define the target
@@ -130,10 +130,10 @@ def train(rank, model, train_loader, valid_loader, batch_size,
 
             conf_matrix += sklearn.metrics.confusion_matrix(target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes))
 
-            if i == 2:
-                break
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 

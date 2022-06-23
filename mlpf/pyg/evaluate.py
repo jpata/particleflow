@@ -124,11 +124,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
             )
             ibatch += 1
 
-            if i == 2:
-                break
-
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        #
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
