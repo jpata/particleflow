@@ -8,6 +8,7 @@ from pyg.utils import one_hot_embedding, target_p4
 from pyg.cms_plots import plot_numPFelements, plot_met, plot_sum_energy, plot_sum_pt, plot_energy_res, plot_eta_res, plot_multiplicity
 
 import torch
+import torch_geometric
 from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader, DataListLoader
 
@@ -28,40 +29,17 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, num_classes, outpath):
+def make_predictions(rank, data, model, file_loader, batch_size, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
     Args
         data: data specification ('cms' or 'delphes')
         model: pytorch model
-        multi_gpu: boolean for multi_gpu training (if multigpus are available)
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
-    if device == 'cpu':
-        print(f"Running inference on cpu")
-    else:
-        torch.cuda.empty_cache()
-        for rank in range(torch.cuda.device_count()):
-            print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
-
-    if not osp.isdir(f'{outpath}/predictions'):
-        os.makedirs(f'{outpath}/predictions')
 
     tt0 = time.time()
-
-    if data == 'delphes':
-        name_to_pid = name_to_pid_delphes
-    elif data == 'cms':
-        name_to_pid = name_to_pid_cms
-
-    pfcands = list(name_to_pid.keys())
-
-    gen_list, cand_list, pred_list = {}, {}, {}
-    for pfcand in pfcands:
-        gen_list[pfcand] = []
-        cand_list[pfcand] = []
-        pred_list[pfcand] = []
 
     t0, tff = time.time(), 0
 
@@ -72,70 +50,80 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
-        if multi_gpu:
-            loader = DataListLoader(file, batch_size=batch_size)
-        else:
-            loader = DataLoader(file, batch_size=batch_size)
+        loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
         t = 0
-
-        outs = {}
         for i, batch in enumerate(loader):
-            np_outfile = f"{outpath}/predictions/pred_batch{ibatch}.npz"
-
-            if multi_gpu:
-                X = batch   # a list (not torch) instance so can't be passed to device
-            else:
-                X = batch.to(device)
+            np_outfile = f"{outpath}/pred_batch{ibatch}_rank{rank}.npz"
 
             ti = time.time()
-            pred, target = model(X)
+            pred_ids_one_hot, pred_p4 = model(batch.to(rank))
+
             tf = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
+            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(tf - ti, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (tf - ti)
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
 
-            vars = {'X': batch.x.detach().to('cpu'),
-                    'ygen': target['ygen'].detach().to('cpu'),
-                    'ycand': target['ycand'].detach().to('cpu'),
-                    'pred_p4': pred[:, 9:].detach().to('cpu'),
-                    'gen_ids_one_hot': one_hot_embedding(target['ygen_id'].detach().to('cpu'), num_classes).to('cpu'),
-                    'cand_ids_one_hot': one_hot_embedding(target['ycand_id'].detach().to('cpu'), num_classes).to('cpu'),
-                    'pred_ids_one_hot': pred[:, :9].detach().to('cpu')
-                    }
+            pred_ids_one_hot_list = []
+            pred_p4_list = []
+            for z in range(batch_size):
+                pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
+                pred_p4_list.append(pred_p4[batch.batch == z])
 
-            vars_padded = {}
-            for key, var in vars.items():
-                var = var[:padded_num_elem_size]
-                var = np.pad(var, [(0, padded_num_elem_size - var.shape[0]), (0, 0)])
-                var = np.expand_dims(var, 0)
-
-                vars_padded[key] = var
+            batch_list = batch.to_data_list()
 
             outs = {}
-            outs['gen_cls'] = vars_padded['gen_ids_one_hot']
-            outs['cand_cls'] = vars_padded['cand_ids_one_hot']
-            outs['pred_cls'] = vars_padded['pred_ids_one_hot']
-
+            outs[f'X'], outs[f'gen_cls'], outs[f'cand_cls'], outs[f'pred_cls'] = [], [], [], []
             for feat, key in enumerate(target_p4):
-                outs[f'gen_{key}'] = vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
-                outs[f'cand_{key}'] = vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
-                outs[f'pred_{key}'] = vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                outs[f'gen_{key}'], outs[f'cand_{key}'], outs[f'pred_{key}'] = [], [], []
+
+            for j, event in enumerate(batch_list):
+                vars = {'X': event.x.detach().to('cpu'),
+                        'ygen': event.ygen.detach().to('cpu'),
+                        'ycand': event.ycand.detach().to('cpu'),
+                        'pred_p4': pred_p4_list[j].detach().to('cpu'),
+                        'gen_ids_one_hot': one_hot_embedding(event.ygen_id.detach().to('cpu'), num_classes),
+                        'cand_ids_one_hot': one_hot_embedding(event.ycand_id.detach().to('cpu'), num_classes),
+                        'pred_ids_one_hot': pred_ids_one_hot_list[j].detach().to('cpu')
+                        }
+
+                vars_padded = {}
+                for key, var in vars.items():
+                    var = var[:padded_num_elem_size]
+                    var = np.pad(var, [(0, padded_num_elem_size - var.shape[0]), (0, 0)])
+                    var = np.expand_dims(var, 0)
+
+                    vars_padded[key] = var
+
+                outs[f'X'].append(vars_padded['X'])
+                outs[f'gen_cls'].append(vars_padded['gen_ids_one_hot'])
+                outs[f'cand_cls'].append(vars_padded['cand_ids_one_hot'])
+                outs[f'pred_cls'].append(vars_padded['pred_ids_one_hot'])
+
+                for feat, key in enumerate(target_p4):
+                    outs[f'gen_{key}'].append(vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
+                    outs[f'cand_{key}'].append(vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
+                    outs[f'pred_{key}'].append(vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
+
+            print(f'saving predictions at {np_outfile}')
+
+            out = {}
+            for key, value in outs.items():
+                out[key] = np.concatenate(value)
 
             np.savez(
                 np_outfile,
-                X=vars_padded['X'],
-                **outs
+                **out
             )
             ibatch += 1
 
-        #     if i == 3:
-        #         break
-        #
-        # if num == 2:
-        #     break
+            if i == 3:
+                break
+
+        if num == 2:
+            break
 
         print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
 
@@ -192,7 +180,7 @@ def load_predictions(path):
     return X, yvals_f, yvals
 
 
-def make_plots(data, num_classes, outpath, target, epoch, sample):
+def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
 
     print('Making plots...')
 
@@ -206,12 +194,12 @@ def make_plots(data, num_classes, outpath, target, epoch, sample):
     t0 = time.time()
 
     # load the necessary predictions to make the plots
-    X, yvals_f, yvals = load_predictions(f'{outpath}/predictions')
+    X, yvals_f, yvals = load_predictions(pred_path)
 
-    plot_numPFelements(X, f'{outpath}/plots', sample)
-    plot_met(X, yvals, f'{outpath}/plots', sample)
-    plot_sum_energy(X, yvals, f'{outpath}/plots', sample)
-    plot_sum_pt(X, yvals, f'{outpath}/plots', sample)
+    plot_numPFelements(X, plot_path, sample)
+    plot_met(X, yvals, plot_path, sample)
+    plot_sum_energy(X, yvals, plot_path, sample)
+    plot_sum_pt(X, yvals, plot_path, sample)
 
     dic = {1: (1e9, np.linspace(-2, 15, 100)),
            2: (1e7, np.linspace(-2, 15, 100)),
@@ -222,14 +210,14 @@ def make_plots(data, num_classes, outpath, target, epoch, sample):
            7: (1e4, np.linspace(-0.1, 0.1, 100))
            }
     for pid, tuple in dic.items():
-        plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], f'{outpath}/plots', sample)
+        plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
 
     dic = {1: 1e10,
            2: 1e8}
     for pid, ylim in dic.items():
-        plot_eta_res(X, yvals_f, pid, ylim, f'{outpath}/plots', sample)
+        plot_eta_res(X, yvals_f, pid, ylim, plot_path, sample)
 
-    plot_multiplicity(X, yvals, f'{outpath}/plots', sample)
+    plot_multiplicity(X, yvals, plot_path, sample)
 
     t1 = time.time()
     print('Time taken to make plots is:', round(((t1 - t0) / 60), 2), 'min')

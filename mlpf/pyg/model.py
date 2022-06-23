@@ -81,11 +81,6 @@ class MLPF(nn.Module):
 
         # unfold the Batch object
         input = batch.x
-        target = {'ygen_id': batch.ygen_id,
-                  'ygen': batch.ygen,
-                  'ycand_id': batch.ycand_id,
-                  'ycand': batch.ycand,
-                  }
 
         # embed the inputs
         embedding = self.nn1(input)
@@ -100,7 +95,7 @@ class MLPF(nn.Module):
         # predict the p4's
         preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
 
-        return torch.cat([preds_id, preds_p4], axis=-1), target
+        return preds_id, preds_p4
 
 
 try:
