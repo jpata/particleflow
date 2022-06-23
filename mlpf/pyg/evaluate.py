@@ -4,6 +4,7 @@ from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
 from pyg.utils import one_hot_embedding
+from pyg.cms_utils import CLASS_NAMES_CMS
 
 import torch
 from torch_geometric.data import Batch
@@ -116,8 +117,8 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, num_cla
             cand_ids_all = torch.cat([cand_ids_all, cand_ids])
             cand_p4_all = torch.cat([cand_p4_all, cand_p4])
 
-        if i == 2:
-            break
+        # if i == 2:
+        #     break
 
     print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
 
@@ -153,7 +154,7 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     if data == 'delphes':
         name_to_pid = name_to_pid_delphes
     elif data == 'cms':
-        name_to_pid = name_to_pid_cms
+        name_to_pid = CLASS_NAMES_CMS
 
     pfcands = list(name_to_pid.keys())
 
