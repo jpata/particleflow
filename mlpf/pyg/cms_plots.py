@@ -252,8 +252,8 @@ def plot_multiplicity(X, yvals, outpath, sample):
         vals_cand = np.sum(np.ma.MaskedArray(yvals["cand_energy"], ~msk), axis=1)[:, 0]
         fig = plt.figure()
         ax = plt.axes()
-        plt.scatter(vals_gen, vals_cand, alpha=0.2)
-        plt.scatter(vals_gen, vals_pred, alpha=0.2)
+        plt.scatter(vals_gen, vals_cand, alpha=0.2, label="PF")
+        plt.scatter(vals_gen, vals_pred, alpha=0.2, label="MLPF")
         minval = min(np.min(vals_gen), np.min(vals_cand), np.min(vals_pred))
         maxval = max(np.max(vals_gen), np.max(vals_cand), np.max(vals_pred))
         plt.plot([minval, maxval], [minval, maxval], color="black")
@@ -261,6 +261,7 @@ def plot_multiplicity(X, yvals, outpath, sample):
         plt.ylim(minval, maxval)
         plt.xlabel("true $\sum E$ [GeV]")
         plt.xlabel("reconstructed $\sum E$ [GeV]")
+        plt.legend(loc=4)
         cms_label(ax)
         sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[icls]}")
         plt.savefig(f"{outpath}/energy_cls{icls}.pdf", bbox_inches="tight")
