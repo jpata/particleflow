@@ -151,7 +151,7 @@ def load_predictions(path):
     Xs = []
     yvals = {}
     for i, fi in enumerate(list(glob.glob(path + "/pred_batch*.npz"))):
-        print(f'loading prediction # {i}')
+        print(f'loading prediction # {i}/{len(list(glob.glob(path + "/pred_batch*.npz")))}')
         dd = np.load(fi)
         Xs.append(dd["X"])
 
