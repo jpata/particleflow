@@ -154,10 +154,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     elif data == 'cms':
         target_names = CLASS_NAMES_CMS
 
-    if epoch == -1:
-        import json
-        epoch = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
-
     plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_MLPF')
     plot_confusion_matrix(conf_matrix_pf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_PF')
 
