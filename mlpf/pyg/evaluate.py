@@ -170,7 +170,7 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     if data == 'delphes':
         name_to_pid = name_to_pid_delphes
     elif data == 'cms':
-        name_to_pid = CLASS_NAMES_CMS
+        name_to_pid = name_to_pid_cms
 
     pfcands = list(name_to_pid.keys())
 
