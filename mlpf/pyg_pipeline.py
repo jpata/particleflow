@@ -72,25 +72,43 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
+def run_demo_train(train_ddp, world_size, args, dataset, model, num_classes, outpath):
     """
-    Necessary function that spawns a process group of size=world_size processes to run a demo_fn on each gpu device that will be indexed by 'rank'.
+    Necessary function that spawns a process group of size=world_size processes to run train_ddp() on each gpu device that will be indexed by 'rank'.
 
     Args:
-    demo_fn: function you wish to run on each gpu
+    train_ddp: function you wish to run on each gpu
     world_size: number of gpus available
     """
 
     # mp.set_start_method('forkserver')
 
-    mp.spawn(demo_fn,
+    mp.spawn(train_ddp,
+             args=(world_size, args, dataset, model, num_classes, outpath),
+             nprocs=world_size,
+             join=True,
+             )
+
+
+def run_demo_inference(inference_ddp, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
+    """
+    Necessary function that spawns a process group of size=world_size processes to run inference_ddp() on each gpu device that will be indexed by 'rank'.
+
+    Args:
+    inference_ddp: function you wish to run on each gpu
+    world_size: number of gpus available
+    """
+
+    # mp.set_start_method('forkserver')
+
+    mp.spawn(inference_ddp,
              args=(world_size, args, dataset, model, num_classes, outpath, epoch_to_load),
              nprocs=world_size,
              join=True,
              )
 
 
-def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
+def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     """
     A train_ddp() function that will be passed as a demo_fn to run_demo() to perform training over multiple gpus using DDP.
 
@@ -158,7 +176,7 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, 
     cleanup()
 
 
-def train(device, world_size, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
+def train(device, world_size, args, dataset, model, num_classes, outpath):
     """
     A train() function that will load the training dataset and start a training_loop on a single device (cuda or cpu).
     """
@@ -262,7 +280,7 @@ if __name__ == "__main__":
 
         # run the training using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
+            run_demo_train(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
@@ -284,7 +302,7 @@ if __name__ == "__main__":
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
+            run_demo_inference(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
         else:
             inference(device, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
 
