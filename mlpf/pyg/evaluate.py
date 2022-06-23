@@ -95,7 +95,7 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
 
-            vars = {'X': batch.x,
+            vars = {'X': batch.x.detach().to('cpu'),
                     'ygen': target['ygen'].detach().to('cpu'),
                     'ycand': target['ycand'].detach().to('cpu'),
                     'pred_p4': pred[:, 9:].detach().to('cpu'),
