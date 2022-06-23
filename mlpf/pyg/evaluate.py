@@ -4,7 +4,6 @@ from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
 from pyg.utils import one_hot_embedding
-from pyg.cms_utils import CLASS_NAMES_CMS
 
 import torch
 from torch_geometric.data import Batch
@@ -26,7 +25,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-def make_predictions(device, data, model, multi_gpu, loader, batch_size, num_classes, outpath):
+def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, num_classes, outpath):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -62,65 +61,81 @@ def make_predictions(device, data, model, multi_gpu, loader, batch_size, num_cla
         pred_list[pfcand] = []
 
     t0, tff = time.time(), 0
+    for num, file in enumerate(file_loader):
+        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        tff = tff + (time.time() - t0)
 
-    t = 0
-    for i, batch in enumerate(loader):
+        file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         if multi_gpu:
-            X = batch   # a list (not torch) instance so can't be passed to device
+            loader = DataListLoader(file, batch_size=batch_size)
         else:
-            X = batch.to(device)
+            loader = DataLoader(file, batch_size=batch_size)
 
-        ti = time.time()
-        pred, target = model(X)
-        tf = time.time()
-        print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
-        t = t + (tf - ti)
+        t = 0
+        for i, batch in enumerate(loader):
 
-        # retrieve predictions
-        pred_p4 = pred[:, num_classes:].detach().to('cpu')
-        pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
-        pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+            if multi_gpu:
+                X = batch   # a list (not torch) instance so can't be passed to device
+            else:
+                X = batch.to(device)
 
-        # retrieve target
-        gen_p4 = target['ygen'].detach().to('cpu')
-        gen_ids = target['ygen_id'].detach().to('cpu')
-        cand_p4 = target['ycand'].detach().to('cpu')
-        cand_ids = target['ycand_id'].detach().to('cpu')
+            ti = time.time()
+            pred, target = model(X)
+            tf = time.time()
+            print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
+            t = t + (tf - ti)
 
-        # one hot encode the target
-        gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
-        cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
+            # retrieve predictions
+            pred_p4 = pred[:, num_classes:].detach().to('cpu')
+            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
+            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
-        # to make "num_gen vs num_pred" plots
-        for key, value in name_to_pid.items():
-            gen_list[key].append((gen_ids == value).sum().item())
-            pred_list[key].append((pred_ids == value).sum().item())
-            cand_list[key].append((cand_ids == value).sum().item())
+            # retrieve target
+            gen_p4 = target['ygen'].detach().to('cpu')
+            gen_ids = target['ygen_id'].detach().to('cpu')
+            cand_p4 = target['ycand'].detach().to('cpu')
+            cand_ids = target['ycand_id'].detach().to('cpu')
 
-        if i == 0:
-            gen_ids_all = gen_ids
-            gen_p4_all = gen_p4
+            # one hot encode the target
+            gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
+            cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
 
-            pred_ids_all = pred_ids
-            pred_p4_all = pred_p4
+            # to make "num_gen vs num_pred" plots
+            for key, value in name_to_pid.items():
+                gen_list[key].append((gen_ids == value).sum().item())
+                pred_list[key].append((pred_ids == value).sum().item())
+                cand_list[key].append((cand_ids == value).sum().item())
 
-            cand_ids_all = cand_ids
-            cand_p4_all = cand_p4
-        else:
-            gen_ids_all = torch.cat([gen_ids_all, gen_ids])
-            gen_p4_all = torch.cat([gen_p4_all, gen_p4])
+            if i == 0:
+                gen_ids_all = gen_ids
+                gen_p4_all = gen_p4
 
-            pred_ids_all = torch.cat([pred_ids_all, pred_ids])
-            pred_p4_all = torch.cat([pred_p4_all, pred_p4])
+                pred_ids_all = pred_ids
+                pred_p4_all = pred_p4
 
-            cand_ids_all = torch.cat([cand_ids_all, cand_ids])
-            cand_p4_all = torch.cat([cand_p4_all, cand_p4])
+                cand_ids_all = cand_ids
+                cand_p4_all = cand_p4
+            else:
+                gen_ids_all = torch.cat([gen_ids_all, gen_ids])
+                gen_p4_all = torch.cat([gen_p4_all, gen_p4])
 
-        # if i == 2:
+                pred_ids_all = torch.cat([pred_ids_all, pred_ids])
+                pred_p4_all = torch.cat([pred_p4_all, pred_p4])
+
+                cand_ids_all = torch.cat([cand_ids_all, cand_ids])
+                cand_p4_all = torch.cat([cand_p4_all, cand_p4])
+
+        #     if i == 2:
+        #         break
+        # if num == 2:
         #     break
 
-    print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
+        print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
+
+        t0 = time.time()
+
+    print(f'Average time to load a file {round((tff / len(file_loader)), 3)}s')
 
     print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
 
@@ -154,7 +169,7 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     if data == 'delphes':
         name_to_pid = name_to_pid_delphes
     elif data == 'cms':
-        name_to_pid = CLASS_NAMES_CMS
+        name_to_pid = name_to_pid_cms
 
     pfcands = list(name_to_pid.keys())
 
