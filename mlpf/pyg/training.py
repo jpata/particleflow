@@ -1,6 +1,7 @@
 from pyg import make_plot_from_lists
 from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions, one_hot_embedding
+from pyg.cms_utils import CLASS_NAMES_CMS
 
 import torch
 import torch_geometric
@@ -217,8 +218,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
             torch.save(state_dict, f'{outpath}/best_epoch_weights.pth')
 
             with open(f'{outpath}/best_epoch.json', 'w') as fp:  # dump best epoch
-                json.dump({'best_epoch': epoch
-                           }, fp)
+                json.dump({'best_epoch': epoch}, fp)
         else:
             stale_epochs += 1
 
@@ -249,7 +249,7 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         if data == 'delphes':
             target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
         elif data == 'cms':
-            target_names = ["none", "HFEM", "HFHAD", "el", "mu", "g", "n.had", "ch.had", "tau"]
+            target_names = CLASS_NAMES_CMS
 
         plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmTrain')
         plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f'epoch_{str(epoch)}_cmValid')

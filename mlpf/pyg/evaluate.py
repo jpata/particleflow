@@ -4,7 +4,7 @@ from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
 from pyg.utils import one_hot_embedding, target_p4
-
+from pyg.cms_utils import CLASS_NAMES_CMS
 from pyg.cms_plots import plot_numPFelements, plot_met, plot_sum_energy, plot_sum_pt, plot_energy_res, plot_eta_res, plot_multiplicity
 
 import torch
@@ -29,7 +29,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-def make_predictions(rank, data, model, file_loader, batch_size, num_classes, outpath):
+def make_predictions(rank, data, model, file_loader, batch_size, num_classes, outpath, epoch):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
@@ -39,9 +39,14 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
 
-    tt0 = time.time()
+    PATH = f'{outpath}/testing_epoch_{epoch}/'
+    if not os.path.exists(f'{PATH}/predictions/'):
+        os.makedirs(f'{PATH}/predictions/')
 
-    t0, tff = time.time(), 0
+    conf_matrix_mlpf = np.zeros((num_classes, num_classes))
+    conf_matrix_pf = np.zeros((num_classes, num_classes))
+
+    tt0, t0, tff = time.time(), time.time(), 0
 
     ibatch = 0
     for num, file in enumerate(file_loader):
@@ -54,14 +59,16 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
         t = 0
         for i, batch in enumerate(loader):
-            np_outfile = f"{outpath}/pred_batch{ibatch}_rank{rank}.npz"
+            np_outfile = f"{PATH}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
             ti = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
-
             tf = time.time()
             # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(tf - ti, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (tf - ti)
+
+            conf_matrix_mlpf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), torch.argmax(pred_ids_one_hot, axis=1).detach().cpu(), labels=range(num_classes))
+            conf_matrix_pf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), batch.ycand_id.detach().to('cpu'), labels=range(num_classes))
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
@@ -119,11 +126,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
             )
             ibatch += 1
 
-        #     if i == 3:
-        #         break
-        #
-        # if num == 2:
-        #     break
+            if i == 2:
+                break
+
+        if num == 2:
+            break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -132,6 +139,25 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - tt0) / 60), 2)} min')
+
+    # make confusion_matrix plots
+    conf_matrix_mlpf = conf_matrix_mlpf / conf_matrix_mlpf.sum(axis=1)[:, np.newaxis]
+    conf_matrix_pf = conf_matrix_pf / conf_matrix_pf.sum(axis=1)[:, np.newaxis]
+
+    if not os.path.exists(f'{PATH}/plots/'):
+        os.makedirs(f'{PATH}/plots/')
+
+    if data == 'delphes':
+        target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
+    elif data == 'cms':
+        target_names = CLASS_NAMES_CMS
+
+    if epoch == -1:
+        import json
+        epoch = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
+
+    plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_MLPF')
+    plot_confusion_matrix(conf_matrix_pf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_PF')
 
 
 def load_predictions(path):

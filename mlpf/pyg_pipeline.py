@@ -153,7 +153,7 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath)
+    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath, epoch_on_plots)
 
     cleanup()
 
@@ -205,7 +205,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath):
     model = model.to(device)
     model.eval()
 
-    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath)
+    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_on_plots)
 
 
 if __name__ == "__main__":
@@ -236,7 +236,6 @@ if __name__ == "__main__":
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
-        # model = torch.jit.script(model)
 
     else:   # instantiates and train a model
         model_kwargs = {'input_dim': input_dim,
@@ -267,10 +266,15 @@ if __name__ == "__main__":
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
-    if args.load:
+        # load the best epoch state
+        state_dict = torch.load(outpath + '/best_epoch_weights.pth', map_location=device_cuda)
+        model.load_state_dict(state_dict)
+
+    if args.load and args.load_epoch != -1:
         epoch_on_plots = args.load_epoch
     else:
-        epoch_on_plots = args.n_epochs - 1
+        import json
+        epoch_on_plots = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
 
     pred_path = f'{outpath}/testing_epoch_{epoch_on_plots}/predictions/'
     plot_path = f'{outpath}/testing_epoch_{epoch_on_plots}/plots/'
@@ -278,14 +282,11 @@ if __name__ == "__main__":
     # run the inference
     if args.make_predictions:
 
-        if not osp.isdir(pred_path):
-            os.makedirs(pred_path)
-
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, pred_path)
+            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath)
         else:
-            inference(device, world_size, args, dataset_qcd, model, num_classes, pred_path)
+            inference(device, world_size, args, dataset_qcd, model, num_classes, outpath)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
