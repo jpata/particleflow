@@ -171,7 +171,7 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, 
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
+    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size / 4, num_classes, outpath, epoch_to_load)
 
     cleanup()
 
@@ -223,7 +223,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath, ep
     model = model.to(device)
     model.eval()
 
-    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
+    make_predictions(device, args.data, model, file_loader_test, args.batch_size / 4, num_classes, outpath, epoch_to_load)
 
 
 if __name__ == "__main__":
