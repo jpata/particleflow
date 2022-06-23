@@ -192,9 +192,9 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath):
     """
 
     if device == 'cpu':
-        print(f"Running training on cpu")
+        print(f"Running inference on cpu")
     else:
-        print(f"Running training on: {torch.cuda.get_device_name(device)}")
+        print(f"Running inference on: {torch.cuda.get_device_name(device)}")
 
     test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
 
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference, world_size, args, dataset_qcd, model, num_classes, pred_path)
+            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, pred_path)
         else:
             inference(device, world_size, args, dataset_qcd, model, num_classes, pred_path)
 

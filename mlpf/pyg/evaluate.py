@@ -45,7 +45,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     ibatch = 0
     for num, file in enumerate(file_loader):
-        print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
+        print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tff = tff + (time.time() - t0)
 
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
@@ -125,13 +125,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         if num == 2:
             break
 
-        print(f'Average inference time per batch is {round((t / (len(loader))), 3)}s')
+        print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
         t0 = time.time()
 
-    print(f'Average time to load a file {round((tff / len(file_loader)), 3)}s')
+    print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
-    print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
+    print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - tt0) / 60), 2)} min')
 
 
 def load_predictions(path):
