@@ -41,10 +41,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     ti = time.time()
 
-    PATH = f'{outpath}/testing_epoch_{epoch}/'
-    if not os.path.exists(f'{PATH}/predictions/'):
-        os.makedirs(f'{PATH}/predictions/')
-
     conf_matrix_mlpf = np.zeros((num_classes, num_classes))
     conf_matrix_pf = np.zeros((num_classes, num_classes))
 
@@ -61,7 +57,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
         t = 0
         for i, batch in enumerate(loader):
-            np_outfile = f"{PATH}/predictions/pred_batch{ibatch}_rank{rank}.npz"
+            np_outfile = f"{outpath}/testing_epoch_{epoch}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
@@ -146,16 +142,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     conf_matrix_mlpf = conf_matrix_mlpf / conf_matrix_mlpf.sum(axis=1)[:, np.newaxis]
     conf_matrix_pf = conf_matrix_pf / conf_matrix_pf.sum(axis=1)[:, np.newaxis]
 
-    if not os.path.exists(f'{PATH}/plots/'):
-        os.makedirs(f'{PATH}/plots/')
-
     if data == 'delphes':
         target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
     elif data == 'cms':
         target_names = CLASS_NAMES_CMS
 
-    plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_MLPF')
-    plot_confusion_matrix(conf_matrix_pf, target_names, epoch + 1, f'{PATH}/plots/', f'confusion_matrix_PF')
+    plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, f'{outpath}/testing_epoch_{epoch}/plots/', f'confusion_matrix_MLPF')
+    plot_confusion_matrix(conf_matrix_pf, target_names, epoch + 1, f'{outpath}/testing_epoch_{epoch}/plots/', f'confusion_matrix_PF')
 
 
 def load_predictions(path):

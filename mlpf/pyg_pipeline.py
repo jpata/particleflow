@@ -300,6 +300,14 @@ if __name__ == "__main__":
     # run the inference
     if args.make_predictions:
 
+        PATH = f'{outpath}/testing_epoch_{epoch_to_load}/'
+        if not os.path.exists(PATH):
+            os.makedirs(PATH)
+        if not os.path.exists(f'{PATH}/predictions/'):
+            os.makedirs(f'{PATH}/predictions/')
+        if not os.path.exists(f'{PATH}/plots/'):
+            os.makedirs(f'{PATH}/plots/')
+
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
             run_demo_inference(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
