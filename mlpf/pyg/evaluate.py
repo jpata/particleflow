@@ -150,7 +150,8 @@ def load_predictions(path):
 
     Xs = []
     yvals = {}
-    for fi in list(glob.glob(path + "/pred_batch*.npz")):
+    for i, fi in enumerate(list(glob.glob(path + "/pred_batch*.npz"))):
+        print(f'loading prediction # {i}')
         dd = np.load(fi)
         Xs.append(dd["X"])
 
@@ -205,7 +206,6 @@ def make_plots(data, num_classes, outpath, target, epoch, sample):
     t0 = time.time()
 
     # load the necessary predictions to make the plots
-    print(outpath)
     X, yvals_f, yvals = load_predictions(f'{outpath}/predictions')
 
     plot_numPFelements(X, f'{outpath}/plots', sample)
