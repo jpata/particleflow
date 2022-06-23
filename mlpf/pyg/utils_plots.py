@@ -31,6 +31,18 @@ pid_to_name_cms = {0: 'null',
                    8: 'tau',
                    }
 
+
+pid_to_name_cms = {0: 'null',
+                   1: 'chhadron',
+                   2: 'nhadron',
+                   3: 'HFHAD',
+                   4: 'HFEM',
+                   5: 'gamma',
+                   6: 'ele',
+                   7: 'mu',
+                   8: 'tau',
+                   }
+
 name_to_pid_delphes = {'null': 0,
                        'chhadron': 1,
                        'nhadron': 2,
@@ -40,13 +52,13 @@ name_to_pid_delphes = {'null': 0,
                        }
 
 name_to_pid_cms = {'null': 0,
-                   'HFEM': 1,
-                   'HFHAD': 2,
-                   'ele': 3,
-                   'mu': 4,
-                   'photon': 5,
-                   'nhadron': 6,
-                   'chhadron': 7,
+                   'chhadron': 1,
+                   'nhadron': 2,
+                   'HFHAD': 3,
+                   'HFEM': 4,
+                   'gamma': 5,
+                   'ele': 6,
+                   'mu': 7,
                    'tau': 8,
                    }
 
