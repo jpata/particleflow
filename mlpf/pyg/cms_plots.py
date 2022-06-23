@@ -26,7 +26,6 @@ import scipy
 import mplhep
 
 import pandas
-import boost_histogram as bh
 import itertools
 import mplhep
 mplhep.set_style(mplhep.styles.CMS)
