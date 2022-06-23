@@ -5,6 +5,8 @@ from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_nam
 from pyg.utils import define_regions, batch_event_into_regions
 from pyg.utils import one_hot_embedding, target_p4
 
+from pyg.cms_plots import plot_numPFelements, plot_met, plot_sum_energy, plot_sum_pt, plot_energy_res, plot_eta_res, plot_multiplicity
+
 import torch
 from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader, DataListLoader
@@ -144,7 +146,52 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
     print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
 
 
-def make_plots(data, num_classes, outpath, target, epoch, tag):
+def load_predictions(path):
+
+    Xs = []
+    yvals = {}
+    for fi in list(glob.glob(path + "/pred_batch*.npz")):
+        dd = np.load(fi)
+        Xs.append(dd["X"])
+
+        keys_in_file = list(dd.keys())
+        for k in keys_in_file:
+            if k == "X":
+                continue
+            if not (k in yvals):
+                yvals[k] = []
+            yvals[k].append(dd[k])
+
+    X = np.concatenate(Xs)
+
+    def flatten(arr):
+        # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
+        return arr.reshape(-1, arr.shape[-1])
+
+    X_f = flatten(X)
+
+    msk_X_f = X_f[:, 0] != 0
+
+    yvals = {k: np.concatenate(v) for k, v in yvals.items()}
+
+    for val in ["gen", "cand", "pred"]:
+        yvals["{}_phi".format(val)] = np.arctan2(yvals["{}_sin_phi".format(val)], yvals["{}_cos_phi".format(val)])
+        yvals["{}_cls_id".format(val)] = np.expand_dims(np.argmax(yvals["{}_cls".format(val)], axis=-1), axis=-1)
+
+        yvals["{}_px".format(val)] = np.sin(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
+        yvals["{}_py".format(val)] = np.cos(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
+
+    yvals_f = {k: flatten(v) for k, v in yvals.items()}
+
+    # remove the last dim
+    for k in yvals_f.keys():
+        if yvals_f[k].shape[-1] == 1:
+            yvals_f[k] = yvals_f[k][..., -1]
+
+    return X, yvals_f, yvals
+
+
+def make_plots(data, num_classes, outpath, target, epoch, sample):
 
     print('Making plots...')
 
@@ -158,76 +205,31 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     t0 = time.time()
 
     # load the necessary predictions to make the plots
+    print(outpath)
+    X, yvals_f, yvals = load_predictions(f'{outpath}/predictions')
 
-    Xs = []
-    yvals = {}
-    for fi in list(glob.glob(outpath + "/predictions/pred_batch*.npz")):
-        dd = np.load(fi)
-        Xs.append(dd["X"])
+    plot_numPFelements(X, f'{outpath}/plots', sample)
+    plot_met(X, yvals, f'{outpath}/plots', sample)
+    plot_sum_energy(X, yvals, f'{outpath}/plots', sample)
+    plot_sum_pt(X, yvals, f'{outpath}/plots', sample)
 
-        keys_in_file = list(dd.keys())
-        for k in keys_in_file:
-            if k == "X":
-                continue
-            if not (k in yvals):
-                yvals[k] = []
-            yvals[k].append(dd[k])
+    dic = {1: (1e9, np.linspace(-2, 15, 100)),
+           2: (1e7, np.linspace(-2, 15, 100)),
+           3: (1e7, np.linspace(-2, 40, 100)),
+           4: (1e7, np.linspace(-2, 30, 100)),
+           5: (1e7, np.linspace(-2, 10, 100)),
+           6: (1e4, np.linspace(-1, 1, 100)),
+           7: (1e4, np.linspace(-0.1, 0.1, 100))
+           }
+    for pid, tuple in dic.items():
+        plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], f'{outpath}/plots', sample)
 
-    # reformat a bit
-    ygen = predictions["ygen"].reshape(-1, 7)
-    ypred = predictions["ypred"].reshape(-1, 7)
-    ycand = predictions["ycand"].reshape(-1, 7)
+    dic = {1: 1e10,
+           2: 1e8}
+    for pid, ylim in dic.items():
+        plot_eta_res(X, yvals_f, pid, ylim, f'{outpath}/plots', sample)
 
-    # make confusion matrix for mlpf
-    conf_matrix_mlpf = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
-                                                        pred_ids.cpu(),
-                                                        labels=range(num_classes),
-                                                        normalize="true")
-
-    plot_confusion_matrix(conf_matrix_mlpf, pfcands, epoch + 1, outpath + 'plots/confusion_matrix_plots/', f'cm_mlpf_epoch_{str(epoch)}')
-
-    # make confusion matrix for rule based PF
-    conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(),
-                                                        cand_ids.cpu(),
-                                                        labels=range(num_classes),
-                                                        normalize="true")
-
-    plot_confusion_matrix(conf_matrix_cand, pfcands, epoch + 1, outpath + 'plots/confusion_matrix_plots/', 'cm_cand', target="rule-based")
-
-    # making all the other plots
-    if 'QCD' in tag:
-        sample = "QCD, 14 TeV, PU200"
-    else:
-        sample = "$t\\bar{t}$, 14 TeV, PU200"
-
-    # make distribution plots
-    for key, value in name_to_pid.items():
-        if key != 'null':
-            plot_distributions_pid(data, value, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,
-                                   target, epoch, outpath + 'plots/', legend_title=sample + "\n")
-
-    plot_distributions_all(data, gen_ids, gen_p4, pred_ids, pred_p4, cand_ids, cand_p4,    # distribution plots combining all classes together
-                           target, epoch, outpath + 'plots/', legend_title=sample + "\n")
-
-    # plot particle multiplicity plots
-    list_for_multiplicities = torch.load(outpath + f'list_for_multiplicities.pt', map_location='cpu')
-
-    for pfcand in pfcands:
-        fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
-        ret_num_particles_null = plot_particle_multiplicity(data, list_for_multiplicities, pfcand, ax)
-        plt.savefig(outpath + f"plots/multiplicity_plots/num_{pfcand}.pdf", bbox_inches="tight")
-        plt.close(fig)
-
-    # make efficiency and fake rate plots for charged hadrons and neutral hadrons
-    for pfcand in pfcands:
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "pt", np.linspace(0, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_pt.pdf", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "eta", np.linspace(-3, 3, 61), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_eta.pdf", both=True, legend_title=sample + "\n")
-        ax, _ = draw_efficiency_fakerate(data, ygen, ypred, ycand, name_to_pid[pfcand], "energy", np.linspace(0, 50, 75), outpath + f"plots/efficiency_plots/eff_fake_{pfcand}_energy.pdf", both=True, legend_title=sample + "\n")
-
-    # make pt, eta, and energy resolution plots
-    for var in ['pt', 'eta', 'energy']:
-        for pfcand in pfcands:
-            plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath + 'plots/', legend_title=sample + "\n")
+    plot_multiplicity(X, yvals, f'{outpath}/plots', sample)
 
     t1 = time.time()
     print('Time taken to make plots is:', round(((t1 - t0) / 60), 2), 'min')

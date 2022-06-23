@@ -16,8 +16,12 @@ ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", 
 
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
-CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "gamma", "ele", "mu", "tau"]
+CLASS_NAMES_CMS_LATEX = ["none", "chhad", "nhad", "HFEM", "HFHAD", "$\gamma$", "$e^\pm$", "$\mu^\pm$", r"$\tau$"]
+CLASS_NAMES_CMS = ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"]
+
 CLASS_NAMES_LONG_CMS = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon", "tau"]
+
+CMS_PF_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 
 X_FEATURES = [
     "typ_idx", "pt", "eta", "phi", "e",
