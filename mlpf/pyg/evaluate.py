@@ -3,13 +3,13 @@ from pyg.utils_plots import plot_distributions_pid, plot_distributions_all, plot
 from pyg.utils_plots import draw_efficiency_fakerate, plot_reso
 from pyg.utils_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
 from pyg.utils import define_regions, batch_event_into_regions
-from pyg.utils import one_hot_embedding
-from pyg.cms_utils import CLASS_NAMES_CMS
+from pyg.utils import one_hot_embedding, target_p4
 
 import torch
 from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader, DataListLoader
 
+import glob
 import mplhep as hep
 import matplotlib
 import matplotlib.pyplot as plt
@@ -62,6 +62,8 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
         pred_list[pfcand] = []
 
     t0, tff = time.time(), 0
+
+    ibatch = 0
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} is {round(time.time() - t0, 3)}s')
         tff = tff + (time.time() - t0)
@@ -74,7 +76,10 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             loader = DataLoader(file, batch_size=batch_size)
 
         t = 0
+
+        outs = {}
         for i, batch in enumerate(loader):
+            np_outfile = f"{outpath}/predictions/pred_batch{ibatch}.npz"
 
             if multi_gpu:
                 X = batch   # a list (not torch) instance so can't be passed to device
@@ -87,48 +92,46 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
             print(f'batch {i}/{len(loader)}, forward pass = {round(tf - ti, 3)}s')
             t = t + (tf - ti)
 
-            # retrieve predictions
-            pred_p4 = pred[:, num_classes:].detach().to('cpu')
-            pred_ids_one_hot = pred[:, :num_classes].detach().to('cpu')
-            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+            # zero pad the events to use the same plotting scripts as the tf pipeline
+            padded_num_elem_size = 6400
 
-            # retrieve target
-            gen_p4 = target['ygen'].detach().to('cpu')
-            gen_ids = target['ygen_id'].detach().to('cpu')
-            cand_p4 = target['ycand'].detach().to('cpu')
-            cand_ids = target['ycand_id'].detach().to('cpu')
+            vars = {'X': batch.x,
+                    'ygen': target['ygen'].detach().to('cpu'),
+                    'ycand': target['ycand'].detach().to('cpu'),
+                    'pred_p4': pred[:, 9:].detach().to('cpu'),
+                    'gen_ids_one_hot': one_hot_embedding(target['ygen_id'].detach().to('cpu'), num_classes).to('cpu'),
+                    'cand_ids_one_hot': one_hot_embedding(target['ycand_id'].detach().to('cpu'), num_classes).to('cpu'),
+                    'pred_ids_one_hot': pred[:, :9].detach().to('cpu')
+                    }
 
-            # one hot encode the target
-            gen_ids_one_hot = one_hot_embedding(gen_ids, num_classes).to('cpu')
-            cand_ids_one_hot = one_hot_embedding(cand_ids, num_classes).to('cpu')
+            vars_padded = {}
+            for key, var in vars.items():
+                var = var[:padded_num_elem_size]
+                var = np.pad(var, [(0, padded_num_elem_size - var.shape[0]), (0, 0)])
+                var = np.expand_dims(var, 0)
 
-            # to make "num_gen vs num_pred" plots
-            for key, value in name_to_pid.items():
-                gen_list[key].append((gen_ids == value).sum().item())
-                pred_list[key].append((pred_ids == value).sum().item())
-                cand_list[key].append((cand_ids == value).sum().item())
+                vars_padded[key] = var
 
-            if i == 0:
-                gen_ids_all = gen_ids
-                gen_p4_all = gen_p4
+            outs = {}
+            outs['gen_cls'] = vars_padded['gen_ids_one_hot']
+            outs['cand_cls'] = vars_padded['cand_ids_one_hot']
+            outs['pred_cls'] = vars_padded['pred_ids_one_hot']
 
-                pred_ids_all = pred_ids
-                pred_p4_all = pred_p4
+            for feat, key in enumerate(target_p4):
+                outs[f'gen_{key}'] = vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                outs[f'cand_{key}'] = vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                outs[f'pred_{key}'] = vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
 
-                cand_ids_all = cand_ids
-                cand_p4_all = cand_p4
-            else:
-                gen_ids_all = torch.cat([gen_ids_all, gen_ids])
-                gen_p4_all = torch.cat([gen_p4_all, gen_p4])
+            np.savez(
+                np_outfile,
+                X=vars_padded['X'],
+                **outs
+            )
+            ibatch += 1
 
-                pred_ids_all = torch.cat([pred_ids_all, pred_ids])
-                pred_p4_all = torch.cat([pred_p4_all, pred_p4])
-
-                cand_ids_all = torch.cat([cand_ids_all, cand_ids])
-                cand_p4_all = torch.cat([cand_p4_all, cand_p4])
-
-        #     if i == 2:
+        #     if i == 3:
         #         break
+        #
         # if num == 2:
         #     break
 
@@ -139,28 +142,6 @@ def make_predictions(device, data, model, multi_gpu, file_loader, batch_size, nu
     print(f'Average time to load a file {round((tff / len(file_loader)), 3)}s')
 
     print('Time taken to make predictions is:', round(((time.time() - tt0) / 60), 2), 'min')
-
-    # store the 3 dictionaries in a list (this is done only to compute the particle multiplicity plots)
-    list_dict = [pred_list, gen_list, cand_list]
-    torch.save(list_dict, outpath + 'predictions/list_for_multiplicities.pt')
-
-    torch.save(gen_ids_all, outpath + 'predictions/gen_ids.pt')
-    torch.save(gen_p4_all, outpath + 'predictions/gen_p4.pt')
-    torch.save(pred_ids_all, outpath + 'predictions/pred_ids.pt')
-    torch.save(pred_p4_all, outpath + 'predictions/pred_p4.pt')
-    torch.save(cand_ids_all, outpath + 'predictions/cand_ids.pt')
-    torch.save(cand_p4_all, outpath + 'predictions/cand_p4.pt')
-
-    ygen = torch.cat([gen_ids_all.reshape(-1, 1).float(), gen_p4_all], axis=1)
-    ypred = torch.cat([pred_ids_all.reshape(-1, 1).float(), pred_p4_all], axis=1)
-    ycand = torch.cat([cand_ids_all.reshape(-1, 1).float(), cand_p4_all], axis=1)
-
-    # store the actual predictions to make all the other plots
-    predictions = {"ygen": ygen.reshape(1, -1, 7).cpu().numpy(),
-                   "ycand": ycand.reshape(1, -1, 7).cpu().numpy(),
-                   "ypred": ypred.reshape(1, -1, 7).cpu().numpy()}
-
-    torch.save(predictions, outpath + 'predictions/predictions.pt')
 
 
 def make_plots(data, num_classes, outpath, target, epoch, tag):
@@ -177,14 +158,20 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
     t0 = time.time()
 
     # load the necessary predictions to make the plots
-    gen_ids = torch.load(outpath + f'predictions/gen_ids.pt', map_location='cpu')
-    gen_p4 = torch.load(outpath + f'predictions/gen_p4.pt', map_location='cpu')
-    pred_ids = torch.load(outpath + f'predictions/pred_ids.pt', map_location='cpu')
-    pred_p4 = torch.load(outpath + f'predictions/pred_p4.pt', map_location='cpu')
-    cand_ids = torch.load(outpath + f'predictions/cand_ids.pt', map_location='cpu')
-    cand_p4 = torch.load(outpath + f'predictions/cand_p4.pt', map_location='cpu')
 
-    predictions = torch.load(outpath + f'predictions/predictions.pt', map_location='cpu')
+    Xs = []
+    yvals = {}
+    for fi in list(glob.glob(outpath + "/predictions/pred_batch*.npz")):
+        dd = np.load(fi)
+        Xs.append(dd["X"])
+
+        keys_in_file = list(dd.keys())
+        for k in keys_in_file:
+            if k == "X":
+                continue
+            if not (k in yvals):
+                yvals[k] = []
+            yvals[k].append(dd[k])
 
     # reformat a bit
     ygen = predictions["ygen"].reshape(-1, 7)
@@ -223,7 +210,7 @@ def make_plots(data, num_classes, outpath, target, epoch, tag):
                            target, epoch, outpath + 'plots/', legend_title=sample + "\n")
 
     # plot particle multiplicity plots
-    list_for_multiplicities = torch.load(outpath + f'predictions/list_for_multiplicities.pt', map_location='cpu')
+    list_for_multiplicities = torch.load(outpath + f'list_for_multiplicities.pt', map_location='cpu')
 
     for pfcand in pfcands:
         fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
