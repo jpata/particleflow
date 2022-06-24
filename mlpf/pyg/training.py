@@ -75,9 +75,7 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     # setup confusion matrix
     conf_matrix = np.zeros((num_classes, num_classes))
 
-    tf = 0
-    t0 = time.time()
-
+    t0, tf = time.time(), 0
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
@@ -145,9 +143,11 @@ def train(rank, model, train_loader, valid_loader, batch_size,
     losses_reg = losses_reg / (len(loader) * len(file_loader))
     losses_tot = losses_tot / (len(loader) * len(file_loader))
 
-    conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
+    losses = {'losses_clf': losses_clf.cpu().item(), 'losses_reg': losses_reg.cpu().item(), 'losses_tot': losses_tot.cpu().item()}
 
-    return losses_clf.cpu().item(), losses_reg.cpu().item(), losses_tot.cpu().item(), conf_matrix_norm
+    conf_matrix = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
+
+    return losses, conf_matrix
 
 
 def training_loop(rank, data, model, train_loader, valid_loader,
@@ -163,12 +163,9 @@ def training_loop(rank, data, model, train_loader, valid_loader,
         dataset: a PFGraphDataset object
         train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method
         valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method
-        batch_size: how many events to use for the forward pass at a time
-        loader: pytorch geometric dataloader which is an iterator of Batch() objects where each Batch() is a single event
-        n_epochs: number of epochs for a full training
         patience: number of stale epochs allowed before stopping the training
         optimizer: optimizer to use for training (by default: Adam)
-        alpha: the hyperparameter controlling the classification vs regression task balance (alpha=0 means pure regression, and greater positive values emphasize regression)
+        alpha: the hyperparameter controlling the classification vs regression task balance
         target: 'gen' or 'cand' training
         num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
         outpath: path to store the model weights and training plots
@@ -191,25 +188,25 @@ def training_loop(rank, data, model, train_loader, valid_loader,
 
         # training step
         model.train()
-        losses_clf, losses_reg, losses_tot, conf_matrix_train = train(rank, model, train_loader, valid_loader,
-                                                                      batch_size, optimizer, alpha, target, num_classes, outpath)
+        losses, conf_matrix_train = train(rank, model, train_loader, valid_loader,
+                                          batch_size, optimizer, alpha, target, num_classes, outpath)
 
-        losses_clf_train.append(losses_clf)
-        losses_reg_train.append(losses_reg)
-        losses_tot_train.append(losses_tot)
+        losses_clf_train.append(losses['losses_clf'])
+        losses_reg_train.append(losses['losses_reg'])
+        losses_tot_train.append(losses['losses_tot'])
 
         # validation step
         model.eval()
-        losses_clf, losses_reg, losses_tot, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader,
-                                                                             batch_size, alpha, target, num_classes, outpath)
+        losses, conf_matrix_val = validation_run(rank, model, train_loader, valid_loader,
+                                                 batch_size, alpha, target, num_classes, outpath)
 
-        losses_clf_valid.append(losses_clf)
-        losses_reg_valid.append(losses_reg)
-        losses_tot_valid.append(losses_tot)
+        losses_clf_valid.append(losses['losses_clf'])
+        losses_reg_valid.append(losses['losses_reg'])
+        losses_tot_valid.append(losses['losses_tot'])
 
         # early-stopping
-        if losses_tot < best_val_loss:
-            best_val_loss = losses_tot
+        if losses['losses_tot'] < best_val_loss:
+            best_val_loss = losses['losses_tot']
             stale_epochs = 0
 
             try:

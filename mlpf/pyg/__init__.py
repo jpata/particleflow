@@ -14,3 +14,4 @@ from pyg.training import training_loop
 from pyg.evaluate import make_predictions, make_plots
 
 from pyg.cms_plots import plot_numPFelements, plot_met, plot_sum_energy, plot_sum_pt, plot_energy_res, plot_eta_res, plot_multiplicity
+from pyg.cms_plots import plot_dist, plot_cm, plot_eff_and_fake_rate, distribution_icls

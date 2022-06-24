@@ -26,6 +26,7 @@ import mplhep
 import pandas
 import itertools
 import mplhep
+import boost_histogram as bh
 mplhep.style.use(mplhep.styles.CMS)
 
 
@@ -263,3 +264,191 @@ def plot_multiplicity(X, yvals, outpath, sample):
         cms_label(ax)
         sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[icls]}")
         plt.savefig(f"{outpath}/energy_cls{icls}.pdf", bbox_inches="tight")
+
+
+def get_distribution(yvals_f, prefix, bins, var):
+
+    hists = []
+    for pid in [13, 11, 22, 1, 2, 130, 211]:
+        icls = CLASS_LABELS_CMS.index(pid)
+        msk_pid = (yvals_f[prefix + "_cls_id"] == icls)
+        h = bh.Histogram(bh.axis.Variable(bins))
+        d = yvals_f[prefix + "_" + var][msk_pid]
+        h.fill(d.flatten())
+        hists.append(h)
+    return hists
+
+
+def plot_dist(yvals_f, var, bin, label, outpath, sample):
+
+    hists_gen = get_distribution(yvals_f, "gen", bin, var)
+    hists_cand = get_distribution(yvals_f, "cand", bin, var)
+    hists_pred = get_distribution(yvals_f, "pred", bin, var)
+
+    plt.figure()
+    ax = plt.axes()
+    v1 = mplhep.histplot([h[bh.rebin(2)] for h in hists_gen], stack=True, label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]], lw=1)
+    v2 = mplhep.histplot([h[bh.rebin(2)] for h in hists_pred], stack=True, color=[x.stairs.get_edgecolor() for x in v1], lw=2, histtype="errorbar")
+
+    legend1 = plt.legend(v1, [x.legend_artist.get_label() for x in v1], loc=(0.60, 0.44), title="true")
+    legend2 = plt.legend(v2, [x.legend_artist.get_label() for x in v1], loc=(0.8, 0.44), title="pred")
+    plt.gca().add_artist(legend1)
+    plt.ylabel("Total number of particles / bin")
+    cms_label(ax)
+    sample_label(sample, ax)
+
+    plt.yscale("log")
+    plt.ylim(top=1e9)
+    plt.xlabel(f"PFCandidate {label} [GeV]")
+    plt.savefig(f"{outpath}/pfcand_{var}.pdf", bbox_inches="tight")
+
+
+def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
+                           icls=1,
+                           ivar=4,
+                           ielem=1,
+                           bins=np.linspace(-3, 6, 100),
+                           xlabel="PFElement log[E/GeV]", log=True
+                           ):
+
+    values = X_f[:, ivar]
+
+    hist_gen = np.histogram(values[(yvals_f["gen_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_gen_pred = np.histogram(values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_gen_cand = np.histogram(values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+
+    hist_pred = np.histogram(values[(yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_cand = np.histogram(values[(yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_pred_fake = np.histogram(values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_cand_fake = np.histogram(values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+
+    eff_mlpf = hist_gen_pred[0] / hist_gen[0]
+    eff_pf = hist_gen_cand[0] / hist_gen[0]
+    fake_pf = hist_cand_fake[0] / hist_cand[0]
+    fake_mlpf = hist_pred_fake[0] / hist_pred[0]
+
+    plt.figure()
+    ax = plt.axes()
+    mplhep.histplot(hist_gen, label="Gen", color="black")
+    mplhep.histplot(hist_cand, label="PF")
+    mplhep.histplot(hist_pred, label="MLPF")
+    plt.ylabel("Number of PFElements / bin")
+    plt.xlabel(xlabel)
+    cms_label(ax)
+    sample_label(sample, ax, ", " + CLASS_NAMES_CMS[icls])
+    if log:
+        plt.xscale("log")
+    plt.savefig(f"{outpath}/distr_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+
+    plt.figure()
+    ax = plt.axes(sharex=ax)
+    mplhep.histplot(eff_pf, bins=hist_gen[1], label="PF")
+    mplhep.histplot(eff_mlpf, bins=hist_gen[1], label="MLFP")
+    plt.ylim(0, 1.2)
+    plt.ylabel("Efficiency")
+    plt.xlabel(xlabel)
+    cms_label(ax)
+    sample_label(sample, ax, ", " + CLASS_NAMES_CMS[icls])
+    if log:
+        plt.xscale("log")
+    plt.savefig(f"{outpath}/eff_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+
+    plt.figure()
+    ax = plt.axes(sharex=ax)
+    mplhep.histplot(fake_pf, bins=hist_gen[1], label="PF")
+    mplhep.histplot(fake_mlpf, bins=hist_gen[1], label="PF")
+    plt.ylim(0, 1.2)
+    plt.ylabel("Fake rate")
+    plt.xlabel(xlabel)
+    cms_label(ax)
+    sample_label(sample, ax, ", " + CLASS_NAMES_CMS[icls])
+    if log:
+        plt.xscale("log")
+    plt.savefig(f"{outpath}/fake_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+
+    #mplhep.histplot(fake, bins=hist_gen[1], label="fake rate", color="red")
+#     plt.legend(frameon=False)
+#     plt.ylim(0,1.4)
+#     plt.xlabel(xlabel)
+#     plt.ylabel("Fraction of particles / bin")
+
+
+def plot_cm(yvals_f, msk_X_f, mode, label, outpath):
+
+    fig = plt.figure(figsize=(12, 12))
+    ax = plt.axes()
+
+    cm_norm = sklearn.metrics.confusion_matrix(
+        yvals_f["gen_cls_id"][msk_X_f],
+        yvals_f["pred_cls_id"][msk_X_f],
+        labels=range(0, len(CLASS_LABELS_CMS)),
+        normalize="true"
+    )
+
+    plt.imshow(cm_norm, cmap="Blues", origin="lower")
+    plt.colorbar()
+
+    thresh = cm_norm.max() / 1.5
+    for i, j in itertools.product(range(cm_norm.shape[0]), range(cm_norm.shape[1])):
+        plt.text(j, i, "{:0.2f}".format(cm_norm[i, j]),
+                 horizontalalignment="center",
+                 color="white" if cm_norm[i, j] > thresh else "black", fontsize=12)
+
+    cms_label(ax, y=1.01)
+    #cms_label_sample_label(x1=0.18, x2=0.52, y=0.82)
+    plt.xticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX, rotation=45)
+    plt.yticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX)
+
+    plt.xlabel(f"{label} candidate ID")
+    plt.ylabel("Truth ID")
+    #plt.ylim(-0.5, 6.9)
+    #plt.title("MLPF trained on PF")
+    plt.savefig(f"{outpath}/cm_normed_{label}.pdf", bbox_inches="tight")
+
+
+def distribution_icls(yvals_f, outpath):
+    for icls in range(0, 8):
+        fig, axs = plt.subplots(
+            2, 2,
+            figsize=(2 * mplhep.styles.CMS["figure.figsize"][0], 2 * mplhep.styles.CMS["figure.figsize"][1])
+        )
+
+        for ax, ivar in zip(axs.flatten(), ["pt", "energy", "eta", "phi"]):
+
+            plt.sca(ax)
+
+            if icls == 0:
+                vals_true = yvals_f["gen_" + ivar][yvals_f["gen_cls_id"] != 0]
+                vals_pf = yvals_f["cand_" + ivar][yvals_f["cand_cls_id"] != 0]
+                vals_pred = yvals_f["pred_" + ivar][yvals_f["pred_cls_id"] != 0]
+            else:
+                vals_true = yvals_f["gen_" + ivar][yvals_f["gen_cls_id"] == icls]
+                vals_pf = yvals_f["cand_" + ivar][yvals_f["cand_cls_id"] == icls]
+                vals_pred = yvals_f["pred_" + ivar][yvals_f["pred_cls_id"] == icls]
+
+            if ivar == "pt" or ivar == "energy":
+                b = np.logspace(-3, 4, 61)
+                log = True
+            else:
+                b = np.linspace(np.min(vals_true), np.max(vals_true), 41)
+                log = False
+
+            plt.hist(vals_true, bins=b, histtype="step", lw=2, label="gen", color="black")
+            plt.hist(vals_pf, bins=b, histtype="step", lw=2, label="PF")
+            plt.hist(vals_pred, bins=b, histtype="step", lw=2, label="MLPF")
+            plt.legend(loc=(0.75, 0.75))
+
+            ylim = ax.get_ylim()
+
+            cls_name = CLASS_NAMES_CMS[icls] if icls > 0 else "all"
+            plt.xlabel(f"{cls_name} {ivar}")
+
+            plt.yscale("log")
+            plt.ylim(10, 10 * ylim[1])
+
+            if log:
+                plt.xscale("log")
+            cms_label(ax)
+
+        plt.tight_layout()
+        plt.savefig(f"{outpath}/distribution_icls{icls}.pdf", bbox_inches="tight")
