@@ -59,7 +59,7 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (t1 - t0)
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
@@ -108,11 +108,10 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
                     Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
                     Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
 
-            if i == 2:
-                break
-
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
