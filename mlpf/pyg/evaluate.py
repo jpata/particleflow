@@ -62,7 +62,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (t1 - t0)
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
@@ -70,12 +70,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
             pred_ids_one_hot_list = []
             pred_p4_list = []
+            print('1')
             for z in range(batch_size):
                 pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
             batch_list = batch.to_data_list()
-
+            print('2')
             for j, event in enumerate(batch_list):
                 vars = {'X': event.x.detach().to('cpu'),
                         'ygen': event.ygen.detach().to('cpu'),
@@ -87,12 +88,14 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                         }
 
                 vars_padded = {}
+                print('3')
                 for key, var in vars.items():
                     var = var[:padded_num_elem_size]
                     var = np.pad(var, [(0, padded_num_elem_size - var.shape[0]), (0, 0)])
                     var = np.expand_dims(var, 0)
 
                     vars_padded[key] = var
+                print('4')
 
                 if not bool(yvals):
                     X = vars_padded['X']
@@ -108,9 +111,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     yvals[f'gen_cls'] = np.concatenate([yvals[f'gen_cls'], vars_padded['gen_ids_one_hot']])
                     yvals[f'cand_cls'] = np.concatenate([yvals[f'cand_cls'], vars_padded['cand_ids_one_hot']])
                     yvals[f'pred_cls'] = np.concatenate([yvals[f'pred_cls'], vars_padded['pred_ids_one_hot']])
+                    print('5')
                     Y_gen = np.concatenate([Y_gen, vars_padded['ygen'].reshape(1, padded_num_elem_size, -1)])
                     Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
                     Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
+                    print('6')
 
         #     if i == 2:
         #         break
