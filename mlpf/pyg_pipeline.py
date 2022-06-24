@@ -39,18 +39,15 @@ np.seterr(divide='ignore', invalid='ignore')
 
 # define the global base device
 if torch.cuda.device_count():
-    device = 0
-    device_cuda = torch.device('cuda:0')
+    device = torch.device('cuda:0')
 else:
     device = 'cpu'
-    device_cuda = 'cpu'
-multi_gpu = torch.cuda.device_count() > 1
 
 
 def setup(rank, world_size):
     """
-    Necessary setup function that sets up environment variables and initializes the process group to training using DistributedDataParallel (DDP).
-    DDP relies on c10d ProcessGroup for communications. Hence, applications must create ProcessGroup instances before constructing DDP.
+    Necessary setup function that sets up environment variables and initializes the process group to perform training & inference using DistributedDataParallel (DDP).
+    DDP relies on c10d ProcessGroup for communications, hence, applications must create ProcessGroup instances before constructing DDP.
 
     Args:
     rank: the process id (or equivalently the gpu index)
@@ -72,40 +69,30 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def run_demo_train(train_ddp, world_size, args, dataset, model, num_classes, outpath):
+def run_demo(demo_fn, world_size, mode, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
     """
-    Necessary function that spawns a process group of size=world_size processes to run train_ddp() on each gpu device that will be indexed by 'rank'.
+    Necessary function that spawns a process group of size=world_size processes to run demo_fn() on each gpu device that will be indexed by 'rank'.
 
     Args:
-    train_ddp: function you wish to run on each gpu
+    demo_fn: function you wish to run on each gpu
     world_size: number of gpus available
+    mode: 'train' or 'inference'
     """
 
     # mp.set_start_method('forkserver')
 
-    mp.spawn(train_ddp,
-             args=(world_size, args, dataset, model, num_classes, outpath),
-             nprocs=world_size,
-             join=True,
-             )
-
-
-def run_demo_inference(inference_ddp, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
-    """
-    Necessary function that spawns a process group of size=world_size processes to run inference_ddp() on each gpu device that will be indexed by 'rank'.
-
-    Args:
-    inference_ddp: function you wish to run on each gpu
-    world_size: number of gpus available
-    """
-
-    # mp.set_start_method('forkserver')
-
-    mp.spawn(inference_ddp,
-             args=(world_size, args, dataset, model, num_classes, outpath, epoch_to_load),
-             nprocs=world_size,
-             join=True,
-             )
+    if mode == 'train':
+        mp.spawn(demo_fn,
+                 args=(world_size, args, dataset, model, num_classes, outpath),
+                 nprocs=world_size,
+                 join=True,
+                 )
+    elif mode == 'inference':
+        mp.spawn(demo_fn,
+                 args=(world_size, args, dataset, model, num_classes, outpath, epoch_to_load),
+                 nprocs=world_size,
+                 join=True,
+                 )
 
 
 def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
@@ -116,9 +103,9 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     to allow synching of gradients, and finally, invokes the training_loop() to run synchronized training among devices.
     """
 
-    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
-
     setup(rank, world_size)
+
+    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     # give each gpu a subset of the data
     hyper_train = int(args.n_train / world_size)
@@ -153,9 +140,9 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, 
     It divides and distributes the testing dataset appropriately, copies the model, and wraps the model with DDP on each device.
     """
 
-    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
-
     setup(rank, world_size)
+
+    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     # give each gpu a subset of the data
     hyper_test = int(args.n_test / world_size)
@@ -185,6 +172,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
         print(f"Running training on cpu")
     else:
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
+        device = device.index
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
@@ -213,6 +201,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath, ep
         print(f"Running inference on cpu")
     else:
         print(f"Running inference on: {torch.cuda.get_device_name(device)}")
+        device = device.index
 
     test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
 
@@ -250,7 +239,7 @@ if __name__ == "__main__":
     outpath = osp.join(args.outpath, args.model_prefix)
 
     if args.load:  # load a pre-trained specified model
-        state_dict, model_kwargs, outpath = load_model(device_cuda, outpath, args.model_prefix, args.load_epoch)
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
@@ -280,22 +269,20 @@ if __name__ == "__main__":
 
         # run the training using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo_train(train_ddp, world_size, args, dataset, model, num_classes, outpath)
+            run_demo(train_ddp, world_size, 'train', args, dataset, model, num_classes, outpath)
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
         # load the best epoch state
-        state_dict = torch.load(outpath + '/best_epoch_weights.pth', map_location=device_cuda)
+        state_dict = torch.load(outpath + '/best_epoch_weights.pth', map_location=device)
         model.load_state_dict(state_dict)
 
+    # specify which epoch/state to load to run the inference and make plots
     if args.load and args.load_epoch != -1:
         epoch_to_load = args.load_epoch
     else:
         import json
         epoch_to_load = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
-
-    pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
-    plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
 
     # run the inference
     if args.make_predictions:
@@ -310,12 +297,14 @@ if __name__ == "__main__":
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo_inference(inference_ddp, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
+            run_demo(inference_ddp, world_size, 'inference', args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
         else:
             inference(device, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
+        pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
+        plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
 
         if not osp.isdir(plot_path):
             os.makedirs(plot_path)
