@@ -31,8 +31,14 @@ import numpy as np
 import pandas as pd
 import sklearn
 import matplotlib
-
 matplotlib.use("Agg")
+
+
+"""
+Developing a PyTorch Geometric MLPF pipeline using DistributedDataParallel.
+
+Author: Farouk Mokhtar
+"""
 
 # Ignore divide by 0 errors
 np.seterr(divide='ignore', invalid='ignore')
