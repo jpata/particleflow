@@ -1,6 +1,6 @@
 from pyg import parse_args
 from pyg import PFGraphDataset
-from pyg import MLPF, training_loop, make_predictions, make_plots
+from pyg import MLPF, training_loop, make_predictions, make_plots_cms
 from pyg import save_model, load_model
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
@@ -69,7 +69,7 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def run_demo(demo_fn, world_size, mode, args, dataset, model, num_classes, outpath, epoch_to_load=-1):
+def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     """
     Necessary function that spawns a process group of size=world_size processes to run demo_fn() on each gpu device that will be indexed by 'rank'.
 
@@ -81,18 +81,11 @@ def run_demo(demo_fn, world_size, mode, args, dataset, model, num_classes, outpa
 
     # mp.set_start_method('forkserver')
 
-    if mode == 'train':
-        mp.spawn(demo_fn,
-                 args=(world_size, args, dataset, model, num_classes, outpath),
-                 nprocs=world_size,
-                 join=True,
-                 )
-    elif mode == 'inference':
-        mp.spawn(demo_fn,
-                 args=(world_size, args, dataset, model, num_classes, outpath, epoch_to_load),
-                 nprocs=world_size,
-                 join=True,
-                 )
+    mp.spawn(demo_fn,
+             args=(world_size, args, dataset, model, num_classes, outpath),
+             nprocs=world_size,
+             join=True,
+             )
 
 
 def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
@@ -133,7 +126,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     cleanup()
 
 
-def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
+def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     """
     An inference_ddp() function that will be passed as a demo_fn to run_demo() to perform inference over multiple gpus using DDP.
 
@@ -158,7 +151,7 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, outpath, 
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(rank, args.data, ddp_model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
+    make_predictions(rank, ddp_model, file_loader_test, args.batch_size, num_classes, PATH)
 
     cleanup()
 
@@ -192,7 +185,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
                   optimizer, args.alpha, args.target, num_classes, outpath)
 
 
-def inference(device, world_size, args, dataset, model, num_classes, outpath, epoch_to_load):
+def inference(device, world_size, args, dataset, model, num_classes, PATH):
     """
     An inference() function that will load the testing dataset and start running inference on a single device (cuda or cpu).
     """
@@ -212,7 +205,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath, ep
     model = model.to(device)
     model.eval()
 
-    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
+    make_predictions(device, model, file_loader_test, args.batch_size, num_classes, PATH)
 
 
 if __name__ == "__main__":
@@ -270,7 +263,7 @@ if __name__ == "__main__":
 
         # run the training using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(train_ddp, world_size, 'train', args, dataset, model, num_classes, outpath)
+            run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
@@ -298,9 +291,9 @@ if __name__ == "__main__":
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, 'inference', args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
+            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, PATH)
         else:
-            inference(device, world_size, args, dataset_qcd, model, num_classes, outpath, epoch_to_load)
+            inference(device, world_size, args, dataset_qcd, model, num_classes, PATH)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
@@ -310,4 +303,5 @@ if __name__ == "__main__":
         if not osp.isdir(plot_path):
             os.makedirs(plot_path)
 
-        make_plots(args.data, num_classes, pred_path, plot_path, args.target, epoch_to_load, 'QCD')
+        if args.data == 'cms':
+            make_plots_cms(pred_path, plot_path, 'QCD')

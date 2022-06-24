@@ -30,17 +30,14 @@ import matplotlib
 matplotlib.use("Agg")
 
 
-def make_predictions(rank, data, model, file_loader, batch_size, num_classes, outpath, epoch):
+def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
     """
     Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
 
     Args
         rank: int representing the gpu device id, or str=='cpu' (both work, trust me)
-        data: data specification ('cms' or 'delphes')
         model: pytorch model
         file_loader:  a pytorch Dataloader that loads .pt files for training when you invoke the get() method
-
-        num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
     """
 
     ti = time.time()
@@ -111,11 +108,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
                     Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
 
-        #     if i == 2:
-        #         break
-        #
-        # if num == 2:
-        #     break
+            if i == 2:
+                break
+
+        if num == 2:
+            break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -138,13 +135,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
 
     print('--> Saving predictions...')
-    np.save(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npy', X)
+    np.save(f'{PATH}/predictions/predictions_X_{rank}.npy', X)
 
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
+    with open(f'{PATH}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
         pkl.dump(yvals, f)
 
 
-def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
+def make_plots_cms(pred_path, plot_path, sample):
 
     t0 = time.time()
 
