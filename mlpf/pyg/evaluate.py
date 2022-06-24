@@ -158,13 +158,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     print(f'saving predictions')
     np.savez(
-        f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X.npz',
+        f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npz',
         X=X, X_f=X_f, msk_X_f=msk_X_f
     )
 
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals.pkl', 'wb') as f:
+    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
         pkl.dump(yvals, f)
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f.pkl', 'wb') as f:
+    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f_{rank}.pkl', 'wb') as f:
         pkl.dump(yvals_f, f)
 
     #
