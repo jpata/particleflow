@@ -111,11 +111,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
                     Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
 
-            if i == 2:
-                break
-
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        #
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -124,8 +124,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     print(f'Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s')
 
     print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min')
-
-    print('--> Concatenating all the predictions into giant arrays and dictionaries')
 
     for feat, key in enumerate(target_p4):
         yvals[f'gen_{key}'] = Y_gen[:, :, feat].reshape(-1, padded_num_elem_size, 1)
@@ -139,7 +137,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
         yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
 
-    print('saving predictions...')
+    print('--> Saving predictions...')
     np.save(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npy', X)
 
     with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
@@ -150,7 +148,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
 
     t0 = time.time()
 
-    print('Loading predictions...')
+    print('--> Loading predictions...')
 
     X = []
     for fi in list(glob.glob(f'{pred_path}/predictions_X_*')):
@@ -171,7 +169,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
             for key, value in yvals.items():
                 yvals[key] = np.concatenate([yvals[key], int[key]])
 
-    print('further processing for convenient plotting')
+    print('Further processing for convenient plotting')
 
     def flatten(arr):
         # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
@@ -199,7 +197,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
     # plot cm
     print('plot_cm...')
     plot_cm(yvals_f, msk_X_f, 'pred_cls_id', 'MLPF', plot_path)
-    plot_cm(yvals_f, msk_X_f, 'pred_cls_id', 'PF', plot_path)
+    plot_cm(yvals_f, msk_X_f, 'cand_cls_id', 'PF', plot_path)
 
     # plot eff_and_fake_rate
     print('plot_eff_and_fake_rate...')
