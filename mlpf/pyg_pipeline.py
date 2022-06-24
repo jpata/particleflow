@@ -1,7 +1,7 @@
 from pyg import parse_args
-from pyg import PFGraphDataset, one_hot_embedding
+from pyg import PFGraphDataset
 from pyg import MLPF, training_loop, make_predictions, make_plots
-from pyg import save_model, load_model, make_directories_for_plots
+from pyg import save_model, load_model
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
 
@@ -212,7 +212,7 @@ def inference(device, world_size, args, dataset, model, num_classes, outpath, ep
     model = model.to(device)
     model.eval()
 
-    make_predictions(device, args.data, model, file_loader_test, int(args.batch_size / 4), num_classes, outpath, epoch_to_load)
+    make_predictions(device, args.data, model, file_loader_test, args.batch_size, num_classes, outpath, epoch_to_load)
 
 
 if __name__ == "__main__":
@@ -238,13 +238,14 @@ if __name__ == "__main__":
 
     outpath = osp.join(args.outpath, args.model_prefix)
 
-    if args.load:  # load a pre-trained specified model
+    # load a pre-trained specified model, otherwise, instantiate and train a new model
+    if args.load:
         state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
 
-    else:   # instantiates and train a model
+    else:
         model_kwargs = {'input_dim': input_dim,
                         'num_classes': num_classes,
                         'output_dim_p4': output_dim_p4,

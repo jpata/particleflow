@@ -1,5 +1,4 @@
-from pyg.cms_utils import ELEM_LABELS_CMS, ELEM_NAMES_CMS, CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX, CLASS_NAMES_LONG_CMS
-from pyg.utils import one_hot_embedding, target_p4
+from pyg.cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
 
 import pickle
 import bz2
@@ -11,7 +10,6 @@ import torch
 import torch_geometric
 import torch_geometric.utils
 from torch_geometric.data import Dataset, Data, Batch
-
 
 import pandas as pd
 import json

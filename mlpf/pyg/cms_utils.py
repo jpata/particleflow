@@ -10,6 +10,8 @@ import torch_geometric.utils
 from torch_geometric.data import Dataset, Data, Batch
 
 
+"""Based on https://github.com/jpata/hep_tfds/blob/master/heptfds/cms_utils.py#L10"""
+
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]

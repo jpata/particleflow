@@ -44,9 +44,8 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     conf_matrix_mlpf = np.zeros((num_classes, num_classes))
     conf_matrix_pf = np.zeros((num_classes, num_classes))
 
-    tf = 0
     ibatch = 0
-    t0 = time.time()
+    t0, tf = time.time(), 0
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
@@ -54,12 +53,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         file = [x for t in file for x in t]     # unpack the list of tuples to a list
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
-
-        outs = {}
-        outs[f'X'], outs[f'gen_cls'], outs[f'cand_cls'], outs[f'pred_cls'] = [], [], [], []
-        for feat, key in enumerate(target_p4):
-            outs[f'gen_{key}'], outs[f'cand_{key}'], outs[f'pred_{key}'] = [], [], []
-        np_outfile = f"{outpath}/testing_epoch_{epoch}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
         t = 0
         for i, batch in enumerate(loader):
@@ -72,6 +65,12 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
             conf_matrix_mlpf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), torch.argmax(pred_ids_one_hot, axis=1).detach().cpu(), labels=range(num_classes))
             conf_matrix_pf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), batch.ycand_id.detach().to('cpu'), labels=range(num_classes))
+
+            outs = {}
+            outs[f'X'], outs[f'gen_cls'], outs[f'cand_cls'], outs[f'pred_cls'] = [], [], [], []
+            for feat, key in enumerate(target_p4):
+                outs[f'gen_{key}'], outs[f'cand_{key}'], outs[f'pred_{key}'] = [], [], []
+            np_outfile = f"{outpath}/testing_epoch_{epoch}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
@@ -112,17 +111,17 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     outs[f'cand_{key}'].append(vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
                     outs[f'pred_{key}'].append(vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
 
-        print(f'saving predictions at {np_outfile}')
+            print(f'saving predictions at {np_outfile}')
 
-        out = {}
-        for key, value in outs.items():
-            out[key] = np.concatenate(value)
+            out = {}
+            for key, value in outs.items():
+                out[key] = np.concatenate(value)
 
-        np.savez(
-            np_outfile,
-            **out
-        )
-        ibatch += 1
+            np.savez(
+                np_outfile,
+                **out
+            )
+            ibatch += 1
 
         #     if i == 2:
         #         break
@@ -203,13 +202,6 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
 
     print('Making plots...')
 
-    if data == 'delphes':
-        name_to_pid = name_to_pid_delphes
-    elif data == 'cms':
-        name_to_pid = name_to_pid_cms
-
-    pfcands = list(name_to_pid.keys())
-
     t0 = time.time()
 
     # load the necessary predictions to make the plots
@@ -220,6 +212,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
     plot_sum_energy(X, yvals, plot_path, sample)
     plot_sum_pt(X, yvals, plot_path, sample)
 
+    # for energy resolution plotting purposes, initialize pid -> (ylim, bins)
     dic = {1: (1e9, np.linspace(-2, 15, 100)),
            2: (1e7, np.linspace(-2, 15, 100)),
            3: (1e7, np.linspace(-2, 40, 100)),
@@ -231,6 +224,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
     for pid, tuple in dic.items():
         plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
 
+    # for eta resolution plotting purposes, initialize pid -> (ylim)
     dic = {1: 1e10,
            2: 1e8}
     for pid, ylim in dic.items():

@@ -157,23 +157,6 @@ def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, out
             pkl.dump(var, f)
 
 
-def make_directories_for_plots(outpath, tag):
-    if not osp.isdir(f'{outpath}/{tag}'):
-        os.makedirs(f'{outpath}/{tag}')
-    if not osp.isdir(f'{outpath}/{tag}/plots'):
-        os.makedirs(f'{outpath}/{tag}/plots')
-    if not osp.isdir(f'{outpath}/{tag}/plots/resolution_plots'):
-        os.makedirs(f'{outpath}/{tag}/plots/resolution_plots')
-    if not osp.isdir(f'{outpath}/{tag}/plots/distribution_plots'):
-        os.makedirs(f'{outpath}/{tag}/plots/distribution_plots')
-    if not osp.isdir(f'{outpath}/{tag}/plots/multiplicity_plots'):
-        os.makedirs(f'{outpath}/{tag}/plots/multiplicity_plots')
-    if not osp.isdir(f'{outpath}/{tag}/plots/efficiency_plots'):
-        os.makedirs(f'{outpath}/{tag}/plots/efficiency_plots')
-    if not osp.isdir(f'{outpath}/{tag}/plots/confusion_matrix_plots'):
-        os.makedirs(f'{outpath}/{tag}/plots/confusion_matrix_plots')
-
-
 def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
     """
     Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.
