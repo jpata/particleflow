@@ -156,7 +156,7 @@ def load_predictions(path):
     Xs = []
     yvals = {}
     for i, fi in enumerate(list(glob.glob(path + "/pred_batch*.npz"))):
-        print(f'loading prediction # {i}/{len(list(glob.glob(path + "/pred_batch*.npz")))}')
+        print(f'loading prediction # {i+1}/{len(list(glob.glob(path + "/pred_batch*.npz")))}')
         dd = np.load(fi)
         Xs.append(dd["X"])
 
@@ -168,6 +168,7 @@ def load_predictions(path):
                 yvals[k] = []
             yvals[k].append(dd[k])
 
+    print('--> Concatenating all the predictions into one big numpy array')
     X = np.concatenate(Xs)
 
     def flatten(arr):
@@ -178,6 +179,7 @@ def load_predictions(path):
 
     msk_X_f = X_f[:, 0] != 0
 
+    print('further processing to make plots')
     yvals = {k: np.concatenate(v) for k, v in yvals.items()}
 
     for val in ["gen", "cand", "pred"]:
