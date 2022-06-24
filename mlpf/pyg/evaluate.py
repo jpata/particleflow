@@ -168,7 +168,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
         else:
             with open(fi, 'rb') as f:
                 int = pkl.load(f)
-            for key, value in yvals.item():
+            for key, value in yvals.items():
                 yvals[key] = np.concatenate([yvals[key], int[key]])
 
     print('further processing for convenient plotting')
