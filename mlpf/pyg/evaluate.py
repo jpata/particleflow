@@ -251,15 +251,18 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
     print('Making plots...')
 
     # plot distributions
+    print('plot_dist...')
     plot_dist(yvals_f, 'pt', np.linspace(0, 200, 61), r'$p_T$', plot_path, sample)
     plot_dist(yvals_f, 'energy', np.linspace(0, 2000, 61), r'$E$', plot_path, sample)
     plot_dist(yvals_f, 'eta', np.linspace(-6, 6, 61), r'$\eta$', plot_path, sample)
 
     # plot cm
+    print('plot_cm...')
     plot_cm(yvals_f, msk_X_f, 'pred_cls_id', 'MLPF', plot_path)
     plot_cm(yvals_f, msk_X_f, 'pred_cls_id', 'PF', plot_path)
 
     # plot eff_and_fake_rate
+    print('plot_eff_and_fake_rate...')
     plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=1, ivar=4, ielem=1, bins=np.logspace(-1, 3, 41), log=True)
     plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=1, ivar=3, ielem=1, bins=np.linspace(-4, 4, 41), log=False, xlabel="PFElement $\eta$")
     plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=2, ivar=4, ielem=5, bins=np.logspace(-1, 3, 41), log=True)
@@ -268,15 +271,22 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
     plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=5, ivar=3, ielem=4, bins=np.linspace(-5, 5, 41), log=False, xlabel="PFElement $\eta$")
 
     # distribution_icls
+    print('distribution_icls...')
     distribution_icls(yvals_f, plot_path)
 
+    print('plot_numPFelements...')
     plot_numPFelements(X, plot_path, sample)
+    print('plot_met...')
     plot_met(X, yvals, plot_path, sample)
+    print('plot_sum_energy...')
     plot_sum_energy(X, yvals, plot_path, sample)
+    print('plot_sum_pt...')
     plot_sum_pt(X, yvals, plot_path, sample)
+    print('plot_multiplicity...')
     plot_multiplicity(X, yvals, plot_path, sample)
 
     # for energy resolution plotting purposes, initialize pid -> (ylim, bins) dictionary
+    print('plot_energy_res...')
     dic = {1: (1e9, np.linspace(-2, 15, 100)),
            2: (1e7, np.linspace(-2, 15, 100)),
            3: (1e7, np.linspace(-2, 40, 100)),
@@ -289,6 +299,7 @@ def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
         plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
 
     # for eta resolution plotting purposes, initialize pid -> (ylim) dictionary
+    print('plot_eta_res...')
     dic = {1: 1e10,
            2: 1e8}
     for pid, ylim in dic.items():
