@@ -1,6 +1,6 @@
 from pyg import make_plot_from_lists
-from pyg.utils_plots import plot_confusion_matrix
 from pyg.utils import define_regions, batch_event_into_regions, one_hot_embedding
+from pyg.delphes_plots import plot_confusion_matrix
 from pyg.cms_utils import CLASS_NAMES_CMS
 
 import torch
