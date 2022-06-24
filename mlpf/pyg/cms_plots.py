@@ -87,6 +87,7 @@ def plot_numPFelements(X, outpath, sample):
     cms_label(ax)
     sample_label(sample, ax)
     plt.savefig(f"{outpath}/num_PFelements.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_met(X, yvals, outpath, sample):
@@ -117,6 +118,7 @@ def plot_met(X, yvals, outpath, sample):
     plt.xlabel(r"$\frac{\mathrm{MET}_{\mathrm{reco}} - \mathrm{MET}_{\mathrm{gen}}}{\mathrm{MET}_{\mathrm{gen}}}$")
     plt.ylabel("Number of events / bin")
     plt.savefig(f"{outpath}/met.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_sum_energy(X, yvals, outpath, sample):
@@ -142,6 +144,7 @@ def plot_sum_energy(X, yvals, outpath, sample):
     plt.xlabel("Gen $\sum E$ [GeV]")
     plt.ylabel("Reconstructed $\sum E$ [GeV]")
     plt.savefig(f"{outpath}/sum_energy.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_sum_pt(X, yvals, outpath, sample):
@@ -168,6 +171,7 @@ def plot_sum_pt(X, yvals, outpath, sample):
     plt.xlabel("Gen $\sum p_T$ [GeV]")
     plt.ylabel("Reconstructed $\sum p_T$ [GeV]")
     plt.savefig(f"{outpath}/sum_pt.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
@@ -192,6 +196,7 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
     plt.legend(loc=(0.4, 0.7))
     plt.ylim(1, ylim)
     plt.savefig(f"{outpath}/energy_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
@@ -218,6 +223,7 @@ def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
     plt.legend(loc=(0.0, 0.7))
     plt.ylim(1, ylim)
     plt.savefig(f"{outpath}/eta_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_multiplicity(X, yvals, outpath, sample):
@@ -241,6 +247,7 @@ def plot_multiplicity(X, yvals, outpath, sample):
         cms_label(ax)
         sample_label(sample, ax, ", " + CLASS_NAMES_CMS[icls])
         plt.savefig(f"{outpath}/num_cls{icls}.pdf", bbox_inches="tight")
+        plt.close()
 
         # Plot the sum of particle energies
         msk = yvals["gen_cls_id"][:, :, 0] == icls
@@ -264,6 +271,7 @@ def plot_multiplicity(X, yvals, outpath, sample):
         cms_label(ax)
         sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[icls]}")
         plt.savefig(f"{outpath}/energy_cls{icls}.pdf", bbox_inches="tight")
+        plt.close()
 
 
 def get_distribution(yvals_f, prefix, bins, var):
@@ -301,6 +309,7 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
     plt.ylim(top=1e9)
     plt.xlabel(f"PFCandidate {label} [GeV]")
     plt.savefig(f"{outpath}/pfcand_{var}.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
@@ -339,6 +348,7 @@ def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
     if log:
         plt.xscale("log")
     plt.savefig(f"{outpath}/distr_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+    plt.close()
 
     plt.figure()
     ax = plt.axes(sharex=ax)
@@ -352,6 +362,7 @@ def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
     if log:
         plt.xscale("log")
     plt.savefig(f"{outpath}/eff_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+    plt.close()
 
     plt.figure()
     ax = plt.axes(sharex=ax)
@@ -365,6 +376,7 @@ def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
     if log:
         plt.xscale("log")
     plt.savefig(f"{outpath}/fake_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
+    plt.close()
 
     #mplhep.histplot(fake, bins=hist_gen[1], label="fake rate", color="red")
 #     plt.legend(frameon=False)
@@ -404,6 +416,7 @@ def plot_cm(yvals_f, msk_X_f, mode, label, outpath):
     #plt.ylim(-0.5, 6.9)
     #plt.title("MLPF trained on PF")
     plt.savefig(f"{outpath}/cm_normed_{label}.pdf", bbox_inches="tight")
+    plt.close()
 
 
 def distribution_icls(yvals_f, outpath):
@@ -452,3 +465,4 @@ def distribution_icls(yvals_f, outpath):
 
         plt.tight_layout()
         plt.savefig(f"{outpath}/distribution_icls{icls}.pdf", bbox_inches="tight")
+        plt.close()
