@@ -45,13 +45,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     ti = time.time()
 
-    # conf_matrix_mlpf = np.zeros((num_classes, num_classes))
-    # conf_matrix_pf = np.zeros((num_classes, num_classes))
-
     yvals = {}
-    Xs, yvals[f'gen_cls'], yvals[f'cand_cls'], yvals[f'pred_cls'] = [], [], [], []
-    for feat, key in enumerate(target_p4):
-        yvals[f'gen_{key}'], yvals[f'cand_{key}'], yvals[f'pred_{key}'] = [], [], []
 
     t0, tf = time.time(), 0
     for num, file in enumerate(file_loader):
@@ -70,9 +64,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
             t1 = time.time()
             # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
             t = t + (t1 - t0)
-
-            # conf_matrix_mlpf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), torch.argmax(pred_ids_one_hot, axis=1).detach().cpu(), labels=range(num_classes))
-            # conf_matrix_pf += sklearn.metrics.confusion_matrix(batch.ygen_id.detach().cpu(), batch.ycand_id.detach().to('cpu'), labels=range(num_classes))
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
@@ -103,21 +94,30 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
                     vars_padded[key] = var
 
-                Xs.append(vars_padded['X'])
-                yvals[f'gen_cls'].append(vars_padded['gen_ids_one_hot'])
-                yvals[f'cand_cls'].append(vars_padded['cand_ids_one_hot'])
-                yvals[f'pred_cls'].append(vars_padded['pred_ids_one_hot'])
+                if not bool(yvals):
+                    X = vars_padded['X']
+                    yvals[f'gen_cls'] = vars_padded['gen_ids_one_hot']
+                    yvals[f'cand_cls'] = vars_padded['cand_ids_one_hot']
+                    yvals[f'pred_cls'] = vars_padded['pred_ids_one_hot']
+                    for feat, key in enumerate(target_p4):
+                        yvals[f'gen_{key}'] = vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                        yvals[f'cand_{key}'] = vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                        yvals[f'pred_{key}'] = vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                else:
+                    X = np.concatenate([X, vars_padded['X']])
+                    yvals[f'gen_cls'] = np.concatenate([yvals[f'gen_cls'], vars_padded['gen_ids_one_hot']])
+                    yvals[f'cand_cls'] = np.concatenate([yvals[f'cand_cls'], vars_padded['cand_ids_one_hot']])
+                    yvals[f'pred_cls'] = np.concatenate([yvals[f'pred_cls'], vars_padded['pred_ids_one_hot']])
+                    for feat, key in enumerate(target_p4):
+                        yvals[f'gen_{key}'] = np.concatenate([yvals[f'gen_{key}'], vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
+                        yvals[f'cand_{key}'] = np.concatenate([yvals[f'cand_{key}'], vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
+                        yvals[f'pred_{key}'] = np.concatenate([yvals[f'pred_{key}'], vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
 
-                for feat, key in enumerate(target_p4):
-                    yvals[f'gen_{key}'].append(vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
-                    yvals[f'cand_{key}'].append(vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
-                    yvals[f'pred_{key}'].append(vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
-        #
-        #     if i == 2:
-        #         break
-        #
-        # if num == 2:
-        #     break
+            if i == 2:
+                break
+
+        if num == 2:
+            break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -129,8 +129,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
     print('--> Concatenating all the predictions into giant arrays and dictionaries')
 
-    X = np.concatenate(Xs)
-
     def flatten(arr):
         # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
         return arr.reshape(-1, arr.shape[-1])
@@ -140,14 +138,13 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     msk_X_f = X_f[:, 0] != 0
 
     print('further processing to save predictions for convenient plotting')
-    yvals = {k: np.concatenate(v) for k, v in yvals.items()}
 
     for val in ["gen", "cand", "pred"]:
-        yvals["{}_phi".format(val)] = np.arctan2(yvals["{}_sin_phi".format(val)], yvals["{}_cos_phi".format(val)])
-        yvals["{}_cls_id".format(val)] = np.expand_dims(np.argmax(yvals["{}_cls".format(val)], axis=-1), axis=-1)
+        yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
+        yvals[f"{val}_cls_id"] = np.expand_dims(np.argmax(yvals[f"{val}_cls"], axis=-1), axis=-1)
 
-        yvals["{}_px".format(val)] = np.sin(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
-        yvals["{}_py".format(val)] = np.cos(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
+        yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
+        yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
 
     yvals_f = {k: flatten(v) for k, v in yvals.items()}
 
@@ -166,19 +163,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         pkl.dump(yvals, f)
     with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f_{rank}.pkl', 'wb') as f:
         pkl.dump(yvals_f, f)
-
-    #
-    # # make confusion_matrix plots
-    # conf_matrix_mlpf = conf_matrix_mlpf / conf_matrix_mlpf.sum(axis=1)[:, np.newaxis]
-    # conf_matrix_pf = conf_matrix_pf / conf_matrix_pf.sum(axis=1)[:, np.newaxis]
-    #
-    # if data == 'delphes':
-    #     target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
-    # elif data == 'cms':
-    #     target_names = CLASS_NAMES_CMS
-    #
-    # plot_confusion_matrix(conf_matrix_mlpf, target_names, epoch + 1, f'{outpath}/testing_epoch_{epoch}/plots/', f'confusion_matrix_MLPF')
-    # plot_confusion_matrix(conf_matrix_pf, target_names, epoch + 1, f'{outpath}/testing_epoch_{epoch}/plots/', f'confusion_matrix_PF')
 
 
 def load_predictions(path):
