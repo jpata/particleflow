@@ -70,13 +70,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
             pred_ids_one_hot_list = []
             pred_p4_list = []
-            print('1')
             for z in range(batch_size):
                 pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
             batch_list = batch.to_data_list()
-            print('2')
             for j, event in enumerate(batch_list):
                 vars = {'X': event.x.detach().to('cpu'),
                         'ygen': event.ygen.detach().to('cpu'),
@@ -88,14 +86,12 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                         }
 
                 vars_padded = {}
-                print('3')
                 for key, var in vars.items():
                     var = var[:padded_num_elem_size]
                     var = np.pad(var, [(0, padded_num_elem_size - var.shape[0]), (0, 0)])
                     var = np.expand_dims(var, 0)
 
                     vars_padded[key] = var
-                print('4')
 
                 if not bool(yvals):
                     X = vars_padded['X']
@@ -111,17 +107,15 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     yvals[f'gen_cls'] = np.concatenate([yvals[f'gen_cls'], vars_padded['gen_ids_one_hot']])
                     yvals[f'cand_cls'] = np.concatenate([yvals[f'cand_cls'], vars_padded['cand_ids_one_hot']])
                     yvals[f'pred_cls'] = np.concatenate([yvals[f'pred_cls'], vars_padded['pred_ids_one_hot']])
-                    print('5')
                     Y_gen = np.concatenate([Y_gen, vars_padded['ygen'].reshape(1, padded_num_elem_size, -1)])
                     Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
                     Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
-                    print('6')
 
-        #     if i == 2:
-        #         break
-        #
-        # if num == 2:
-        #     break
+            if i == 2:
+                break
+
+        if num == 2:
+            break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -138,16 +132,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         yvals[f'cand_{key}'] = Y_cand[:, :, feat].reshape(-1, padded_num_elem_size, 1)
         yvals[f'pred_{key}'] = Y_pred[:, :, feat].reshape(-1, padded_num_elem_size, 1)
 
-    def flatten(arr):
-        # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
-        return arr.reshape(-1, arr.shape[-1])
-
-    X_f = flatten(X)
-
-    msk_X_f = X_f[:, 0] != 0
-
-    print('further processing to save predictions for convenient plotting')
-
     for val in ["gen", "cand", "pred"]:
         yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
         yvals[f"{val}_cls_id"] = np.expand_dims(np.argmax(yvals[f"{val}_cls"], axis=-1), axis=-1)
@@ -155,33 +139,39 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
         yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
         yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
 
-    yvals_f = {k: flatten(v) for k, v in yvals.items()}
+    print('saving predictions...')
+    np.save(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npy', X)
 
-    # remove the last dim
-    for k in yvals_f.keys():
-        if yvals_f[k].shape[-1] == 1:
-            yvals_f[k] = yvals_f[k][..., -1]
+    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
+        pkl.dump(yvals, f)
 
 
-def load_predictions(path):
+def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
 
-    Xs = []
+    t0 = time.time()
+
+    print('Loading predictions...')
+
+    X = []
+    for fi in list(glob.glob(f'{pred_path}/predictions_X_*')):
+        if len(X) == 0:
+            X = np.load(fi, allow_pickle=True)
+        else:
+            X = np.concatenate([X, np.load(fi, allow_pickle=True)])
+
     yvals = {}
-    for i, fi in enumerate(list(glob.glob(path + "/pred_batch*.npz"))):
-        print(f'loading prediction # {i+1}/{len(list(glob.glob(path + "/pred_batch*.npz")))}')
-        dd = np.load(fi)
-        Xs.append(dd["X"])
+    for fi in list(glob.glob(f'{pred_path}/predictions_yvals_*')):
 
-        keys_in_file = list(dd.keys())
-        for k in keys_in_file:
-            if k == "X":
-                continue
-            if not (k in yvals):
-                yvals[k] = []
-            yvals[k].append(dd[k])
+        if not bool(yvals):
+            with open(fi, 'rb') as f:
+                yvals = pkl.load(f)
+        else:
+            with open(fi, 'rb') as f:
+                int = pkl.load(f)
+            for key, value in yvals.item():
+                yvals[key] = np.concatenate([yvals[key], int[key]])
 
-    print('--> Concatenating all the predictions into one big numpy array')
-    X = np.concatenate(Xs)
+    print('further processing for convenient plotting')
 
     def flatten(arr):
         # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
@@ -191,55 +181,12 @@ def load_predictions(path):
 
     msk_X_f = X_f[:, 0] != 0
 
-    print('further processing to make plots')
-    yvals = {k: np.concatenate(v) for k, v in yvals.items()}
-
-    for val in ["gen", "cand", "pred"]:
-        yvals["{}_phi".format(val)] = np.arctan2(yvals["{}_sin_phi".format(val)], yvals["{}_cos_phi".format(val)])
-        yvals["{}_cls_id".format(val)] = np.expand_dims(np.argmax(yvals["{}_cls".format(val)], axis=-1), axis=-1)
-
-        yvals["{}_px".format(val)] = np.sin(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
-        yvals["{}_py".format(val)] = np.cos(yvals["{}_phi".format(val)]) * yvals["{}_pt".format(val)]
-
     yvals_f = {k: flatten(v) for k, v in yvals.items()}
 
     # remove the last dim
     for k in yvals_f.keys():
         if yvals_f[k].shape[-1] == 1:
             yvals_f[k] = yvals_f[k][..., -1]
-    print(f'saving predictions')
-
-    np.savez(
-        f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npz',
-        X=X, X_f=X_f, msk_X_f=msk_X_f
-    )
-
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
-        pkl.dump(yvals, f)
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f_{rank}.pkl', 'wb') as f:
-        pkl.dump(yvals_f, f)
-
-    return X, yvals_f, yvals, X_f, msk_X_f
-
-
-def make_plots(data, num_classes, pred_path, plot_path, target, epoch, sample):
-
-    print('Loading predictions...')
-
-    t0 = time.time()
-
-    # load the predictions to make the plots
-    # X, yvals_f, yvals, X_f, msk_X_f = load_predictions(pred_path)
-
-    d = np.load(f'{pred_path}/predictions_X.npz', allow_pickle=True)
-    X = d['X']
-    X_f = d['X_f']
-    msk_X_f = d['msk_X_f']
-
-    with open(f'{pred_path}/predictions_yvals_f.pkl', 'rb') as f:
-        yvals_f = pkl.load(f)
-    with open(f'{pred_path}/predictions_yvals.pkl', 'rb') as f:
-        yvals = pkl.load(f)
 
     print('Making plots...')
 
