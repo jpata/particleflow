@@ -28,7 +28,7 @@ import mplhep
 import pandas
 import itertools
 import mplhep
-mplhep.set_style(mplhep.styles.CMS)
+mplhep.style.use(mplhep.styles.CMS)
 
 
 def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
