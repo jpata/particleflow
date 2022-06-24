@@ -113,11 +113,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                         yvals[f'cand_{key}'] = np.concatenate([yvals[f'cand_{key}'], vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
                         yvals[f'pred_{key}'] = np.concatenate([yvals[f'pred_{key}'], vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
 
-            if i == 2:
-                break
-
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        #
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
