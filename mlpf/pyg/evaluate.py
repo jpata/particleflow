@@ -99,19 +99,18 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     yvals[f'gen_cls'] = vars_padded['gen_ids_one_hot']
                     yvals[f'cand_cls'] = vars_padded['cand_ids_one_hot']
                     yvals[f'pred_cls'] = vars_padded['pred_ids_one_hot']
-                    for feat, key in enumerate(target_p4):
-                        yvals[f'gen_{key}'] = vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
-                        yvals[f'cand_{key}'] = vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
-                        yvals[f'pred_{key}'] = vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)
+                    Y_gen = vars_padded['ygen'].reshape(1, padded_num_elem_size, -1)
+                    Y_cand = vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)
+                    Y_pred = vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)
+
                 else:
                     X = np.concatenate([X, vars_padded['X']])
                     yvals[f'gen_cls'] = np.concatenate([yvals[f'gen_cls'], vars_padded['gen_ids_one_hot']])
                     yvals[f'cand_cls'] = np.concatenate([yvals[f'cand_cls'], vars_padded['cand_ids_one_hot']])
                     yvals[f'pred_cls'] = np.concatenate([yvals[f'pred_cls'], vars_padded['pred_ids_one_hot']])
-                    for feat, key in enumerate(target_p4):
-                        yvals[f'gen_{key}'] = np.concatenate([yvals[f'gen_{key}'], vars_padded['ygen'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
-                        yvals[f'cand_{key}'] = np.concatenate([yvals[f'cand_{key}'], vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
-                        yvals[f'pred_{key}'] = np.concatenate([yvals[f'pred_{key}'], vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1)])
+                    Y_gen = np.concatenate([Y_gen, vars_padded['ygen'].reshape(1, padded_num_elem_size, -1)])
+                    Y_cand = np.concatenate([Y_cand, vars_padded['ycand'].reshape(1, padded_num_elem_size, -1)])
+                    Y_pred = np.concatenate([Y_pred, vars_padded['pred_p4'].reshape(1, padded_num_elem_size, -1)])
 
         #     if i == 2:
         #         break
@@ -128,6 +127,11 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     print(f'Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min')
 
     print('--> Concatenating all the predictions into giant arrays and dictionaries')
+
+    for feat, key in enumerate(target_p4):
+        yvals[f'gen_{key}'] = Y_gen[:, :, feat].reshape(-1, padded_num_elem_size, 1)
+        yvals[f'cand_{key}'] = Y_cand[:, :, feat].reshape(-1, padded_num_elem_size, 1)
+        yvals[f'pred_{key}'] = Y_pred[:, :, feat].reshape(-1, padded_num_elem_size, 1)
 
     def flatten(arr):
         # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
@@ -152,17 +156,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
     for k in yvals_f.keys():
         if yvals_f[k].shape[-1] == 1:
             yvals_f[k] = yvals_f[k][..., -1]
-
-    print(f'saving predictions')
-    np.savez(
-        f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npz',
-        X=X, X_f=X_f, msk_X_f=msk_X_f
-    )
-
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
-        pkl.dump(yvals, f)
-    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f_{rank}.pkl', 'wb') as f:
-        pkl.dump(yvals_f, f)
 
 
 def load_predictions(path):
@@ -209,6 +202,17 @@ def load_predictions(path):
     for k in yvals_f.keys():
         if yvals_f[k].shape[-1] == 1:
             yvals_f[k] = yvals_f[k][..., -1]
+    print(f'saving predictions')
+
+    np.savez(
+        f'{outpath}/testing_epoch_{epoch}/predictions/predictions_X_{rank}.npz',
+        X=X, X_f=X_f, msk_X_f=msk_X_f
+    )
+
+    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_{rank}.pkl', 'wb') as f:
+        pkl.dump(yvals, f)
+    with open(f'{outpath}/testing_epoch_{epoch}/predictions/predictions_yvals_f_{rank}.pkl', 'wb') as f:
+        pkl.dump(yvals_f, f)
 
     return X, yvals_f, yvals, X_f, msk_X_f
 
