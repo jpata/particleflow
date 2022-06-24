@@ -112,7 +112,7 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                     outs[f'cand_{key}'].append(vars_padded['ycand'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
                     outs[f'pred_{key}'].append(vars_padded['pred_p4'][:, :, feat].reshape(-1, padded_num_elem_size, 1))
 
-            print(f'saving predictions at {np_outfile}')
+        print(f'saving predictions at {np_outfile}')
 
         out = {}
         for key, value in outs.items():
