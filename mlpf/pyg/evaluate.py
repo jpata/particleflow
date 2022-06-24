@@ -55,9 +55,14 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
+        outs = {}
+        outs[f'X'], outs[f'gen_cls'], outs[f'cand_cls'], outs[f'pred_cls'] = [], [], [], []
+        for feat, key in enumerate(target_p4):
+            outs[f'gen_{key}'], outs[f'cand_{key}'], outs[f'pred_{key}'] = [], [], []
+        np_outfile = f"{outpath}/testing_epoch_{epoch}/predictions/pred_batch{ibatch}_rank{rank}.npz"
+
         t = 0
         for i, batch in enumerate(loader):
-            np_outfile = f"{outpath}/testing_epoch_{epoch}/predictions/pred_batch{ibatch}_rank{rank}.npz"
 
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
@@ -78,11 +83,6 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
             batch_list = batch.to_data_list()
-
-            outs = {}
-            outs[f'X'], outs[f'gen_cls'], outs[f'cand_cls'], outs[f'pred_cls'] = [], [], [], []
-            for feat, key in enumerate(target_p4):
-                outs[f'gen_{key}'], outs[f'cand_{key}'], outs[f'pred_{key}'] = [], [], []
 
             for j, event in enumerate(batch_list):
                 vars = {'X': event.x.detach().to('cpu'),
@@ -114,15 +114,15 @@ def make_predictions(rank, data, model, file_loader, batch_size, num_classes, ou
 
             print(f'saving predictions at {np_outfile}')
 
-            out = {}
-            for key, value in outs.items():
-                out[key] = np.concatenate(value)
+        out = {}
+        for key, value in outs.items():
+            out[key] = np.concatenate(value)
 
-            np.savez(
-                np_outfile,
-                **out
-            )
-            ibatch += 1
+        np.savez(
+            np_outfile,
+            **out
+        )
+        ibatch += 1
 
         #     if i == 2:
         #         break
