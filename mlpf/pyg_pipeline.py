@@ -1,6 +1,6 @@
 from pyg import parse_args
 from pyg import PFGraphDataset
-from pyg import MLPF, training_loop, make_predictions, make_plots_cms
+from pyg import MLPF, training_loop, make_predictions, postprocess_predictions, make_plots_cms
 from pyg import save_model, load_model
 from pyg import features_delphes, features_cms, target_p4
 from pyg import make_file_loaders
@@ -284,6 +284,9 @@ if __name__ == "__main__":
         import json
         epoch_to_load = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
 
+    pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
+    plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
+
     # run the inference
     if args.make_predictions:
 
@@ -301,10 +304,10 @@ if __name__ == "__main__":
         else:
             inference(device, world_size, args, dataset_qcd, model, num_classes, PATH)
 
+        postprocess_predictions(pred_path)
+
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
-        pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
-        plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
 
         if not osp.isdir(plot_path):
             os.makedirs(plot_path)
