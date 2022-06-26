@@ -304,7 +304,7 @@ if __name__ == "__main__":
         else:
             inference(device, world_size, args, dataset_qcd, model, num_classes, PATH)
 
-    postprocess_predictions(pred_path)
+        postprocess_predictions(pred_path)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:

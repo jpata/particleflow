@@ -103,11 +103,10 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
 
             ibatch += 1
 
-            if i == 2:
-                break
-
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        # if num == 2:
+        #     break
 
         print(f'Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s')
 
@@ -156,15 +155,15 @@ def postprocess_predictions(pred_path):
     print('Further processing for convenient plotting')
 
     def flatten(arr):
-        # return arr.reshape((arr.shape[0]*arr.shape[1], arr.shape[2]))
         return arr.reshape(-1, arr.shape[-1])
+
     X_f = flatten(Xs)
 
     msk_X_f = X_f[:, 0] != 0
 
     for val in ["gen", "cand", "pred"]:
         yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
-        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1)
+        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1)  # cz for some reason keepdims doesn't work
 
         yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
         yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
