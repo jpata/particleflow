@@ -164,7 +164,7 @@ def postprocess_predictions(pred_path):
 
     for val in ["gen", "cand", "pred"]:
         yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
-        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1, keepdims=True)
+        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1)
 
         yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
         yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
