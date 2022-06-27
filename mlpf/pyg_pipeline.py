@@ -224,7 +224,7 @@ if __name__ == "__main__":
 
     # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
     dataset = PFGraphDataset(args.dataset, args.data)
-    dataset_qcd = PFGraphDataset(args.dataset_qcd, args.data)
+    dataset_test = PFGraphDataset(args.dataset_test, args.data)
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
@@ -284,13 +284,13 @@ if __name__ == "__main__":
         import json
         epoch_to_load = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
 
-    pred_path = f'{outpath}/testing_epoch_{epoch_to_load}/predictions/'
-    plot_path = f'{outpath}/testing_epoch_{epoch_to_load}/plots/'
+    PATH = f'{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/'
+    pred_path = f'{PATH}/predictions/'
+    plot_path = f'{PATH}/plots/'
 
     # run the inference
     if args.make_predictions:
 
-        PATH = f'{outpath}/testing_epoch_{epoch_to_load}/'
         if not os.path.exists(PATH):
             os.makedirs(PATH)
         if not os.path.exists(f'{PATH}/predictions/'):
@@ -300,9 +300,9 @@ if __name__ == "__main__":
 
         # run the inference using DDP if more than one gpu is available
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, args, dataset_qcd, model, num_classes, PATH)
+            run_demo(inference_ddp, world_size, args, dataset_test, model, num_classes, PATH)
         else:
-            inference(device, world_size, args, dataset_qcd, model, num_classes, PATH)
+            inference(device, world_size, args, dataset_test, model, num_classes, PATH)
 
         postprocess_predictions(pred_path)
 
@@ -313,4 +313,4 @@ if __name__ == "__main__":
             os.makedirs(plot_path)
 
         if args.data == 'cms':
-            make_plots_cms(pred_path, plot_path, 'QCD')
+            make_plots_cms(pred_path, plot_path, args.sample)

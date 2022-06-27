@@ -16,7 +16,8 @@ def parse_args():
     # for loading the data
     parser.add_argument("--data",           type=str,           required=True,   help="cms or delphes?")
     parser.add_argument("--dataset",        type=str,           default='../data/delphes/pythia8_ttbar',   help="training dataset path")
-    parser.add_argument("--dataset_qcd",    type=str,           default='../data/delphes/pythia8_qcd',     help="testing dataset path")
+    parser.add_argument("--dataset_test",   type=str,           default='../data/delphes/pythia8_qcd',     help="testing dataset path")
+    parser.add_argument("--sample",         type=str,           default='QCD',     help="sample to test on")
     parser.add_argument("--n_train",        type=int,           default=1,      help="number of data files to use for training.. each file contains 100 events")
     parser.add_argument("--n_valid",        type=int,           default=1,      help="number of data files to use for validation.. each file contains 100 events")
     parser.add_argument("--n_test",         type=int,           default=1,      help="number of data files to use for testing.. each file contains 100 events")
