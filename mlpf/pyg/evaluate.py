@@ -130,7 +130,9 @@ def postprocess_predictions(pred_path):
     Y_pids = []
     Y_p4s = []
 
-    for fi in list(glob.glob(f'{pred_path}/pred_batch*.pt')):
+    PATH = list(glob.glob(f'{pred_path}/pred_batch*.pt'))
+    for i, fi in enumerate(PATH):
+        print(f'loading prediction # {i+1}/{len(PATH)}')
         dd = torch.load(fi)
         Xs.append(dd["X"])
         Y_pids.append(dd["Y_pid"])
