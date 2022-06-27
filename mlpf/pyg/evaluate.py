@@ -183,11 +183,11 @@ def postprocess_predictions(pred_path):
 
     print(f'-->Saving the processed events')
     t0 = time.time()
-    torch.save(Xs, f'{pred_path}/post_processed_Xs.pt')
-    torch.save(X_f, f'{pred_path}/post_processed_X_f.pt')
-    torch.save(msk_X_f, f'{pred_path}/post_processed_msk_X_f.pt')
-    torch.save(yvals, f'{pred_path}/post_processed_yvals.pt')
-    torch.save(yvals_f, f'{pred_path}/post_processed_yvals_f.pt')
+    torch.save(Xs, f'{pred_path}/post_processed_Xs.pt', pickle_protocol=4)
+    torch.save(X_f, f'{pred_path}/post_processed_X_f.pt', pickle_protocol=4)
+    torch.save(msk_X_f, f'{pred_path}/post_processed_msk_X_f.pt', pickle_protocol=4)
+    torch.save(yvals, f'{pred_path}/post_processed_yvals.pt', pickle_protocol=4)
+    torch.save(yvals_f, f'{pred_path}/post_processed_yvals_f.pt', pickle_protocol=4)
     print(f'Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min')
 
     return Xs, X_f, msk_X_f, yvals, yvals_f
