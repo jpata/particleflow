@@ -215,8 +215,8 @@ def make_plots_cms(pred_path, plot_path, sample):
 
     # plot cm
     print('plot_cm...')
-    plot_cm(yvals_f, msk_X_f, 'pred_cls_id', 'MLPF', plot_path)
-    plot_cm(yvals_f, msk_X_f, 'cand_cls_id', 'PF', plot_path)
+    plot_cm(yvals_f, msk_X_f, 'MLPF', plot_path)
+    plot_cm(yvals_f, msk_X_f, 'PF', plot_path)
 
     # plot eff_and_fake_rate
     print('plot_eff_and_fake_rate...')

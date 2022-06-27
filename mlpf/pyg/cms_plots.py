@@ -390,14 +390,19 @@ def plot_eff_and_fake_rate(X_f, yvals_f, outpath, sample,
 #     plt.ylabel("Fraction of particles / bin")
 
 
-def plot_cm(yvals_f, msk_X_f, mode, label, outpath):
+def plot_cm(yvals_f, msk_X_f, label, outpath):
 
     fig = plt.figure(figsize=(12, 12))
     ax = plt.axes()
 
+    if label == 'MLPF':
+        Y = yvals_f["pred_cls_id"][msk_X_f]
+    else:
+        Y = yvals_f["cand_cls_id"][msk_X_f]
+
     cm_norm = sklearn.metrics.confusion_matrix(
         yvals_f["gen_cls_id"][msk_X_f],
-        yvals_f["pred_cls_id"][msk_X_f],
+        Y,
         labels=range(0, len(CLASS_LABELS_CMS)),
         normalize="true"
     )
