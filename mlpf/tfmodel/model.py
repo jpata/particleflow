@@ -641,10 +641,10 @@ class OutputDecoding(tf.keras.Model):
         msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
         pred_phi = tf.math.atan2(pred_sin_phi, pred_cos_phi)
-        pt_hist = batched_histogram_2d(
+        energy_hist = batched_histogram_2d(
             tf.squeeze(pred_eta, axis=-1),
             tf.squeeze(pred_phi, axis=-1),
-            tf.squeeze(pred_pt*msk_input_outtype*msk_output, axis=-1),
+            tf.squeeze(pred_energy*msk_input_outtype*msk_output, axis=-1),
             tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
         )
         if self.mask_reg_cls0:
@@ -671,7 +671,7 @@ class OutputDecoding(tf.keras.Model):
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
 
-            "pt_hist": pt_hist,
+            "energy_hist": energy_hist,
             "met": met,
         }
 
