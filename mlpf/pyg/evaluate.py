@@ -40,9 +40,9 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
 
     ti = time.time()
 
-    yvals = {}
-
     t0, tf = time.time(), 0
+
+    ibatch = 0
     for num, file in enumerate(file_loader):
         print(f'Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s')
         tf = tf + (time.time() - t0)
@@ -51,7 +51,7 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
-        t, ibatch = 0, 0
+        t = 0
         for i, batch in enumerate(loader):
 
             t0 = time.time()
@@ -192,13 +192,13 @@ def make_plots_cms(pred_path, plot_path, sample):
     t0 = time.time()
 
     print(f'-->Loading the processed events')
-    Xs = torch.load(f'{pred_path}/post_processed_Xs.pt')
+    X = torch.load(f'{pred_path}/post_processed_Xs.pt')
     X_f = torch.load(f'{pred_path}/post_processed_X_f.pt')
     msk_X_f = torch.load(f'{pred_path}/post_processed_msk_X_f.pt')
     yvals = torch.load(f'{pred_path}/post_processed_yvals.pt')
     yvals_f = torch.load(f'{pred_path}/post_processed_yvals_f.pt')
 
-    print('Making plots...')
+    print(f'Making plots using {len(X)} events...')
 
     # plot distributions
     print('plot_dist...')
@@ -225,15 +225,15 @@ def make_plots_cms(pred_path, plot_path, sample):
     distribution_icls(yvals_f, plot_path)
 
     print('plot_numPFelements...')
-    plot_numPFelements(Xs, plot_path, sample)
+    plot_numPFelements(X, plot_path, sample)
     print('plot_met...')
-    plot_met(Xs, yvals, plot_path, sample)
+    plot_met(X, yvals, plot_path, sample)
     print('plot_sum_energy...')
-    plot_sum_energy(Xs, yvals, plot_path, sample)
+    plot_sum_energy(X, yvals, plot_path, sample)
     print('plot_sum_pt...')
-    plot_sum_pt(Xs, yvals, plot_path, sample)
+    plot_sum_pt(X, yvals, plot_path, sample)
     print('plot_multiplicity...')
-    plot_multiplicity(Xs, yvals, plot_path, sample)
+    plot_multiplicity(X, yvals, plot_path, sample)
 
     # for energy resolution plotting purposes, initialize pid -> (ylim, bins) dictionary
     print('plot_energy_res...')
@@ -246,13 +246,13 @@ def make_plots_cms(pred_path, plot_path, sample):
            7: (1e4, np.linspace(-0.1, 0.1, 100))
            }
     for pid, tuple in dic.items():
-        plot_energy_res(Xs, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
+        plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
 
     # for eta resolution plotting purposes, initialize pid -> (ylim) dictionary
     print('plot_eta_res...')
     dic = {1: 1e10,
            2: 1e8}
     for pid, ylim in dic.items():
-        plot_eta_res(Xs, yvals_f, pid, ylim, plot_path, sample)
+        plot_eta_res(X, yvals_f, pid, ylim, plot_path, sample)
 
     print(f'Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min')
