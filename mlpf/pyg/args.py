@@ -6,8 +6,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # for data loading
-    parser.add_argument("--num_workers",        type=int,  default=0,      help="number of subprocesses used for data loading")
-    parser.add_argument("--prefetch_factor",    type=int,  default=2,      help="number of samples loaded in advance by each worker")
+    parser.add_argument("--num_workers",        type=int,  default=2,      help="number of subprocesses used for data loading")
+    parser.add_argument("--prefetch_factor",    type=int,  default=4,      help="number of samples loaded in advance by each worker")
 
     # for saving the model
     parser.add_argument("--outpath",        type=str,           default='../experiments/',         help="output folder")
