@@ -31,7 +31,7 @@ def parse_args():
     # for training hyperparameters
     parser.add_argument("--n_epochs",       type=int,           default=3,      help="number of training epochs")
     parser.add_argument("--batch_size",     type=int,           default=1,      help="number of events to run inference on before updating the loss")
-    parser.add_argument("--patience",       type=int,           default=100,    help="patience before early stopping")
+    parser.add_argument("--patience",       type=int,           default=30,    help="patience before early stopping")
     parser.add_argument("--target",         type=str,           default="gen",  choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", )
     parser.add_argument("--lr",             type=float,         default=1e-4,   help="learning rate")
     parser.add_argument("--alpha",          type=float,         default=2e-5,   help="loss = clf + alpha*reg.. if set to 0 model only does trains for classification")
