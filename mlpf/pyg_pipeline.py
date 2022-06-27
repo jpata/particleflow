@@ -222,10 +222,6 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.benchmark = True
 
-    # load the dataset (assumes the datafiles exist as .pt files under <args.dataset>/processed)
-    dataset = PFGraphDataset(args.dataset, args.data)
-    dataset_test = PFGraphDataset(args.dataset_test, args.data)
-
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == 'delphes':
         input_dim = len(features_delphes)
@@ -268,6 +264,8 @@ if __name__ == "__main__":
         print("Training over {} epochs".format(args.n_epochs))
 
         # run the training using DDP if more than one gpu is available
+        dataset = PFGraphDataset(args.dataset, args.data)
+
         if world_size >= 2:
             run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
         else:
@@ -299,6 +297,8 @@ if __name__ == "__main__":
             os.makedirs(f'{PATH}/plots/')
 
         # run the inference using DDP if more than one gpu is available
+        dataset_test = PFGraphDataset(args.dataset_test, args.data)
+
         if world_size >= 2:
             run_demo(inference_ddp, world_size, args, dataset_test, model, num_classes, PATH)
         else:
