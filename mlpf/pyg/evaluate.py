@@ -123,7 +123,7 @@ def postprocess_predictions(pred_path):
     Saves the processed predictions.
     """
 
-    print('--> Loading predictions...')
+    print('--> Concatenating all predictions...')
     t0 = time.time()
 
     Xs = []
@@ -136,7 +136,6 @@ def postprocess_predictions(pred_path):
         Y_pids.append(dd["Y_pid"])
         Y_p4s.append(dd["Y_p4"])
 
-    print('Concatenating all predictions...')
     Xs = torch.cat(Xs).numpy()
     Y_pids = torch.cat(Y_pids)
     Y_p4s = torch.cat(Y_p4s)
@@ -152,7 +151,10 @@ def postprocess_predictions(pred_path):
         yvals[f'cand_{key}'] = Y_p4s[:, 1, :, feat].unsqueeze(-1).numpy()
         yvals[f'pred_{key}'] = Y_p4s[:, 2, :, feat].unsqueeze(-1).numpy()
 
-    print('Further processing for convenient plotting')
+    print(f'Time taken to concatenate all predictions is: {round(((time.time() - t0) / 60), 2)} min')
+
+    print('--> Further processing for convenient plotting')
+    t0 = time.time()
 
     def flatten(arr):
         return arr.reshape(-1, arr.shape[-1])
@@ -175,14 +177,16 @@ def postprocess_predictions(pred_path):
         if yvals_f[k].shape[-1] == 1:
             yvals_f[k] = yvals_f[k][..., -1]
 
-    print(f'Time taken to load and process predictions is: {round(((time.time() - t0) / 60), 2)} min')
+    print(f'Time taken to process the predictions is: {round(((time.time() - t0) / 60), 2)} min')
 
     print(f'-->Saving the processed events')
+    t0 = time.time()
     torch.save(Xs, f'{pred_path}/post_processed_Xs.pt')
     torch.save(X_f, f'{pred_path}/post_processed_X_f.pt')
     torch.save(msk_X_f, f'{pred_path}/post_processed_msk_X_f.pt')
     torch.save(yvals, f'{pred_path}/post_processed_yvals.pt')
     torch.save(yvals_f, f'{pred_path}/post_processed_yvals_f.pt')
+    print(f'Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min')
 
     return Xs, X_f, msk_X_f, yvals, yvals_f
 
@@ -191,14 +195,15 @@ def make_plots_cms(pred_path, plot_path, sample):
 
     t0 = time.time()
 
-    print(f'-->Loading the processed events')
+    print(f'--> Loading the processed predictions')
     X = torch.load(f'{pred_path}/post_processed_Xs.pt')
     X_f = torch.load(f'{pred_path}/post_processed_X_f.pt')
     msk_X_f = torch.load(f'{pred_path}/post_processed_msk_X_f.pt')
     yvals = torch.load(f'{pred_path}/post_processed_yvals.pt')
     yvals_f = torch.load(f'{pred_path}/post_processed_yvals_f.pt')
+    print(f'Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min')
 
-    print(f'Making plots using {len(X)} events...')
+    print(f'--> Making plots using {len(X)} events...')
 
     # plot distributions
     print('plot_dist...')
