@@ -67,7 +67,7 @@ class MLPF(nn.Module):
 
         # (4) DNN layer: regressing p4
         self.nn3 = nn.Sequential(
-            nn.Linear(input_dim + num_classes, hidden_dim2),
+            nn.Linear(input_dim + embedding_dim + num_classes, hidden_dim2),
             self.act(),
             nn.Linear(hidden_dim2, hidden_dim2),
             self.act(),
@@ -92,7 +92,7 @@ class MLPF(nn.Module):
         preds_id = self.nn2(torch.cat([input, embedding], axis=-1))
 
         # predict the p4's
-        preds_p4 = self.nn3(torch.cat([input, preds_id], axis=-1))
+        preds_p4 = self.nn3(torch.cat([input, embedding, preds_id], axis=-1))
 
         return preds_id, preds_p4
 
