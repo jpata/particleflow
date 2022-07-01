@@ -30,8 +30,8 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
-  met_loss_coef: 0.00001
-  energy_hist_loss_coef: 0.00001
+  met_loss_coef: 0.00000001
+  pt_hist_loss_coef: 0.00000001
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,7 +53,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.00002
+  lr: 0.000005
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32

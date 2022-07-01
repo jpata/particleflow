@@ -12,17 +12,17 @@ def unpack_target(y, num_output_classes):
     phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])
   
     if len(y.shape)==3:
-        energy_hist = batched_histogram_2d(
+        pt_hist = batched_histogram_2d(
             tf.squeeze(eta, axis=-1),
             tf.squeeze(phi, axis=-1),
-            tf.squeeze(energy, axis=-1),
+            tf.squeeze(pt, axis=-1),
             tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
         )
     else:
-        energy_hist = histogram_2d(
+        pt_hist = histogram_2d(
             tf.squeeze(eta, axis=-1),
             tf.squeeze(phi, axis=-1),
-            tf.squeeze(energy, axis=-1),
+            tf.squeeze(pt, axis=-1),
             tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
         )
 
@@ -42,7 +42,7 @@ def unpack_target(y, num_output_classes):
         "sin_phi": y[..., 4:5],
         "cos_phi": y[..., 5:6],
         "energy": energy,
-        "energy_hist": energy_hist,
+        "pt_hist": pt_hist,
         "met": met
     }
 
@@ -77,8 +77,6 @@ class BaseDatasetFactory:
                     "sin_phi": msk_elems*msk_signal,
                     "cos_phi": msk_elems*msk_signal,
                     "energy": msk_elems*msk_signal,
-                    "sum_energy": 1.0,
-                    "sum_pt": 1.0
                 }
             )
         return func
