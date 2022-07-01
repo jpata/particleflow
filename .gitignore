@@ -4,21 +4,18 @@
 *.pt
 *.pdf
 data/*
+experiments/*
+prp/*
 *.pth
 test/__pycache__/
 
-mlpf/pytorch/__pycache__/*
-mlpf/plotting/__pycache__/*
-mlpf/pytorch/data
-test_tmp/
-test_tmp_delphes/
+*/__pycache__/*
 .DS_Store
 
-prp
 *.pyc
 *.pyo
 
-mlpf/updated/LRP/pid*
-mlpf/updated/LRP/class*
-
 *.ipynb_checkpoints
+
+*playground.py
+nohup.out
