@@ -1,3 +1,13 @@
+try:
+    from pyg.cms_utils import prepare_data_cms
+except:
+    from cms_utils import prepare_data_cms
+
+from numpy.lib.recfunctions import append_fields
+import bz2
+import h5py
+import pandas
+import pandas as pd
 import numpy as np
 import os
 import os.path as osp
@@ -9,23 +19,6 @@ from glob import glob
 
 import pickle
 import multiprocessing
-
-# assumes pkl files exist in /test_tmp_delphes/data/pythia8_ttbar/raw
-# they are processed and saved as pt files in /test_tmp_delphes/data/pythia8_ttbar/processed
-# PFGraphDataset -> returns for 1 event: Data(x=[5139, 12], ycand=[5139, 6], ycand_id=[5139, 6], ygen=[5139, 6], ygen_id=[5139, 6])
-
-
-def one_hot_embedding(labels, num_classes):
-    """
-    Embedding labels to one-hot form.
-    Args:
-      labels: (LongTensor) class labels, sized [N,].
-      num_classes: (int) number of classes.
-    Returns:
-      (tensor) encoded labels, sized [N, #classes].
-    """
-    y = torch.eye(num_classes)
-    return y[labels]
 
 
 def process_func(args):
@@ -46,9 +39,10 @@ class PFGraphDataset(Dataset):
         root (str): path
     """
 
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, data, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
+        self.data = data
 
     @property
     def raw_file_names(self):
@@ -79,41 +73,40 @@ class PFGraphDataset(Dataset):
         pass
 
     def process_single_file(self, raw_file_name):
-        with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-            data = pickle.load(fi, encoding='iso-8859-1')
+        """
+        Loads a list of 100 events from a pkl file and generates pytorch geometric Data() objects and stores them in .pt format.
+        For cms data, each element is assumed to be a dict('Xelem', 'ygen', ycand') of numpy rec_arrays with the first element in ygen/ycand is the pid
+        For delphes data, each element is assumed to be a dict('X', 'ygen', ycand') of numpy standard arrays with the first element in ygen/ycand is the pid
 
-        x = []
-        ygen = []
-        ycand = []
-        d = []
-        batch_data = []
-        ygen_id = []
-        ycand_id = []
+        Args
+            raw_file_name: a pkl file
+        Returns
+            batched_data: a list of Data() objects of the form
+             cms ~ Data(x=[#elem, 41], ygen=[#elem, 6], ygen_id=[#elem, 9], ycand=[#elem, 6], ycand_id=[#elem, 9])
+             delphes ~ Data(x=[#elem, 12], ygen=[#elem, 6], ygen_id=[#elem, 6], ycand=[#elem, 6], ycand_id=[#elem, 6])
+        """
 
-        for i in range(len(data['X'])):
-            x.append(torch.tensor(data['X'][i], dtype=torch.float))
-            ygen.append(torch.tensor(data['ygen'][i], dtype=torch.float))
-            ycand.append(torch.tensor(data['ycand'][i], dtype=torch.float))
+        if self.data == 'cms':
+            return prepare_data_cms(osp.join(self.raw_dir, raw_file_name))
 
-            # one-hot encoding the first element in ygen & ycand (which is the PID) and store it in ygen_id & ycand_id
-            ygen_id.append(ygen[i][:, 0])
-            ycand_id.append(ycand[i][:, 0])
+        elif self.data == 'delphes':
+            # load the data pkl file
+            with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
+                data = pickle.load(fi, encoding='iso-8859-1')
 
-            ygen_id[i] = ygen_id[i].long()
-            ycand_id[i] = ycand_id[i].long()
+            for i in range(len(data['X'])):
+                # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
+                d = Data(
+                    x=torch.tensor(data['X'][i], dtype=torch.float),
+                    ygen=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 1:],
+                    ygen_id=torch.tensor(data['ygen'][i], dtype=torch.float)[:, 0].long(),
+                    ycand=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 1:],
+                    ycand_id=torch.tensor(data['ycand'][i], dtype=torch.float)[:, 0].long(),
+                )
 
-            ygen_id[i] = one_hot_embedding(ygen_id[i], 6)
-            ycand_id[i] = one_hot_embedding(ycand_id[i], 6)
+                batched_data.append(d)
 
-            # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
-            d = Data(
-                x=x[i],
-                ygen=ygen[i][:, 1:], ygen_id=ygen_id[i],
-                ycand=ycand[i][:, 1:], ycand_id=ycand_id[i]
-            )
-
-            batch_data.append(d)
-        return batch_data
+        return batched_data
 
     def process_multiple_files(self, filenames, idx_file):
         datas = [self.process_single_file(fn) for fn in filenames]
@@ -139,7 +132,7 @@ class PFGraphDataset(Dataset):
 
     def get(self, idx):
         p = osp.join(self.processed_dir, 'data_{}.pt'.format(idx))
-        data = torch.load(p)
+        data = torch.load(p, map_location='cpu')
         return data
 
     def __getitem__(self, idx):
@@ -149,6 +142,7 @@ class PFGraphDataset(Dataset):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
@@ -159,12 +153,20 @@ def parse_args():
 
 if __name__ == "__main__":
 
+    """
+    e.g. to run for cms
+    python PFGraphDataset.py --data cms --dataset ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
+
+    e.g. to run for delphes
+    python3 PFGraphDataset.py --data delphes --dataset $sample --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
+
+    """
+
     args = parse_args()
 
-    pfgraphdataset = PFGraphDataset(root=args.dataset)
+    pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir
 
     pfgraphdataset.process_parallel(args.num_files_merge, args.num_proc)
-    # pfgraphdataset.process(args.num_files_merge)

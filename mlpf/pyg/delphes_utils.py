@@ -1,10 +1,25 @@
-from pytorch_delphes.utils_plots import plot_confusion_matrix, plot_distributions_pid, plot_distributions_all, plot_particle_multiplicity, draw_efficiency_fakerate, plot_reso
+from pyg.delphes_plots import plot_confusion_matrix
+from pyg.delphes_plots import plot_distributions_pid, plot_distributions_all, plot_particle_multiplicity
+from pyg.delphes_plots import draw_efficiency_fakerate, plot_reso
+from pyg.delphes_plots import pid_to_name_delphes, name_to_pid_delphes, pid_to_name_cms, name_to_pid_cms
+from pyg.utils import define_regions, batch_event_into_regions
+from pyg.utils import one_hot_embedding, target_p4
+from pyg.cms_utils import CLASS_NAMES_CMS
+from pyg.cms_plots import plot_numPFelements, plot_met, plot_sum_energy, plot_sum_pt, plot_energy_res, plot_eta_res, plot_multiplicity
+from pyg.cms_plots import plot_dist, plot_cm, plot_eff_and_fake_rate, distribution_icls
+
 import torch
+import torch_geometric
 from torch_geometric.data import Batch
+from torch_geometric.loader import DataLoader, DataListLoader
+
+import glob
 import mplhep as hep
 import matplotlib
 import matplotlib.pyplot as plt
 import pickle as pkl
+import os
+import os.path as osp
 import math
 import time
 import tqdm
@@ -13,10 +28,9 @@ import pandas as pd
 import sklearn
 import matplotlib
 matplotlib.use("Agg")
-matplotlib.rcParams['pdf.fonttype'] = 42
 
 
-def make_predictions(model, multi_gpu, test_loader, outpath, device, epoch):
+def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epoch):
 
     print('Making predictions...')
     t0 = time.time()
@@ -35,15 +49,11 @@ def make_predictions(model, multi_gpu, test_loader, outpath, device, epoch):
 
         ti = time.time()
 
-        pred, target = model(X)
+        pred_ids_one_hot, pred_p4 = model(X)
 
-        gen_ids_one_hot = target['ygen_id']
-        gen_p4 = target['ygen']
-        cand_ids_one_hot = target['ycand_id']
-        cand_p4 = target['ycand']
-
-        pred_ids_one_hot = pred[:, :6]
-        pred_p4 = pred[:, 6:]
+        gen_p4 = X.ygen.detach().to('cpu')
+        cand_ids_one_hot = one_hot_embedding(X.ycand_id.detach().to('cpu'), num_classes)
+        cand_p4 = X.ycand.detach().to('cpu')
 
         tf = time.time()
         if i != 0:
@@ -136,7 +146,7 @@ def make_predictions(model, multi_gpu, test_loader, outpath, device, epoch):
     torch.save(predictions, outpath + '/predictions.pt')
 
 
-def make_plots(model, test_loader, outpath, target, device, epoch, tag):
+def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
 
     print('Making plots...')
     t0 = time.time()

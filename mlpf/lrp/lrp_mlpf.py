@@ -14,14 +14,15 @@ from torch.nn import Sequential as Seq, Linear as Lin, ReLU
 class LRP_MLPF():
 
     """
-    A class that act on graph datasets and GNNs based on the Gravnet layer (e.g. the MLPF model)
-    The main trick is to realize that the ".lin_s" layers in Gravnet are irrelevant for explanations so shall be skipped
-    The hack, however, is to substitute them precisely with the message_passing step
+    A class that introduces useful functionality to perform layerwise-relevance propagation (LRP) on MLPF.
+    This class is meant to work for any model with any number of GravNetConv layers.
+    The main trick is to realize that the ".lin_s" layers in GravNetConv are irrelevant for explanations so shall be skipped.
+    The hack, however, is to substitute them precisely with the message_passing step.
 
     Differences from standard LRP
-        - Rscores become tensors/graphs of input features per output neuron instead of vectors
-        - accomodates message passing steps by using the adjacency matrix as the weight matrix in standard LRP,
-          and redistributing Rscores over the other dimension (over nodes instead of features)
+        a. Rscores become tensors/graphs of input features per output neuron instead of vectors
+        b. accomodates message passing steps by using the adjacency matrix as the weight matrix in standard LRP,
+           and redistributing Rscores over the other dimension (over nodes instead of features)
     """
 
     def __init__(self, device, model, epsilon):
@@ -153,8 +154,8 @@ class LRP_MLPF():
 
         Can accomodate message_passing layers if the adjacency matrix and the activations before the message_passing are provided.
         The trick (or as we like to call it, the message_passing hack) is in
-            (1) using the adjacency matrix as the weight matrix in the standard lrp rule
-            (2) transposing the activations to distribute the Rscores over the other dimension (over nodes instead of features)
+            a. using the adjacency matrix as the weight matrix in the standard lrp rule
+            b. transposing the activations to distribute the Rscores over the other dimension (over nodes instead of features)
 
         Args:
             layer: a torch.nn module with a corresponding weight matrix W
