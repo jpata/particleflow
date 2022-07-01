@@ -103,51 +103,11 @@ class MLPF(nn.Module):
 
 class GravNetConv_LRP(MessagePassing):
     """
-    Copied from pytorch_geometric source code
-    Edits:
-      - retrieve adjacency matrix (we call A), and the activations before the message passing step (we call msg_activations)
-      - switched the execution of self.lin_s & self.lin_p so that the message passing step can substitute out of the box self.lin_s for lrp purposes
-      - used reduce='sum' instead of reduce='mean' in the message passing
-      - removed skip connection
-
-    The GravNet operator from the `"Learning Representations of Irregular
-    Particle-detector Geometry with Distance-weighted Graph
-    Networks" <https://arxiv.org/abs/1902.07987>`_ paper, where the graph is
-    dynamically constructed using nearest neighbors.
-    The neighbors are constructed in a learnable low-dimensional projection of
-    the feature space.
-    A second projection of the input feature space is then propagated from the
-    neighbors to each vertex using distance weights that are derived by
-    applying a Gaussian function to the distances.
-
-    Args:
-        in_channels (int): Size of each input sample, or :obj:`-1` to derive
-            the size from the first input(s) to the forward method.
-        out_channels (int): The number of output channels.
-        space_dimensions (int): The dimensionality of the space used to
-           construct the neighbors; referred to as :math:`S` in the paper.
-        propagate_dimensions (int): The number of features to be propagated
-           between the vertices; referred to as :math:`F_{\textrm{LR}}` in the
-           paper.
-        k (int): The number of nearest neighbors.
-        num_workers (int): Number of workers to use for k-NN computation.
-            Has no effect in case :obj:`batch` is not :obj:`None`, or the input
-            lies on the GPU. (default: :obj:`1`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch_geometric.nn.conv.MessagePassing`.
-
-    Shapes:
-        - **input:**
-          node features :math:`(|\mathcal{V}|, F_{in})` or
-          :math:`((|\mathcal{V_s}|, F_{in}), (|\mathcal{V_t}|, F_{in}))`
-          if bipartite,
-          batch vector :math:`(|\mathcal{V}|)` or
-          :math:`((|\mathcal{V}_s|), (|\mathcal{V}_t|))` if bipartite
-          *(optional)*
-        - **output:** node features :math:`(|\mathcal{V}|, F_{out})` or
-          :math:`(|\mathcal{V}_t|, F_{out})` if bipartite
-
-
+    Copied from pytorch_geometric source code, with the following edits
+        a. used reduce='sum' instead of reduce='mean' in the message passing
+        b. removed skip connection
+        c. retrieved adjacency matrix and the activations before the message passing, both are useful only for LRP purposes
+        d. switched the execution of self.lin_s & self.lin_p so that the message passing step can substitute out of the box self.lin_s for lrp purposes
     """
 
     def __init__(self, in_channels: int, out_channels: int,
