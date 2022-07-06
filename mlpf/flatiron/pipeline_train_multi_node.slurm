@@ -1,21 +1,12 @@
 #!/bin/sh
 
 # Walltime limit
-<<<<<<< Updated upstream
 #SBATCH -t 02:00:00
 #SBATCH -N 4
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4
 #SBATCH --constraint=a100,sxm4
-=======
-#SBATCH -t 03:00:00
-#SBATCH -N 1
-#SBATCH --ntasks-per-node=4
-#SBATCH -p gpu
-#SBATCH --gres=gpu:4
-#SBATCH --constraint=v100
->>>>>>> Stashed changes
 
 # Job name
 #SBATCH -J test
@@ -63,11 +54,11 @@ nod=${node_server: : -1}
 echo 'Starting training.'
 # Run the training of the base GNN model using e.g. 4 GPUs in a data-parallel mode
 
-#horovodrun -np $SLURM_NTASKS -H $nod --log-level DEBUG --tcp --mpi-args="--mca orte_base_help_aggregate 0" python3 mlpf/pipeline.py train -c $1 -p $2
+horovodrun -np $SLURM_NTASKS -H $nod --log-level DEBUG --tcp --mpi-args="--mca orte_base_help_aggregate 0" python3 mlpf/pipeline.py train -c $1 -p $2
 
 #valgrind --track-origins=yes --leak-check=full --show-leak-kinds=all -s mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
 
-mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
+#mpirun -v -np $SLURM_NTASKS -H $nod -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib python3 mlpf/pipeline.py train -c $1 -p $2
 
 #CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c $1 -p $2
 
