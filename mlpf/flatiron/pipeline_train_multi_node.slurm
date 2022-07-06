@@ -1,15 +1,24 @@
 #!/bin/sh
 
 # Walltime limit
+<<<<<<< Updated upstream
 #SBATCH -t 02:00:00
 #SBATCH -N 4
 #SBATCH --ntasks-per-node=4
 #SBATCH -p gpu
 #SBATCH --gres=gpu:4
 #SBATCH --constraint=a100,sxm4
+=======
+#SBATCH -t 03:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=4
+#SBATCH -p gpu
+#SBATCH --gres=gpu:4
+#SBATCH --constraint=v100
+>>>>>>> Stashed changes
 
 # Job name
-#SBATCH -J pipetrain
+#SBATCH -J test
 
 # Output and error logs
 #SBATCH -o logs_slurm/log_%x_%j.out
@@ -22,9 +31,8 @@ echo "################# End of job submission script. #########################"
 
 #module --force purge; module load modules/1.49-20211101
 #module load slurm gcc cmake nccl/2.9.9-1 cuda/11.3.1 cudnn/8.2.0.53-11.3 openmpi/4.0.6
-
 module --force purge; module load modules/2.0
-module load slurm gcc cmake nccl cuda cudnn openmpi/cuda 
+module load slurm gcc cmake cudnn cuda openmpi/cuda
 
 nvidia-smi 
 

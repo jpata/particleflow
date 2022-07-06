@@ -1,6 +1,6 @@
 try:
     import horovod.tensorflow.keras as hvd
-except ImportError:
+except ModuleNotFoundError:
     print("hvd not enabled, ignoring")
 
 from .model import PFNetTransformer, PFNetDense

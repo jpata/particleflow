@@ -5,7 +5,7 @@ except ModuleNotFoundError as e:
 
 try:
     import horovod.tensorflow.keras as hvd
-except ImportError:
+except ModuleNotFoundError:
     print("hvd not enabled, ignoring")
 
 import sys
@@ -241,7 +241,7 @@ def model_save(outdir, fit_result, model, weights):
     history_path = Path(outdir) / "history"
     history_path = str(history_path)
     with open("{}/history.json".format(history_path), "w") as fi:
-        json.dump(str(fit_result.history), fi)
+        json.dump(fit_result.history, fi)
 
     weights = get_best_checkpoint(outdir)
     print("Loading best weights that could be found from {}".format(weights))
