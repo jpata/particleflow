@@ -73,16 +73,19 @@ def set_raytune_search_parameters(search_space, config):
         config["parameters"]["combined_graph_layer"]["dist_activation"] = search_space["activation"]
         config["parameters"]["combined_graph_layer"]["activation"] = search_space["activation"]
 
-    if "num_graph_layers_common" in search_space.keys():
-        config["parameters"]["num_graph_layers_common"] = int(search_space["num_graph_layers_common"])
-    if "num_graph_layers_energy" in search_space.keys():
-        config["parameters"]["num_graph_layers_energy"] = int(search_space["num_graph_layers_energy"])
+    if "num_graph_layers_id" in search_space.keys():
+        config["parameters"]["num_graph_layers_id"] = int(search_space["num_graph_layers_id"])
+    if "num_graph_layers_reg" in search_space.keys():
+        config["parameters"]["num_graph_layers_reg"] = int(search_space["num_graph_layers_reg"])
     if "bin_size" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["bin_size"] = int(search_space["bin_size"])
     if "clip_value_low" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["kernel"]["clip_value_low"] = search_space["clip_value_low"]
     if "dist_mult" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["kernel"]["dist_mult"] = search_space["dist_mult"]
+
+    if "dist_norm" in search_space.keys():
+        config["parameters"]["combined_graph_layer"]["kernel"]["dist_norm"] = search_space["dist_norm"]
 
     if "dropout" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["dropout"] = search_space["dropout"] / 2
@@ -94,6 +97,10 @@ def set_raytune_search_parameters(search_space, config):
     if "batch_size_physical" in search_space.keys():
         config["train_test_datasets"]["physical"]["batch_per_gpu"] = int(search_space["batch_size_physical"])
 
+    if "batch_size_delphes" in search_space.keys():
+        config["train_test_datasets"]["delphes"]["batch_per_gpu"] = int(search_space["batch_size_physical"])
+
+
     if "batch_size_gun" in search_space.keys():
         config["train_test_datasets"]["gun"]["batch_per_gpu"] = int(search_space["batch_size_gun"])
 
@@ -102,5 +109,11 @@ def set_raytune_search_parameters(search_space, config):
 
     if "expdecay_decay_rate" in search_space.keys():
         config["exponentialdecay"]["decay_rate"] = search_space["expdecay_decay_rate"]
+
+    if "lr_schedule" in search_space.keys():
+        config["setup"]["lr_schedule"] = search_space["lr_schedule"]
+
+    if "weight_decay" in search_space.keys():
+        config["optimizer"]["adamw"]["weight_decay"] = search_space["weight_decay"]
 
     return config
