@@ -736,6 +736,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         resume=resume,
         max_failures=2,
         sync_config=sync_config,
+        stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
     )
     end = datetime.now()
     print("Total time of tune.run(...): {}".format(end - start))
