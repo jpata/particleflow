@@ -223,7 +223,7 @@ train_test_datasets:
     datasets:
       - delphes_pf
 
-validation_dataset:
+validation_datasets:
  - delphes_pf
 
 datasets:

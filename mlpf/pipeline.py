@@ -80,6 +80,7 @@ def customize_pipeline_test(config):
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
         config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+        config["validation_datasets"] = ["cms_pf_ttbar"]
 
     return config
 
@@ -363,13 +364,16 @@ def compute_validation_loss(config, train_dir, weights):
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-def evaluate(config, train_dir, weights):
+@click.option("--customize", help="customization function", type=str, default=None)
+def evaluate(config, train_dir, weights, customize):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
-
+    
+    if customize:
+        config = customization_functions[customize](config)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16

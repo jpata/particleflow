@@ -8,8 +8,8 @@ mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_1.root
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_2.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_1.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_2.root
 
 cd ../../..
 
@@ -33,6 +33,6 @@ python3 mlpf/pipeline.py train -c parameters/cms.yaml --nepochs 2 --customize pi
 ls ./experiments/cms_*/weights/
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate -t ./experiments/cms_*
+python3 mlpf/pipeline.py evaluate --customize pipeline_test -t ./experiments/cms_*
 
 #python3 mlpf/pipeline.py train -c parameters/cms-transformer.yaml --nepochs 2 --customize pipeline_test
