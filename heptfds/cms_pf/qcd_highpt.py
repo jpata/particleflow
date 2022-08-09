@@ -12,7 +12,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-QCD events with PU~55 in a Run3 setup.
+QCD highpt events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -21,7 +21,7 @@ _CITATION = """
 
 PADDED_NUM_ELEM_SIZE = 6400
 
-class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
+class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
     VERSION = tfds.core.Version("1.3.1")
@@ -55,7 +55,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        sample_dir = "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi"
         return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
