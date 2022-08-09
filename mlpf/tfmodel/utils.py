@@ -102,8 +102,10 @@ def get_strategy():
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
     if num_gpus > 1:
+        print("Using tf.distribute.MirroredStrategy()")
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
+        print("Using tf.distribute.OneDeviceStrategy('gpu:0')")
         strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     elif num_gpus == 0:
         print("fallback to CPU")
