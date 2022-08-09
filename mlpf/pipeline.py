@@ -423,8 +423,7 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus = get_strategy()
 
-    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
-    ds_train = ds_train.take(1)
+    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -724,8 +723,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     start = datetime.now()
     analysis = tune.run(
-        distributed_trainable,
+        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
         config=search_space,
+        resources_per_trial={"cpu": cpus, "gpu": gpus},
         name=name,
         scheduler=sched,
         search_alg=search_alg,
@@ -736,6 +736,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         resume=resume,
         max_failures=2,
         sync_config=sync_config,
+        stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
     )
     end = datetime.now()
     print("Total time of tune.run(...): {}".format(end - start))
