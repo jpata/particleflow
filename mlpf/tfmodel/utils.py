@@ -326,7 +326,7 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=Tr
     print("dataset loaded, len={}".format(num_events))
 
     weight_func = make_weight_function(config)
-    assert n_train + n_test <= num_events
+    assert(n_train + n_test <= num_events)
 
     # Padded shapes
     ps = (
@@ -372,7 +372,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
         ygens.append(np.concatenate(ygen))
         ycands.append(np.concatenate(ycand))
 
-    assert len(Xs) > 0, "Xs is empty"
+    assert(len(Xs) > 0, "Xs is empty")
     X_val = np.concatenate(Xs)
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
@@ -403,10 +403,11 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, 
 def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     datasets = []
     steps = []
+    total_num_steps = 0
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-        #ds = ds.take(1000)
         num_steps = ds.cardinality().numpy()
+        total_num_steps += num_steps
         assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
@@ -429,7 +430,13 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     if num_gpus>1:
         bs = bs*num_gpus
     ds = ds.batch(bs)
-    return ds
+
+    total_num_steps = total_num_steps // bs
+    num_steps = 0
+    for _ in ds:
+        num_steps += 1
+    assert(total_num_steps == num_steps)
+    return ds, total_num_steps
 
 #Load multiple datasets and mix them together
 def get_datasets(datasets_to_interleave, config, num_gpus, split):
@@ -440,18 +447,17 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
-            num_steps = 0
-            for elem in interleaved_ds:
-                num_steps += 1
+            interleaved_ds, num_steps = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
     
     ids = 0
     indices = []
+    total_num_steps = 0
     for ds, num_steps in zip(datasets, steps):
         indices += num_steps*[ids]
+        total_num_steps += num_steps
         ids += 1
     indices = np.array(indices, np.int64)
     np.random.shuffle(indices)
@@ -461,9 +467,10 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
     num_steps = 0
     for elem in ds:
         num_steps += 1
+    assert(total_num_steps == num_steps)
 
-    print("Final dataset with {} steps".format(num_steps))
-    return ds, num_steps
+    print("Final dataset with {} steps".format(total_num_steps))
+    return ds, total_num_steps
 
 def set_config_loss(config, trainable):
     if trainable == "classification":
@@ -518,8 +525,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "met": tf.keras.losses.MeanSquaredError(),
-        "pt_hist": tf.keras.losses.MeanSquaredError(),
+        "met": tf.keras.losses.MeanAbsoluteError(),
+        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
