@@ -30,8 +30,8 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
-  met_loss_coef: 1.0
-  pt_hist_loss_coef: 1.0
+  met_loss_coef: 0.01
+  pt_hist_loss_coef: 0.01
   energy_loss:
     type: Huber
   pt_loss:
@@ -53,7 +53,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.00005
   num_events_validation: 1000
   num_epochs: 100
   dtype: float32
@@ -219,7 +219,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 10
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
       - cms_pf_qcd

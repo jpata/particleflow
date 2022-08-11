@@ -6,10 +6,12 @@ import heptfds
 #the feature order is defined in the data prep stage (postprocessing2.py)
 def unpack_target(y, num_output_classes):
     from tfmodel.utils import batched_histogram_2d, histogram_2d
-    pt = y[..., 2:3]
-    energy = y[..., 6:7]
-    eta = y[..., 3:4]
-    phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])
+    msk_pid = tf.cast(y[..., 0:1]!=0, tf.float32)
+    
+    pt = y[..., 2:3]*msk_pid
+    energy = y[..., 6:7]*msk_pid
+    eta = y[..., 3:4]*msk_pid
+    phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])*msk_pid
   
     if len(y.shape)==3:
         pt_hist = batched_histogram_2d(
@@ -26,9 +28,8 @@ def unpack_target(y, num_output_classes):
             tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
         )
 
-    msk_pid = tf.cast(y[..., 0:1]!=0, tf.float32)
-    px = tf.squeeze(pt*y[..., 5:6]*msk_pid, axis=-1)
-    py = tf.squeeze(pt*y[..., 4:5]*msk_pid, axis=-1)
+    px = tf.squeeze(pt*y[..., 5:6], axis=-1)
+    py = tf.squeeze(pt*y[..., 4:5], axis=-1)
     
     sum_px = tf.math.reduce_sum(px, axis=-1)
     sum_py = tf.math.reduce_sum(py, axis=-1)

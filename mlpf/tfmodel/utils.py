@@ -432,10 +432,10 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     ds = ds.batch(bs)
 
     total_num_steps = total_num_steps // bs
-    num_steps = 0
-    for _ in ds:
-        num_steps += 1
-    assert(total_num_steps == num_steps)
+    #num_steps = 0
+    #for _ in ds:
+    #    num_steps += 1
+    #assert(total_num_steps == num_steps)
     return ds, total_num_steps
 
 #Load multiple datasets and mix them together
@@ -464,10 +464,10 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    num_steps = 0
-    for elem in ds:
-        num_steps += 1
-    assert(total_num_steps == num_steps)
+    #num_steps = 0
+    #for elem in ds:
+    #    num_steps += 1
+    #assert(total_num_steps == num_steps)
 
     print("Final dataset with {} steps".format(total_num_steps))
     return ds, total_num_steps
