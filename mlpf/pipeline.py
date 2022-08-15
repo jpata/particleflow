@@ -675,9 +675,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest, seeds):
     import ray
     from ray import tune
-    from ray.tune.integration.tensorflow import DistributedTrainableCreator
     from ray.tune.logger import TBXLoggerCallback
-    from ray.tune import Analysis
     from raytune.search_space import search_space, raytune_num_samples
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
@@ -709,15 +707,6 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     sched = get_raytune_schedule(cfg["raytune"])
     search_alg = get_raytune_search_alg(cfg["raytune"], seeds)
-
-    distributed_trainable = DistributedTrainableCreator(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
-        num_workers=1,  # Number of hosts that each trial is expected to use.
-        num_cpus_per_worker=cpus,
-        num_gpus_per_worker=gpus,
-        num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
-        timeout_s=1 * 60 * 60,
-    )
 
     sync_config = tune.SyncConfig(sync_to_driver=False)
 
@@ -782,8 +771,9 @@ def count_skipped(exp_dir):
 @click.option("--metric", help="experiment dir", type=str, default="val_loss")
 @click.option("--mode", help="experiment dir", type=str, default="min")
 def raytune_analysis(exp_dir, save, skip, mode, metric):
-    analysis = Analysis(exp_dir,  default_metric=metric, default_mode=mode)
-    plot_ray_analysis(analysis, save=save, skip=skip)
+    from ray.tune import ExperimentAnalysis
+    experiment_analysis = ExperimentAnalysis(exp_dir, default_metric=metric, default_mode=mode)
+    plot_ray_analysis(experiment_analysis, save=save, skip=skip)
     analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
 
 @main.command()
