@@ -33,9 +33,7 @@ python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 2 --customiz
 ls ./experiments/cms*/weights/
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate --customize pipeline_test -t ./experiments/cms*
-
-ls -R ./experiments
+python3 mlpf/pipeline.py evaluate --customize pipeline_test -t ./experiments/cms* -w ./experiments/cms*/weights/weights-02-*.hdf5
 
 #Evaluate the notebook
 papermill --inject-output-path --log-output -p ncores 1 -p path ./experiments/cms*/evaluation/epoch_2/cms_pf_ttbar/ notebooks/cms-mlpf.ipynb out.ipynb
