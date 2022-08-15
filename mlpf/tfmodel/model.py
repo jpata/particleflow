@@ -624,7 +624,7 @@ class OutputDecoding(tf.keras.Model):
         pred_energy = tf.abs(pred_energy)
 
         #compute pt=E/cosh(eta)
-        orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+        orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)
         pred_pt_corr = pred_pt_corr*msk_input_outtype

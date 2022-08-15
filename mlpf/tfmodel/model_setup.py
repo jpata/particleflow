@@ -629,7 +629,7 @@ def eval_model(model, dataset, config, outdir):
 
     ibatch = 0
     for elem in tqdm(dataset, desc="Evaluating model"):
-        y_pred = model.predict(elem["X"])
+        y_pred = model.predict(elem["X"], verbose=False)
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
