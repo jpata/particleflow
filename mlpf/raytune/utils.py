@@ -49,7 +49,6 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
     if raytune_cfg["search_alg"] == "scikit":
         print("INFO: Using bayesian optimization from scikit-learn")
         return SkOptSearch(
-            optimizer=gp_minimize,
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
             convert_to_python=True,

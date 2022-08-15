@@ -190,7 +190,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         else:
             X_phi = np.arctan2(
                 self.X[:, :, x_feat.index("sin_phi")],
-                self.Xs[:, :, x_feat.index("cos_phi")]
+                self.X[:, :, x_feat.index("cos_phi")]
             )
 
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(3*5, 5))
