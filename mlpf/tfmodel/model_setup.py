@@ -25,6 +25,10 @@ import tf2onnx
 import sklearn
 import sklearn.metrics
 
+import fastjet
+import vector
+import awkward
+
 from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
@@ -628,6 +632,9 @@ def make_transformer(config, dtype):
 def eval_model(model, dataset, config, outdir):
 
     ibatch = 0
+
+    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
     for elem in tqdm(dataset, desc="Evaluating model"):
         y_pred = model.predict(elem["X"], verbose=False)
 
@@ -638,9 +645,55 @@ def eval_model(model, dataset, config, outdir):
 
         outs = {}
         for key in y_pred.keys():
-            outs["gen_{}".format(key)] = ygen[key]
-            outs["cand_{}".format(key)] = ycand[key]
+            outs["gen_{}".format(key)] = ygen[key].numpy()
+            outs["cand_{}".format(key)] = ycand[key].numpy()
             outs["pred_{}".format(key)] = y_pred[key]
+
+        jets_coll = {}
+        for typ in ["gen", "cand", "pred"]:
+            cls_id = np.argmax(outs["{}_cls".format(typ)], axis=-1)
+            valid = cls_id!=0
+            pt = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_pt".format(typ)], valid)])
+            eta = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_eta".format(typ)], valid)])
+
+            phi = np.arctan2(outs["{}_sin_phi".format(typ)], outs["{}_cos_phi".format(typ)])
+            phi = awkward.from_iter([y[m][:, 0] for y, m in zip(phi, valid)])
+            e = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_energy".format(typ)], valid)])
+
+            vec = vector.arr({"pt": pt, "eta": eta, "phi": phi, "e": e})          
+            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+
+            jets = cluster.inclusive_jets()
+            jets_coll[typ] = jets[jets.pt > 5.0]
+
+        for key in ["pt", "eta", "phi", "energy"]:
+            outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
+            outs["jets_cand_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["cand"], key)))
+            outs["jets_pred_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["pred"], key)))
+
+        cart = awkward.cartesian([jets_coll["gen"], jets_coll["pred"]], nested=True)
+        jets_a, jets_b = awkward.unzip(cart)
+        dr = lambda a,b: a.deltaR(b)
+        drs = dr(jets_a, jets_b)
+        match_gen_to_pred = [awkward.where(d<0.1) for d in drs]
+        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
+        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
+        j1s = awkward.flatten(jets_coll["gen"][m0])
+        j2s = awkward.flatten(jets_coll["pred"][m1])
+        outs["jets_pt_gen_to_pred"] = np.stack([awkward.to_numpy(j1s.pt), awkward.to_numpy(j2s.pt)], axis=-1)
+
+        cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
+        jets_a, jets_b = awkward.unzip(cart)
+        dr = lambda a,b: a.deltaR(b)
+        drs = dr(jets_a, jets_b)
+        match_gen_to_pred = [awkward.where(d<0.1) for d in drs]
+        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
+        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
+        j1s = awkward.flatten(jets_coll["gen"][m0])
+        j2s = awkward.flatten(jets_coll["cand"][m1])
+        outs["jets_pt_gen_to_cand"] = np.stack([awkward.to_numpy(j1s.pt), awkward.to_numpy(j2s.pt)], axis=-1)
+
+
         np.savez(
             np_outfile,
             X=elem["X"],
