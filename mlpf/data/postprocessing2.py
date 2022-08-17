@@ -225,6 +225,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     #If there are multiple tracks matched to a gen/sim particle, keep the association to the closest one by dR 
     for node in g.nodes:   
         if node[0] == "sc" or node[0] == "tp":
+            #collect tracks or GSFs
             tracks = []
             for suc in g.successors(node):
                 typ = g.nodes[suc]["typ"]
@@ -507,6 +508,11 @@ def make_graph(ev, iev):
     pfcandidate_e = ev['pfcandidate_energy'][iev]
     pfcandidate_eta = ev['pfcandidate_eta'][iev]
     pfcandidate_phi = ev['pfcandidate_phi'][iev]
+    
+    #gen_pt = ev['gen_pt'][iev]
+    #gen_e = ev['gen_energy'][iev]
+    #gen_eta = ev['gen_eta'][iev]
+    #gen_phi = ev['gen_phi'][iev]
 
     g = nx.DiGraph()
     for iobj in range(len(element_type)):
