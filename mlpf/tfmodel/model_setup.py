@@ -649,7 +649,7 @@ def eval_model(model, dataset, config, outdir):
         outs = {}
         outs_awk = {}
 
-        #outs_awk["X"] = elem["X"]
+        outs_awk["X"] = awkward.from_iter([e[e[:, 0]!=0].numpy() for e in elem["X"]])
 
         for key in y_pred.keys():
             outs["gen_{}".format(key)] = ygen[key].numpy()
@@ -730,10 +730,8 @@ def eval_model(model, dataset, config, outdir):
             **outs
         )
 
-        for k, v in outs_awk.items():
-            print(k, v)
-        with open(np_outfile.replace("npz", "pkl"), "wb") as fi:
-            pickle.dump(outs_awk, fi)
+        # with open(np_outfile.replace("npz", "pkl"), "wb") as fi:
+        #     pickle.dump(outs_awk, fi)
 
         ibatch += 1
 
