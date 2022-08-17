@@ -329,6 +329,8 @@ if __name__ == "__main__":
         }
  
         event_data.append(event)
+
+        #save the current events
         if len(event_data) >= perfile:
             ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
             json.dump(event_data, ofi, indent=2, sort_keys=True)
@@ -337,6 +339,9 @@ if __name__ == "__main__":
             ioutfile += 1
         nEvent += 1
    
-    #save the event data to a file 
+    #save the events data to a file 
+    ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
+    json.dump(event_data, ofi, indent=2, sort_keys=True)
+    ofi.close()
     
     reader.close() # close the file

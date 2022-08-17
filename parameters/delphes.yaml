@@ -18,8 +18,8 @@ dataset:
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
-  sum_energy_loss_coef: 0.0
-  sum_pt_loss_coef: 0.0
+  met_loss_coef: 0.00000001
+  pt_hist_loss_coef: 0.00000001
   energy_loss:
     type: Huber
     delta: 1.0
@@ -210,7 +210,8 @@ train_test_datasets:
     datasets:
       - delphes_pf
 
-validation_dataset: delphes_pf
+validation_datasets:
+ - delphes_pf
 
 datasets:
   delphes_pf:
