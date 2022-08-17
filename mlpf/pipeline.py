@@ -80,6 +80,7 @@ def customize_pipeline_test(config):
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
         config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+        config["validation_datasets"] = ["cms_pf_ttbar"]
 
     return config
 
@@ -156,7 +157,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
-    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
     ds_val = ds_val.batch(5)
 
     if ntrain:
@@ -250,7 +251,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+            if model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1":
                 model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
             else:
                 model.optimizer.set_weights(loaded_opt["weights"])
@@ -363,20 +364,17 @@ def compute_validation_loss(config, train_dir, weights):
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-def evaluate(config, train_dir, weights, evaluation_dir):
+@click.option("--customize", help="customization function", type=str, default=None)
+@click.option("--nevents", help="override the number of events to evaluate", type=int, default=None)
+def evaluate(config, train_dir, weights, customize, nevents):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
-
-    if evaluation_dir is None:
-        eval_dir = str(Path(train_dir) / "evaluation")
-    else:
-        eval_dir = evaluation_dir
-
-    Path(eval_dir).mkdir(parents=True, exist_ok=True)
+    
+    if customize:
+        config = customization_functions[customize](config)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -391,12 +389,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     #for dev in physical_devices:
     #    tf.config.experimental.set_memory_growth(dev, True)
 
-    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
-    ds_test = ds_test.batch(5)
-
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
+    
     # need to load the weights in the same trainable configuration as the model was set up
     configure_model_weights(model, config["setup"].get("weights_config", "all"))
     if weights:
@@ -405,8 +400,18 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    
-    eval_model(model, ds_test, config, eval_dir)
+
+    iepoch = int(weights.split("/")[-1].split("-")[1])
+
+    for dsname in config["validation_datasets"]:
+        ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
+        if nevents:
+            ds_test = ds_test.take(nevents)
+        ds_test = ds_test.batch(5)
+        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
+        Path(eval_dir).mkdir(parents=True, exist_ok=True)
+        eval_model(model, ds_test, config, eval_dir)
+
     freeze_model(model, config, train_dir)
 
 @main.command()
@@ -500,7 +505,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
  
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
     num_train_steps = 0
     for _ in ds_train:
@@ -559,7 +564,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
         ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
-        ds_val, ds_info = get_heptfds_dataset(full_config["validation_dataset"], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
+        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
 
         if ntrain:
             ds_train = ds_train.take(ntrain)
