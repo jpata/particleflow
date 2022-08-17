@@ -509,10 +509,20 @@ def get_loss_from_params(input_dict):
     loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
-# class MyLoss(tf.keras.losses.Loss):
-#   def call(self, y_true, y_pred):
-#       import pdb;pdb.set_trace()
-#       return tf.reduce_mean(tf.square(y_pred - y_true), axis=-1)
+#batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
+def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
+    
+    theta = tf.random.normal((num_projections, y_true.shape[-1]))
+    theta = theta / tf.sqrt(tf.reduce_sum(theta**2, axis=1, keepdims=True))
+
+    A = tf.linalg.matmul(y_true, theta, False, True)
+    B = tf.linalg.matmul(y_pred, theta, False, True)
+
+    A_sorted = tf.sort(A, axis=-2)
+    B_sorted = tf.sort(B, axis=-2)
+
+    ret = tf.math.sqrt(tf.reduce_sum(tf.math.pow(A_sorted - B_sorted, 2), axis=[-1,-2]))
+    return ret
 
 
 def get_loss_dict(config):
@@ -527,8 +537,9 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "met": tf.keras.losses.MeanAbsoluteError(),
-        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
+        #"met": tf.keras.losses.MeanAbsoluteError(),
+        #"pt_hist": tf.keras.losses.MeanAbsoluteError(),
+        "pt_eta_phi": sliced_wasserstein_loss
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -538,7 +549,8 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
-        "met": config["dataset"]["met_loss_coef"],
-        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        #"met": config["dataset"]["met_loss_coef"],
+        #"pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        "pt_eta_phi": 0.0001,
     }
     return loss_dict, loss_weights

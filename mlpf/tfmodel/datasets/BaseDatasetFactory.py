@@ -11,7 +11,9 @@ def unpack_target(y, num_output_classes):
     pt = y[..., 2:3]*msk_pid
     energy = y[..., 6:7]*msk_pid
     eta = y[..., 3:4]*msk_pid
-    phi = tf.math.atan2(y[..., 4:5], y[..., 5:6])*msk_pid
+    sin_phi = y[..., 4:5]*msk_pid
+    cos_phi = y[..., 5:6]*msk_pid
+    phi = tf.math.atan2(sin_phi, cos_phi)*msk_pid
   
     if len(y.shape)==3:
         pt_hist = batched_histogram_2d(
@@ -35,16 +37,19 @@ def unpack_target(y, num_output_classes):
     sum_py = tf.math.reduce_sum(py, axis=-1)
     met = tf.math.sqrt(sum_px**2 + sum_py**2)
 
+    arr = tf.concat([pt, eta, sin_phi, cos_phi], axis=-1)
+
     return {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
         "charge": y[..., 1:2],
         "pt": pt,
         "eta": eta,
-        "sin_phi": y[..., 4:5],
-        "cos_phi": y[..., 5:6],
+        "sin_phi": sin_phi,
+        "cos_phi": cos_phi,
         "energy": energy,
-        "pt_hist": pt_hist,
-        "met": met
+        #"pt_hist": pt_hist,
+        #"met": met,
+        "pt_eta_phi": arr
     }
 
 class BaseDatasetFactory:

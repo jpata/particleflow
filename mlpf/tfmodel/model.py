@@ -662,6 +662,13 @@ class OutputDecoding(tf.keras.Model):
         sum_py = tf.math.reduce_sum(py, axis=-1)
         met = tf.math.sqrt(sum_px**2 + sum_py**2)
 
+        pt_eta_phi = tf.concat([
+            pred_pt*msk_input_outtype*msk_output,
+            pred_eta*msk_input_outtype*msk_output,
+            pred_sin_phi*msk_input_outtype*msk_output,
+            pred_cos_phi*msk_input_outtype*msk_output
+            ], axis=-1)
+
         ret = {
             "cls": out_id_softmax,
             "charge": out_charge*msk_input_outtype,
@@ -671,8 +678,9 @@ class OutputDecoding(tf.keras.Model):
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
 
-            "pt_hist": pt_hist,
-            "met": met,
+            #"pt_hist": pt_hist,
+            #"met": met,
+            "pt_eta_phi": pt_eta_phi,
         }
 
         return ret
