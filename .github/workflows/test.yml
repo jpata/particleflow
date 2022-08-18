@@ -18,15 +18,16 @@ jobs:
           sudo apt install python3 python3-pip wget
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
-          sudo python3 -m pip install tensorflow==2.6 setGPU \
-            sklearn matplotlib mplhep pandas scipy uproot \
-            awkward vector keras-tuner networkx \
-            tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
+          sudo python3 -m pip install tensorflow==2.9 setGPU \
+            sklearn matplotlib boost_histogram mplhep pandas scipy uproot \
+            awkward vector fastjet keras-tuner networkx \
+            tensorflow-probability tensorflow-addons \
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
-            tensorflow-estimator==2.6.0 keras==2.6.0
-            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras]
+            tensorflow-estimator keras \
+            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras] \
+            notebook papermill
           git submodule init
           git submodule update
       - name: Run delphes TF model
@@ -41,15 +42,16 @@ jobs:
           sudo apt install python3 python3-pip wget
           sudo python3 -m pip install --upgrade pip
           sudo python3 -m pip install --upgrade setuptools
-          sudo python3 -m pip install tensorflow==2.6 setGPU \
-            sklearn matplotlib mplhep pandas scipy uproot \
-            awkward vector keras-tuner networkx \
-            tensorflow-probability==0.12.2 tensorflow-addons==0.13.0 \
-            tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]'==1.6.0 \
+          sudo python3 -m pip install tensorflow==2.9 setGPU \
+            sklearn matplotlib boost_histogram mplhep pandas scipy uproot \
+            awkward vector fastjet keras-tuner networkx \
+            tensorflow-probability tensorflow-addons \
+            tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
-            tensorflow-estimator==2.6.0 keras==2.6.0
-            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras]
+            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras] \
+            tensorflow-estimator keras \
+            notebook papermill
           git submodule init
           git submodule update
       - name: Run CMS TF model using the pipeline

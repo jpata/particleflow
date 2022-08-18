@@ -3,6 +3,7 @@
 # PFNetTransformer: the transformer-based model using fast attention
 
 import tensorflow as tf
+from tfmodel.utils import batched_histogram_2d
 
 regularizer_weight = 0.0
 
@@ -620,9 +621,10 @@ class OutputDecoding(tf.keras.Model):
             pred_energy = orig_energy+tf.reduce_sum(out_id_hard_softmax*pred_energy_corr, axis=-1, keepdims=True)
         else:
             pred_energy = orig_energy+pred_energy_corr
+        pred_energy = tf.abs(pred_energy)
 
         #compute pt=E/cosh(eta)
-        orig_pt = tf.stop_gradient(pred_energy/tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+        orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)
         pred_pt_corr = pred_pt_corr*msk_input_outtype
@@ -633,9 +635,18 @@ class OutputDecoding(tf.keras.Model):
         else:
             pred_pt = orig_pt*pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
         
+        pred_pt = tf.abs(pred_pt)
+
         #mask the regression outputs for the nodes with a class prediction 0
         msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
+        pred_phi = tf.math.atan2(pred_sin_phi, pred_cos_phi)
+        pt_hist = batched_histogram_2d(
+            tf.squeeze(pred_eta, axis=-1),
+            tf.squeeze(pred_phi, axis=-1),
+            tf.squeeze(pred_pt*msk_input_outtype*msk_output, axis=-1),
+            tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+        )
         if self.mask_reg_cls0:
             out_charge = out_charge*msk_output
             pred_pt = pred_pt*msk_output
@@ -643,6 +654,13 @@ class OutputDecoding(tf.keras.Model):
             pred_sin_phi = pred_sin_phi*msk_output
             pred_cos_phi = pred_cos_phi*msk_output
             pred_energy = pred_energy*msk_output
+
+        px = tf.squeeze(pred_pt*pred_cos_phi*msk_output, axis=-1)
+        py = tf.squeeze(pred_pt*pred_sin_phi*msk_output, axis=-1)
+        
+        sum_px = tf.math.reduce_sum(px, axis=-1)
+        sum_py = tf.math.reduce_sum(py, axis=-1)
+        met = tf.math.sqrt(sum_px**2 + sum_py**2)
 
         ret = {
             "cls": out_id_softmax,
@@ -653,9 +671,8 @@ class OutputDecoding(tf.keras.Model):
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
 
-            #per-event sum of energy and pt
-            "sum_energy": tf.reduce_sum(pred_energy*msk_input_outtype*msk_output, axis=-2),
-            "sum_pt": tf.reduce_sum(pred_pt*msk_input_outtype*msk_output, axis=-2),
+            "pt_hist": pt_hist,
+            "met": met,
         }
 
         return ret

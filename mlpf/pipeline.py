@@ -86,6 +86,7 @@ def customize_pipeline_test(config):
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
         config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+        config["validation_datasets"] = ["cms_pf_ttbar"]
 
     return config
 
@@ -109,7 +110,8 @@ def main():
 @click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize):
+@click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline):
 
     #tf.debugging.enable_check_numerics()
 
@@ -127,17 +129,30 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     
 
     try:
-        from comet_ml import Experiment
-        experiment = Experiment(
-            project_name="particleflow-tf",
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-            #offline_directory=outdir,
-            #disabled=True
-        )
+        if comet_offline:
+            print("Using comet-ml OfflineExperiment, saving logs locally.")
+            from comet_ml import OfflineExperiment
+            experiment = OfflineExperiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+                offline_directory=outdir + "/cometml",
+            )
+        else:
+            print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+            from comet_ml import Experiment
+            offline_dir = None
+            experiment = Experiment(
+                project_name="particleflow-tf",
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+            )
     except Exception as e:
         print("Failed to initialize comet-ml dashboard")
         experiment = None
@@ -169,7 +184,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
-    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
     ds_val = ds_val.batch(5)
 
     if ntrain:
@@ -185,15 +200,11 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     print("total_steps", total_steps)
 
     
-
-    
-
     if horovod_enabled :
         model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
     else:
         with strategy.scope():
             model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
-    
 
     callbacks = prepare_callbacks(
         config["callbacks"],
@@ -254,6 +265,7 @@ def model_save(outdir, fit_result, model, weights):
 def model_scope(config, total_steps, weights, horovod_enabled=False):
     lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
     opt = get_optimizer(config, lr_schedule)
+    
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -322,7 +334,7 @@ def model_scope(config, total_steps, weights, horovod_enabled=False):
             grad_vars = model.trainable_weights
             zero_grads = [tf.zeros_like(w) for w in grad_vars]
             model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if isinstance(model.optimizer, keras.optimizer_v1.TFOptimizer):
+            if model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1":
                 model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
             else:
                 model.optimizer.set_weights(loaded_opt["weights"])
@@ -413,20 +425,17 @@ def compute_validation_loss(config, train_dir, weights):
 @click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("-e", "--evaluation_dir", help="optionally specify evaluation output dir", type=click.Path())
-def evaluate(config, train_dir, weights, evaluation_dir):
+@click.option("--customize", help="customization function", type=str, default=None)
+@click.option("--nevents", help="override the number of events to evaluate", type=int, default=None)
+def evaluate(config, train_dir, weights, customize, nevents):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
-
-    if evaluation_dir is None:
-        eval_dir = str(Path(train_dir) / "evaluation")
-    else:
-        eval_dir = evaluation_dir
-
-    Path(eval_dir).mkdir(parents=True, exist_ok=True)
+    
+    if customize:
+        config = customization_functions[customize](config)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -441,12 +450,9 @@ def evaluate(config, train_dir, weights, evaluation_dir):
     #for dev in physical_devices:
     #    tf.config.experimental.set_memory_growth(dev, True)
 
-    ds_test, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", supervised=False)
-    ds_test = ds_test.batch(5)
-
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
+    
     # need to load the weights in the same trainable configuration as the model was set up
     configure_model_weights(model, config["setup"].get("weights_config", "all"))
     if weights:
@@ -455,8 +461,18 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    
-    eval_model(model, ds_test, config, eval_dir)
+
+    iepoch = int(weights.split("/")[-1].split("-")[1])
+
+    for dsname in config["validation_datasets"]:
+        ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
+        if nevents:
+            ds_test = ds_test.take(nevents)
+        ds_test = ds_test.batch(5)
+        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
+        Path(eval_dir).mkdir(parents=True, exist_ok=True)
+        eval_model(model, ds_test, config, eval_dir)
+
     freeze_model(model, config, train_dir)
 
 @main.command()
@@ -473,8 +489,7 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus = get_strategy()
 
-    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
-    ds_train = ds_train.take(1)
+    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -551,7 +566,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
  
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
 
     num_train_steps = 0
     for _ in ds_train:
@@ -610,7 +625,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
         ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
-        ds_val, ds_info = get_heptfds_dataset(full_config["validation_dataset"], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
+        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
 
         if ntrain:
             ds_train = ds_train.take(ntrain)
@@ -726,9 +741,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest, seeds):
     import ray
     from ray import tune
-    from ray.tune.integration.tensorflow import DistributedTrainableCreator
     from ray.tune.logger import TBXLoggerCallback
-    from ray.tune import Analysis
     from raytune.search_space import search_space, raytune_num_samples
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
@@ -761,21 +774,13 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     sched = get_raytune_schedule(cfg["raytune"])
     search_alg = get_raytune_search_alg(cfg["raytune"], seeds)
 
-    distributed_trainable = DistributedTrainableCreator(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
-        num_workers=1,  # Number of hosts that each trial is expected to use.
-        num_cpus_per_worker=cpus,
-        num_gpus_per_worker=gpus,
-        num_workers_per_host=1,  # Number of workers to colocate per host. None if not specified.
-        timeout_s=1 * 60 * 60,
-    )
-
     sync_config = tune.SyncConfig(sync_to_driver=False)
 
     start = datetime.now()
     analysis = tune.run(
-        distributed_trainable,
+        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
         config=search_space,
+        resources_per_trial={"cpu": cpus, "gpu": gpus},
         name=name,
         scheduler=sched,
         search_alg=search_alg,
@@ -786,6 +791,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         resume=resume,
         max_failures=2,
         sync_config=sync_config,
+        stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
     )
     end = datetime.now()
     print("Total time of tune.run(...): {}".format(end - start))
@@ -831,8 +837,9 @@ def count_skipped(exp_dir):
 @click.option("--metric", help="experiment dir", type=str, default="val_loss")
 @click.option("--mode", help="experiment dir", type=str, default="min")
 def raytune_analysis(exp_dir, save, skip, mode, metric):
-    analysis = Analysis(exp_dir,  default_metric=metric, default_mode=mode)
-    plot_ray_analysis(analysis, save=save, skip=skip)
+    from ray.tune import ExperimentAnalysis
+    experiment_analysis = ExperimentAnalysis(exp_dir, default_metric=metric, default_mode=mode)
+    plot_ray_analysis(experiment_analysis, save=save, skip=skip)
     analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
 
 @main.command()

@@ -18,6 +18,19 @@ from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleSchedu
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 
+@tf.function
+def histogram_2d(x, y, weights, x_range, y_range, nbins, bin_dtype=tf.float32):
+    x_bins = tf.histogram_fixed_width_bins(x, x_range, nbins=nbins, dtype=bin_dtype)
+    y_bins = tf.histogram_fixed_width_bins(y, y_range, nbins=nbins, dtype=bin_dtype)
+    hist = tf.zeros((nbins, nbins), dtype=weights.dtype)
+    indices = tf.transpose(tf.stack([y_bins, x_bins]))
+    hist = tf.tensor_scatter_nd_add(hist, indices, weights)
+    return hist
+
+@tf.function
+def batched_histogram_2d(x, y, w, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.vectorized_map(lambda a: histogram_2d(a[0], a[1], a[2], x_range, y_range, nbins, bin_dtype), (x,y,w))
+
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
         cfg = yaml.load(ymlfile, Loader=yaml.FullLoader)
@@ -102,8 +115,10 @@ def get_strategy():
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
     if num_gpus > 1:
+        print("Using tf.distribute.MirroredStrategy()")
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
+        print("Using tf.distribute.OneDeviceStrategy('gpu:0')")
         strategy = tf.distribute.OneDeviceStrategy("gpu:0")
     elif num_gpus == 0:
         print("fallback to CPU")
@@ -313,7 +328,7 @@ def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=Tr
     print("dataset loaded, len={}".format(num_events))
 
     weight_func = make_weight_function(config)
-    assert n_train + n_test <= num_events
+    assert(n_train + n_test <= num_events)
 
     # Padded shapes
     ps = (
@@ -359,7 +374,7 @@ def prepare_val_data(config, dataset_def, single_file=False):
         ygens.append(np.concatenate(ygen))
         ycands.append(np.concatenate(ycand))
 
-    assert len(Xs) > 0, "Xs is empty"
+    assert(len(Xs) > 0, "Xs is empty")
     X_val = np.concatenate(Xs)
     ygen_val = np.concatenate(ygens)
     ycand_val = np.concatenate(ycands)
@@ -390,10 +405,11 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, 
 def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     datasets = []
     steps = []
+    total_num_steps = 0
     for ds_name in dataset_names:
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
-        #ds = ds.take(500)
         num_steps = ds.cardinality().numpy()
+        total_num_steps += num_steps
         assert(num_steps > 0)
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
@@ -417,7 +433,13 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
         if num_gpus>1:
             bs = bs*num_gpus
     ds = ds.batch(bs)
-    return ds
+
+    total_num_steps = total_num_steps // bs
+    #num_steps = 0
+    #for _ in ds:
+    #    num_steps += 1
+    #assert(total_num_steps == num_steps)
+    return ds, total_num_steps
 
 #Load multiple datasets and mix them together
 def get_datasets(datasets_to_interleave, config, num_gpus, split):
@@ -428,30 +450,30 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
-            num_steps = 0
-            for elem in interleaved_ds:
-                num_steps += 1
+            interleaved_ds, num_steps = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
     
     ids = 0
     indices = []
+    total_num_steps = 0
     for ds, num_steps in zip(datasets, steps):
         indices += num_steps*[ids]
+        total_num_steps += num_steps
         ids += 1
     indices = np.array(indices, np.int64)
     np.random.shuffle(indices)
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    num_steps = 0
-    for elem in ds:
-        num_steps += 1
+    #num_steps = 0
+    #for elem in ds:
+    #    num_steps += 1
+    #assert(total_num_steps == num_steps)
 
-    print("Final dataset with {} steps".format(num_steps))
-    return ds, num_steps
+    print("Final dataset with {} steps".format(total_num_steps))
+    return ds, total_num_steps
 
 def set_config_loss(config, trainable):
     if trainable == "classification":
@@ -506,8 +528,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "sum_energy": tf.keras.losses.MeanSquaredError(),
-        "sum_pt": tf.keras.losses.MeanSquaredError(),
+        "met": tf.keras.losses.MeanAbsoluteError(),
+        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
     }
     loss_weights = {
         "cls": config["dataset"]["classification_loss_coef"],
@@ -517,7 +539,7 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
-        "sum_energy": config["dataset"]["sum_energy_loss_coef"],
-        "sum_pt": config["dataset"]["sum_pt_loss_coef"],
+        "met": config["dataset"]["met_loss_coef"],
+        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
     }
     return loss_dict, loss_weights
