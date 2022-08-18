@@ -680,7 +680,7 @@ class OutputDecoding(tf.keras.Model):
 
             #"pt_hist": pt_hist,
             #"met": met,
-            "pt_eta_phi": pt_eta_phi,
+            #"pt_eta_phi": pt_eta_phi,
         }
 
         return ret

@@ -157,7 +157,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
-    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
     ds_val = ds_val.batch(5)
 
     if ntrain:
@@ -261,10 +261,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             print(e)
 
     callbacks = prepare_callbacks(
+        config,
         config["callbacks"],
         outdir,
         ds_val,
-        ds_info,
         comet_experiment=experiment
     )
     callbacks.append(optim_callbacks)

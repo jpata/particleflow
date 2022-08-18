@@ -49,7 +49,7 @@ def unpack_target(y, num_output_classes):
         "energy": energy,
         #"pt_hist": pt_hist,
         #"met": met,
-        "pt_eta_phi": arr
+        #"pt_eta_phi": arr
     }
 
 class BaseDatasetFactory:
@@ -70,13 +70,16 @@ class BaseDatasetFactory:
             #mask to keep only nonzero target particles
             msk_signal = tf.cast(y[:, 0:1]!=0, tf.float32)
 
+            target = unpack_target(y, num_output_classes)
+
             #inputs: X
             #targets: dict by classification (cls) and regression feature columns
             #weights: dict of weights for each target
             return (
-                X, unpack_target(y, num_output_classes),
+                X,
+                target,
                 {
-                    "cls": msk_elems,
+                    "cls": msk_elems*target["pt"],
                     "charge": msk_elems*msk_signal,
                     "pt": msk_elems*msk_signal,
                     "eta": msk_elems*msk_signal,
