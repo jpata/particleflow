@@ -26,8 +26,8 @@ jobs:
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
             tensorflow-estimator keras \
-            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras] \
             notebook papermill
+          HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras]
           git submodule init
           git submodule update
       - name: Run delphes TF model
@@ -49,9 +49,9 @@ jobs:
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
-            HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras] \
             tensorflow-estimator keras \
             notebook papermill
+          HOROVOD_WITH_TENSORFLOW=1 sudo python3 -m pip install horovod[tensorflow,keras]
           git submodule init
           git submodule update
       - name: Run CMS TF model using the pipeline
