@@ -172,7 +172,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
                 experiment.log_code("mlpf/tfmodel/model.py")
                 experiment.log_code("mlpf/tfmodel/utils.py")
                 experiment.log_code(config_file_path)
-                shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+            
+            shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
     else:
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
         if experiment:
@@ -180,7 +181,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             experiment.log_code("mlpf/tfmodel/model.py")
             experiment.log_code("mlpf/tfmodel/utils.py")
             experiment.log_code(config_file_path)
-            shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+        
+        shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
