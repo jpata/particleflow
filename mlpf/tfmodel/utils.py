@@ -537,8 +537,8 @@ def get_loss_dict(config):
         "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        #"met": tf.keras.losses.MeanAbsoluteError(),
-        #"pt_hist": tf.keras.losses.MeanAbsoluteError(),
+        "met": tf.keras.losses.MeanAbsoluteError(),
+        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
         #"pt_eta_phi": sliced_wasserstein_loss
     }
     loss_weights = {
@@ -549,8 +549,8 @@ def get_loss_dict(config):
         "sin_phi": config["dataset"]["sin_phi_loss_coef"],
         "cos_phi": config["dataset"]["cos_phi_loss_coef"],
         "energy": config["dataset"]["energy_loss_coef"],
-        #"met": config["dataset"]["met_loss_coef"],
-        #"pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        "met": config["dataset"]["met_loss_coef"],
+        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
         #"pt_eta_phi": 0.0001,
     }
     return loss_dict, loss_weights

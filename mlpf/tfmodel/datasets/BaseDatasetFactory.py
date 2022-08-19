@@ -47,8 +47,8 @@ def unpack_target(y, num_output_classes):
         "sin_phi": sin_phi,
         "cos_phi": cos_phi,
         "energy": energy,
-        #"pt_hist": pt_hist,
-        #"met": met,
+        "pt_hist": pt_hist,
+        "met": met,
         #"pt_eta_phi": arr
     }
 

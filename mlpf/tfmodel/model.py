@@ -678,8 +678,8 @@ class OutputDecoding(tf.keras.Model):
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
 
-            #"pt_hist": pt_hist,
-            #"met": met,
+            "pt_hist": pt_hist,
+            "met": met,
             #"pt_eta_phi": pt_eta_phi,
         }
 
