@@ -551,6 +551,6 @@ def get_loss_dict(config):
         "energy": config["dataset"]["energy_loss_coef"],
         #"met": config["dataset"]["met_loss_coef"],
         #"pt_hist": config["dataset"]["pt_hist_loss_coef"],
-        "pt_eta_phi": 0.0001,
+        "pt_eta_phi": 0.00001,
     }
     return loss_dict, loss_weights
