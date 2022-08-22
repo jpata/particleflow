@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 8
+#SBATCH --gpus 2
 #SBATCH --mem-per-gpu=8G
 
 IMG=/home/software/singularity/tf-2.9.0.simg
@@ -10,4 +10,4 @@ cd ~/particleflow
 singularity exec -B /scratch-persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1
+    $IMG python mlpf/pipeline.py train -c $1 --plot-freq 1 --ntrain 5000 --ntest 1000 

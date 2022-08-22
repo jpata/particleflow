@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 export PYTHONPATH=`pwd`/hep_tfds
+export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 
@@ -28,15 +29,15 @@ mkdir -p experiments
 tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 2 --customize pipeline_test
+python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test
 
 ls ./experiments/cms*/weights/
 
 #Generate the pred.npz file of predictions
-python3 mlpf/pipeline.py evaluate --customize pipeline_test -t ./experiments/cms* -w ./experiments/cms*/weights/weights-02-*.hdf5
+python3 mlpf/pipeline.py evaluate --customize pipeline_test -t ./experiments/cms* -w ./experiments/cms*/weights/weights-01-*.hdf5
 
 #Evaluate the notebook
-papermill --inject-output-path --log-output -p path ./experiments/cms*/evaluation/epoch_2/cms_pf_ttbar/ notebooks/cms-mlpf.ipynb ./out.ipynb
+papermill --inject-output-path --log-output -p path ./experiments/cms*/evaluation/epoch_1/cms_pf_ttbar/ notebooks/cms-mlpf.ipynb ./out.ipynb
 
 #Retrain from existing weights
-python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 2 --customize pipeline_test -w ./experiments/cms*/weights/weights-02-*.hdf5
+python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test -w ./experiments/cms*/weights/weights-01-*.hdf5

@@ -483,6 +483,8 @@ class OutputDecoding(tf.keras.Model):
         layernorm=False,
         mask_reg_cls0=True,
         energy_multimodal=True,
+
+        event_set_output=False,
         **kwargs):
 
         super(OutputDecoding, self).__init__(**kwargs)
@@ -502,6 +504,8 @@ class OutputDecoding(tf.keras.Model):
         self.do_layernorm = layernorm
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, name="output_layernorm")
+
+        self.event_set_output = event_set_output
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes, id_hidden_dim,
@@ -640,13 +644,6 @@ class OutputDecoding(tf.keras.Model):
         #mask the regression outputs for the nodes with a class prediction 0
         msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1)!=0, tf.float32), axis=-1)
 
-        pred_phi = tf.math.atan2(pred_sin_phi, pred_cos_phi)
-        pt_hist = batched_histogram_2d(
-            tf.squeeze(pred_eta, axis=-1),
-            tf.squeeze(pred_phi, axis=-1),
-            tf.squeeze(pred_pt*msk_input_outtype*msk_output, axis=-1),
-            tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-        )
         if self.mask_reg_cls0:
             out_charge = out_charge*msk_output
             pred_pt = pred_pt*msk_output
@@ -654,13 +651,6 @@ class OutputDecoding(tf.keras.Model):
             pred_sin_phi = pred_sin_phi*msk_output
             pred_cos_phi = pred_cos_phi*msk_output
             pred_energy = pred_energy*msk_output
-
-        px = tf.squeeze(pred_pt*pred_cos_phi*msk_output, axis=-1)
-        py = tf.squeeze(pred_pt*pred_sin_phi*msk_output, axis=-1)
-        
-        sum_px = tf.math.reduce_sum(px, axis=-1)
-        sum_py = tf.math.reduce_sum(py, axis=-1)
-        met = tf.math.sqrt(sum_px**2 + sum_py**2)
 
         ret = {
             "cls": out_id_softmax,
@@ -670,10 +660,17 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi*msk_input_outtype,
             "cos_phi": pred_cos_phi*msk_input_outtype,
             "energy": pred_energy*msk_input_outtype,
-
-            "pt_hist": pt_hist,
-            "met": met,
         }
+
+        if self.event_set_output:
+            pt_e_eta_phi = tf.concat([
+                pred_pt*msk_input_outtype*msk_output,
+                pred_energy*msk_input_outtype*msk_output,
+                pred_eta*msk_input_outtype*msk_output,
+                pred_sin_phi*msk_input_outtype*msk_output,
+                pred_cos_phi*msk_input_outtype*msk_output
+                ], axis=-1)
+            ret["pt_e_eta_phi"] = pt_e_eta_phi
 
         return ret
 
@@ -796,6 +793,7 @@ class PFNetDense(tf.keras.Model):
             debug=False,
             schema="cms",
             node_update_mode="concat",
+            event_set_output=False,
             **kwargs
         ):
         super(PFNetDense, self).__init__()
@@ -831,6 +829,7 @@ class PFNetDense(tf.keras.Model):
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
+        output_decoding["event_set_output"] = event_set_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
@@ -1053,7 +1052,9 @@ class PFNetTransformer(tf.keras.Model):
         input_encoding="cms",
         schema="cms",
         output_decoding={},
-        multi_output=True):
+        multi_output=True,
+        event_set_output=False,
+        ):
         super(PFNetTransformer, self).__init__()
 
         self.multi_output = multi_output
@@ -1071,6 +1072,7 @@ class PFNetTransformer(tf.keras.Model):
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
+        output_decoding["event_set_output"] = event_set_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
