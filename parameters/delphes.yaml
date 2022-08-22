@@ -54,6 +54,7 @@ setup:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
 
 optimizer:
   adam:
