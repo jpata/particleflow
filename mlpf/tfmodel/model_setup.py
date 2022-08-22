@@ -1,3 +1,8 @@
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    print("hvd not enabled, ignoring")
+
 from .model import PFNetTransformer, PFNetDense
 
 import tensorflow as tf
@@ -35,6 +40,7 @@ from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
+
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
 import keras
@@ -91,25 +97,32 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
                 os.remove(weightfile_path)
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, config, plot_freq=1):
+    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.dataset = dataset
         self.outpath = outpath
         self.config = config
+        self.horovod_enabled = horovod_enabled
 
         self.writer = tf.summary.create_file_writer(outpath)
 
     def on_epoch_end(self, epoch, logs=None):
+        if not self.horovod_enabled or hvd.rank()==0:
+            epoch_end(self, epoch, logs)
 
-        #first epoch is 1, not 0
-        epoch = epoch + 1
+def epoch_end(self, epoch, logs):
+    #first epoch is 1, not 0
+    epoch = epoch + 1
 
-        #save the training logs (losses) for this epoch
-        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-            json.dump(logs, fi)
+    #save the training logs (losses) for this epoch
+    with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+        json.dump(logs, fi)
 
-        if self.plot_freq<=0:
+    if self.plot_freq<=0:
+        return
+    if self.plot_freq>1:
+        if epoch%self.plot_freq!=0 or epoch==1:
             return
         if self.plot_freq>1:
             if epoch%self.plot_freq!=0 or epoch==1:
@@ -191,36 +204,30 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
 def prepare_callbacks(
         config,
-        callbacks_cfg,
         outdir,
         dataset,
-        comet_experiment=None
+        comet_experiment=None,
+        horovod_enabled=False,
     ):
 
     callbacks = []
-    tb = CustomTensorBoard(
-        log_dir=outdir + "/logs",
-        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
-        write_graph=False, write_images=False,
-        update_freq="epoch",
-        #profile_batch=(10,90),
-        profile_batch=0,
-        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
-    )
-    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
-    tb.__class__.__name__ = "TensorBoard"
-    callbacks += [tb]
-
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
 
+    if not horovod_enabled or hvd.rank()==0:
+        callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
+
+    return callbacks
+
+def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled):
+    callbacks = []
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
     cp_callback = ModelOptimizerCheckpoint(
         filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
         save_weights_only=True,
         verbose=0,
-        monitor=callbacks_cfg["checkpoint"]["monitor"],
+        monitor=config["callbacks"]["checkpoint"]["monitor"],
         save_best_only=False,
     )
     cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
@@ -228,15 +235,28 @@ def prepare_callbacks(
 
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
-    history_path = str(history_path)
+    history_path = str(history_path)    
     cb = CustomCallback(
         history_path,
         dataset.take(config["setup"]["num_events_validation"]),
         config,
-        plot_freq=callbacks_cfg["plot_freq"],
+        plot_freq=config["callbacks"]["plot_freq"],
+        horovod_enabled=horovod_enabled
     )
 
     callbacks += [cb]
+    tb = CustomTensorBoard(
+        log_dir=outdir + "/logs",
+        histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
+        write_graph=False, write_images=False,
+        update_freq="epoch",
+        #profile_batch=(10,90),
+        profile_batch=0,
+        dump_history=config["callbacks"]["tensorboard"]["dump_history"],
+    )
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
+    callbacks += [tb]
 
     return callbacks
 

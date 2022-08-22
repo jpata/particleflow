@@ -3,6 +3,11 @@ try:
 except ModuleNotFoundError as e:
     print("comet_ml not found, ignoring")
 
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    print("hvd not enabled, ignoring")
+
 import sys
 import os
 import yaml
@@ -27,6 +32,7 @@ import tensorflow as tf
 from tensorflow.keras import mixed_precision
 import tensorflow_addons as tfa
 import keras
+
 
 from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
@@ -120,8 +126,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     if customize:
         config = customization_functions[customize](config)
-
-    outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+    
 
     try:
         if comet_offline:
@@ -153,12 +158,25 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         experiment = None
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, num_gpus = get_strategy()
+    horovod_enabled = config["setup"]["horovod_enabled"]
+    if horovod_enabled:
+        num_gpus = initialize_horovod()
+    else:
+        strategy, num_gpus = get_strategy()
+    outdir = ''
+    if not horovod_enabled or hvd.rank() == 0:
+        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
+        if experiment:
+            experiment.set_name(outdir)
+            experiment.log_code("mlpf/tfmodel/model.py")
+            experiment.log_code("mlpf/tfmodel/utils.py")
+            experiment.log_code(config_file_path)
+        
+        shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
-    ds_val = ds_val.batch(5)
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -172,78 +190,126 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     total_steps = num_train_steps * config["setup"]["num_epochs"]
     print("total_steps", total_steps)
 
-    if experiment:
-        experiment.set_name(outdir)
-        experiment.log_code("mlpf/tfmodel/model.py")
-        experiment.log_code("mlpf/tfmodel/utils.py")
-        experiment.log_code(config_file_path)
+    
+    if horovod_enabled :
+        model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
+    else:
+        with strategy.scope():
+            model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
 
-    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+    callbacks = prepare_callbacks(
+        config,
+        outdir,
+        ds_val,
+        comet_experiment=experiment,
+        horovod_enabled=config["setup"]["horovod_enabled"]
+    )
 
-    with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(config, steps=total_steps)
-        opt = get_optimizer(config, lr_schedule)
+    verbose = 1
+    if horovod_enabled: 
+        callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
+        callbacks.append(hvd.callbacks.MetricAverageCallback())
+        verbose = 1 if hvd.rank() == 0 else 0
 
-        if config["setup"]["dtype"] == "float16":
-            model_dtype = tf.dtypes.float16
-            policy = mixed_precision.Policy("mixed_float16")
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
+        num_train_steps /= hvd.size()
+        num_test_steps /= hvd.size()
 
-        model = make_model(config, model_dtype)
 
-        # Build the layers after the element and feature dimensions are specified
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    callbacks.append(optim_callbacks)
 
-        initial_epoch = 0
-        loaded_opt = None
-        
-        if weights:
-            if lr_schedule:
-                raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+    
+    fit_result = model.fit(
+        ds_train.repeat(),
+        validation_data=ds_test.repeat(),
+        epochs=initial_epoch + config["setup"]["num_epochs"],
+        callbacks=callbacks,
+        steps_per_epoch=num_train_steps,
+        validation_steps=num_test_steps,
+        initial_epoch=initial_epoch,
+        verbose=verbose
+    )
 
-            # We need to load the weights in the same trainable configuration as the model was set up
-            configure_model_weights(model, config["setup"].get("weights_config", "all"))
-            model.load_weights(weights, by_name=True)
-            opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
-            if os.path.isfile(opt_weight_file):
-                loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+    # if not horovod_enabled or hvd.rank()==0:
+    #     model_save(outdir, fit_result, model, weights)
 
-            initial_epoch = int(weights.split("/")[-1].split("-")[1])
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+def model_save(outdir, fit_result, model, weights):
+    history_path = Path(outdir) / "history"
+    history_path = str(history_path)
+    with open("{}/history.json".format(history_path), "w") as fi:
+        json.dump(fit_result.history, fi)
 
-        config = set_config_loss(config, config["setup"]["trainable"])
-        configure_model_weights(model, config["setup"]["trainable"])
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    weights = get_best_checkpoint(outdir)
+    print("Loading best weights that could be found from {}".format(weights))
+    model.load_weights(weights, by_name=True)
 
-        print("model weights")
-        tw_names = [m.name for m in model.trainable_weights]
-        for w in model.weights:
-            print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
+    #model.save(outdir + "/model_full", save_format="tf")
+    print("Training done.")
 
-        loss_dict, loss_weights = get_loss_dict(config)
+def model_scope(config, total_steps, weights, horovod_enabled=False):
+    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
+    opt = get_optimizer(config, lr_schedule)
+    
 
-        model.compile(
-            loss=loss_dict,
-            optimizer=opt,
-            sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ] + [
-                    SingleClassRecall(
-                        icls,
-                        name="rec_cls{}".format(icls),
-                        dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
-                ]
-            },
-        )
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
 
-        model.summary()
+    model = make_model(config, model_dtype)
+
+    # Build the layers after the element and feature dimensions are specified
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+
+    initial_epoch = 0
+    loaded_opt = None
+    
+    if weights:
+        if lr_schedule:
+            raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+
+        # We need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        model.load_weights(weights, by_name=True)
+        opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+        if os.path.isfile(opt_weight_file):
+            loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+
+        initial_epoch = int(weights.split("/")[-1].split("-")[1])
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+
+    config = set_config_loss(config, config["setup"]["trainable"])
+    configure_model_weights(model, config["setup"]["trainable"])
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+
+    print("model weights")
+    tw_names = [m.name for m in model.trainable_weights]
+    for w in model.weights:
+        print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
+
+    loss_dict, loss_weights = get_loss_dict(config)
+
+    model.compile(
+        loss=loss_dict,
+        optimizer=opt,
+        sample_weight_mode="temporal",
+        loss_weights=loss_weights,
+        metrics={
+            "cls": [
+                FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
+                FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
+            ] + [
+                SingleClassRecall(
+                    icls,
+                    name="rec_cls{}".format(icls),
+                    dtype=tf.float64) for icls in range(config["dataset"]["num_output_classes"])
+            ]
+        },
+    )
+
+    model.summary()
 
     #Set the optimizer weights
     if loaded_opt:
@@ -260,40 +326,19 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         except Exception as e:
             print(e)
 
-    callbacks = prepare_callbacks(
-        config,
-        config["callbacks"],
-        outdir,
-        ds_val,
-        comet_experiment=experiment
-    )
-    callbacks.append(optim_callbacks)
+    return model,optim_callbacks,initial_epoch
 
-    fit_result = model.fit(
-        ds_train.repeat(),
-        validation_data=ds_test.repeat(),
-        epochs=initial_epoch + config["setup"]["num_epochs"],
-        callbacks=callbacks,
-        steps_per_epoch=num_train_steps,
-        validation_steps=num_test_steps,
-        initial_epoch=initial_epoch,
-    )
+def initialize_horovod():
+    hvd.init()
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+
+    return hvd.size()
 
 
-    history_path = Path(outdir) / "history"
-    history_path = str(history_path)
-    with open("{}/history.json".format(history_path), "w") as fi:
-        json.dump(fit_result.history, fi)
-
-    weights = get_best_checkpoint(outdir)
-    print("Loading best weights that could be found from {}".format(weights))
-    model.load_weights(weights, by_name=True)
-
-    #model.save(outdir + "/model_full", save_format="tf")
-    print("Training done.")
-
-    #if "CPU" not in strategy.extended.worker_devices[0]:
-    #    p.terminate()
 
 
 @main.command()
@@ -504,7 +549,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
  
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
 
     num_train_steps = 0
     for _ in ds_train:
@@ -516,10 +561,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
 
     callbacks = prepare_callbacks(
-        config["callbacks"],
+        config,
         outdir,
         ds_val,
-        ds_info,
     )
 
     callbacks.append(optim_callbacks)
@@ -563,7 +607,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
         ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
-        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
+        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"], supervised=False)
 
         if ntrain:
             ds_train = ds_train.take(ntrain)
@@ -578,10 +622,9 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         print("total_steps", total_steps)
 
         callbacks = prepare_callbacks(
-            full_config["callbacks"],
+            full_config,
             tune.get_trial_dir(),
             ds_val,
-            ds_info,
         )
 
         callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list

@@ -63,6 +63,7 @@ setup:
   classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
 
 optimizer:
   adam:
@@ -224,9 +225,6 @@ train_test_datasets:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
-      - cms_pf_ztt
 
 validation_datasets:
   - cms_pf_ttbar
