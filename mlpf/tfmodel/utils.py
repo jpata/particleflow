@@ -549,33 +549,37 @@ def hist_loss_2d(y_true, y_pred):
     return mse
 
 
+def jet_reco(px, py, jet_idx, max_jets):
+
+    jet_idx = tf.where(jet_idx <= max_jets, jet_idx, 0)
+    jet_px = tf.zeros([max_jets], dtype=px.dtype)
+    jet_py = tf.zeros([max_jets], dtype=py.dtype)
+
+    jet_px = tf.tensor_scatter_nd_add(jet_px, indices=jet_idx, updates=px)
+    jet_py = tf.tensor_scatter_nd_add(jet_py, indices=jet_idx, updates=py)
+
+    jet_pt = tf.math.sqrt(jet_px**2 + jet_py**2)
+
+    return jet_pt
+
+
+@tf.function
+def batched_jet_reco(px, py, jet_idx, max_jets):
+    return tf.vectorized_map(lambda a: jet_reco(a[0], a[1], a[2], max_jets), (px,py,jet_idx))
+
+
 def gen_jet_loss(y_true, y_pred):
-    # tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
     y = {}
     y["true"] = y_true
     y["pred"] = y_pred
     jet_pt = {}
-    jet_eta = {}
 
     max_jets = 201
-    jet_idx = y[typ][..., 5]
-    jet_idx = tf.where(jet_idx <= max_jets, jet_idx, 0)
-
+    jet_idx = tf.cast(y["true"][..., 5:6], dtype=tf.int32)
     for typ in ["true", "pred"]:
         px = y[typ][..., 0]*y[typ][..., 4]
         py = y[typ][..., 0]*y[typ][..., 3]
-        pz = y[typ][..., 0]*tf.math.sinh(y[typ][..., 2])
-
-        jet_px = tf.zeros([max_jets, 1], dtype=tf.float32)
-        jet_py = tf.zeros([max_jets, 1], dtype=tf.float32)
-        jet_pz = tf.zeros([max_jets, 1], dtype=tf.float32)
-
-        jet_px = tf.tensor_scatter_nd_add(jet_px, indices=jet_idx, updates=px)
-        jet_py = tf.tensor_scatter_nd_add(jet_py, indices=jet_idx, updates=py)
-        jet_pz = tf.tensor_scatter_nd_add(jet_pz, indices=jet_idx, updates=pz)
-
-        jet_pt[typ] = tf.math.sqrt(jet_px**2 + jet_py**2)
-        jet_eta[typ] = tf.math.asinh(jet_pz / jet_pt[typ])
+        jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
 
     mse = tf.math.sqrt(tf.reduce_mean((jet_pt['true']-jet_pt['pred'])**2, axis=[-1,-2]))
     return mse
@@ -610,6 +614,10 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] == "hist_2d":
         loss_dict["pt_e_eta_phi"] = hist_loss_2d
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
+    if config["loss"]["event_loss"] == "gen_jet":
+        loss_dict["pt_e_eta_phi"] = gen_jet_loss
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     return loss_dict, loss_weights

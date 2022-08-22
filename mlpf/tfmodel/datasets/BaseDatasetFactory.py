@@ -12,7 +12,7 @@ def unpack_target(y, num_output_classes, config):
     eta = y[..., 3:4]*msk_pid
     sin_phi = y[..., 4:5]*msk_pid
     cos_phi = y[..., 5:6]*msk_pid
-    jet_idx = tf.cast(y[..., 7:8]*msk_pid, tf.int32)
+    jet_idx = y[..., 7:8]*msk_pid
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
