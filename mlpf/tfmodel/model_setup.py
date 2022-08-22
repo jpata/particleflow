@@ -122,7 +122,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         eval_model(self.model, self.dataset, self.config, cp_dir)
         
         yvals = {}
-        for fi in glob.glob(str(cp_dir/"*")):
+        for fi in glob.glob(str(cp_dir/"*.npz")):
             dd = np.load(fi)
             keys_in_file = list(dd.keys())
             for k in keys_in_file:
@@ -137,13 +137,30 @@ class CustomCallback(tf.keras.callbacks.Callback):
         gen_py = yvals["gen_pt"]*yvals["gen_sin_phi"]
         pred_px = yvals["pred_pt"]*yvals["pred_cos_phi"]
         pred_py = yvals["pred_pt"]*yvals["pred_sin_phi"]
+        cand_px = yvals["cand_pt"]*yvals["cand_cos_phi"]
+        cand_py = yvals["cand_pt"]*yvals["cand_sin_phi"]
 
         gen_met = np.sqrt(np.sum(gen_px**2+gen_py**2, axis=1))
         pred_met = np.sqrt(np.sum(pred_px**2+pred_py**2, axis=1))
+        cand_met = np.sqrt(np.sum(cand_px**2+cand_py**2, axis=1))
 
         with self.writer.as_default():
-
             jet_ratio = yvals["jets_pt_gen_to_pred"][:, 1]/yvals["jets_pt_gen_to_pred"][:, 0]
+
+            plt.figure()
+            b = np.linspace(0,5,100)
+            plt.hist(yvals["jets_pt_gen_to_cand"][:, 1]/yvals["jets_pt_gen_to_cand"][:, 0], bins=b, histtype="step", lw=2)
+            plt.hist(yvals["jets_pt_gen_to_pred"][:, 1]/yvals["jets_pt_gen_to_pred"][:, 0], bins=b, histtype="step", lw=2)
+            plt.savefig(str(cp_dir/"jet_res.png"), bbox_inches="tight", dpi=100)
+            plt.clf()
+
+            plt.figure()
+            b = np.linspace(0,5,100)
+            plt.hist(cand_met/gen_met, bins=b, histtype="step", lw=2)
+            plt.hist(pred_met/gen_met, bins=b, histtype="step", lw=2)
+            plt.savefig(str(cp_dir/"met_res.png"), bbox_inches="tight", dpi=100)
+            plt.clf()
+
             tf.summary.histogram(
                 "jet_pt_pred_over_gen", jet_ratio,
                 step=epoch-1,

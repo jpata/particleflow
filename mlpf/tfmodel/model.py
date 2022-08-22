@@ -648,7 +648,6 @@ class OutputDecoding(tf.keras.Model):
             pred_cos_phi = pred_cos_phi*msk_output
             pred_energy = pred_energy*msk_output
 
-        #all the particles in the event as a (pt,e,eta,phi) matrix
         pt_e_eta_phi = tf.concat([
             pred_pt*msk_input_outtype*msk_output,
             pred_energy*msk_input_outtype*msk_output,
