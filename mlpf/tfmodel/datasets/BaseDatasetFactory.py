@@ -58,7 +58,7 @@ class BaseDatasetFactory:
                 X,
                 target,
                 {
-                    "cls": msk_elems*target["pt"],
+                    "cls": msk_elems,
                     "charge": msk_elems*msk_signal,
                     "pt": msk_elems*msk_signal,
                     "eta": msk_elems*msk_signal,
