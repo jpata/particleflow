@@ -55,7 +55,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.00001
+  lr: 0.00005
   num_events_validation: 100
   num_epochs: 20
   dtype: float32
