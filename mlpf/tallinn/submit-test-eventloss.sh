@@ -1,3 +1,3 @@
-sbatch mlpf/tallinn/test-swd.sh parameters/test-swd/baseline.yaml
-sbatch mlpf/tallinn/test-swd.sh parameters/test-swd/swd.yaml
-sbatch mlpf/tallinn/test-swd.sh parameters/test-swd/h2d.yaml
+sbatch mlpf/tallinn/cms-mlpf-test.sh parameters/test-eventloss/baseline.yaml
+sbatch mlpf/tallinn/cms-mlpf-test.sh parameters/test-eventloss/swd.yaml
+sbatch mlpf/tallinn/cms-mlpf-test.sh parameters/test-eventloss/h2d.yaml
