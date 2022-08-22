@@ -23,6 +23,8 @@ dataset:
   padded_num_elem_size: 12000
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
+
+loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 0.01
   pt_loss_coef: 0.0001
@@ -45,6 +47,8 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
+  event_loss: none
+  event_loss_coef: 0.0
 
 tensorflow:
   eager: no

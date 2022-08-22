@@ -121,12 +121,10 @@ def epoch_end(self, epoch, logs):
 
     if self.plot_freq<=0:
         return
+        
     if self.plot_freq>1:
         if epoch%self.plot_freq!=0 or epoch==1:
             return
-        if self.plot_freq>1:
-            if epoch%self.plot_freq!=0 or epoch==1:
-                return
 
         cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
         cp_dir.mkdir(parents=True, exist_ok=True)
