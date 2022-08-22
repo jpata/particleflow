@@ -548,6 +548,39 @@ def hist_loss_2d(y_true, y_pred):
     mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true-pt_hist_pred)**2, axis=[-1,-2]))
     return mse
 
+
+def gen_jet_loss(y_true, y_pred):
+    # tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
+    y = {}
+    y["true"] = y_true
+    y["pred"] = y_pred
+    jet_pt = {}
+    jet_eta = {}
+
+    max_jets = 201
+    jet_idx = y[typ][..., 5]
+    jet_idx = tf.where(jet_idx <= max_jets, jet_idx, 0)
+
+    for typ in ["true", "pred"]:
+        px = y[typ][..., 0]*y[typ][..., 4]
+        py = y[typ][..., 0]*y[typ][..., 3]
+        pz = y[typ][..., 0]*tf.math.sinh(y[typ][..., 2])
+
+        jet_px = tf.zeros([max_jets, 1], dtype=tf.float32)
+        jet_py = tf.zeros([max_jets, 1], dtype=tf.float32)
+        jet_pz = tf.zeros([max_jets, 1], dtype=tf.float32)
+
+        jet_px = tf.tensor_scatter_nd_add(jet_px, indices=jet_idx, updates=px)
+        jet_py = tf.tensor_scatter_nd_add(jet_py, indices=jet_idx, updates=py)
+        jet_pz = tf.tensor_scatter_nd_add(jet_pz, indices=jet_idx, updates=pz)
+
+        jet_pt[typ] = tf.math.sqrt(jet_px**2 + jet_py**2)
+        jet_eta[typ] = tf.math.asinh(jet_pz / jet_pt[typ])
+
+    mse = tf.math.sqrt(tf.reduce_mean((jet_pt['true']-jet_pt['pred'])**2, axis=[-1,-2]))
+    return mse
+
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
 
