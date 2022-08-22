@@ -11,6 +11,8 @@ dataset:
   num_output_classes: 6
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
+
+losses:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 100.0
@@ -35,6 +37,8 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
+  event_loss: sliced_wasserstein
+  event_loss_coef: 0.00001
 
 tensorflow:
   eager: no

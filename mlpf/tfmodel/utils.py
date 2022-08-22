@@ -531,26 +531,25 @@ def get_loss_dict(config):
     default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
-        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
-        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
-        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
-        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
-        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        #"met": tf.keras.losses.MeanAbsoluteError(),
-        #"pt_hist": tf.keras.losses.MeanAbsoluteError(),
-        "pt_eta_phi": sliced_wasserstein_loss
+        "charge": get_loss_from_params(config["loss"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["loss"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["loss"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["loss"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["loss"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
     }
     loss_weights = {
-        "cls": config["dataset"]["classification_loss_coef"],
-        "charge": config["dataset"]["charge_loss_coef"],
-        "pt": config["dataset"]["pt_loss_coef"],
-        "eta": config["dataset"]["eta_loss_coef"],
-        "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-        "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-        "energy": config["dataset"]["energy_loss_coef"],
-        #"met": config["dataset"]["met_loss_coef"],
-        #"pt_hist": config["dataset"]["pt_hist_loss_coef"],
-        "pt_eta_phi": 0.00001,
+        "cls": config["loss"]["classification_loss_coef"],
+        "charge": config["loss"]["charge_loss_coef"],
+        "pt": config["loss"]["pt_loss_coef"],
+        "eta": config["loss"]["eta_loss_coef"],
+        "sin_phi": config["loss"]["sin_phi_loss_coef"],
+        "cos_phi": config["loss"]["cos_phi_loss_coef"],
+        "energy": config["loss"]["energy_loss_coef"],
     }
+
+    if config["loss"]["event_loss"] == "sliced_wasserstein":
+        loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     return loss_dict, loss_weights

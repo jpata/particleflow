@@ -14,30 +14,8 @@ def unpack_target(y, num_output_classes):
     sin_phi = y[..., 4:5]*msk_pid
     cos_phi = y[..., 5:6]*msk_pid
     phi = tf.math.atan2(sin_phi, cos_phi)*msk_pid
-  
-    #if len(y.shape)==3:
-    #    pt_hist = batched_histogram_2d(
-    #        tf.squeeze(eta, axis=-1),
-    #        tf.squeeze(phi, axis=-1),
-    #        tf.squeeze(pt, axis=-1),
-    #        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-    #    )
-    #else:
-    #    pt_hist = histogram_2d(
-    #        tf.squeeze(eta, axis=-1),
-    #        tf.squeeze(phi, axis=-1),
-    #        tf.squeeze(pt, axis=-1),
-    #        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
-    #    )
 
-    #px = tf.squeeze(pt*y[..., 5:6], axis=-1)
-    #py = tf.squeeze(pt*y[..., 4:5], axis=-1)
-    #
-    #sum_px = tf.math.reduce_sum(px, axis=-1)
-    #sum_py = tf.math.reduce_sum(py, axis=-1)
-    #met = tf.math.sqrt(sum_px**2 + sum_py**2)
-
-    arr = tf.concat([pt, energy, eta, sin_phi, cos_phi], axis=-1)
+    pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi], axis=-1)
 
     return {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
@@ -47,9 +25,7 @@ def unpack_target(y, num_output_classes):
         "sin_phi": sin_phi,
         "cos_phi": cos_phi,
         "energy": energy,
-        #"pt_hist": pt_hist,
-        #"met": met,
-        "pt_eta_phi": arr
+        "pt_e_eta_phi": pt_e_eta_phi
     }
 
 class BaseDatasetFactory:
