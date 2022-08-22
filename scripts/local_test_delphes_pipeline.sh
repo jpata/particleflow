@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 export PYTHONPATH=`pwd`/hep_tfds
+export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 
 mkdir -p data/delphes_pf/pythia8_ttbar/raw
 mkdir -p data/delphes_pf/pythia8_qcd/val

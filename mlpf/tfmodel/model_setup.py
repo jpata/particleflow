@@ -389,7 +389,7 @@ def eval_model(model, dataset, config, outdir):
             jets = cluster.inclusive_jets()
             jet_constituents = cluster.constituent_index()
             jets_coll[typ] = jets[jets.pt > 5.0]
-            jets_const[typ] = jet_constituents[jets.pt>5.0]
+            jets_const[typ] = jet_constituents[jets.pt > 5.0]
 
         for key in ["pt", "eta", "phi", "energy"]:
             outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
