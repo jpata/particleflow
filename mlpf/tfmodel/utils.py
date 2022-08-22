@@ -525,6 +525,28 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
     return ret
 
 
+def hist_loss_2d(y_true, y_pred):
+
+    phi_true = tf.math.atan2(y_true[..., 3], y_true[..., 4])
+    phi_pred = tf.math.atan2(y_pred[..., 3], y_pred[..., 4])
+
+    pt_hist_true = batched_histogram_2d(
+        y_true[..., 2],
+        phi_true,
+        y_true[..., 0],
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
+
+    pt_hist_pred = batched_histogram_2d(
+        y_pred[..., 2],
+        phi_pred,
+        y_pred[..., 0],
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
+
+    mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true-pt_hist_pred)**2, axis=[-1,-2]))
+    return mse
+
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
 
@@ -550,6 +572,10 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] == "sliced_wasserstein":
         loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
+    if config["loss"]["event_loss"] == "hist_2d":
+        loss_dict["pt_e_eta_phi"] = hist_loss_2d
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     return loss_dict, loss_weights

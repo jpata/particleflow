@@ -4,7 +4,7 @@ import heptfds
 
 #Unpacks a flat target array along the feature axis to a feature dict
 #the feature order is defined in the data prep stage (postprocessing2.py)
-def unpack_target(y, num_output_classes):
+def unpack_target(y, num_output_classes, config):
     from tfmodel.utils import batched_histogram_2d, histogram_2d
     msk_pid = tf.cast(y[..., 0:1]!=0, tf.float32)
     
@@ -15,9 +15,7 @@ def unpack_target(y, num_output_classes):
     cos_phi = y[..., 5:6]*msk_pid
     phi = tf.math.atan2(sin_phi, cos_phi)*msk_pid
 
-    pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi], axis=-1)
-
-    return {
+    ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
         "charge": y[..., 1:2],
         "pt": pt,
@@ -25,8 +23,13 @@ def unpack_target(y, num_output_classes):
         "sin_phi": sin_phi,
         "cos_phi": cos_phi,
         "energy": energy,
-        "pt_e_eta_phi": pt_e_eta_phi
     }
+
+    if config["loss"]["event_loss"] != "none":
+        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi], axis=-1)
+        ret["pt_e_eta_phi"] = pt_e_eta_phi
+
+    return ret
 
 class BaseDatasetFactory:
     def __init__(self, config):
@@ -46,7 +49,7 @@ class BaseDatasetFactory:
             #mask to keep only nonzero target particles
             msk_signal = tf.cast(y[:, 0:1]!=0, tf.float32)
 
-            target = unpack_target(y, num_output_classes)
+            target = unpack_target(y, num_output_classes, self.cfg)
 
             #inputs: X
             #targets: dict by classification (cls) and regression feature columns
