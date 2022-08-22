@@ -164,17 +164,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     else:
         strategy, num_gpus = get_strategy()
     outdir = ''
-    if horovod_enabled:
-        if hvd.rank() == 0:
-            outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-            if experiment:
-                experiment.set_name(outdir)
-                experiment.log_code("mlpf/tfmodel/model.py")
-                experiment.log_code("mlpf/tfmodel/utils.py")
-                experiment.log_code(config_file_path)
-            
-            shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
-    else:
+    if not horovod_enabled or hvd.rank() == 0:
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
         if experiment:
             experiment.set_name(outdir)
@@ -186,8 +176,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
-    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
-    ds_val = ds_val.batch(5)
+    ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -209,10 +198,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             model,optim_callbacks,initial_epoch = model_scope(config, total_steps, weights)
 
     callbacks = prepare_callbacks(
-        config["callbacks"],
+        config,
         outdir,
         ds_val,
-        ds_info,
         comet_experiment=experiment,
         horovod_enabled=config["setup"]["horovod_enabled"]
     )
@@ -241,14 +229,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         verbose=verbose
     )
 
-    if horovod_enabled:
-        if hvd.rank() == 0:
-            model_save(outdir, fit_result, model, weights)
-    else:
-        model_save(outdir, fit_result, model, weights)
-
-    #if "CPU" not in strategy.extended.worker_devices[0]:
-    #    p.terminate()
+    # if not horovod_enabled or hvd.rank()==0:
+    #     model_save(outdir, fit_result, model, weights)
 
 def model_save(outdir, fit_result, model, weights):
     history_path = Path(outdir) / "history"
@@ -260,8 +242,7 @@ def model_save(outdir, fit_result, model, weights):
     print("Loading best weights that could be found from {}".format(weights))
     model.load_weights(weights, by_name=True)
 
-    model.save(outdir + "/model_full", save_format="tf")
-
+    #model.save(outdir + "/model_full", save_format="tf")
     print("Training done.")
 
 def model_scope(config, total_steps, weights, horovod_enabled=False):
@@ -568,7 +549,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
  
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
 
     num_train_steps = 0
     for _ in ds_train:
@@ -580,10 +561,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
 
     callbacks = prepare_callbacks(
-        config["callbacks"],
+        config,
         outdir,
         ds_val,
-        ds_info,
     )
 
     callbacks.append(optim_callbacks)
@@ -627,7 +607,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
         ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
-        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
+        ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"], supervised=False)
 
         if ntrain:
             ds_train = ds_train.take(ntrain)
@@ -642,10 +622,9 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         print("total_steps", total_steps)
 
         callbacks = prepare_callbacks(
-            full_config["callbacks"],
+            full_config,
             tune.get_trial_dir(),
             ds_val,
-            ds_info,
         )
 
         callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list

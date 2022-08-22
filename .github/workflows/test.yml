@@ -20,7 +20,7 @@ jobs:
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.9 setGPU \
             sklearn matplotlib boost_histogram mplhep pandas scipy uproot \
-            awkward vector fastjet keras-tuner networkx \
+            awkward vector pyarrow fastjet keras-tuner networkx \
             tensorflow-probability tensorflow-addons \
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \
@@ -44,7 +44,7 @@ jobs:
           sudo python3 -m pip install --upgrade setuptools
           sudo python3 -m pip install tensorflow==2.9 setGPU \
             sklearn matplotlib boost_histogram mplhep pandas scipy uproot \
-            awkward vector fastjet keras-tuner networkx \
+            awkward vector pyarrow fastjet keras-tuner networkx \
             tensorflow-probability tensorflow-addons \
             tqdm click tensorflow-datasets 'ray[default]'==1.6.0 'ray[tune]==1.6.0' \
             tf-models-official tensorflow-text \

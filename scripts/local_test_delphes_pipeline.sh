@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 export PYTHONPATH=`pwd`/hep_tfds
+export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 
 mkdir -p data/delphes_pf/pythia8_ttbar/raw
 mkdir -p data/delphes_pf/pythia8_qcd/val
@@ -14,7 +15,7 @@ mv tev14_pythia8_qcd_10_0.pkl.bz2 data/delphes_pf/pythia8_qcd/val/
 tfds build hep_tfds/heptfds/delphes_pf --download_dir data/
 
 #Run a simple training on a few events
-python3 mlpf/pipeline.py train -c parameters/delphes.yaml --nepochs 2 --ntrain 5 --ntest 5 --customize pipeline_test
+python3 mlpf/pipeline.py train -c parameters/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
 
 ls ./experiments/delphes_*/weights/
 

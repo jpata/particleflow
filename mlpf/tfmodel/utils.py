@@ -510,11 +510,43 @@ def get_loss_from_params(input_dict):
     loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
-# class MyLoss(tf.keras.losses.Loss):
-#   def call(self, y_true, y_pred):
-#       import pdb;pdb.set_trace()
-#       return tf.reduce_mean(tf.square(y_pred - y_true), axis=-1)
+#batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
+def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
+    
+    theta = tf.random.normal((num_projections, y_true.shape[-1]))
+    theta = theta / tf.sqrt(tf.reduce_sum(theta**2, axis=1, keepdims=True))
 
+    A = tf.linalg.matmul(y_true, theta, False, True)
+    B = tf.linalg.matmul(y_pred, theta, False, True)
+
+    A_sorted = tf.sort(A, axis=-2)
+    B_sorted = tf.sort(B, axis=-2)
+
+    ret = tf.math.sqrt(tf.reduce_sum(tf.math.pow(A_sorted - B_sorted, 2), axis=[-1,-2]))
+    return ret
+
+
+def hist_loss_2d(y_true, y_pred):
+
+    phi_true = tf.math.atan2(y_true[..., 3], y_true[..., 4])
+    phi_pred = tf.math.atan2(y_pred[..., 3], y_pred[..., 4])
+
+    pt_hist_true = batched_histogram_2d(
+        y_true[..., 2],
+        phi_true,
+        y_true[..., 0],
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
+
+    pt_hist_pred = batched_histogram_2d(
+        y_pred[..., 2],
+        phi_pred,
+        y_pred[..., 0],
+        tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
+    )
+
+    mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true-pt_hist_pred)**2, axis=[-1,-2]))
+    return mse
 
 def get_loss_dict(config):
     cls_loss = get_class_loss(config)
@@ -522,24 +554,29 @@ def get_loss_dict(config):
     default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
-        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
-        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
-        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
-        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
-        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "met": tf.keras.losses.MeanAbsoluteError(),
-        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
+        "charge": get_loss_from_params(config["loss"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["loss"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["loss"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["loss"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["loss"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
     }
     loss_weights = {
-        "cls": config["dataset"]["classification_loss_coef"],
-        "charge": config["dataset"]["charge_loss_coef"],
-        "pt": config["dataset"]["pt_loss_coef"],
-        "eta": config["dataset"]["eta_loss_coef"],
-        "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-        "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-        "energy": config["dataset"]["energy_loss_coef"],
-        "met": config["dataset"]["met_loss_coef"],
-        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        "cls": config["loss"]["classification_loss_coef"],
+        "charge": config["loss"]["charge_loss_coef"],
+        "pt": config["loss"]["pt_loss_coef"],
+        "eta": config["loss"]["eta_loss_coef"],
+        "sin_phi": config["loss"]["sin_phi_loss_coef"],
+        "cos_phi": config["loss"]["cos_phi_loss_coef"],
+        "energy": config["loss"]["energy_loss_coef"],
     }
+
+    if config["loss"]["event_loss"] == "sliced_wasserstein":
+        loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
+    if config["loss"]["event_loss"] == "hist_2d":
+        loss_dict["pt_e_eta_phi"] = hist_loss_2d
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     return loss_dict, loss_weights
