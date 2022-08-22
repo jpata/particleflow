@@ -289,8 +289,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     print("Loading best weights that could be found from {}".format(weights))
     model.load_weights(weights, by_name=True)
 
-    model.save(outdir + "/model_full", save_format="tf")
-
+    #model.save(outdir + "/model_full", save_format="tf")
     print("Training done.")
 
     #if "CPU" not in strategy.extended.worker_devices[0]:
