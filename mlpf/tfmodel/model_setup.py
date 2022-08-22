@@ -1,3 +1,8 @@
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    print("hvd not enabled, ignoring")
+
 from .model import PFNetTransformer, PFNetDense
 
 import tensorflow as tf
@@ -34,6 +39,7 @@ from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.utils import get_lr_schedule, get_optimizer, make_weight_function, targets_multi_output
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 import tensorflow_datasets as tfds
+
 
 from tensorflow.keras.metrics import Recall, CategoricalAccuracy
 import keras
@@ -90,7 +96,7 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
                 os.remove(weightfile_path)
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None):
+    def __init__(self, outpath, dataset, dataset_info, plot_freq=1, comet_experiment=None, horovod_enabled=False):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.comet_experiment = comet_experiment
@@ -136,6 +142,8 @@ class CustomCallback(tf.keras.callbacks.Callback):
             "cos_phi": np.linspace(-1,1,100),
             "energy": np.linspace(-100, 1000, 100),
         }
+
+        self.horovod_enabled = horovod_enabled
 
     def plot_cm(self, epoch, outpath, ypred_id, msk):
 
@@ -429,96 +437,102 @@ class CustomCallback(tf.keras.callbacks.Callback):
             self.comet_experiment.log_image(image_path, step=epoch)
 
     def on_epoch_end(self, epoch, logs=None):
+        if self.horovod_enabled:
+            if  hvd.rank() == 0:
+                epoch_end(self, epoch, logs)
+        else:
+            epoch_end(self, epoch, logs)
 
-        #first epoch is 1, not 0
-        epoch = epoch + 1
 
-        #save the training logs (losses) for this epoch
-        with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
-            json.dump(logs, fi)
+def epoch_end(self, epoch, logs):
+    #first epoch is 1, not 0
+    epoch = epoch + 1
 
-        if self.plot_freq<=0:
+    #save the training logs (losses) for this epoch
+    with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
+        json.dump(logs, fi)
+
+    if self.plot_freq<=0:
+        return
+    if self.plot_freq>1:
+        if epoch%self.plot_freq!=0 or epoch==1:
             return
-        if self.plot_freq>1:
-            if epoch%self.plot_freq!=0 or epoch==1:
-                return
 
-        cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
-        cp_dir.mkdir(parents=True, exist_ok=True)
+    cp_dir = Path(self.outpath) / "epoch_{}".format(epoch)
+    cp_dir.mkdir(parents=True, exist_ok=True)
 
-        #run the model inference on the validation dataset
-        ypred = self.model.predict(self.X, batch_size=1)
+    #run the model inference on the validation dataset
+    ypred = self.model.predict(self.X, batch_size=1)
 
-        #choose the class with the highest probability as the prediction
-        #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
-        ypred_id = np.argmax(ypred["cls"], axis=-1)
-       
-        #exclude padded elements from the plotting
-        msk = self.X[:, :, 0] != 0
+    #choose the class with the highest probability as the prediction
+    #this is a shortcut, in actual inference, we may want to apply additional per-class thresholds        
+    ypred_id = np.argmax(ypred["cls"], axis=-1)
+    
+    #exclude padded elements from the plotting
+    msk = self.X[:, :, 0] != 0
 
-        self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
+    self.plot_elem_to_pred(epoch, cp_dir, msk, ypred_id)
 
-        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
-        self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
+    self.plot_sumperevent_corr(epoch, cp_dir, ypred, "energy")
+    self.plot_sumperevent_corr(epoch, cp_dir, ypred, "pt")
 
-        self.plot_cm(epoch, cp_dir, ypred_id, msk)
-        for ievent in range(min(5, self.X.shape[0])):
-            self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
+    self.plot_cm(epoch, cp_dir, ypred_id, msk)
+    for ievent in range(min(5, self.X.shape[0])):
+        self.plot_event_visualization(epoch, cp_dir, ypred, ypred_id, msk, ievent=ievent)
 
-        for icls in range(self.num_output_classes):
-            cp_dir_cls = cp_dir / "cls_{}".format(icls)
-            cp_dir_cls.mkdir(parents=True, exist_ok=True)
+    for icls in range(self.num_output_classes):
+        cp_dir_cls = cp_dir / "cls_{}".format(icls)
+        cp_dir_cls.mkdir(parents=True, exist_ok=True)
 
-            plt.figure(figsize=(4,4))
-            npred = np.sum(ypred_id == icls, axis=1)
-            ntrue = np.sum(self.ytrue_id == icls, axis=1)
-            maxval = max(np.max(npred), np.max(ntrue))
-            plt.scatter(ntrue, npred, marker=".")
-            plt.plot([0,maxval], [0, maxval], color="black", ls="--")
+        plt.figure(figsize=(4,4))
+        npred = np.sum(ypred_id == icls, axis=1)
+        ntrue = np.sum(self.ytrue_id == icls, axis=1)
+        maxval = max(np.max(npred), np.max(ntrue))
+        plt.scatter(ntrue, npred, marker=".")
+        plt.plot([0,maxval], [0, maxval], color="black", ls="--")
 
-            image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
-            plt.savefig(image_path, bbox_inches="tight")
-            plt.close("all")
-            if self.comet_experiment:
-                self.comet_experiment.log_image(image_path, step=epoch)
-                num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
-                self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
+        image_path = str(cp_dir_cls/"num_cls{}.png".format(icls))
+        plt.savefig(image_path, bbox_inches="tight")
+        plt.close("all")
+        if self.comet_experiment:
+            self.comet_experiment.log_image(image_path, step=epoch)
+            num_ptcl_err = np.sqrt(np.sum((npred-ntrue)**2))
+            self.comet_experiment.log_metric('num_ptcl_cls{}'.format(icls), num_ptcl_err, step=epoch)
 
-            if icls!=0:
-                self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
-                self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls, ivar=2, bins=np.linspace(-5,5,100))
+        if icls!=0:
+            self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls)
+            self.plot_eff_and_fake_rate(epoch, icls, msk, ypred_id, cp_dir_cls, ivar=2, bins=np.linspace(-5,5,100))
 
-            for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
-                self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
-                try:
-                    self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
-                except ValueError as e:
-                    print("Could not draw corr plot: {}".format(e))
+        for variable in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
+            self.plot_reg_distribution(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+            try:
+                self.plot_corr(epoch, cp_dir_cls, ypred, ypred_id, icls, variable)
+            except ValueError as e:
+                print("Could not draw corr plot: {}".format(e))
 
 def prepare_callbacks(
         callbacks_cfg, outdir,
         dataset,
         dataset_info,
-        comet_experiment=None
+        comet_experiment=None,
+        horovod_enabled=False
     ):
 
     callbacks = []
-    tb = CustomTensorBoard(
-        log_dir=outdir + "/logs",
-        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
-        write_graph=False, write_images=False,
-        update_freq="epoch",
-        #profile_batch=(10,90),
-        profile_batch=0,
-        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
-    )
-    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
-    tb.__class__.__name__ = "TensorBoard"
-    callbacks += [tb]
-
     terminate_cb = tf.keras.callbacks.TerminateOnNaN()
     callbacks += [terminate_cb]
 
+
+    if horovod_enabled:
+        if hvd.rank() == 0:
+            callbacks += get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment)
+    else:
+        callbacks += get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment)    
+
+    return callbacks
+
+def get_checkpoint_history_callback(outdir, callbacks_cfg, dataset, dataset_info, comet_experiment):
+    callbacks = []
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
     cp_callback = ModelOptimizerCheckpoint(
@@ -533,7 +547,7 @@ def prepare_callbacks(
 
     history_path = Path(outdir) / "history"
     history_path.mkdir(parents=True, exist_ok=True)
-    history_path = str(history_path)
+    history_path = str(history_path)    
     cb = CustomCallback(
         history_path,
         dataset,
@@ -543,6 +557,18 @@ def prepare_callbacks(
     )
 
     callbacks += [cb]
+    tb = CustomTensorBoard(
+        log_dir=outdir + "/logs",
+        histogram_freq=callbacks_cfg["tensorboard"]["hist_freq"],
+        write_graph=False, write_images=False,
+        update_freq="epoch",
+        #profile_batch=(10,90),
+        profile_batch=0,
+        dump_history=callbacks_cfg["tensorboard"]["dump_history"],
+    )
+    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+    tb.__class__.__name__ = "TensorBoard"
+    callbacks += [tb]
 
     return callbacks
 

@@ -169,7 +169,7 @@ def get_lr_schedule(config, steps):
     else:
         lr_schedule = None
         callbacks = []
-    return lr_schedule, callbacks
+    return lr_schedule, callbacks,lr
 
 
 def get_optimizer(config, lr_schedule=None):
@@ -429,8 +429,9 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
 
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
     bs = batch_size
-    if num_gpus>1:
-        bs = bs*num_gpus
+    if not config["setup"]["horovod_enabled"]:
+        if num_gpus>1:
+            bs = bs*num_gpus
     ds = ds.batch(bs)
 
     total_num_steps = total_num_steps // bs
