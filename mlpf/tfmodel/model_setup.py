@@ -339,13 +339,10 @@ def eval_model(model, dataset, config, outdir):
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
-        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"])
-        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"])
+        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
+        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
 
         outs = {}
-        #outs_awk = {}
-
-        #outs_awk["X"] = awkward.from_iter([e[e[:, 0]!=0].numpy() for e in elem["X"]])
 
         for key in y_pred.keys():
             outs["gen_{}".format(key)] = ygen[key].numpy()
@@ -367,26 +364,12 @@ def eval_model(model, dataset, config, outdir):
 
             vec = vector.arr({"pt": pt, "eta": eta, "phi": phi, "e": e})
 
-            #outs_awk["{}_cls_id".format(typ)] = cls_id[valid]
-            #outs_awk["{}_pt".format(typ)] = pt
-            #outs_awk["{}_eta".format(typ)] = eta
-            #outs_awk["{}_phi".format(typ)] = phi
-            #outs_awk["{}_e".format(typ)] = e
-            #outs_awk["{}_idx_to_elem".format(typ)] = idx_to_elem
-
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
             jets = cluster.inclusive_jets()
             jet_constituents = cluster.constituent_index()
             jets_coll[typ] = jets[jets.pt > 5.0]
             jets_const[typ] = jet_constituents[jets.pt>5.0]
-
-            #pass through arrow to allow pickle
-            #outs_awk["jet_{}_pt".format(typ)] = awkward.from_arrow(awkward.to_arrow(jets_coll[typ].pt))
-            #outs_awk["jet_{}_eta".format(typ)] = awkward.from_arrow(awkward.to_arrow(jets_coll[typ].eta))
-            #outs_awk["jet_{}_phi".format(typ)] = awkward.from_arrow(awkward.to_arrow(jets_coll[typ].phi))
-            #outs_awk["jet_{}_e".format(typ)] = awkward.from_arrow(awkward.to_arrow(jets_coll[typ].e))
-            #outs_awk["jet_const_{}".format(typ)] = jets_const[typ]
 
         for key in ["pt", "eta", "phi", "energy"]:
             outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
@@ -404,8 +387,6 @@ def eval_model(model, dataset, config, outdir):
         j2s = jets_coll["pred"][m1]
 
         outs["jets_pt_gen_to_pred"] = np.stack([awkward.to_numpy(awkward.flatten(j1s.pt)), awkward.to_numpy(awkward.flatten(j2s.pt))], axis=-1)
-        #outs_awk["jets_gen_to_pred__igen"] = m0
-        #outs_awk["jets_gen_to_pred__ipred"] = m1
 
         cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
         jets_a, jets_b = awkward.unzip(cart)
@@ -417,18 +398,13 @@ def eval_model(model, dataset, config, outdir):
         j2s = jets_coll["cand"][m1]
 
         outs["jets_pt_gen_to_cand"] = np.stack([awkward.to_numpy(awkward.flatten(j1s.pt)), awkward.to_numpy(awkward.flatten(j2s.pt))], axis=-1)
-        #outs_awk["jets_gen_to_cand__igen"] = m0
-        #outs_awk["jets_gen_to_cand__icand"] = m1
 
         np.savez(
             np_outfile,
             X=elem["X"],
             **outs
         )
-
-        # with open(np_outfile.replace("npz", "pkl"), "wb") as fi:
-        #     pickle.dump(outs_awk, fi)
-
+        
         ibatch += 1
 
 def freeze_model(model, config, outdir):
