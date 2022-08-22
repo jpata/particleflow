@@ -37,8 +37,8 @@ loss:
   eta_loss:
     type: Huber
     delta: 0.1
-  event_loss: sliced_wasserstein
-  event_loss_coef: 0.00001
+  event_loss: none
+  event_loss_coef: 0.0
 
 tensorflow:
   eager: no
