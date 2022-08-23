@@ -177,7 +177,8 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
-
+    ds_val = ds_val.batch(5)
+    
     if ntrain:
         ds_train = ds_train.take(ntrain)
         num_train_steps = ntrain
@@ -550,6 +551,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
     ds_val, _ = get_heptfds_dataset(config["validation_datasets"][0], config, num_gpus, "test", config["setup"]["num_events_validation"], supervised=False)
+    ds_val = ds_val.batch(5)
 
     num_train_steps = 0
     for _ in ds_train:
@@ -608,6 +610,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
         ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
         ds_val, ds_info = get_heptfds_dataset(full_config["validation_datasets"][0], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"], supervised=False)
+        ds_val = ds_val.batch(5)
 
         if ntrain:
             ds_train = ds_train.take(ntrain)
