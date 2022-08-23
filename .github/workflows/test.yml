@@ -28,7 +28,7 @@ jobs:
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
             tensorflow-estimator keras \
-            notebook papermill
+            notebook papermill ./hep_tfds
           HOROVOD_WITH_TENSORFLOW=1 pip install horovod[tensorflow,keras]
       - name: Run delphes TF model
         run: ./scripts/local_test_delphes_pipeline.sh
@@ -44,7 +44,6 @@ jobs:
           python-version: '3.9'
       - name: Install python deps
         run: |
-          sudo apt install wget
           pip install tensorflow==2.9 setGPU \
             sklearn matplotlib boost_histogram mplhep pandas scipy uproot \
             awkward vector pyarrow fastjet keras-tuner networkx \
@@ -53,7 +52,7 @@ jobs:
             tf-models-official tensorflow-text \
             tf2onnx onnxruntime zenodo_get seaborn scikit-optimize nevergrad \
             tensorflow-estimator keras \
-            notebook papermill
+            notebook papermill ./hep_tfds
           HOROVOD_WITH_TENSORFLOW=1 pip install horovod[tensorflow,keras]
       - name: Run CMS TF model using the pipeline
         run: ./scripts/local_test_cms_pipeline.sh

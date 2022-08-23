@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-export PYTHONPATH=`pwd`/hep_tfds
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
