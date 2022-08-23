@@ -508,7 +508,7 @@ def get_loss_from_params(input_dict):
     input_dict = input_dict.copy()
     loss_type = input_dict.pop("type")
     loss_cls = getattr(tf.keras.losses, loss_type)
-    return loss_cls(**input_dict)
+    return loss_cls(**input_dict, reduction=tf.keras.losses.Reduction.NONE)
 
 #batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
@@ -551,22 +551,45 @@ def hist_loss_2d(y_true, y_pred):
 
 def jet_reco(px, py, jet_idx, max_jets):
 
-    jet_idx = tf.where(jet_idx <= max_jets, jet_idx, 0)
-    jet_px = tf.zeros([max_jets], dtype=px.dtype)
-    jet_py = tf.zeros([max_jets], dtype=py.dtype)
+    tf.debugging.assert_shapes([
+        (px, ('N')),
+        (py, ('N')),
+        (jet_idx, ('N')),
+    ])
 
-    jet_px = tf.tensor_scatter_nd_add(jet_px, indices=jet_idx, updates=px)
-    jet_py = tf.tensor_scatter_nd_add(jet_py, indices=jet_idx, updates=py)
+    jet_idx_capped = tf.where(jet_idx <= max_jets, jet_idx, 0)
 
-    jet_pt = tf.math.sqrt(jet_px**2 + jet_py**2)
+    jet_px = tf.zeros([max_jets, ], dtype=px.dtype)
+    jet_py = tf.zeros([max_jets, ], dtype=py.dtype)
+
+    jet_px_new = tf.tensor_scatter_nd_add(jet_px, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=px)[1:]
+    jet_py_new = tf.tensor_scatter_nd_add(jet_py, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=py)[1:]
+
+    jet_pt = tf.math.sqrt(jet_px_new**2 + jet_py_new**2)
+    tf.print("jet_idx_capped", jet_idx_capped)
+
+    jet_idx_capped_np = jet_idx_capped.numpy()
+    print(np.unique(jet_idx_capped_np, return_counts=True))
+    tf.print("px", px, jet_px_new)
+    tf.print("py", py, jet_py_new)
+    tf.print("pt", jet_pt)
+    tf.debugging.check_numerics(jet_pt, "numerics jet pt")
 
     return jet_pt
 
 
-@tf.function
+#@tf.function
 def batched_jet_reco(px, py, jet_idx, max_jets):
-    return tf.vectorized_map(lambda a: jet_reco(a[0], a[1], a[2], max_jets), (px,py,jet_idx))
+    tf.debugging.assert_shapes([
+        (px, ('B', 'N')),
+        (py, ('B', 'N')),
+        (jet_idx, ('B', 'N')),
+    ])
 
+    return tf.map_fn(
+        lambda a: jet_reco(a[0], a[1], a[2], max_jets), (px, py, jet_idx),
+        fn_output_signature=tf.TensorSpec([max_jets-1, ], dtype=tf.float32)
+    )
 
 def gen_jet_loss(y_true, y_pred):
     y = {}
@@ -575,7 +598,7 @@ def gen_jet_loss(y_true, y_pred):
     jet_pt = {}
 
     max_jets = 201
-    jet_idx = tf.cast(y["true"][..., 5:6], dtype=tf.int32)
+    jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
     for typ in ["true", "pred"]:
         px = y[typ][..., 0]*y[typ][..., 4]
         py = y[typ][..., 0]*y[typ][..., 3]
@@ -618,6 +641,6 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] == "gen_jet":
         loss_dict["pt_e_eta_phi"] = gen_jet_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+        loss_weights["pt_e_eta_phi"] = 1e-12
 
     return loss_dict, loss_weights
