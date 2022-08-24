@@ -1,9 +1,7 @@
 import datetime
-import glob
 import logging
 import os
 import platform
-import random
 import re
 from pathlib import Path
 
@@ -11,7 +9,6 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 import yaml
-from tfmodel.data import Dataset
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
@@ -310,94 +307,6 @@ def targets_multi_output(num_output_classes):
         )
 
     return func
-
-
-def get_dataset_def(config):
-    cds = config["dataset"]
-
-    return Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        schema=cds["schema"],
-    )
-
-
-def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=True):
-    dataset_def = get_dataset_def(config)
-
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
-
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(
-        dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE
-    )
-
-    # Due to TFRecords format, the length of the dataset is not known beforehand
-    num_events = 0
-    for _ in dataset:
-        num_events += 1
-    print("dataset loaded, len={}".format(num_events))
-
-    weight_func = make_weight_function(config)
-    assert n_train + n_test <= num_events
-
-    # Padded shapes
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        {
-            "cls": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "charge": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "energy": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "pt": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "eta": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "sin_phi": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-            "cos_phi": tf.TensorShape(
-                [
-                    dataset_def.padded_num_elem_size,
-                ]
-            ),
-        },
-    )
-
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-    if config["setup"]["multi_output"]:
-        dataset_transform = targets_multi_output(config["dataset"]["num_output_classes"])
-        ds_train = ds_train.map(dataset_transform)
-        ds_test = ds_test.map(dataset_transform)
-    else:
-        dataset_transform = None
-
-    return ds_train, ds_test, dataset_transform
 
 
 def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, supervised=True):
