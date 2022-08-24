@@ -1,20 +1,19 @@
-import os
-import yaml
-from pathlib import Path
 import datetime
+import glob
+import logging
+import os
 import platform
 import random
-import glob
-import numpy as np
 import re
-import logging
+from pathlib import Path
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-
+import yaml
 from tfmodel.data import Dataset
-from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
 
 @tf.function
