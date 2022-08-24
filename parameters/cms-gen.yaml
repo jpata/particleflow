@@ -141,10 +141,6 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
-    pt_skip_gate: no
-    eta_skip_gate: yes
-    phi_skip_gate: yes
-
     id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
@@ -221,7 +217,7 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  physical: 
+  physical:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
@@ -232,7 +228,7 @@ train_test_datasets:
 validation_datasets:
   - cms_pf_ttbar
 
-datasets: 
+datasets:
   cms_pf_ttbar:
     version: 1.4.0
     data_dir:
