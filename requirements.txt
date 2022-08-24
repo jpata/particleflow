@@ -15,7 +15,7 @@ papermill
 pre-commit
 pyarrow
 ray[default]==1.6.0
-ray[tune]==1.6.0'
+ray[tune]==1.6.0
 scikit-optimize
 scipy
 seaborn
