@@ -1,4 +1,4 @@
-"""CMS PF TTbar dataset."""
+"""CMS PF QCD High Pt dataset."""
 
 from pathlib import Path
 import tensorflow as tf
@@ -24,10 +24,11 @@ PADDED_NUM_ELEM_SIZE = 6400
 class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.3.1")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
-        "1.3.1": "Remove PS again"
+        "1.3.1": "Remove PS again",
+        "1.4.0": "Add gen jet index information"
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     FIXME

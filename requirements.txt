@@ -1,2 +1,5 @@
 tensorflow>=2.5.0
 tensorflow_datasets==4.3.0
+fastjet
+awkward
+vector

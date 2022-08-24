@@ -1,15 +1,19 @@
+from configparser import MAX_INTERPOLATION_DEPTH
 import pickle
 import bz2
 
 import numpy as np
 from numpy.lib.recfunctions import append_fields
+import fastjet
+import vector
+import awkward as ak
 
 
-#https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
+# https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
 
-#https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
+# https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
 CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "gamma", "ele", "mu"]
 CLASS_NAMES_LONG_CMS = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
@@ -37,12 +41,17 @@ Y_FEATURES = [
     "sin_phi",
     "cos_phi",
     "e",
+    "jet_idx"
 ]
 
 def prepare_data_cms(fn, padded_num_elem_size):
     Xs = []
     ygens = []
     ycands = []
+
+    # prepare jet definition and min jet pt for clustering gen jets 
+    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    min_jet_pt = 5.0 # GeV
 
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
@@ -67,10 +76,16 @@ def prepare_data_cms(fn, padded_num_elem_size):
         ygen = append_fields(
             ygen, "typ_idx", np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32)
         )
+        ygen = append_fields(
+            ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32)
+        )
         ycand = append_fields(
             ycand,
             "typ_idx",
             np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32),
+        )
+        ycand = append_fields(
+            ycand, "jet_idx", np.zeros(ycand["typ"].shape, dtype=np.float32)
         )
 
         Xelem_flat = np.stack(
@@ -115,6 +130,38 @@ def prepare_data_cms(fn, padded_num_elem_size):
         X = np.expand_dims(X, 0)
         ygen = np.expand_dims(ygen, 0)
         ycand = np.expand_dims(ycand, 0)
+
+        # prepare gen candidates for clustering
+        cls_id = ygen[:, :, 0]
+        valid = (cls_id != 0)
+        # save mapping of index after masking -> index before masking as numpy array
+        # inspired from: https://stackoverflow.com/a/1044443
+        cumsum = np.cumsum(valid) - 1
+        index_mapping = np.nonzero(np.r_[1, np.diff(cumsum)[:-1]])[0]
+
+        pt = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("pt")], valid)])
+        eta = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("eta")], valid)])
+        phi = np.arctan2(ygen[:, :, Y_FEATURES.index("sin_phi")], ygen[:, :, Y_FEATURES.index("cos_phi")])
+        phi = ak.from_iter([y[m] for y, m in zip(phi, valid)])
+        e = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("e")], valid)])
+        vec = vector.arr({"pt": pt, "eta": eta, "phi": phi, "e": e})
+
+        # cluster jets, sort jet indices in descending order by pt
+        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+        jets = cluster.inclusive_jets(min_pt=min_jet_pt)
+        sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()[0]
+        # retrieve corresponding indices of constituents
+        constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()[0]
+
+        # add index information to ygen and ycand
+        # index jets in descending order by pt starting from 1:
+        # 0 is null (unclustered),
+        # 1 is 1st highest-pt jet,
+        # 2 is 2nd highest-pt jet, ...
+        for jet_idx in sorted_jet_idx:
+            jet_constituents = [index_mapping[idx] for idx in constituent_idx[jet_idx]] # map back to constituent index *before* masking
+            ygen[0, jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1 # jet index starts from 1
+            ycand[0, jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
         Xs.append(X)
         ygens.append(ygen)
