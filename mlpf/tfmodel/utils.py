@@ -19,17 +19,22 @@ from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
 
 
 @tf.function
-def histogram_2d(x, y, weights, x_range, y_range, nbins, bin_dtype=tf.float32):
-    x_bins = tf.histogram_fixed_width_bins(x, x_range, nbins=nbins, dtype=bin_dtype)
-    y_bins = tf.histogram_fixed_width_bins(y, y_range, nbins=nbins, dtype=bin_dtype)
-    hist = tf.zeros((nbins, nbins), dtype=weights.dtype)
-    indices = tf.transpose(tf.stack([y_bins, x_bins]))
-    hist = tf.tensor_scatter_nd_add(hist, indices, weights)
-    return hist
+def histogram_2d(eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
+    eta_bins = tf.histogram_fixed_width_bins(eta, eta_range, nbins=nbins, dtype=bin_dtype)
+    phi_bins = tf.histogram_fixed_width_bins(phi, phi_range, nbins=nbins, dtype=bin_dtype)
+
+    hist_px = tf.zeros((nbins, nbins), dtype=weights_px.dtype)
+    hist_py = tf.zeros((nbins, nbins), dtype=weights_py.dtype)
+    indices = tf.transpose(tf.stack([phi_bins, eta_bins]))
+
+    hist_px = tf.tensor_scatter_nd_add(hist_px, indices, weights_px)
+    hist_py = tf.tensor_scatter_nd_add(hist_py, indices, weights_py)
+    hist_pt = tf.sqrt(hist_px**2 + hist_py**2)
+    return hist_pt
 
 @tf.function
-def batched_histogram_2d(x, y, w, x_range, y_range, nbins, bin_dtype=tf.float32):
-    return tf.vectorized_map(lambda a: histogram_2d(a[0], a[1], a[2], x_range, y_range, nbins, bin_dtype), (x,y,w))
+def batched_histogram_2d(eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.vectorized_map(lambda a: histogram_2d(a[0], a[1], a[2], a[3], x_range, y_range, nbins, bin_dtype), (eta, phi, w_px, w_py))
 
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
@@ -508,14 +513,21 @@ def get_loss_from_params(input_dict):
     input_dict = input_dict.copy()
     loss_type = input_dict.pop("type")
     loss_cls = getattr(tf.keras.losses, loss_type)
-    return loss_cls(**input_dict, reduction=tf.keras.losses.Reduction.NONE)
+    return loss_cls(**input_dict)
 
 #batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
+@tf.function
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
     
+    #take everything but the jet_idx
+    y_true = y_true[..., :5]
+    y_pred = y_pred[..., :5]
+
+    #create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))
     theta = theta / tf.sqrt(tf.reduce_sum(theta**2, axis=1, keepdims=True))
 
+    #project the features with the random basis
     A = tf.linalg.matmul(y_true, theta, False, True)
     B = tf.linalg.matmul(y_pred, theta, False, True)
 
@@ -525,23 +537,35 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
     ret = tf.math.sqrt(tf.reduce_sum(tf.math.pow(A_sorted - B_sorted, 2), axis=[-1,-2]))
     return ret
 
-
+@tf.function
 def hist_loss_2d(y_true, y_pred):
 
+    eta_true = y_true[..., 2]
+    eta_pred = y_pred[..., 2]
     phi_true = tf.math.atan2(y_true[..., 3], y_true[..., 4])
     phi_pred = tf.math.atan2(y_pred[..., 3], y_pred[..., 4])
 
+    pt_true = y_true[..., 0]
+    pt_pred = y_pred[..., 0]
+
+    px_true = pt_true*y_true[..., 4]
+    py_true = pt_true*y_true[..., 3]
+    px_pred = pt_pred*y_pred[..., 4]
+    py_pred = pt_pred*y_pred[..., 3]
+
     pt_hist_true = batched_histogram_2d(
-        y_true[..., 2],
+        eta_true,
         phi_true,
-        y_true[..., 0],
+        px_true,
+        py_true,
         tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
     )
 
     pt_hist_pred = batched_histogram_2d(
-        y_pred[..., 2],
+        eta_pred,
         phi_pred,
-        y_pred[..., 0],
+        px_pred,
+        py_pred,
         tf.cast([-6.0,6.0], tf.float32), tf.cast([-4.0,4.0], tf.float32), 20
     )
 
@@ -549,6 +573,7 @@ def hist_loss_2d(y_true, y_pred):
     return mse
 
 
+@tf.function
 def jet_reco(px, py, jet_idx, max_jets):
 
     tf.debugging.assert_shapes([
@@ -562,23 +587,15 @@ def jet_reco(px, py, jet_idx, max_jets):
     jet_px = tf.zeros([max_jets, ], dtype=px.dtype)
     jet_py = tf.zeros([max_jets, ], dtype=py.dtype)
 
-    jet_px_new = tf.tensor_scatter_nd_add(jet_px, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=px)[1:]
-    jet_py_new = tf.tensor_scatter_nd_add(jet_py, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=py)[1:]
+    jet_px_new = tf.tensor_scatter_nd_add(jet_px, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=px)
+    jet_py_new = tf.tensor_scatter_nd_add(jet_py, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=py)
 
     jet_pt = tf.math.sqrt(jet_px_new**2 + jet_py_new**2)
-    tf.print("jet_idx_capped", jet_idx_capped)
-
-    jet_idx_capped_np = jet_idx_capped.numpy()
-    print(np.unique(jet_idx_capped_np, return_counts=True))
-    tf.print("px", px, jet_px_new)
-    tf.print("py", py, jet_py_new)
-    tf.print("pt", jet_pt)
-    tf.debugging.check_numerics(jet_pt, "numerics jet pt")
 
     return jet_pt
 
 
-#@tf.function
+@tf.function
 def batched_jet_reco(px, py, jet_idx, max_jets):
     tf.debugging.assert_shapes([
         (px, ('B', 'N')),
@@ -588,9 +605,10 @@ def batched_jet_reco(px, py, jet_idx, max_jets):
 
     return tf.map_fn(
         lambda a: jet_reco(a[0], a[1], a[2], max_jets), (px, py, jet_idx),
-        fn_output_signature=tf.TensorSpec([max_jets-1, ], dtype=tf.float32)
+        fn_output_signature=tf.TensorSpec([max_jets, ], dtype=tf.float32)
     )
 
+@tf.function
 def gen_jet_loss(y_true, y_pred):
     y = {}
     y["true"] = y_true
@@ -641,6 +659,6 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] == "gen_jet":
         loss_dict["pt_e_eta_phi"] = gen_jet_loss
-        loss_weights["pt_e_eta_phi"] = 1e-12
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     return loss_dict, loss_weights
