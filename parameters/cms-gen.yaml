@@ -45,8 +45,8 @@ loss:
   eta_loss:
     type: Huber
     delta: 0.1
-  event_loss: gen_jet
-  event_loss_coef: 1.0
+  event_loss: none #none, sliced_wasserstein, gen_jet, hist_2d
+  event_loss_coef: 0.0001
 
 tensorflow:
   eager: no
@@ -225,6 +225,9 @@ train_test_datasets:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
+      - cms_pf_ztt
+      - cms_pf_qcd
+      - cms_pf_qcd_high_pt
 
 validation_datasets:
   - cms_pf_ttbar
