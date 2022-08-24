@@ -1,18 +1,12 @@
 import argparse
-import math
-import os
-import os.path as osp
-import sys
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import setGPU
+import setGPU  # noqa F401
 import torch
 import tqdm
 from graph_data import PFGraphDataset
 from models import EdgeNet
-from torch_geometric.data import Data, DataLoader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("using device %s" % device)
@@ -29,7 +23,7 @@ def main(args):
     x_data = data.x.cpu().detach().numpy()
 
     mask = (x_data[:, 4] == 0) & (x_data[:, 5] == 0) & (x_data[:, 6] == 0) & (x_data[:, 7] == 0)
-    good_index = np.zeros((x_data.shape[0], 1, 2), dtype=int)
+    # good_index = np.zeros((x_data.shape[0], 1, 2), dtype=int)
 
     good_x = x_data[:, 2:4].copy()
     # good_x[~mask] = x_data[~mask,6:8].copy()

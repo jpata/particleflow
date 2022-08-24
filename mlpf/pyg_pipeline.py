@@ -1,24 +1,12 @@
 import json
-import math
 import os
 import os.path as osp
-import pickle as pkl
-import shutil
-import sys
-import time
-from glob import glob
 
 import matplotlib
-import matplotlib.pyplot as plt
-import mplhep as hep
 import numpy as np
-import pandas as pd
-import sklearn
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-import torch_geometric
-import tqdm
 from pyg import (
     MLPF,
     PFGraphDataset,
@@ -35,8 +23,6 @@ from pyg import (
     training_loop,
 )
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch_geometric.data import Batch, Data
-from torch_geometric.loader import DataListLoader, DataLoader
 
 matplotlib.use("Agg")
 
@@ -59,8 +45,9 @@ else:
 
 def setup(rank, world_size):
     """
-    Necessary setup function that sets up environment variables and initializes the process group to perform training & inference using DistributedDataParallel (DDP).
-    DDP relies on c10d ProcessGroup for communications, hence, applications must create ProcessGroup instances before constructing DDP.
+    Necessary setup function that sets up environment variables and initializes the process group
+    to perform training & inference using DistributedDataParallel (DDP). DDP relies on c10d ProcessGroup
+    for communications, hence, applications must create ProcessGroup instances before constructing DDP.
 
     Args:
     rank: the process id (or equivalently the gpu index)
@@ -84,7 +71,8 @@ def cleanup():
 
 def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
     """
-    Necessary function that spawns a process group of size=world_size processes to run demo_fn() on each gpu device that will be indexed by 'rank'.
+    Necessary function that spawns a process group of size=world_size processes to run demo_fn()
+    on each gpu device that will be indexed by 'rank'.
 
     Args:
     demo_fn: function you wish to run on each gpu
@@ -104,10 +92,12 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
 
 def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     """
-    A train_ddp() function that will be passed as a demo_fn to run_demo() to perform training over multiple gpus using DDP.
+    A train_ddp() function that will be passed as a demo_fn to run_demo() to
+    perform training over multiple gpus using DDP.
 
-    It divides and distributes the training dataset appropriately, copies the model, and wraps the model with DDP on each device
-    to allow synching of gradients, and finally, invokes the training_loop() to run synchronized training among devices.
+    It divides and distributes the training dataset appropriately, copies the model,
+    wraps the model with DDP on each device to allow synching of gradients,
+    and finally, invokes the training_loop() to run synchronized training among devices.
     """
 
     setup(rank, world_size)
@@ -160,9 +150,11 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
 
 def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     """
-    An inference_ddp() function that will be passed as a demo_fn to run_demo() to perform inference over multiple gpus using DDP.
+    An inference_ddp() function that will be passed as a demo_fn to run_demo()
+    to perform inference over multiple gpus using DDP.
 
-    It divides and distributes the testing dataset appropriately, copies the model, and wraps the model with DDP on each device.
+    It divides and distributes the testing dataset appropriately, copies the model,
+    and wraps the model with DDP on each device.
     """
 
     setup(rank, world_size)
@@ -192,11 +184,12 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
 
 def train(device, world_size, args, dataset, model, num_classes, outpath):
     """
-    A train() function that will load the training dataset and start a training_loop on a single device (cuda or cpu).
+    A train() function that will load the training dataset and start a training_loop
+    on a single device (cuda or cpu).
     """
 
     if device == "cpu":
-        print(f"Running training on cpu")
+        print("Running training on cpu")
     else:
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
         device = device.index
@@ -237,11 +230,12 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
 
 def inference(device, world_size, args, dataset, model, num_classes, PATH):
     """
-    An inference() function that will load the testing dataset and start running inference on a single device (cuda or cpu).
+    An inference() function that will load the testing dataset and start running inference
+    on a single device (cuda or cpu).
     """
 
     if device == "cpu":
-        print(f"Running inference on cpu")
+        print("Running inference on cpu")
     else:
         print(f"Running inference on: {torch.cuda.get_device_name(device)}")
         device = device.index
@@ -268,7 +262,8 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.benchmark = True
 
-    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
+    # retrieve the dimensions of the PF-elements & PF-candidates
+    # to set the input/output dimension of the model
     if args.data == "delphes":
         input_dim = len(features_delphes)
         num_classes = 6  # we have 6 classes/pids for delphes
@@ -326,8 +321,6 @@ if __name__ == "__main__":
     if args.load and args.load_epoch != -1:
         epoch_to_load = args.load_epoch
     else:
-        import json
-
         epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
 
     PATH = f"{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/"

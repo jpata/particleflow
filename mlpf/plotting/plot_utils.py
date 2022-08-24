@@ -24,7 +24,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -38,7 +37,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -52,7 +50,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -66,7 +63,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -80,7 +76,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -94,7 +89,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -108,7 +102,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -122,7 +115,6 @@ bins = {
         "eta_xlabel": "$\eta$",
         "phi_val": np.linspace(-4, 4, 61),
         "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "Energy [GeV]",
         "phi_xlabel": "$\phi$",
         "true_val": "reco PF",
         "pred_val": "ML-PF",
@@ -252,7 +244,7 @@ def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="tar
     plt.figure(figsize=(4, 4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
-    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
+    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
     plt.xlabel(bins["true_val"] + " " + bins["E_xlabel"])
     plt.ylabel(bins["pred_val"] + " " + bins["E_xlabel"])
     cms_label()
@@ -347,7 +339,7 @@ def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="t
     plt.figure(figsize=(4, 4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["eta_val"], bins["eta_val"]))
-    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
+    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
     plt.xlabel(bins["true_val"] + " " + bins["eta_xlabel"])
     plt.ylabel(bins["pred_val"] + " " + bins["eta_xlabel"])
     cms_label()
@@ -446,7 +438,7 @@ def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="t
     plt.figure(figsize=(4, 4))
     ax = plt.axes()
     hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["phi_val"], bins["phi_val"]))
-    mplhep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
+    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
     plt.xlabel(bins["true_val"] + " " + bins["phi_xlabel"])
     plt.ylabel(bins["pred_val"] + " " + bins["phi_xlabel"])
     cms_label()

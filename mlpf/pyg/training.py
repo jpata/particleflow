@@ -1,26 +1,17 @@
 import json
 import math
 import os
-import pickle as pkl
 import time
 
 import matplotlib
-import matplotlib.pyplot as plt
-import mplhep as hep
 import numpy as np
-import pandas as pd
 import sklearn
 import sklearn.metrics
 import torch
 import torch_geometric
-import tqdm
 from pyg import make_plot_from_lists
 from pyg.cms_utils import CLASS_NAMES_CMS
 from pyg.delphes_plots import plot_confusion_matrix
-from pyg.utils import batch_event_into_regions, define_regions, one_hot_embedding
-from torch_geometric.data import Batch, Data
-from torch_geometric.loader import DataListLoader, DataLoader
-from torch_geometric.utils import dense_to_sparse, to_dense_adj
 
 matplotlib.use("Agg")
 
@@ -88,7 +79,11 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            # print(
+            #     f"batch {i}/{len(loader)}, "
+            #     + f"forward pass on rank {rank} = {round(t1 - t0, 3)}s, "
+            #     + f"for batch with {batch.num_nodes} nodes"
+            # )
             t = t + (t1 - t0)
 
             # define the target
@@ -103,7 +98,7 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
 
             # define some useful masks
-            msk = (pred_ids != 0) & (target_ids != 0)
+            # msk = (pred_ids != 0) & (target_ids != 0)
             msk2 = (pred_ids != 0) & (pred_ids == target_ids)
 
             # compute the loss
@@ -116,11 +111,9 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             loss_tot = loss_clf + (alpha * loss_reg)
 
             if is_train:
-                for (
-                    param
-                ) in (
-                    model.parameters()
-                ):  # better than calling optimizer.zero_grad() according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+                for param in model.parameters():
+                    # better than calling optimizer.zero_grad()
+                    # according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
                     param.grad = None
                 loss_tot.backward()
                 optimizer.step()
@@ -250,7 +243,12 @@ def training_loop(
         eta = epochs_remaining * time_per_epoch / 60
 
         print(
-            f"Rank {rank}: epoch={epoch + 1} / {n_epochs} train_loss={round(losses_tot_train[epoch], 4)} valid_loss={round(losses_tot_valid[epoch], 4)} stale={stale_epochs} time={round((t1-t0)/60, 2)}m eta={round(eta, 1)}m"
+            f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
+            + f"train_loss={round(losses_tot_train[epoch], 4)} "
+            + f"valid_loss={round(losses_tot_valid[epoch], 4)} "
+            + f"stale={stale_epochs} "
+            + f"time={round((t1-t0)/60, 2)}m "
+            + f"eta={round(eta, 1)}m"
         )
 
         # save the model's weights

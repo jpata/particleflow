@@ -1,17 +1,9 @@
 import argparse
-import os
-import os.path as osp
 import pickle as pkl
-import sys
 
-import mplhep as hep
-import numpy as np
-import pandas as pd
 import torch
-import torch_geometric
 from lrp import LRP_MLPF, MLPF, make_Rmaps
 from pyg import PFGraphDataset, dataloader_qcd, load_model
-from torch_geometric.data import Batch, Data, DataListLoader, DataLoader
 
 # this script runs lrp on a trained MLPF model
 

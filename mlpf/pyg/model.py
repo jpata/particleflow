@@ -1,19 +1,11 @@
-import os
-import os.path as osp
-import pickle as pkl
-import sys
-from glob import glob
 from typing import Optional, Union
 
-import scipy.spatial
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
-from torch_geometric.nn.conv import DynamicEdgeConv, GCNConv, GraphConv, MessagePassing
+from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.typing import OptTensor, PairOptTensor, PairTensor
-from torch_geometric.utils import to_dense_adj
 from torch_scatter import scatter
 
 

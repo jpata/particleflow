@@ -1,13 +1,7 @@
-import os
-import os.path as osp
-import pickle as pkl
-import sys
-from glob import glob
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 from torch_geometric.nn.conv import MessagePassing
@@ -19,7 +13,7 @@ try:
     from torch_cluster import knn
 except ImportError:
     knn = None
-from torch_cluster import knn_graph
+# from torch_cluster import knn_graph as knn
 
 
 class MLPF(nn.Module):
@@ -114,8 +108,10 @@ class GravNetConv_LRP(MessagePassing):
     Copied from pytorch_geometric source code, with the following edits
         a. used reduce='sum' instead of reduce='mean' in the message passing
         b. removed skip connection
-        c. retrieved adjacency matrix and the activations before the message passing, both are useful only for LRP purposes
-        d. switched the execution of self.lin_s & self.lin_p so that the message passing step can substitute out of the box self.lin_s for lrp purposes
+        c. retrieved adjacency matrix and the activations before the message passing,
+           both are useful only for LRP purposes
+        d. switched the execution of self.lin_s & self.lin_p so that the message passing
+           step can substitute out of the box self.lin_s for lrp purposes
     """
 
     def __init__(

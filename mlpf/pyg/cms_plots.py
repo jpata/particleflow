@@ -1,25 +1,12 @@
-import bz2
-import glob
 import itertools
-import json
-import pickle
 
 import boost_histogram as bh
-import matplotlib
 import matplotlib.pyplot as plt
 import mplhep
 import numpy as np
-import pandas
-import pandas as pd
-import scipy
 import sklearn
 import sklearn.metrics
-import torch
-import torch_geometric
-import torch_geometric.utils
-from numpy.lib.recfunctions import append_fields
 from pyg.cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
-from torch_geometric.data import Batch, Data, Dataset
 
 mplhep.style.use(mplhep.styles.CMS)
 
@@ -100,7 +87,7 @@ def plot_met(X, yvals, outpath, sample):
     sum_py = np.sum(yvals["pred_py"], axis=1)
     pred_met = np.sqrt(sum_px**2 + sum_py**2)[:, 0]
 
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
     b = np.linspace(-2, 5, 101)
     vals_a = (cand_met - gen_met) / gen_met
@@ -131,7 +118,7 @@ def plot_met(X, yvals, outpath, sample):
 
 
 def plot_sum_energy(X, yvals, outpath, sample):
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
 
     plt.scatter(np.sum(yvals["gen_energy"], axis=1), np.sum(yvals["cand_energy"], axis=1), alpha=0.5, label="PF")
@@ -148,7 +135,7 @@ def plot_sum_energy(X, yvals, outpath, sample):
 
 def plot_sum_pt(X, yvals, outpath, sample):
 
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
 
     plt.scatter(np.sum(yvals["gen_pt"], axis=1), np.sum(yvals["cand_pt"], axis=1), alpha=0.5, label="PF")
@@ -165,7 +152,7 @@ def plot_sum_pt(X, yvals, outpath, sample):
 
 def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
 
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
 
     msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
@@ -202,7 +189,7 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
 
 def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
 
-    fig = plt.figure()
+    plt.figure()
     ax = plt.axes()
 
     msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
@@ -245,7 +232,7 @@ def plot_multiplicity(X, yvals, outpath, sample):
         npred = np.sum(yvals["pred_cls_id"] == icls, axis=1)
         ngen = np.sum(yvals["gen_cls_id"] == icls, axis=1)
         ncand = np.sum(yvals["cand_cls_id"] == icls, axis=1)
-        fig = plt.figure()
+        plt.figure()
         ax = plt.axes()
         plt.scatter(ngen, ncand, marker=".", alpha=0.4, label="PF")
         plt.scatter(ngen, npred, marker=".", alpha=0.4, label="MLPF")
@@ -269,7 +256,7 @@ def plot_multiplicity(X, yvals, outpath, sample):
         vals_pred = np.sum(np.ma.MaskedArray(yvals["pred_energy"], ~msk), axis=1)[:, 0]
         msk = yvals["cand_cls_id"][:, :, 0] == icls
         vals_cand = np.sum(np.ma.MaskedArray(yvals["cand_energy"], ~msk), axis=1)[:, 0]
-        fig = plt.figure()
+        plt.figure()
         ax = plt.axes()
         plt.scatter(vals_gen, vals_cand, alpha=0.2, label="PF")
         plt.scatter(vals_gen, vals_pred, alpha=0.2, label="MLPF")
@@ -303,7 +290,7 @@ def get_distribution(yvals_f, prefix, bins, var):
 def plot_dist(yvals_f, var, bin, label, outpath, sample):
 
     hists_gen = get_distribution(yvals_f, "gen", bin, var)
-    hists_cand = get_distribution(yvals_f, "cand", bin, var)
+    # hists_cand = get_distribution(yvals_f, "cand", bin, var)
     hists_pred = get_distribution(yvals_f, "pred", bin, var)
 
     plt.figure()
@@ -311,7 +298,7 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
     v1 = mplhep.histplot(
         [h[bh.rebin(2)] for h in hists_gen], stack=True, label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]], lw=1
     )
-    v2 = mplhep.histplot(
+    mplhep.histplot(
         [h[bh.rebin(2)] for h in hists_pred],
         stack=True,
         color=[x.stairs.get_edgecolor() for x in v1],
@@ -320,7 +307,7 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
     )
 
     legend1 = plt.legend(v1, [x.legend_artist.get_label() for x in v1], loc=(0.60, 0.44), title="true")
-    legend2 = plt.legend(v2, [x.legend_artist.get_label() for x in v1], loc=(0.8, 0.44), title="pred")
+    # legend2 = plt.legend(v2, [x.legend_artist.get_label() for x in v1], loc=(0.8, 0.44), title="pred")
     plt.gca().add_artist(legend1)
     plt.ylabel("Total number of particles / bin")
     cms_label(ax)
@@ -428,7 +415,7 @@ def plot_eff_and_fake_rate(
 
 def plot_cm(yvals_f, msk_X_f, label, outpath):
 
-    fig = plt.figure(figsize=(12, 12))
+    plt.figure(figsize=(12, 12))
     ax = plt.axes()
 
     if label == "MLPF":

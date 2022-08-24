@@ -1,20 +1,10 @@
 import glob
-import math
-import os
-import os.path as osp
-import pickle as pkl
-import sys
 import time
 
 import matplotlib
-import matplotlib.pyplot as plt
-import mplhep as hep
 import numpy as np
-import pandas as pd
-import sklearn
 import torch
 import torch_geometric
-import tqdm
 from pyg.cms_plots import (
     distribution_icls,
     plot_cm,
@@ -28,23 +18,17 @@ from pyg.cms_plots import (
     plot_sum_energy,
     plot_sum_pt,
 )
-from pyg.cms_utils import CLASS_NAMES_CMS
-from pyg.utils import (
-    batch_event_into_regions,
-    define_regions,
-    one_hot_embedding,
-    target_p4,
-)
-from torch_geometric.data import Batch
-from torch_geometric.loader import DataListLoader, DataLoader
+from pyg.utils import one_hot_embedding, target_p4
 
 matplotlib.use("Agg")
 
 
 def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
     """
-    Runs inference on the qcd test dataset to evaluate performance. Saves the predictions as .pt files.
-    Each .pt file will contain a dict() object with keys X, Y_pid, Y_p4; contains all the necessary event information to make plots.
+    Runs inference on the qcd test dataset to evaluate performance.
+    Saves the predictions as .pt files.
+    Each .pt file will contain a dict() object with keys X, Y_pid, Y_p4;
+    contains all the necessary event information to make plots.
 
     Args
         rank: int representing the gpu device id, or str=='cpu' (both work, trust me)
@@ -71,7 +55,11 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            # print(f'batch {i}/{len(loader)}, forward pass on rank {rank} = {round(t1 - t0, 3)}s, for batch with {batch.num_nodes} nodes')
+            # print(
+            #     f"batch {i}/{len(loader)}, "
+            #     f"forward pass on rank {rank} = {round(t1 - t0, 3)}s, "
+            #     f"for batch with {batch.num_nodes} nodes"
+            # )
             t = t + (t1 - t0)
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
@@ -169,9 +157,9 @@ def postprocess_predictions(pred_path):
 
     # reformat the loaded files for convenient plotting
     yvals = {}
-    yvals[f"gen_cls"] = Y_pids[:, 0, :, :].numpy()
-    yvals[f"cand_cls"] = Y_pids[:, 1, :, :].numpy()
-    yvals[f"pred_cls"] = Y_pids[:, 2, :, :].numpy()
+    yvals["gen_cls"] = Y_pids[:, 0, :, :].numpy()
+    yvals["cand_cls"] = Y_pids[:, 1, :, :].numpy()
+    yvals["pred_cls"] = Y_pids[:, 2, :, :].numpy()
 
     for feat, key in enumerate(target_p4):
         yvals[f"gen_{key}"] = Y_p4s[:, 0, :, feat].unsqueeze(-1).numpy()
@@ -208,7 +196,7 @@ def postprocess_predictions(pred_path):
 
     print(f"Time taken to process the predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
-    print(f"-->Saving the processed events")
+    print("-->Saving the processed events")
     t0 = time.time()
     torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
     torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
@@ -224,7 +212,7 @@ def make_plots_cms(pred_path, plot_path, sample):
 
     t0 = time.time()
 
-    print(f"--> Loading the processed predictions")
+    print("--> Loading the processed predictions")
     X = torch.load(f"{pred_path}/post_processed_Xs.pt")
     X_f = torch.load(f"{pred_path}/post_processed_X_f.pt")
     msk_X_f = torch.load(f"{pred_path}/post_processed_msk_X_f.pt")

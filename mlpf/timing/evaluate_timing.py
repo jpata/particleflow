@@ -2,10 +2,7 @@
 
 # on manivald: singularity exec /home/software/singularity/base.simg:latest python3 test/evaluate_timing.py
 
-import torch
-import torch_geometric
-from graph_data import PFGraphDataset, class_labels, class_to_id, elem_to_id
-from torch_geometric.data import Batch, Data, DataListLoader, DataLoader
+from graph_data import PFGraphDataset
 
 dataset_path = "/home/joosep/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
@@ -28,7 +25,9 @@ if __name__ == "__main__":
             # this is the number of input elements in the event
             input_multiplicity = input_matrix.shape[0]
 
-            # task 1: plot the distribution of the input multiplicities across the events using numpy.histogram and matplotlib.histogram
+            # task 1: plot the distribution of the input multiplicities across the events
+            # using numpy.histogram and matplotlib.histogram
 
-            # task 2: save the `data` object using torch.save(data, "data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_i/file_j.pt") to
-            # subfolders based on the input multiplicity binning
+            # task 2: save the `data` object using:
+            # torch.save(data, "data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_i/file_j.pt")
+            # to subfolders based on the input multiplicity binning

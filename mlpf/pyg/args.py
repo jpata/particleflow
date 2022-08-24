@@ -1,5 +1,4 @@
 import argparse
-from math import inf
 
 
 def parse_args():

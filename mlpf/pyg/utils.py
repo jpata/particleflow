@@ -1,25 +1,15 @@
 import json
-import math
 import os
 import os.path as osp
 import pickle as pkl
 import shutil
 import sys
-import time
-from collections.abc import Mapping, Sequence
-from glob import glob
+from collections.abc import Sequence
 
 import matplotlib
 import matplotlib.pyplot as plt
-import mplhep as hep
-import numpy as np
-import pandas as pd
-import sklearn
 import torch
-import torch_geometric
-import tqdm
-from torch.utils.data.dataloader import default_collate
-from torch_geometric.data import Batch, Data
+from torch_geometric.data import Batch
 from torch_geometric.data.data import BaseData
 from torch_geometric.loader import DataListLoader, DataLoader
 
@@ -124,7 +114,7 @@ def save_model(args, model_fname, outpath, model_kwargs):
         for f in filelist:
             try:
                 os.remove(os.path.join(outpath, f))
-            except:
+            except IsADirectoryError:
                 shutil.rmtree(os.path.join(outpath, f))
 
     with open(f"{outpath}/model_kwargs.pkl", "wb") as f:  # dump model architecture
@@ -206,7 +196,8 @@ def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5
     Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.
 
     Returns
-        regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max) that defines the limits of a region and equivalenelty phi
+        regions: a list of tuples ~ (eta_tuples, phi_tuples) where eta_tuples is a tuple ~ (eta_min, eta_max)
+        that defines the limits of a region and equivalenelty phi
     """
     eta_step = (max_eta - min_eta) / num_eta_regions
     phi_step = (max_phi - min_phi) / num_phi_regions
@@ -252,7 +243,7 @@ def batch_event_into_regions(data, regions):
         )
 
         if in_region_msk.sum() != 0:  # if region is not empty
-            if x == None:  # first iteration
+            if x is None:  # first iteration
                 x = data.x[in_region_msk]
                 ygen = data.ygen[in_region_msk]
                 ygen_id = data.ygen_id[in_region_msk]
@@ -285,8 +276,9 @@ def batch_event_into_regions(data, regions):
 class Collater:
     """
     This function was copied from torch_geometric.loader.Dataloader() source code.
-    Edits were made such that the function can collate samples as a list of tuples of Data() objects instead of Batch() objects.
-    This is needed becase pyg Dataloaders do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
+    Edits were made such that the function can collate samples as a list of tuples
+    of Data() objects instead of Batch() objects. This is needed becase pyg Dataloaders
+    do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
     """
 
     def __init__(self):
@@ -305,9 +297,11 @@ class Collater:
 
 def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2):
     """
-    This function is only one line, but it's worth explaining why it's needed and what it's doing.
-    It uses native torch Dataloaders with a custom collate_fn that allows loading Data() objects from pt files in a fast way.
-    This is needed becase pyg Dataloaders do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
+    This function is only one line, but it's worth explaining why it's needed
+    and what it's doing. It uses native torch Dataloaders with a custom collate_fn
+    that allows loading Data() objects from pt files in a fast way. This is needed
+    becase pyg Dataloaders do not handle num_workers>0 since Batch() objects
+    cannot be directly serialized using pkl.
 
     Args:
         world_size: number of gpus available
@@ -317,7 +311,8 @@ def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_
         prefetch_factor: number of files to fetch in advance
 
     Returns:
-        a torch iterable() that returns a list of 100 elements, each element is a tuple of size=num_files containing Data() objects
+        a torch iterable() that returns a list of 100 elements,
+        each element is a tuple of size=num_files containing Data() objects
     """
     if world_size > 0:
         return torch.utils.data.DataLoader(
