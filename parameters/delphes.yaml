@@ -50,7 +50,7 @@ setup:
   lr: 1e-4
   num_events_train: 45000
   num_events_test: 5000
-  num_events_validation: 100
+  num_events_validation: 10
   num_epochs: 10
   num_val_files: 5
   dtype: float32

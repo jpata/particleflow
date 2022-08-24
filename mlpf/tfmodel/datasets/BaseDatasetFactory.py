@@ -5,7 +5,6 @@ import heptfds
 #Unpacks a flat target array along the feature axis to a feature dict
 #the feature order is defined in the data prep stage (postprocessing2.py)
 def unpack_target(y, num_output_classes, config):
-    from tfmodel.utils import batched_histogram_2d, histogram_2d
     msk_pid = tf.cast(y[..., 0:1]!=0, tf.float32)
     
     pt = y[..., 2:3]*msk_pid
@@ -13,7 +12,7 @@ def unpack_target(y, num_output_classes, config):
     eta = y[..., 3:4]*msk_pid
     sin_phi = y[..., 4:5]*msk_pid
     cos_phi = y[..., 5:6]*msk_pid
-    phi = tf.math.atan2(sin_phi, cos_phi)*msk_pid
+    jet_idx = y[..., 7:8]*msk_pid
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
@@ -26,7 +25,7 @@ def unpack_target(y, num_output_classes, config):
     }
 
     if config["loss"]["event_loss"] != "none":
-        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi], axis=-1)
+        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
         ret["pt_e_eta_phi"] = pt_e_eta_phi
 
     return ret

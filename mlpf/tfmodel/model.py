@@ -664,11 +664,11 @@ class OutputDecoding(tf.keras.Model):
 
         if self.event_set_output:
             pt_e_eta_phi = tf.concat([
-                pred_pt*msk_input_outtype*msk_output,
-                pred_energy*msk_input_outtype*msk_output,
-                pred_eta*msk_input_outtype*msk_output,
-                pred_sin_phi*msk_input_outtype*msk_output,
-                pred_cos_phi*msk_input_outtype*msk_output
+                pred_pt*msk_input_outtype,
+                pred_energy*msk_input_outtype,
+                pred_eta*msk_input_outtype,
+                pred_sin_phi*msk_input_outtype,
+                pred_cos_phi*msk_input_outtype
                 ], axis=-1)
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
