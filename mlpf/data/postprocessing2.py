@@ -1,40 +1,76 @@
-import sys
+import math
+import os
 import pickle
+
+import matplotlib
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import os
-import awkward
+import tqdm
 import uproot
 import vector
-import math
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import tqdm
-
 from networkx.drawing.nx_pydot import graphviz_layout
 
+matplotlib.use("Agg")
+
 elem_branches = [
-    "typ", "pt", "eta", "phi", "e",
-    "layer", "depth", "charge", "trajpoint", 
-    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
-    "px", "py", "pz", "deltap", "sigmadeltap",
-    "gsf_electronseed_trkorecal", "gsf_electronseed_dnn1", "gsf_electronseed_dnn2", "gsf_electronseed_dnn3", "gsf_electronseed_dnn4", "gsf_electronseed_dnn5",
-    "num_hits", "cluster_flags", "corr_energy", "corr_energy_err", "vx", "vy", "vz", "pterror", "etaerror", "phierror", "lambd", "lambdaerror", "theta", "thetaerror"
+    "typ",
+    "pt",
+    "eta",
+    "phi",
+    "e",
+    "layer",
+    "depth",
+    "charge",
+    "trajpoint",
+    "eta_ecal",
+    "phi_ecal",
+    "eta_hcal",
+    "phi_hcal",
+    "muon_dt_hits",
+    "muon_csc_hits",
+    "muon_type",
+    "px",
+    "py",
+    "pz",
+    "deltap",
+    "sigmadeltap",
+    "gsf_electronseed_trkorecal",
+    "gsf_electronseed_dnn1",
+    "gsf_electronseed_dnn2",
+    "gsf_electronseed_dnn3",
+    "gsf_electronseed_dnn4",
+    "gsf_electronseed_dnn5",
+    "num_hits",
+    "cluster_flags",
+    "corr_energy",
+    "corr_energy_err",
+    "vx",
+    "vy",
+    "vz",
+    "pterror",
+    "etaerror",
+    "phierror",
+    "lambd",
+    "lambdaerror",
+    "theta",
+    "thetaerror",
 ]
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
+
 def map_pdgid_to_candid(pdgid, charge):
-    if pdgid in [22,11,13]:
+    if pdgid in [22, 11, 13]:
         return pdgid
 
-    #charged hadron
-    if abs(charge)>0:
+    # charged hadron
+    if abs(charge) > 0:
         return 211
-    
-    #neutral hadron
+
+    # neutral hadron
     return 130
+
 
 def deltar_pairs(eta_vec, phi_vec, dr_cut):
 
@@ -43,85 +79,129 @@ def deltar_pairs(eta_vec, phi_vec, dr_cut):
 
     dr2 = deta**2 + dphi**2
     dr2 *= np.tri(*dr2.shape)
-    dr2[dr2==0] = 999
+    dr2[dr2 == 0] = 999
 
-    ind_pairs = np.where(dr2<dr_cut)
+    ind_pairs = np.where(dr2 < dr_cut)
 
     return ind_pairs
 
+
 def get_charge(pid):
     abs_pid = abs(pid)
-    if pid in [130,22,1,2]:
+    if pid in [130, 22, 1, 2]:
         return 0.0
-    #13: mu-, 11: e-
-    elif abs_pid in [11,13]:
+    # 13: mu-, 11: e-
+    elif abs_pid in [11, 13]:
         return -math.copysign(1.0, pid)
-    #211: pi+
+    # 211: pi+
     elif abs_pid in [211]:
         return math.copysign(1.0, pid)
     else:
         raise Exception("Unknown pid: ", pid)
 
+
 def save_ego_graph(g, node, radius=4, undirected=False):
     sg = nx.ego_graph(g, node, radius, undirected=undirected).reverse()
 
-    #remove BREM PFElements from plotting 
-    nodes_to_remove = [n for n in sg.nodes if (n[0]=="elem" and sg.nodes[n]["typ"] in [7,])]
+    # remove BREM PFElements from plotting
+    nodes_to_remove = [
+        n
+        for n in sg.nodes
+        if (
+            n[0] == "elem"
+            and sg.nodes[n]["typ"]
+            in [
+                7,
+            ]
+        )
+    ]
     sg.remove_nodes_from(nodes_to_remove)
 
-    fig = plt.figure(figsize=(2*len(sg.nodes)+2, 10))
-    sg_pos = graphviz_layout(sg, prog='dot')
-    
+    fig = plt.figure(figsize=(2 * len(sg.nodes) + 2, 10))
+    sg_pos = graphviz_layout(sg, prog="dot")
+
     edge_labels = {}
     for e in sg.edges:
-        if e[1][iev] == "elem" and not (sg.nodes[e[1]]["typ"] in [1,10]):
+        if e[1][iev] == "elem" and not (sg.nodes[e[1]]["typ"] in [1, 10]):
             edge_labels[e] = "{:.2f} GeV".format(sg.edges[e].get("weight", 0))
         else:
             edge_labels[e] = ""
-    
+
     node_labels = {}
     for node in sg.nodes:
         labels = {"sc": "CaloParticle", "elem": "PFElement", "tp": "TrackingParticle", "pfcand": "PFCandidate"}
         node_labels[node] = "[{label} {idx}] \ntype: {typ}\ne: {e:.4f} GeV\neta: {eta:.4f}".format(
-            label=labels[node[0]], idx=node[1], **sg.nodes[node])
-        tp = sg.nodes[node]["typ"]
-            
+            label=labels[node[0]], idx=node[1], **sg.nodes[node]
+        )
+
     nx.draw_networkx(sg, pos=sg_pos, node_shape=".", node_color="grey", edge_color="grey", node_size=0, alpha=0.5, labels={})
     nx.draw_networkx_labels(sg, pos=sg_pos, labels=node_labels)
-    nx.draw_networkx_edge_labels(sg, pos=sg_pos, edge_labels=edge_labels);
+    nx.draw_networkx_edge_labels(sg, pos=sg_pos, edge_labels=edge_labels)
     plt.tight_layout()
     plt.axis("off")
 
     return fig
+
 
 def draw_event(g):
     pos = {}
     for node in g.nodes:
         pos[node] = (g.nodes[node]["eta"], g.nodes[node]["phi"])
 
-    fig = plt.figure(figsize=(10,10))
-    
-    nodes_to_draw = [n for n in g.nodes if n[0]=="elem"]
-    nx.draw_networkx(g, pos=pos, with_labels=False, node_size=5, nodelist=nodes_to_draw, edgelist=[], node_color="red", node_shape="s", alpha=0.5)
-    
-    nodes_to_draw = [n for n in g.nodes if n[0]=="pfcand"]
-    nx.draw_networkx(g, pos=pos, with_labels=False, node_size=10, nodelist=nodes_to_draw, edgelist=[], node_color="green", node_shape="x", alpha=0.5)
-    
-    nodes_to_draw = [n for n in g.nodes if (n[0]=="sc" or n[0]=="tp")]
-    nx.draw_networkx(g, pos=pos, with_labels=False, node_size=1, nodelist=nodes_to_draw, edgelist=[], node_color="blue", node_shape=".", alpha=0.5)
-   
-    #draw edges between genparticles and elements
+    fig = plt.figure(figsize=(10, 10))
+
+    nodes_to_draw = [n for n in g.nodes if n[0] == "elem"]
+    nx.draw_networkx(
+        g,
+        pos=pos,
+        with_labels=False,
+        node_size=5,
+        nodelist=nodes_to_draw,
+        edgelist=[],
+        node_color="red",
+        node_shape="s",
+        alpha=0.5,
+    )
+
+    nodes_to_draw = [n for n in g.nodes if n[0] == "pfcand"]
+    nx.draw_networkx(
+        g,
+        pos=pos,
+        with_labels=False,
+        node_size=10,
+        nodelist=nodes_to_draw,
+        edgelist=[],
+        node_color="green",
+        node_shape="x",
+        alpha=0.5,
+    )
+
+    nodes_to_draw = [n for n in g.nodes if (n[0] == "sc" or n[0] == "tp")]
+    nx.draw_networkx(
+        g,
+        pos=pos,
+        with_labels=False,
+        node_size=1,
+        nodelist=nodes_to_draw,
+        edgelist=[],
+        node_color="blue",
+        node_shape=".",
+        alpha=0.5,
+    )
+
+    # draw edges between genparticles and elements
     edges_to_draw = [e for e in g.edges if e[0] in nodes_to_draw]
     nx.draw_networkx_edges(g, pos, edgelist=edges_to_draw, arrows=False, alpha=0.1)
-    
-    plt.xlim(-6,6)
-    plt.ylim(-4,4)
+
+    plt.xlim(-6, 6)
+    plt.ylim(-4, 4)
     plt.tight_layout()
     plt.axis("on")
     return fig
 
+
 def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
-    photons = [elem for elem in g.nodes if g.nodes[elem]["typ"]==pid and (elem[0]=="tp" or elem[0]=="sc")]
+    photons = [elem for elem in g.nodes if g.nodes[elem]["typ"] == pid and (elem[0] == "tp" or elem[0] == "sc")]
     phot_eta = [g.nodes[node]["eta"] for node in photons]
     phot_phi = [g.nodes[node]["phi"] for node in photons]
     merge_pairs = []
@@ -133,61 +213,57 @@ def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
         if pair[0] in g.nodes and pair[1] in g.nodes:
             lv = vector.obj(pt=0, eta=0, phi=0, E=0)
             for gp in pair:
-                lv += vector.obj(
-                    pt=g.nodes[gp]["pt"],
-                    eta=g.nodes[gp]["eta"],
-                    phi=g.nodes[gp]["phi"],
-                    E=g.nodes[gp]["e"]
-                )
-                
+                lv += vector.obj(pt=g.nodes[gp]["pt"], eta=g.nodes[gp]["eta"], phi=g.nodes[gp]["phi"], E=g.nodes[gp]["e"])
+
             g.nodes[pair[0]]["pt"] = lv.pt
             g.nodes[pair[0]]["eta"] = lv.eta
             g.nodes[pair[0]]["phi"] = lv.phi
             g.nodes[pair[0]]["e"] = lv.energy
-            
-            #add edge weights from the deleted photon to the remaining photon
+
+            # add edge weights from the deleted photon to the remaining photon
             for suc in g.successors(pair[1]):
                 if (pair[0], suc) in g.edges:
                     g.edges[(pair[0], suc)]["weight"] += g.edges[(pair[1], suc)]["weight"]
             g.remove_nodes_from([pair[1]])
 
+
 def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     g = g.copy()
 
-    #remove genparticles that deposit less than a fraction of their energy
+    # remove genparticles that deposit less than a fraction of their energy
     nodes_to_remove = []
     for node in g.nodes:
-        if node[0]=="sc" or node[0]=="tp":
+        if node[0] == "sc" or node[0] == "tp":
             sw = 0.0
             for edge in g.edges(node):
                 sw += g.edges[edge]["weight"]
-            if sw/g.nodes[node]["e"]<node_energy_threshold:
+            if sw / g.nodes[node]["e"] < node_energy_threshold:
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
 
-    #for each element, remove the incoming edge where the caloparticle deposited less than a threshold of it's energy
+    # for each element, remove the incoming edge where the caloparticle deposited less than a threshold of it's energy
     edges_to_remove = []
     for node in g.nodes:
         if node[0] == "elem":
-            #remove edges that don't contribute above a threshold 
+            # remove edges that don't contribute above a threshold
             ew = [((gen, node), g.edges[gen, node]["weight"]) for gen in g.predecessors(node)]
             ew = sorted(ew, key=lambda x: x[1], reverse=True)
             for edge, weight in ew:
-                if weight/g.nodes[edge[0]]["e"] < edge_energy_threshold:
-                    edges_to_remove += [edge] 
+                if weight / g.nodes[edge[0]]["e"] < edge_energy_threshold:
+                    edges_to_remove += [edge]
     g.remove_edges_from(edges_to_remove)
-    
-    #remove calopart/trackingpart not linked to any elements
-    #as these are not reconstructable in principle
+
+    # remove calopart/trackingpart not linked to any elements
+    # as these are not reconstructable in principle
     nodes_to_remove = []
     for node in g.nodes:
-        if node[0]=="sc" or node[0]=="tp":
+        if node[0] == "sc" or node[0] == "tp":
             deg = g.degree[node]
-            if deg==0:
+            if deg == 0:
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
 
-    #For each truth particle, compute the energy in tracks or calorimeter clusters
+    # For each truth particle, compute the energy in tracks or calorimeter clusters
     for node in g.nodes:
         if node[0] == "sc" or node[0] == "tp":
             E_track = 0.0
@@ -197,20 +273,20 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
             E_hfem = 0.0
             E_hfhad = 0.0
 
-            #remap PID
+            # remap PID
             g.nodes[node]["typ"] = map_pdgid_to_candid(abs(g.nodes[node]["typ"]), g.nodes[node]["charge"])
 
             for suc in g.successors(node):
                 elem_type = g.nodes[suc]["typ"]
-                if elem_type in [1,6]:
+                if elem_type in [1, 6]:
                     E_track += g.edges[node, suc]["weight"]
-                elif elem_type in [4,5,10,11]:
+                elif elem_type in [4, 5, 10, 11]:
                     E_calo += g.edges[node, suc]["weight"]
-                elif elem_type in [8,9]:
+                elif elem_type in [8, 9]:
                     if elem_type == 8:
-                        E_hfem += g.edges[node, suc]["weight"] 
+                        E_hfem += g.edges[node, suc]["weight"]
                     elif elem_type == 9:
-                        E_hfhad += g.edges[node, suc]["weight"] 
+                        E_hfhad += g.edges[node, suc]["weight"]
                     E_hf += g.edges[node, suc]["weight"]
                 else:
                     E_other += g.edges[node, suc]["weight"]
@@ -221,17 +297,17 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
             g.nodes[node]["E_hf"] = E_hf
             g.nodes[node]["E_hfem"] = E_hfem
             g.nodes[node]["E_hfhad"] = E_hfhad
-   
-    #If there are multiple tracks matched to a gen/sim particle, keep the association to the closest one by dR 
-    for node in g.nodes:   
+
+    # If there are multiple tracks matched to a gen/sim particle, keep the association to the closest one by dR
+    for node in g.nodes:
         if node[0] == "sc" or node[0] == "tp":
-            #collect tracks or GSFs
+            # collect tracks or GSFs
             tracks = []
             for suc in g.successors(node):
                 typ = g.nodes[suc]["typ"]
                 if typ == 1 or typ == 6:
                     tracks.append(suc)
-            if len(tracks)>1:
+            if len(tracks) > 1:
                 n0 = g.nodes[node]
                 drs = []
                 for tr in tracks:
@@ -242,22 +318,27 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
                     drs.append(dr2)
                 imin = np.argmin(drs)
 
-                #set the weight of the edge to the other tracks to 0
+                # set the weight of the edge to the other tracks to 0
                 for itr in range(len(tracks)):
                     if itr != imin:
                         g.edges[(node, tracks[itr])]["weight"] = 0.0
- 
+
     for node in g.nodes:
         if node[0] == "sc" or node[0] == "tp":
             typ = g.nodes[node]["typ"]
 
-            #charged particles that leave no track should not be reconstructed as charged 
-            if typ in [211, 13, 11] and g.nodes[node]["E_track"]==0:
+            # charged particles that leave no track should not be reconstructed as charged
+            if typ in [211, 13, 11] and g.nodes[node]["E_track"] == 0:
                 g.nodes[node]["typ"] = 130
                 g.nodes[node]["charge"] = 0
-            
-            #if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate
-            if (g.nodes[node]["E_track"]==0) and (g.nodes[node]["E_calo"]==0) and (g.nodes[node]["E_other"]==0) and g.nodes[node]["E_hf"]>0:
+
+            # if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate
+            if (
+                (g.nodes[node]["E_track"] == 0)
+                and (g.nodes[node]["E_calo"] == 0)
+                and (g.nodes[node]["E_other"] == 0)
+                and g.nodes[node]["E_hf"] > 0
+            ):
                 if g.nodes[node]["E_hfhad"] > g.nodes[node]["E_hfem"]:
                     g.nodes[node]["typ"] = 1
                     g.nodes[node]["charge"] = 0
@@ -265,8 +346,8 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
                     g.nodes[node]["typ"] = 2
                     g.nodes[node]["charge"] = 0
 
-    #CaloParticles contain a lot of electrons and muons with a soft pt spectrum
-    #these should not be attempted to be reconstructed as ele/mu, but rather as charged or neutral hadrons
+    # CaloParticles contain a lot of electrons and muons with a soft pt spectrum
+    # these should not be attempted to be reconstructed as ele/mu, but rather as charged or neutral hadrons
     for node in g.nodes:
         if node[0] == "sc" or node[0] == "tp":
             nd = g.nodes[node]
@@ -276,8 +357,8 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
                 else:
                     g.nodes[node]["typ"] = 130
                     g.nodes[node]["charge"] = 0
-    
-    #merge close-by neutral particles
+
+    # merge close-by neutral particles
     merge_closeby_particles(g, 22)
     merge_closeby_particles(g, 130)
     merge_closeby_particles(g, 1)
@@ -285,8 +366,9 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
 
     return g
 
+
 def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
-    #rg = g.reverse()
+    # rg = g.reverse()
 
     all_genparticles = []
     all_elements = []
@@ -301,15 +383,15 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     all_genparticles = list(set(all_genparticles))
     all_elements = sorted(all_elements)
 
-    #assign genparticles in reverse energy order uniquely to best element
-    elem_to_gp = {} #map of element -> genparticles
+    # assign genparticles in reverse energy order uniquely to best element
+    elem_to_gp = {}  # map of element -> genparticles
     unmatched_gp = []
     for gp in sorted(all_genparticles, key=lambda x: g.nodes[x]["e"], reverse=True):
         elems = [e for e in g.successors(gp)]
 
-        #sort elements by energy deposit from genparticle
+        # sort elements by energy deposit from genparticle
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
-            
+
         chosen_elem = None
         for weight, elem in elems_sorted:
             if not (elem in elem_to_gp):
@@ -322,39 +404,39 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         else:
             elem_to_gp[elem] += [gp]
 
-    #assign unmatched genparticles to best element, allowing for overlaps
+    # assign unmatched genparticles to best element, allowing for overlaps
     for gp in sorted(unmatched_gp, key=lambda x: g.nodes[x]["e"], reverse=True):
         elems = [e for e in g.successors(gp)]
         elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
         _, elem = elems_sorted[0]
         elem_to_gp[elem] += [gp]
- 
-    unmatched_cand = [] 
+
+    unmatched_cand = []
     elem_to_cand = {}
 
-    #Find primary element for each PFCandidate
+    # Find primary element for each PFCandidate
     for cand in sorted(all_pfcandidates, key=lambda x: g.nodes[x]["e"], reverse=True):
         tp = g.nodes[cand]["typ"]
         neighbors = list(g.predecessors(cand))
 
         chosen_elem = None
 
-        #Pions, muons and electrons will be assigned to the best associated track
+        # Pions, muons and electrons will be assigned to the best associated track
         if tp in [211, 13, 11]:
             for elem in neighbors:
                 tp_neighbor = g.nodes[elem]["typ"]
 
-                #track or gsf
-                if tp_neighbor==1 or tp_neighbor==6:
+                # track or gsf
+                if tp_neighbor == 1 or tp_neighbor == 6:
                     if not (elem in elem_to_cand):
                         chosen_elem = elem
                         elem_to_cand[elem] = cand
                         break
 
-        #other particles will be assigned to the highest-energy cluster (ECAL, HCAL, HFEM, HFHAD, SC)
+        # other particles will be assigned to the highest-energy cluster (ECAL, HCAL, HFEM, HFHAD, SC)
         else:
-            #neighbors = [n for n in neighbors if g.nodes[n]["typ"] in [4,5,8,9,10]]
-            #sorted_neighbors = sorted(neighbors, key=lambda x: g.nodes[x]["e"], reverse=True)
+            # neighbors = [n for n in neighbors if g.nodes[n]["typ"] in [4,5,8,9,10]]
+            # sorted_neighbors = sorted(neighbors, key=lambda x: g.nodes[x]["e"], reverse=True)
             sorted_neighbors = sorted(neighbors, key=lambda x: g.edges[(x, cand)]["weight"], reverse=True)
             for elem in sorted_neighbors:
                 if not (elem in elem_to_cand):
@@ -363,7 +445,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                     break
 
         if chosen_elem is None:
-            #print("unmatched candidate {}, {}".format(cand, g.nodes[cand]))
+            # print("unmatched candidate {}, {}".format(cand, g.nodes[cand]))
             unmatched_cand += [cand]
 
     Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
@@ -372,10 +454,9 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     ygen.fill(0.0)
     ycand = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
     ycand.fill(0.0)
- 
+
     for ielem, elem in enumerate(all_elements):
         elem_type = g.nodes[elem]["typ"]
-        elem_eta = g.nodes[elem]["eta"]
         genparticles = sorted(elem_to_gp.get(elem, []), key=lambda x: g.edges[(x, elem)]["weight"], reverse=True)
         genparticles = [gp for gp in genparticles if g.nodes[gp]["e"] > genparticle_energy_threshold]
         candidate = elem_to_cand.get(elem, None)
@@ -387,37 +468,49 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             for j in range(len(target_branches)):
                 ycand[target_branches[j]][ielem] = g.nodes[candidate][target_branches[j]]
 
-        lv = vector.obj(x=0,y=0,z=0,t=0)
-        if len(genparticles)>0:
+        lv = vector.obj(x=0, y=0, z=0, t=0)
+        if len(genparticles) > 0:
 
-            # print("elem type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(g.nodes[elem]["typ"], g.nodes[elem]["e"], g.nodes[elem]["eta"], g.nodes[elem]["phi"], g.nodes[elem]["charge"]))
+            # print(
+            #     "elem type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(
+            #         g.nodes[elem]["typ"],
+            #         g.nodes[elem]["e"],
+            #         g.nodes[elem]["eta"],
+            #         g.nodes[elem]["phi"],
+            #         g.nodes[elem]["charge"],
+            #     )
+            # )
             # for gp in genparticles:
-            #     print("  gp type={} E={:.2f} eta={:.2f} phi={:.2f} q={} w={:.2f}".format(g.nodes[gp]["typ"], g.nodes[gp]["e"], g.nodes[gp]["eta"], g.nodes[gp]["phi"], g.nodes[gp]["charge"], g.edges[(gp, elem)]["weight"]))
-                
+            #     print(
+            #         "  gp type={} E={:.2f} eta={:.2f} phi={:.2f} q={} w={:.2f}".format(
+            #             g.nodes[gp]["typ"],
+            #             g.nodes[gp]["e"],
+            #             g.nodes[gp]["eta"],
+            #             g.nodes[gp]["phi"],
+            #             g.nodes[gp]["charge"],
+            #             g.edges[(gp, elem)]["weight"],
+            #         )
+            #     )
+
             pid = g.nodes[genparticles[0]]["typ"]
             charge = g.nodes[genparticles[0]]["charge"]
 
             for gp in genparticles:
-                lv += vector.obj(
-                    pt=g.nodes[gp]["pt"],
-                    eta=g.nodes[gp]["eta"],
-                    phi=g.nodes[gp]["phi"],
-                    e=g.nodes[gp]["e"]
-                )
+                lv += vector.obj(pt=g.nodes[gp]["pt"], eta=g.nodes[gp]["eta"], phi=g.nodes[gp]["phi"], e=g.nodes[gp]["e"])
 
-            #remap PID in case of HCAL cluster to neutral
+            # remap PID in case of HCAL cluster to neutral
             if elem_type == 5 and (pid == 22 or pid == 11):
                 pid = 130
 
-            #remap forward region to HFHAD or HFEM
-            if elem_type in [8,9]:
+            # remap forward region to HFHAD or HFEM
+            if elem_type in [8, 9]:
                 if pid == 130:
                     pid = 1
                 elif pid == 22:
                     pid = 2
-       
-            #Remap HF candidates to neutral hadron or photon in case not matched to HF
-            if elem_type in [2,3,4,5]:
+
+            # Remap HF candidates to neutral hadron or photon in case not matched to HF
+            if elem_type in [2, 3, 4, 5]:
                 if pid == 1:
                     pid = 130
                 elif pid == 2:
@@ -433,90 +526,94 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                 "px": lv.x,
                 "py": lv.y,
                 "pz": lv.z,
-                "charge": charge if pid in [211,11,13] else 0
+                "charge": charge if pid in [211, 11, 13] else 0,
             }
-            #print("  mlpf: type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(pid, lv.t, lv.eta, lv.phi, gp["charge"]))
+            # print("  mlpf: type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(pid, lv.t, lv.eta, lv.phi, gp["charge"]))
 
             for j in range(len(target_branches)):
                 ygen[target_branches[j]][ielem] = gp[target_branches[j]]
 
     return Xelem, ycand, ygen
-#end of prepare_normalized_table
+
+
+# end of prepare_normalized_table
+
 
 def make_graph(ev, iev):
-    element_type = ev['element_type'][iev]
-    element_pt = ev['element_pt'][iev]
-    element_e = ev['element_energy'][iev]
-    element_eta = ev['element_eta'][iev]
-    element_phi = ev['element_phi'][iev]
-    element_eta_ecal = ev['element_eta_ecal'][iev]
-    element_phi_ecal = ev['element_phi_ecal'][iev]
-    element_eta_hcal = ev['element_eta_hcal'][iev]
-    element_phi_hcal = ev['element_phi_hcal'][iev]
-    element_trajpoint = ev['element_trajpoint'][iev]
-    element_layer = ev['element_layer'][iev]
-    element_charge = ev['element_charge'][iev]
-    element_depth = ev['element_depth'][iev]
-    element_deltap = ev['element_deltap'][iev]
-    element_sigmadeltap = ev['element_sigmadeltap'][iev]
-    element_px = ev['element_px'][iev]
-    element_py = ev['element_py'][iev]
-    element_pz = ev['element_pz'][iev]
-    element_muon_dt_hits = ev['element_muon_dt_hits'][iev]
-    element_muon_csc_hits = ev['element_muon_csc_hits'][iev]
-    element_muon_type = ev['element_muon_type'][iev]
-    element_gsf_electronseed_trkorecal = ev['element_gsf_electronseed_trkorecal'][iev]
-    element_gsf_electronseed_dnn1 = ev['element_gsf_electronseed_dnn1'][iev]
-    element_gsf_electronseed_dnn2 = ev['element_gsf_electronseed_dnn2'][iev]
-    element_gsf_electronseed_dnn3 = ev['element_gsf_electronseed_dnn3'][iev]
-    element_gsf_electronseed_dnn4 = ev['element_gsf_electronseed_dnn4'][iev]
-    element_gsf_electronseed_dnn5 = ev['element_gsf_electronseed_dnn5'][iev]
-    element_num_hits = ev['element_num_hits'][iev]
-    element_cluster_flags = ev['element_cluster_flags'][iev]
-    element_corr_energy = ev['element_corr_energy'][iev]
-    element_corr_energy_err = ev['element_corr_energy_err'][iev]
-    element_pterror = ev['element_pterror'][iev]
-    element_etaerror = ev['element_etaerror'][iev]
-    element_phierror = ev['element_phierror'][iev]
-    element_lambda = ev['element_lambda'][iev]
-    element_theta = ev['element_theta'][iev]
-    element_lambdaerror = ev['element_lambdaerror'][iev]
-    element_thetaerror = ev['element_thetaerror'][iev]
-    element_vx = ev['element_vx'][iev]
-    element_vy = ev['element_vy'][iev]
-    element_vz = ev['element_vz'][iev]
+    element_type = ev["element_type"][iev]
+    element_pt = ev["element_pt"][iev]
+    element_e = ev["element_energy"][iev]
+    element_eta = ev["element_eta"][iev]
+    element_phi = ev["element_phi"][iev]
+    element_eta_ecal = ev["element_eta_ecal"][iev]
+    element_phi_ecal = ev["element_phi_ecal"][iev]
+    element_eta_hcal = ev["element_eta_hcal"][iev]
+    element_phi_hcal = ev["element_phi_hcal"][iev]
+    element_trajpoint = ev["element_trajpoint"][iev]
+    element_layer = ev["element_layer"][iev]
+    element_charge = ev["element_charge"][iev]
+    element_depth = ev["element_depth"][iev]
+    element_deltap = ev["element_deltap"][iev]
+    element_sigmadeltap = ev["element_sigmadeltap"][iev]
+    element_px = ev["element_px"][iev]
+    element_py = ev["element_py"][iev]
+    element_pz = ev["element_pz"][iev]
+    element_muon_dt_hits = ev["element_muon_dt_hits"][iev]
+    element_muon_csc_hits = ev["element_muon_csc_hits"][iev]
+    element_muon_type = ev["element_muon_type"][iev]
+    element_gsf_electronseed_trkorecal = ev["element_gsf_electronseed_trkorecal"][iev]
+    element_gsf_electronseed_dnn1 = ev["element_gsf_electronseed_dnn1"][iev]
+    element_gsf_electronseed_dnn2 = ev["element_gsf_electronseed_dnn2"][iev]
+    element_gsf_electronseed_dnn3 = ev["element_gsf_electronseed_dnn3"][iev]
+    element_gsf_electronseed_dnn4 = ev["element_gsf_electronseed_dnn4"][iev]
+    element_gsf_electronseed_dnn5 = ev["element_gsf_electronseed_dnn5"][iev]
+    element_num_hits = ev["element_num_hits"][iev]
+    element_cluster_flags = ev["element_cluster_flags"][iev]
+    element_corr_energy = ev["element_corr_energy"][iev]
+    element_corr_energy_err = ev["element_corr_energy_err"][iev]
+    element_pterror = ev["element_pterror"][iev]
+    element_etaerror = ev["element_etaerror"][iev]
+    element_phierror = ev["element_phierror"][iev]
+    element_lambda = ev["element_lambda"][iev]
+    element_theta = ev["element_theta"][iev]
+    element_lambdaerror = ev["element_lambdaerror"][iev]
+    element_thetaerror = ev["element_thetaerror"][iev]
+    element_vx = ev["element_vx"][iev]
+    element_vy = ev["element_vy"][iev]
+    element_vz = ev["element_vz"][iev]
 
-    trackingparticle_pid = ev['trackingparticle_pid'][iev]
-    trackingparticle_charge = ev['trackingparticle_charge'][iev]
-    trackingparticle_pt = ev['trackingparticle_pt'][iev]
-    trackingparticle_e = ev['trackingparticle_energy'][iev]
-    trackingparticle_eta = ev['trackingparticle_eta'][iev]
-    trackingparticle_phi = ev['trackingparticle_phi'][iev]
-    trackingparticle_ev = ev['trackingparticle_ev'][iev]
+    trackingparticle_pid = ev["trackingparticle_pid"][iev]
+    trackingparticle_charge = ev["trackingparticle_charge"][iev]
+    trackingparticle_pt = ev["trackingparticle_pt"][iev]
+    trackingparticle_e = ev["trackingparticle_energy"][iev]
+    trackingparticle_eta = ev["trackingparticle_eta"][iev]
+    trackingparticle_phi = ev["trackingparticle_phi"][iev]
+    trackingparticle_ev = ev["trackingparticle_ev"][iev]
 
-    caloparticle_pid = ev['caloparticle_pid'][iev]
-    caloparticle_charge = ev['caloparticle_charge'][iev]
-    caloparticle_pt = ev['caloparticle_pt'][iev]
-    caloparticle_e = ev['caloparticle_energy'][iev]
-    caloparticle_eta = ev['caloparticle_eta'][iev]
-    caloparticle_phi = ev['caloparticle_phi'][iev]
-    caloparticle_ev = ev['caloparticle_ev'][iev]
-    caloparticle_idx_trackingparticle = ev['caloparticle_idx_trackingparticle'][iev]
+    caloparticle_pid = ev["caloparticle_pid"][iev]
+    caloparticle_charge = ev["caloparticle_charge"][iev]
+    caloparticle_pt = ev["caloparticle_pt"][iev]
+    caloparticle_e = ev["caloparticle_energy"][iev]
+    caloparticle_eta = ev["caloparticle_eta"][iev]
+    caloparticle_phi = ev["caloparticle_phi"][iev]
+    caloparticle_ev = ev["caloparticle_ev"][iev]
+    caloparticle_idx_trackingparticle = ev["caloparticle_idx_trackingparticle"][iev]
 
-    pfcandidate_pdgid = ev['pfcandidate_pdgid'][iev]
-    pfcandidate_pt = ev['pfcandidate_pt'][iev]
-    pfcandidate_e = ev['pfcandidate_energy'][iev]
-    pfcandidate_eta = ev['pfcandidate_eta'][iev]
-    pfcandidate_phi = ev['pfcandidate_phi'][iev]
-    
-    #gen_pt = ev['gen_pt'][iev]
-    #gen_e = ev['gen_energy'][iev]
-    #gen_eta = ev['gen_eta'][iev]
-    #gen_phi = ev['gen_phi'][iev]
+    pfcandidate_pdgid = ev["pfcandidate_pdgid"][iev]
+    pfcandidate_pt = ev["pfcandidate_pt"][iev]
+    pfcandidate_e = ev["pfcandidate_energy"][iev]
+    pfcandidate_eta = ev["pfcandidate_eta"][iev]
+    pfcandidate_phi = ev["pfcandidate_phi"][iev]
+
+    # gen_pt = ev['gen_pt'][iev]
+    # gen_e = ev['gen_energy'][iev]
+    # gen_eta = ev['gen_eta'][iev]
+    # gen_phi = ev['gen_phi'][iev]
 
     g = nx.DiGraph()
     for iobj in range(len(element_type)):
-        g.add_node(("elem", iobj),
+        g.add_node(
+            ("elem", iobj),
             typ=element_type[iobj],
             pt=element_pt[iobj],
             e=element_e[iobj],
@@ -560,28 +657,31 @@ def make_graph(ev, iev):
             vz=element_vz[iobj],
         )
     for iobj in range(len(trackingparticle_pid)):
-        g.add_node(("tp", iobj),
+        g.add_node(
+            ("tp", iobj),
             typ=trackingparticle_pid[iobj],
             charge=trackingparticle_charge[iobj],
             pt=trackingparticle_pt[iobj],
             e=trackingparticle_e[iobj],
             eta=trackingparticle_eta[iobj],
             phi=trackingparticle_phi[iobj],
-            ispu=trackingparticle_ev[iobj]!=0,
+            ispu=trackingparticle_ev[iobj] != 0,
         )
     for iobj in range(len(caloparticle_pid)):
-        g.add_node(("sc", iobj),
+        g.add_node(
+            ("sc", iobj),
             typ=caloparticle_pid[iobj],
             charge=caloparticle_charge[iobj],
             pt=caloparticle_pt[iobj],
             e=caloparticle_e[iobj],
             eta=caloparticle_eta[iobj],
             phi=caloparticle_phi[iobj],
-            ispu=caloparticle_ev[iobj]!=0,
+            ispu=caloparticle_ev[iobj] != 0,
         )
 
     for iobj in range(len(pfcandidate_pdgid)):
-        g.add_node(("pfcand", iobj),
+        g.add_node(
+            ("pfcand", iobj),
             typ=abs(pfcandidate_pdgid[iobj]),
             pt=pfcandidate_pt[iobj],
             e=pfcandidate_e[iobj],
@@ -591,37 +691,40 @@ def make_graph(ev, iev):
             charge=get_charge(pfcandidate_pdgid[iobj]),
         )
 
-    trackingparticle_to_element_first = ev['trackingparticle_to_element.first'][iev]
-    trackingparticle_to_element_second = ev['trackingparticle_to_element.second'][iev]
-    trackingparticle_to_element_cmp = ev['trackingparticle_to_element_cmp'][iev]
-    #for trackingparticles associated to elements, set a very high edge weight
-    for tp, elem, c in zip(trackingparticle_to_element_first, trackingparticle_to_element_second, trackingparticle_to_element_cmp):
+    trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
+    trackingparticle_to_element_second = ev["trackingparticle_to_element.second"][iev]
+    trackingparticle_to_element_cmp = ev["trackingparticle_to_element_cmp"][iev]
+    # for trackingparticles associated to elements, set a very high edge weight
+    for tp, elem, c in zip(
+        trackingparticle_to_element_first, trackingparticle_to_element_second, trackingparticle_to_element_cmp
+    ):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("tp", tp), ("elem", elem), weight=float("inf"))
- 
-    caloparticle_to_element_first = ev['caloparticle_to_element.first'][iev]
-    caloparticle_to_element_second = ev['caloparticle_to_element.second'][iev]
-    caloparticle_to_element_cmp = ev['caloparticle_to_element_cmp'][iev]
+
+    caloparticle_to_element_first = ev["caloparticle_to_element.first"][iev]
+    caloparticle_to_element_second = ev["caloparticle_to_element.second"][iev]
+    caloparticle_to_element_cmp = ev["caloparticle_to_element_cmp"][iev]
     for sc, elem, c in zip(caloparticle_to_element_first, caloparticle_to_element_second, caloparticle_to_element_cmp):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("sc", sc), ("elem", elem), weight=c)
 
-    #merge caloparticles and trackingparticles that refer to the same particle
+    # merge caloparticles and trackingparticles that refer to the same particle
     nodes_to_remove = []
     for idx_sc, idx_tp in enumerate(caloparticle_idx_trackingparticle):
         if idx_tp != -1:
             for elem in g.neighbors(("sc", idx_sc)):
-                g.add_edge(("tp", idx_tp), elem, weight=g.edges[("sc", idx_sc), elem]["weight"]) 
-            g.nodes[("tp", idx_tp)]["idx_sc"] = idx_sc   
+                g.add_edge(("tp", idx_tp), elem, weight=g.edges[("sc", idx_sc), elem]["weight"])
+            g.nodes[("tp", idx_tp)]["idx_sc"] = idx_sc
             nodes_to_remove += [("sc", idx_sc)]
     g.remove_nodes_from(nodes_to_remove)
 
-    element_to_candidate_first = ev['element_to_candidate.first'][iev]
-    element_to_candidate_second = ev['element_to_candidate.second'][iev]
+    element_to_candidate_first = ev["element_to_candidate.first"][iev]
+    element_to_candidate_second = ev["element_to_candidate.second"][iev]
     for elem, pfcand in zip(element_to_candidate_first, element_to_candidate_second):
         g.add_edge(("elem", elem), ("pfcand", pfcand), weight=1.0)
 
     return g
+
 
 def gen_e(g):
     etot_gen = 0.0
@@ -633,11 +736,12 @@ def gen_e(g):
             etot_pf += g.nodes[node]["e"]
     return etot_gen, etot_pf
 
+
 def process(args):
     infile = args.input
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
-    
+
     if "ana" in tf:
         tt = tf["ana/pftree"]
     elif "pfana" in tf:
@@ -647,16 +751,15 @@ def process(args):
 
     if args.num_events == -1:
         args.num_events = tt.num_entries
-    events_to_process = [i for i in range(args.num_events)] 
+    events_to_process = [i for i in range(args.num_events)]
 
     all_data = []
-    ifile = 0
     ev = tt.arrays(library="np")
     for iev in tqdm.tqdm(events_to_process):
 
         g = make_graph(ev, iev)
         g = cleanup_graph(g)
-        
+
         # for elem in g.nodes:
         #     if elem[0]=="tp" or elem[0]=="sc":
         #         if g.nodes[elem]["typ"] == 11:
@@ -664,7 +767,7 @@ def process(args):
         #             for suc in g.successors(elem):
         #                 print("  ", suc, g.nodes[suc]["typ"], g.edges[(elem, suc)]["weight"])
 
-        #associate target particles to input elements
+        # associate target particles to input elements
         Xelem, ycand, ygen = prepare_normalized_table(g)
         data = {}
 
@@ -683,8 +786,10 @@ def process(args):
     with open(outpath + ".pkl", "wb") as fi:
         pickle.dump(all_data, fi)
 
+
 def parse_args():
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
@@ -694,7 +799,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
 if __name__ == "__main__":
     args = parse_args()
     process(args)
-

@@ -1,7 +1,8 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
-import matplotlib.pyplot as plt
-from pathlib import Path
 
 
 class LRFinder(Callback):

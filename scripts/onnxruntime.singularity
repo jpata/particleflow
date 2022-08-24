@@ -17,4 +17,4 @@ From: nvcr.io/nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
 %environment
 
 %runscript
-    /bin/bash 
+    /bin/bash

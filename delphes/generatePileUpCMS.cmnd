@@ -46,7 +46,7 @@ MultipartonInteractions:pT0Ref = 2.09
 MultipartonInteractions:alphaSvalue = 0.126
 # BeamRemnants:reconnectRange  = 1.71
 
-#Pythia settings 
+#Pythia settings
 #PhaseSpace:mHatMin = 100.
 #PhaseSpace:mHatMax = 10000
 #PhaseSpace:pTHatMin = 40
@@ -69,4 +69,3 @@ ColourReconnection:range=1.71
 SoftQCD:nonDiffractive = on
 SoftQCD:singleDiffractive = on
 SoftQCD:doubleDiffractive = on
-

@@ -1,36 +1,43 @@
-from pyg import parse_args
-from pyg import PFGraphDataset
-from pyg import MLPF, training_loop, make_predictions, postprocess_predictions, make_plots_cms
-from pyg import save_model, load_model
-from pyg import features_delphes, features_cms, target_p4
-from pyg import make_file_loaders
-
-import torch
-import torch_geometric
-from torch_geometric.loader import DataLoader, DataListLoader
-from torch_geometric.data import Data, Batch
-
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-
-import mplhep as hep
-import time
-import matplotlib.pyplot as plt
-from glob import glob
-import sys
-import os
-import os.path as osp
-import shutil
-import pickle as pkl
 import json
 import math
+import os
+import os.path as osp
+import pickle as pkl
+import shutil
+import sys
 import time
-import tqdm
+from glob import glob
+
+import matplotlib
+import matplotlib.pyplot as plt
+import mplhep as hep
 import numpy as np
 import pandas as pd
 import sklearn
-import matplotlib
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+import torch_geometric
+import tqdm
+from pyg import (
+    MLPF,
+    PFGraphDataset,
+    features_cms,
+    features_delphes,
+    load_model,
+    make_file_loaders,
+    make_plots_cms,
+    make_predictions,
+    parse_args,
+    postprocess_predictions,
+    save_model,
+    target_p4,
+    training_loop,
+)
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch_geometric.data import Batch, Data
+from torch_geometric.loader import DataListLoader, DataLoader
+
 matplotlib.use("Agg")
 
 
@@ -41,13 +48,13 @@ Author: Farouk Mokhtar
 """
 
 # Ignore divide by 0 errors
-np.seterr(divide='ignore', invalid='ignore')
+np.seterr(divide="ignore", invalid="ignore")
 
 # define the global base device
 if torch.cuda.device_count():
-    device = torch.device('cuda:0')
+    device = torch.device("cuda:0")
 else:
-    device = 'cpu'
+    device = "cpu"
 
 
 def setup(rank, world_size):
@@ -60,11 +67,11 @@ def setup(rank, world_size):
     world_size: number of gpus available
     """
 
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)   # should be faster for DistributedDataParallel on gpus
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)  # should be faster for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -87,11 +94,12 @@ def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
 
     # mp.set_start_method('forkserver')
 
-    mp.spawn(demo_fn,
-             args=(world_size, args, dataset, model, num_classes, outpath),
-             nprocs=world_size,
-             join=True,
-             )
+    mp.spawn(
+        demo_fn,
+        args=(world_size, args, dataset, model, num_classes, outpath),
+        nprocs=world_size,
+        join=True,
+    )
 
 
 def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
@@ -111,23 +119,41 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     hyper_valid = int(args.n_valid / world_size)
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
-    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid))
+    valid_dataset = torch.utils.data.Subset(
+        dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
+    )
 
     # construct file loaders
-    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_train = make_file_loaders(
+        world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
+    file_loader_valid = make_file_loaders(
+        world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
 
     # copy the model to the GPU with id=rank
-    print(f'Copying the model on rank {rank}..')
+    print(f"Copying the model on rank {rank}..")
     model = model.to(rank)
     model.train()
     ddp_model = DDP(model, device_ids=[rank])
 
     optimizer = torch.optim.Adam(ddp_model.parameters(), lr=args.lr)
 
-    training_loop(rank, args.data, ddp_model, file_loader_train, file_loader_valid,
-                  args.batch_size, args.n_epochs, args.patience,
-                  optimizer, args.alpha, args.target, num_classes, outpath)
+    training_loop(
+        rank,
+        args.data,
+        ddp_model,
+        file_loader_train,
+        file_loader_valid,
+        args.batch_size,
+        args.n_epochs,
+        args.patience,
+        optimizer,
+        args.alpha,
+        args.target,
+        num_classes,
+        outpath,
+    )
 
     cleanup()
 
@@ -149,10 +175,12 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     test_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
 
     # construct data loaders
-    file_loader_test = make_file_loaders(world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_test = make_file_loaders(
+        world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
 
     # copy the model to the GPU with id=rank
-    print(f'Copying the model on rank {rank}..')
+    print(f"Copying the model on rank {rank}..")
     model = model.to(rank)
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
@@ -167,7 +195,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
     A train() function that will load the training dataset and start a training_loop on a single device (cuda or cpu).
     """
 
-    if device == 'cpu':
+    if device == "cpu":
         print(f"Running training on cpu")
     else:
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
@@ -177,8 +205,12 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
     valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
 
     # construct file loaders
-    file_loader_train = make_file_loaders(world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-    file_loader_valid = make_file_loaders(world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_train = make_file_loaders(
+        world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
+    file_loader_valid = make_file_loaders(
+        world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
 
     # move the model to the device (cuda or cpu)
     model = model.to(device)
@@ -186,9 +218,21 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    training_loop(device, args.data, model, file_loader_train, file_loader_valid,
-                  args.batch_size, args.n_epochs, args.patience,
-                  optimizer, args.alpha, args.target, num_classes, outpath)
+    training_loop(
+        device,
+        args.data,
+        model,
+        file_loader_train,
+        file_loader_valid,
+        args.batch_size,
+        args.n_epochs,
+        args.patience,
+        optimizer,
+        args.alpha,
+        args.target,
+        num_classes,
+        outpath,
+    )
 
 
 def inference(device, world_size, args, dataset, model, num_classes, PATH):
@@ -196,7 +240,7 @@ def inference(device, world_size, args, dataset, model, num_classes, PATH):
     An inference() function that will load the testing dataset and start running inference on a single device (cuda or cpu).
     """
 
-    if device == 'cpu':
+    if device == "cpu":
         print(f"Running inference on cpu")
     else:
         print(f"Running inference on: {torch.cuda.get_device_name(device)}")
@@ -205,7 +249,9 @@ def inference(device, world_size, args, dataset, model, num_classes, PATH):
     test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
 
     # construct data loaders
-    file_loader_test = make_file_loaders(world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+    file_loader_test = make_file_loaders(
+        world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+    )
 
     # copy the model to the GPU with id=rank
     model = model.to(device)
@@ -223,12 +269,12 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
 
     # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
-    if args.data == 'delphes':
+    if args.data == "delphes":
         input_dim = len(features_delphes)
-        num_classes = 6   # we have 6 classes/pids for delphes
-    elif args.data == 'cms':
+        num_classes = 6  # we have 6 classes/pids for delphes
+    elif args.data == "cms":
         input_dim = len(features_cms)
-        num_classes = 9   # we have 9 classes/pids for cms (including taus)
+        num_classes = 9  # we have 9 classes/pids for cms (including taus)
     output_dim_p4 = len(target_p4)
 
     outpath = osp.join(args.outpath, args.model_prefix)
@@ -241,17 +287,18 @@ if __name__ == "__main__":
         model.load_state_dict(state_dict)
 
     else:
-        model_kwargs = {'input_dim': input_dim,
-                        'num_classes': num_classes,
-                        'output_dim_p4': output_dim_p4,
-                        'embedding_dim': args.embedding_dim,
-                        'hidden_dim1': args.hidden_dim1,
-                        'hidden_dim2': args.hidden_dim2,
-                        'num_convs': args.num_convs,
-                        'space_dim': args.space_dim,
-                        'propagate_dim': args.propagate_dim,
-                        'k': args.nearest,
-                        }
+        model_kwargs = {
+            "input_dim": input_dim,
+            "num_classes": num_classes,
+            "output_dim_p4": output_dim_p4,
+            "embedding_dim": args.embedding_dim,
+            "hidden_dim1": args.hidden_dim1,
+            "hidden_dim2": args.hidden_dim2,
+            "num_convs": args.num_convs,
+            "space_dim": args.space_dim,
+            "propagate_dim": args.propagate_dim,
+            "k": args.nearest,
+        }
 
         model = MLPF(**model_kwargs)
 
@@ -272,7 +319,7 @@ if __name__ == "__main__":
             train(device, world_size, args, dataset, model, num_classes, outpath)
 
         # load the best epoch state
-        state_dict = torch.load(outpath + '/best_epoch_weights.pth', map_location=device)
+        state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
         model.load_state_dict(state_dict)
 
     # specify which epoch/state to load to run the inference and make plots
@@ -280,21 +327,22 @@ if __name__ == "__main__":
         epoch_to_load = args.load_epoch
     else:
         import json
-        epoch_to_load = json.load(open(f'{outpath}/best_epoch.json'))['best_epoch']
 
-    PATH = f'{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/'
-    pred_path = f'{PATH}/predictions/'
-    plot_path = f'{PATH}/plots/'
+        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
+
+    PATH = f"{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/"
+    pred_path = f"{PATH}/predictions/"
+    plot_path = f"{PATH}/plots/"
 
     # run the inference
     if args.make_predictions:
 
         if not os.path.exists(PATH):
             os.makedirs(PATH)
-        if not os.path.exists(f'{PATH}/predictions/'):
-            os.makedirs(f'{PATH}/predictions/')
-        if not os.path.exists(f'{PATH}/plots/'):
-            os.makedirs(f'{PATH}/plots/')
+        if not os.path.exists(f"{PATH}/predictions/"):
+            os.makedirs(f"{PATH}/predictions/")
+        if not os.path.exists(f"{PATH}/plots/"):
+            os.makedirs(f"{PATH}/plots/")
 
         # run the inference using DDP if more than one gpu is available
         dataset_test = PFGraphDataset(args.dataset_test, args.data)
@@ -312,5 +360,5 @@ if __name__ == "__main__":
         if not osp.isdir(plot_path):
             os.makedirs(plot_path)
 
-        if args.data == 'cms':
+        if args.data == "cms":
             make_plots_cms(pred_path, plot_path, args.sample)

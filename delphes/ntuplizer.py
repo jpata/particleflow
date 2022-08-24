@@ -1,26 +1,26 @@
-import ROOT
-import numpy as np
-import networkx as nx
-from collections import Counter
-import uproot_methods
+import bz2
 import math
+import multiprocessing
 import pickle
 import sys
-import multiprocessing
-import bz2
+
+import networkx as nx
+import numpy as np
+import ROOT
+import uproot_methods
 
 ROOT.gSystem.Load("libDelphes.so")
 ROOT.gInterpreter.Declare('#include "classes/DelphesClasses.h"')
 
-#for debugging
+# for debugging
 save_full_graphs = False
 
-#0 - nothing associated
-#1 - charged hadron
-#2 - neutral hadron
-#3 - photon
-#4 - electron
-#5 - muon
+# 0 - nothing associated
+# 1 - charged hadron
+# 2 - neutral hadron
+# 3 - photon
+# 4 - electron
+# 5 - muon
 gen_pid_encoding = {
     211: 1,
     130: 2,
@@ -29,15 +29,17 @@ gen_pid_encoding = {
     13: 5,
 }
 
-#check if a genparticle has an associated reco track
+
+# check if a genparticle has an associated reco track
 def particle_has_track(g, particle):
     for e in g.edges(particle):
         if e[1][0] == "track":
             return True
     return False
 
-#go through all the genparticles associated in the tower that do not have a track
-#returns the sum of energies by PID and the list of these genparticles
+
+# go through all the genparticles associated in the tower that do not have a track
+# returns the sum of energies by PID and the list of these genparticles
 def get_tower_gen_fracs(g, tower):
     e_130 = 0.0
     e_211 = 0.0
@@ -55,109 +57,121 @@ def get_tower_gen_fracs(g, tower):
                     e_211 += e
                 elif pid in [130]:
                     e_130 += e
-                elif pid==22:
+                elif pid == 22:
                     e_22 += e
-                elif pid==11:
+                elif pid == 11:
                     e_11 += e
                 else:
-                    if ch==1:
+                    if ch == 1:
                         e_211 += e
                     else:
                         e_130 += e
     return ptcls, (e_130, e_211, e_22, e_11)
 
-#creates the feature vector for calorimeter towers
+
+# creates the feature vector for calorimeter towers
 def make_tower_array(tower_dict):
-    return np.array([
-        1, #tower is denoted with ID 1
-        tower_dict["et"],
-        tower_dict["eta"],
-        np.sin(tower_dict["phi"]),
-        np.cos(tower_dict["phi"]),
-        tower_dict["energy"],
-        tower_dict["eem"],
-        tower_dict["ehad"],
-        #padding
-        0.0,
-        0.0,
-        0.0,
-        0.0
-    ])
+    return np.array(
+        [
+            1,  # tower is denoted with ID 1
+            tower_dict["et"],
+            tower_dict["eta"],
+            np.sin(tower_dict["phi"]),
+            np.cos(tower_dict["phi"]),
+            tower_dict["energy"],
+            tower_dict["eem"],
+            tower_dict["ehad"],
+            # padding
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]
+    )
 
-#creates the feature vector for tracks
+
+# creates the feature vector for tracks
 def make_track_array(track_dict):
-    return np.array([
-        2, #track is denoted with ID 2
-        track_dict["pt"],
-        track_dict["eta"],
-        np.sin(track_dict["phi"]),
-        np.cos(track_dict["phi"]),
-        track_dict["p"],
-        track_dict["eta_outer"],
-        np.sin(track_dict["phi_outer"]),
-        np.cos(track_dict["phi_outer"]),
-        track_dict["charge"],
-        track_dict["is_gen_muon"], #muon bit set from generator to mimic PFDelphes
-        track_dict["is_gen_electron"], #electron bit set from generator to mimic PFDelphes
-    ])
+    return np.array(
+        [
+            2,  # track is denoted with ID 2
+            track_dict["pt"],
+            track_dict["eta"],
+            np.sin(track_dict["phi"]),
+            np.cos(track_dict["phi"]),
+            track_dict["p"],
+            track_dict["eta_outer"],
+            np.sin(track_dict["phi_outer"]),
+            np.cos(track_dict["phi_outer"]),
+            track_dict["charge"],
+            track_dict["is_gen_muon"],  # muon bit set from generator to mimic PFDelphes
+            track_dict["is_gen_electron"],  # electron bit set from generator to mimic PFDelphes
+        ]
+    )
 
-#creates the target vector for gen-level particles
+
+# creates the target vector for gen-level particles
 def make_gen_array(gen_dict):
     if not gen_dict:
         return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(gen_dict["pid"]), 1)
-    charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1,4,5] else 0
+    charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1, 4, 5] else 0
 
-    return np.array([
-        encoded_pid,
-        charge,
-        gen_dict["pt"],
-        gen_dict["eta"],
-        np.sin(gen_dict["phi"]),
-        np.cos(gen_dict["phi"]),
-        gen_dict["energy"]
-    ])
+    return np.array(
+        [
+            encoded_pid,
+            charge,
+            gen_dict["pt"],
+            gen_dict["eta"],
+            np.sin(gen_dict["phi"]),
+            np.cos(gen_dict["phi"]),
+            gen_dict["energy"],
+        ]
+    )
 
-#creates the output vector for delphes PFCandidates
+
+# creates the output vector for delphes PFCandidates
 def make_cand_array(cand_dict):
     if not cand_dict:
         return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(cand_dict["pid"]), 1)
-    return np.array([
-        encoded_pid,
-        cand_dict["charge"],
-        cand_dict.get("pt", 0),
-        cand_dict["eta"],
-        np.sin(cand_dict["phi"]),
-        np.cos(cand_dict["phi"]),
-        cand_dict.get("energy", 0)
-    ])
+    return np.array(
+        [
+            encoded_pid,
+            cand_dict["charge"],
+            cand_dict.get("pt", 0),
+            cand_dict["eta"],
+            np.sin(cand_dict["phi"]),
+            np.cos(cand_dict["phi"]),
+            cand_dict.get("energy", 0),
+        ]
+    )
 
 
-#make (reco, gen, cand) triplets from tracks and towers
-#also return genparticles that were not associated to any reco object
+# make (reco, gen, cand) triplets from tracks and towers
+# also return genparticles that were not associated to any reco object
 def make_triplets(g, tracks, towers, particles, pfparticles):
     triplets = []
     remaining_particles = set(particles)
     remaining_pfcandidates = set(pfparticles)
 
-    #loop over all reco tracks
+    # loop over all reco tracks
     for t in tracks:
 
-        #for each track, find the associated GenParticle
+        # for each track, find the associated GenParticle
         ptcl = None
         for e in g.edges(t):
             if e[1][0] == "particle":
                 ptcl = e[1]
                 break
-        
-        #for each track, find the associated PFCandidate.
-        #The track does not store the PFCandidate links directly.
-        #Instead, we need to get the links to PFCandidates from the GenParticle found above.
-        #We should only look for charged PFCandidates,
-        #we assume the track makes only one genparticle, and the GenParticle makes only one charged PFCandidate
+
+        # for each track, find the associated PFCandidate.
+        # The track does not store the PFCandidate links directly.
+        # Instead, we need to get the links to PFCandidates from the GenParticle found above.
+        # We should only look for charged PFCandidates,
+        # we assume the track makes only one genparticle, and the GenParticle makes only one charged PFCandidate
         pf_ptcl = None
         for e in g.edges(ptcl):
             if e[1][0] in ["pfcharged", "pfel", "pfmu"] and e[1] in remaining_pfcandidates:
@@ -170,33 +184,31 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
             remaining_pfcandidates.remove(pf_ptcl)
 
         triplets.append((t, ptcl, pf_ptcl))
-    
-    #now loop over all the reco calo towers
+
+    # now loop over all the reco calo towers
     for t in towers:
 
-        #get all the genparticles in the tower
-        num_ptcls = 0
+        # get all the genparticles in the tower
         ptcls, fracs = get_tower_gen_fracs(g, t)
 
-        #get the index of the highest energy deposit in the array (neutral hadron, charged hadron, photon, electron)
+        # get the index of the highest energy deposit in the array (neutral hadron, charged hadron, photon, electron)
         imax = np.argmax(fracs)
-        
-        #determine the PID based on which energy deposit is maximal
-        charge = 0
+
+        # determine the PID based on which energy deposit is maximal
         if len(ptcls) > 0:
-            if imax==0:
+            if imax == 0:
                 pid = 130
-            elif imax==1:
+            elif imax == 1:
                 pid = 211
-            elif imax==2:
+            elif imax == 2:
                 pid = 22
-            elif imax==3:
+            elif imax == 3:
                 pid = 11
             for ptcl in ptcls:
                 if ptcl in remaining_particles:
                     remaining_particles.remove(ptcl)
-        
-        #add up the genparticles in the tower   
+
+        # add up the genparticles in the tower
         lvs = []
         for ptcl in ptcls:
             lv = uproot_methods.TLorentzVector.from_ptetaphie(
@@ -210,22 +222,22 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
         lv = None
         gen_ptcl = None
 
-        #determine the GenParticle to reconstruct from this tower
+        # determine the GenParticle to reconstruct from this tower
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
             gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
 
-            #charged gen particles outside the tracker acceptance should be reconstructed as neutrals
+            # charged gen particles outside the tracker acceptance should be reconstructed as neutrals
             if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
                 gen_ptcl["pid"] = 130
-            
-            #we don't want to reconstruct neutral genparticles that have too low energy.
-            #the threshold is set according to the delphes PFCandidate energy distribution
+
+            # we don't want to reconstruct neutral genparticles that have too low energy.
+            # the threshold is set according to the delphes PFCandidate energy distribution
             if gen_ptcl["pid"] == 130 and gen_ptcl["energy"] < 9.0:
                 gen_ptcl = None
 
-        #find the PFCandidate matched to this tower.
-        #again, we need to loop over the GenParticles that are associated to the tower.
+        # find the PFCandidate matched to this tower.
+        # again, we need to loop over the GenParticles that are associated to the tower.
         found_pf = False
         for pf_ptcl in remaining_pfcandidates:
             if (g.nodes[pf_ptcl]["eta"] == g.nodes[t]["eta"]) and (g.nodes[pf_ptcl]["phi"] == g.nodes[t]["phi"]):
@@ -239,6 +251,7 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
 
         triplets.append((t, gen_ptcl, pf_ptcl))
     return triplets, list(remaining_particles), list(remaining_pfcandidates)
+
 
 def process_chunk(infile, ev_start, ev_stop, outfile):
     f = ROOT.TFile.Open(infile)
@@ -257,7 +270,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         pileupmix_idxdict = {}
         for ip, p in enumerate(pileupmix):
             pileupmix_idxdict[p] = ip
-        
+
         towers = list(tree.Tower)
         tracks = list(tree.Track)
 
@@ -267,7 +280,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         pf_el = list(tree.PFElectron)
         pf_mu = list(tree.PFMuon)
 
-        #Create a graph with particles, tracks and towers as nodes and gen-level information as edges
+        # Create a graph with particles, tracks and towers as nodes and gen-level information as edges
         graph = nx.Graph()
         for i in range(len(pileupmix)):
             node = ("particle", i)
@@ -296,7 +309,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for i in range(len(tracks)):
             node = ("track", i)
             graph.add_node(node)
-            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(tracks[i].Eta) #tracks[i].P
+            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(tracks[i].Eta)  # tracks[i].P
             graph.nodes[node]["eta"] = tracks[i].Eta
             graph.nodes[node]["phi"] = tracks[i].Phi
             graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
@@ -312,7 +325,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
             graph.add_node(node)
             graph.nodes[node]["pid"] = pf_charged[i].PID
             graph.nodes[node]["eta"] = pf_charged[i].Eta
-            #print(pf_charged[i].Eta, pf_charged[i].CtgTheta)
+            # print(pf_charged[i].Eta, pf_charged[i].CtgTheta)
             graph.nodes[node]["phi"] = pf_charged[i].Phi
             graph.nodes[node]["pt"] = pf_charged[i].PT
             graph.nodes[node]["charge"] = pf_charged[i].Charge
@@ -352,7 +365,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
             for ptcl in pf_neutral[i].Particles:
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfneutral", i), ("particle", ip))
-        
+
         for i in range(len(pf_photon)):
             node = ("pfphoton", i)
             graph.add_node(node)
@@ -365,12 +378,12 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
                 ip = pileupmix_idxdict[ptcl]
                 graph.add_edge(("pfphoton", i), ("particle", ip))
 
-        #write the full graph, mainly for study purposes
-        if iev<10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2","_graph_{}.pkl".format(iev)))
+        # write the full graph, mainly for study purposes
+        if iev < 10 and save_full_graphs:
+            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)))
 
-        #now clean up the graph, keeping only reconstructable genparticles
-        #we also merge neutral genparticles within towers, as they are otherwise not reconstructable
+        # now clean up the graph, keeping only reconstructable genparticles
+        # we also merge neutral genparticles within towers, as they are otherwise not reconstructable
         particles = [n for n in graph.nodes if n[0] == "particle"]
         pfcand = [n for n in graph.nodes if n[0].startswith("pf")]
 
@@ -392,8 +405,9 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
                 track_dict = graph.nodes[reco]
                 gen_dict = graph.nodes[gen]
 
-                #delphes PF reconstructs electrons and muons based on generator info, so if a track was associated with a gen-level electron or muon,
-                #we embed this information so that MLPF would have access to the same low-level info
+                # delphes PF reconstructs electrons and muons based on generator info,
+                # so if a track was associated with a gen-level electron or muon,
+                # we embed this information so that MLPF would have access to the same low-level info
                 if abs(gen_dict["pid"]) == 13:
                     track_dict["is_gen_muon"] = 1.0
                 else:
@@ -414,7 +428,7 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
 
         for prt in remaining_particles:
             ygen_remaining.append(make_gen_array(graph.nodes[prt]))
-            
+
         X = np.stack(X)
         ygen = np.stack(ygen)
         ygen_remaining = np.stack(ygen_remaining)
@@ -429,13 +443,16 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
     with bz2.BZ2File(outfile, "wb") as fi:
         pickle.dump({"X": X_all, "ygen": ygen_all, "ycand": ycand_all}, fi)
 
+
 def process_chunk_args(args):
     process_chunk(*args)
+
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield lst[i:i + n]
+        yield lst[i : i + n]
+
 
 if __name__ == "__main__":
     pool = multiprocessing.Pool(24)
@@ -450,7 +467,7 @@ if __name__ == "__main__":
 
     for chunk in chunks(range(num_evs), 100):
         outfile = sys.argv[2].replace(".pkl.bz2", "_{}.pkl.bz2".format(ichunk))
-        #print(chunk[0], chunk[-1]+1)
+        # print(chunk[0], chunk[-1]+1)
         arg_list.append((infile, chunk[0], chunk[-1] + 1, outfile))
         ichunk += 1
 

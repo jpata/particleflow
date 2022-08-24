@@ -1,36 +1,34 @@
 #!/use/bin/env python3
 
-#on manivald: singularity exec /home/software/singularity/base.simg:latest python3 test/evaluate_timing.py
+# on manivald: singularity exec /home/software/singularity/base.simg:latest python3 test/evaluate_timing.py
 
 import torch
 import torch_geometric
-
-from torch_geometric.data import Data, DataLoader, DataListLoader, Batch
-from graph_data import PFGraphDataset, elem_to_id, class_to_id, class_labels
+from graph_data import PFGraphDataset, class_labels, class_to_id, elem_to_id
+from torch_geometric.data import Batch, Data, DataListLoader, DataLoader
 
 dataset_path = "/home/joosep/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"
 
-#Goal: measure the evaluation cost of the MLPF model as a function of input multiplicity
+# Goal: measure the evaluation cost of the MLPF model as a function of input multiplicity
 if __name__ == "__main__":
-     
+
     full_dataset = PFGraphDataset(dataset_path)
 
-    #events in bunches of 5
+    # events in bunches of 5
     for data_items in full_dataset:
 
-        #loop over each event in the bunch
+        # loop over each event in the bunch
         for data in data_items:
 
-            #get the input matrix
+            # get the input matrix
             input_matrix = data.x
-            
+
             print("input_matrix.shape=", input_matrix.shape)
-            
-            #this is the number of input elements in the event
+
+            # this is the number of input elements in the event
             input_multiplicity = input_matrix.shape[0]
 
-            #task 1: plot the distribution of the input multiplicities across the events using numpy.histogram and matplotlib.histogram
+            # task 1: plot the distribution of the input multiplicities across the events using numpy.histogram and matplotlib.histogram
 
-            #task 2: save the `data` object using torch.save(data, "data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_i/file_j.pt") to
-            #subfolders based on the input multiplicity binning
-
+            # task 2: save the `data` object using torch.save(data, "data/TTbar_14TeV_TuneCUETP8M1_cfi/bin_i/file_j.pt") to
+            # subfolders based on the input multiplicity binning

@@ -1,23 +1,20 @@
-from torch_geometric.nn.conv import MessagePassing
-from typing import Optional
-import scipy.spatial
-import pickle as pkl
-import os.path as osp
 import os
+import os.path as osp
+import pickle as pkl
 import sys
 from glob import glob
-
-import torch
-from torch import Tensor
-import torch.nn as nn
-from torch.nn import Linear
-from torch_scatter import scatter
-from torch_geometric.nn.conv import MessagePassing, GCNConv, GraphConv, DynamicEdgeConv
-from torch_geometric.utils import to_dense_adj
-import torch.nn.functional as F
-
 from typing import Optional, Union
-from torch_geometric.typing import OptTensor, PairTensor, PairOptTensor
+
+import scipy.spatial
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+from torch.nn import Linear
+from torch_geometric.nn.conv import DynamicEdgeConv, GCNConv, GraphConv, MessagePassing
+from torch_geometric.typing import OptTensor, PairOptTensor, PairTensor
+from torch_geometric.utils import to_dense_adj
+from torch_scatter import scatter
 
 
 class MLPF(nn.Module):
@@ -28,10 +25,19 @@ class MLPF(nn.Module):
         target: dict() object containing gen and cand target information
     """
 
-    def __init__(self,
-                 input_dim=12, num_classes=6, output_dim_p4=6,
-                 embedding_dim=32, hidden_dim1=126, hidden_dim2=256,
-                 num_convs=3, space_dim=4, propagate_dim=8, k=4):
+    def __init__(
+        self,
+        input_dim=12,
+        num_classes=6,
+        output_dim_p4=6,
+        embedding_dim=32,
+        hidden_dim1=126,
+        hidden_dim2=256,
+        num_convs=3,
+        space_dim=4,
+        propagate_dim=8,
+        k=4,
+    ):
         super(MLPF, self).__init__()
 
         # self.act = nn.ReLU
@@ -112,10 +118,17 @@ class GravNetConv_MLPF(MessagePassing):
         b. removed skip connection
     """
 
-    def __init__(self, in_channels: int, out_channels: int,
-                 space_dimensions: int, propagate_dimensions: int, k: int,
-                 num_workers: int = 1, **kwargs):
-        super().__init__(flow='source_to_target', **kwargs)
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        space_dimensions: int,
+        propagate_dimensions: int,
+        k: int,
+        num_workers: int = 1,
+        **kwargs,
+    ):
+        super().__init__(flow="source_to_target", **kwargs)
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -133,9 +146,7 @@ class GravNetConv_MLPF(MessagePassing):
         self.lin_p.reset_parameters()
         self.lin_out.reset_parameters()
 
-    def forward(
-            self, x: Union[Tensor, PairTensor],
-            batch: Union[OptTensor, Optional[PairTensor]] = None) -> Tensor:
+    def forward(self, x: Union[Tensor, PairTensor], batch: Union[OptTensor, Optional[PairTensor]] = None) -> Tensor:
 
         is_bipartite: bool = True
         if isinstance(x, Tensor):
@@ -161,33 +172,30 @@ class GravNetConv_MLPF(MessagePassing):
 
         # add error message when trying to preform knn without enough neighbors in the region
         if (torch.unique(b[0], return_counts=True)[1] < self.k).sum() != 0:
-            raise RuntimeError(f'Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}')
+            raise RuntimeError(
+                f"Not enough elements in a region to perform the k-nearest neighbors. Current k-value={self.k}"
+            )
 
         edge_index = knn(s_l, s_r, self.k, b[0], b[1]).flip([0])
         # edge_index = knn_graph(s_l, self.k, b[0])     # cmspepr
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
-        edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
+        edge_weight = torch.exp(-10.0 * edge_weight)  # 10 gives a better spread
 
         # message passing
-        out = self.propagate(edge_index, x=(msg_activations, None),
-                             edge_weight=edge_weight,
-                             size=(s_l.size(0), s_r.size(0)))
+        out = self.propagate(edge_index, x=(msg_activations, None), edge_weight=edge_weight, size=(s_l.size(0), s_r.size(0)))
 
         return self.lin_out(out)
 
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
 
-    def aggregate(self, inputs: Tensor, index: Tensor,
-                  dim_size: Optional[int] = None) -> Tensor:
-        out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size,
-                           reduce='sum')
+    def aggregate(self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None) -> Tensor:
+        out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum")
         return out_mean
 
     def __repr__(self) -> str:
-        return (f'{self.__class__.__name__}({self.in_channels}, '
-                f'{self.out_channels}, k={self.k})')
+        return f"{self.__class__.__name__}({self.in_channels}, " f"{self.out_channels}, k={self.k})"
 
 
 # try:

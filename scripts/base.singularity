@@ -63,11 +63,11 @@ From: nvcr.io/nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04
 
     python3 -m pip install energyflow
     python3 -m pip install POT
-    
-    
+
+
     python3 -m pip install fastparquet
 
 %environment
 
 %runscript
-    /bin/bash 
+    /bin/bash

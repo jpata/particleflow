@@ -1,12 +1,8 @@
-import numpy as np
-import pandas
-import torch
-import os.path as osp
 import itertools
-import pickle as pkl
 
 import matplotlib.pyplot as plt
 import mplhep as hep
+import numpy as np
 
 plt.style.use(hep.style.ROOT)
 
@@ -20,49 +16,52 @@ pid_to_name_delphes = {
     5: "Muons",
 }
 
-pid_to_name_cms = {0: 'null',
-                   1: 'chhadron',
-                   2: 'nhadron',
-                   3: 'HFHAD',
-                   4: 'HFEM',
-                   5: 'photon',
-                   6: 'ele',
-                   7: 'mu',
-                   8: 'tau',
-                   }
+pid_to_name_cms = {
+    0: "null",
+    1: "chhadron",
+    2: "nhadron",
+    3: "HFHAD",
+    4: "HFEM",
+    5: "photon",
+    6: "ele",
+    7: "mu",
+    8: "tau",
+}
 
-name_to_pid_delphes = {'null': 0,
-                       'chhadron': 1,
-                       'nhadron': 2,
-                       'photon': 3,
-                       'ele': 4,
-                       'mu': 5,
-                       }
+name_to_pid_delphes = {
+    "null": 0,
+    "chhadron": 1,
+    "nhadron": 2,
+    "photon": 3,
+    "ele": 4,
+    "mu": 5,
+}
 
-name_to_pid_cms = {'null': 0,
-                   'chhadron': 1,
-                   'nhadron': 2,
-                   'HFHAD': 3,
-                   'HFEM': 4,
-                   'photon': 5,
-                   'ele': 6,
-                   'mu': 7,
-                   'tau': 8,
-                   }
+name_to_pid_cms = {
+    "null": 0,
+    "chhadron": 1,
+    "nhadron": 2,
+    "HFHAD": 3,
+    "HFEM": 4,
+    "photon": 5,
+    "ele": 6,
+    "mu": 7,
+    "tau": 8,
+}
 
 var_names = {
     "pt": r"$p_\mathrm{T}$ [GeV]",
     "eta": r"$\eta$",
     "sphi": r"$\mathrm{sin} \phi$",
     "cphi": r"$\mathrm{cos} \phi$",
-    "energy": r"$E$ [GeV]"
+    "energy": r"$E$ [GeV]",
 }
 var_names_nounit = {
     "pt": r"$p_\mathrm{T}$",
     "eta": r"$\eta$",
     "sphi": r"$\mathrm{sin} \phi$",
     "cphi": r"$\mathrm{cos} \phi$",
-    "energy": r"$E$"
+    "energy": r"$E$",
 }
 var_names_bare = {
     "pt": "p_\mathrm{T}",
@@ -78,13 +77,14 @@ var_indices = {
     "energy": 5,
 }
 
-bins = {'charge': np.linspace(0, 5, 100),
-        'pt': np.linspace(0, 5, 100),
-        'eta': np.linspace(-5, 5, 100),
-        'sin phi': np.linspace(-2, 2, 100),
-        'cos phi': np.linspace(-2, 2, 100),
-        'E': np.linspace(-1, 5, 100),
-        }
+bins = {
+    "charge": np.linspace(0, 5, 100),
+    "pt": np.linspace(0, 5, 100),
+    "eta": np.linspace(-5, 5, 100),
+    "sin phi": np.linspace(-2, 2, 100),
+    "cos phi": np.linspace(-2, 2, 100),
+    "E": np.linspace(-1, 5, 100),
+}
 
 
 def midpoints(x):
@@ -111,16 +111,16 @@ def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname
     """
     plt.style.use(hep.style.CMS)
 
-    if data == 'delphes':
+    if data == "delphes":
         pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
+    elif data == "cms":
         pid_to_name = pid_to_name_cms
 
     fig = plt.figure(figsize=(10, 10))
 
-    if target_type == 'cand':
+    if target_type == "cand":
         plt.hist(target, bins=rng, density=True, histtype="step", lw=2, label="cand")
-    elif target_type == 'gen':
+    elif target_type == "gen":
         plt.hist(target, bins=rng, density=True, histtype="step", lw=2, label="gen")
 
     plt.hist(mlpf, bins=rng, density=True, histtype="step", lw=2, label="MLPF")
@@ -132,45 +132,65 @@ def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname
         plt.legend(frameon=False, title=legend_title)
 
     plt.ylim(0, 1.5)
-    plt.savefig(fname + '.pdf')
+    plt.savefig(fname + ".pdf")
     plt.close(fig)
 
     return fig
 
 
-def plot_distributions_pid(data, pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""):
+def plot_distributions_pid(
+    data, pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""
+):
     """
     plot distributions for the target and mlpf of the regressed features for a given PID
     """
     plt.style.use("default")
 
-    if data == 'delphes':
+    if data == "delphes":
         pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
+    elif data == "cms":
         pid_to_name = pid_to_name_cms
 
     for i, bin_dict in enumerate(bins.items()):
         true = true_p4[true_id == pid, i].flatten().detach().cpu().numpy()
         pred = pred_p4[pred_id == pid, i].flatten().detach().cpu().numpy()
-        figure = plot_distribution(data, pid, true, pred, bin_dict[0], bin_dict[1], target, fname=outpath + '/distribution_plots/' + pid_to_name[pid] + f'_{bin_dict[0]}_distribution', legend_title=legend_title)
+        plot_distribution(
+            data,
+            pid,
+            true,
+            pred,
+            bin_dict[0],
+            bin_dict[1],
+            target,
+            fname=outpath + "/distribution_plots/" + pid_to_name[pid] + f"_{bin_dict[0]}_distribution",
+            legend_title=legend_title,
+        )
 
 
-def plot_distributions_all(data, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""):
+def plot_distributions_all(
+    data, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""
+):
     """
     plot distributions for the target and mlpf of a all features, merging all PIDs
     """
     plt.style.use("default")
 
     msk = (pred_id != 0) & (true_id != 0)
-    if data == 'delphes':
-        pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
-        pid_to_name = pid_to_name_cms
 
     for i, bin_dict in enumerate(bins.items()):
         true = true_p4[msk, i].flatten().detach().cpu().numpy()
         pred = pred_p4[msk, i].flatten().detach().cpu().numpy()
-        figure = plot_distribution(data, -1, true, pred, bin_dict[0], bin_dict[1], target, fname=outpath + f'/distribution_plots/all_{bin_dict[0]}_distribution', legend_title=legend_title)
+        plot_distribution(
+            data,
+            -1,
+            true,
+            pred,
+            bin_dict[0],
+            bin_dict[1],
+            target,
+            fname=outpath + f"/distribution_plots/all_{bin_dict[0]}_distribution",
+            legend_title=legend_title,
+        )
 
 
 def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
@@ -179,10 +199,10 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
     """
     plt.style.use(hep.style.ROOT)
 
-    if data == 'delphes':
+    if data == "delphes":
         name_to_pid = name_to_pid_delphes
         pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
+    elif data == "cms":
         name_to_pid = name_to_pid_cms
         pid_to_name = pid_to_name_cms
 
@@ -211,7 +231,7 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
         label="Rule-based PF, $r={0:.3f}$\n$\mu={1:.3f}\\ \sigma={2:.3f}$".format(
             np.corrcoef(a, b)[0, 1], mu_dpf, sigma_dpf
         ),
-        alpha=0.5
+        alpha=0.5,
     )
 
     c = np.array(cand_list[key])
@@ -227,10 +247,8 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
         target_list[key],
         cand_list[key],
         marker="^",
-        label="MLPF, $r={0:.3f}$\n$\mu={1:.3f}\\ \sigma={2:.3f}$".format(
-            np.corrcoef(a, b)[0, 1], mu_mlpf, sigma_mlpf
-        ),
-        alpha=0.5
+        label="MLPF, $r={0:.3f}$\n$\mu={1:.3f}\\ \sigma={2:.3f}$".format(np.corrcoef(a, b)[0, 1], mu_mlpf, sigma_mlpf),
+        alpha=0.5,
     )
 
     lims = [
@@ -238,8 +256,8 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
         np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
     ]
     # now plot both limits against each other
-    ax.plot(lims, lims, '--', alpha=0.75, zorder=0)
-    ax.set_aspect('equal')
+    ax.plot(lims, lims, "--", alpha=0.75, zorder=0)
+    ax.set_aspect("equal")
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     plt.tight_layout()
@@ -250,9 +268,9 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
 
 
 def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, both=True, legend_title=""):
-    if data == 'delphes':
+    if data == "delphes":
         pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
+    elif data == "cms":
         pid_to_name = pid_to_name_cms
 
     var_idx = var_indices[var]
@@ -281,12 +299,22 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
         midpoints(hist_gen[1]),
         divide_zero(hist_cand[0], hist_gen[0]),
         divide_zero(np.sqrt(hist_gen[0]), hist_gen[0]) * divide_zero(hist_cand[0], hist_gen[0]),
-        lw=0, label="Rule-based PF", elinewidth=2, marker=".", markersize=10)
+        lw=0,
+        label="Rule-based PF",
+        elinewidth=2,
+        marker=".",
+        markersize=10,
+    )
     ax1.errorbar(
         midpoints(hist_gen[1]),
         divide_zero(hist_pred[0], hist_gen[0]),
         divide_zero(np.sqrt(hist_gen[0]), hist_gen[0]) * divide_zero(hist_pred[0], hist_gen[0]),
-        lw=0, label="MLPF", elinewidth=2, marker=".", markersize=10)
+        lw=0,
+        label="MLPF",
+        elinewidth=2,
+        marker=".",
+        markersize=10,
+    )
     ax1.legend(frameon=False, loc=0, title=legend_title + pid_to_name[pid])
     ax1.set_ylim(0, 1.2)
     # if var=="energy":
@@ -311,12 +339,22 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
             midpoints(hist_cand2[1]),
             divide_zero(hist_cand_gen2[0], hist_cand2[0]),
             divide_zero(np.sqrt(hist_cand_gen2[0]), hist_cand2[0]),
-            lw=0, label="Rule-based PF", elinewidth=2, marker=".", markersize=10)
+            lw=0,
+            label="Rule-based PF",
+            elinewidth=2,
+            marker=".",
+            markersize=10,
+        )
         ax2.errorbar(
             midpoints(hist_pred2[1]),
             divide_zero(hist_pred_gen2[0], hist_pred2[0]),
             divide_zero(np.sqrt(hist_pred_gen2[0]), hist_pred2[0]),
-            lw=0, label="MLPF", elinewidth=2, marker=".", markersize=10)
+            lw=0,
+            label="MLPF",
+            elinewidth=2,
+            marker=".",
+            markersize=10,
+        )
         ax2.legend(frameon=False, loc=0, title=legend_title + pid_to_name[pid])
         ax2.set_ylim(0, 1.0)
         # plt.yscale("log")
@@ -332,12 +370,10 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
 def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
     plt.style.use(hep.style.ROOT)
 
-    if data == 'delphes':
+    if data == "delphes":
         name_to_pid = name_to_pid_delphes
-        pid_to_name = pid_to_name_delphes
-    elif data == 'cms':
+    elif data == "cms":
         name_to_pid = name_to_pid_cms
-        pid_to_name = pid_to_name_cms
     pid = name_to_pid[pfcand]
 
     var_idx = var_indices[var]
@@ -361,10 +397,16 @@ def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
     res_mlpf = np.mean(ratio_mlpf), np.std(ratio_mlpf)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-    ax.hist(ratio_dpf, bins=bins, histtype="step", lw=2, label="Rule-based PF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_dpf))
+    ax.hist(
+        ratio_dpf, bins=bins, histtype="step", lw=2, label="Rule-based PF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_dpf)
+    )
     ax.hist(ratio_mlpf, bins=bins, histtype="step", lw=2, label="MLPF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_mlpf))
     ax.legend(frameon=False, title=legend_title + pfcand)
-    ax.set_xlabel("{nounit} resolution, $({bare}^\prime - {bare})/{bare}$".format(nounit=var_names_nounit[var], bare=var_names_bare[var]))
+    ax.set_xlabel(
+        "{nounit} resolution, $({bare}^\prime - {bare})/{bare}$".format(
+            nounit=var_names_nounit[var], bare=var_names_bare[var]
+        )
+    )
     ax.set_ylabel("Particles")
     ax.set_ylim(1, 1e10)
     ax.set_yscale("log")
@@ -373,11 +415,9 @@ def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
     plt.close(fig)
 
 
-def plot_confusion_matrix(cm, target_names,
-                          epoch, outpath, save_as,
-                          title='Confusion matrix',
-                          cmap=None,
-                          normalize=True, target=None):
+def plot_confusion_matrix(
+    cm, target_names, epoch, outpath, save_as, title="Confusion matrix", cmap=None, normalize=True, target=None
+):
     """
     given a sklearn confusion matrix (cm), make a nice plot
 
@@ -410,17 +450,17 @@ def plot_confusion_matrix(cm, target_names,
     http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
 
     """
-    plt.style.use('default')
+    plt.style.use("default")
 
     # # only true if it weren't normalized:
     # accuracy = np.trace(cm) / float(np.sum(cm))
     # misclass = 1 - accuracy
 
     if cmap is None:
-        cmap = plt.get_cmap('Blues')
+        cmap = plt.get_cmap("Blues")
 
     if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     cm[np.isnan(cm)] = 0.0
 
     if len(target_names) > 6:
@@ -429,11 +469,11 @@ def plot_confusion_matrix(cm, target_names,
         fig = plt.figure(figsize=(5, 4))
 
     ax = plt.axes()
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.imshow(cm, interpolation="nearest", cmap=cmap)
     if target == "rule-based":
-        plt.title(title + ' for rule-based PF', fontsize=20)
+        plt.title(title + " for rule-based PF", fontsize=20)
     else:
-        plt.title(title + ' for MLPF at epoch ' + str(epoch), fontsize=20)
+        plt.title(title + " for MLPF at epoch " + str(epoch), fontsize=20)
 
     plt.colorbar()
 
@@ -445,21 +485,25 @@ def plot_confusion_matrix(cm, target_names,
     thresh = cm.max() / 1.5 if normalize else cm.max() / 2
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
         if normalize:
-            plt.text(j, i, "{:0.2f}".format(cm[i, j]),
-                     horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+            plt.text(
+                j,
+                i,
+                "{:0.2f}".format(cm[i, j]),
+                horizontalalignment="center",
+                color="white" if cm[i, j] > thresh else "black",
+            )
         else:
-            plt.text(j, i, "{:,}".format(cm[i, j]),
-                     horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+            plt.text(
+                j, i, "{:,}".format(cm[i, j]), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black"
+            )
 
-    plt.ylabel('True label')
+    plt.ylabel("True label")
     plt.xlim(-1, len(target_names))
     plt.ylim(-1, len(target_names))
-    plt.xlabel('Predicted label')
+    plt.xlabel("Predicted label")
     # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.tight_layout()
-    plt.savefig(outpath + save_as + '.pdf')
+    plt.savefig(outpath + save_as + ".pdf")
     plt.close(fig)
 
     # torch.save(cm, outpath + save_as + '.pt')

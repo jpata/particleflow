@@ -1,8 +1,9 @@
+import json
+from pathlib import Path
+
 import click
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import json
-from pathlib import Path
 
 
 @click.group()

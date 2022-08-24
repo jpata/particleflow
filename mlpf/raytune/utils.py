@@ -1,21 +1,24 @@
-from ray.tune.schedulers import AsyncHyperBandScheduler, HyperBandScheduler, HyperBandForBOHB, PopulationBasedTraining
+import nevergrad as ng
+from ray.tune.schedulers import (
+    AsyncHyperBandScheduler,
+    HyperBandForBOHB,
+    HyperBandScheduler,
+    PopulationBasedTraining,
+)
 from ray.tune.schedulers.pb2 import PB2  # Population Based Bandits
+from ray.tune.suggest.bayesopt import BayesOptSearch
 from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.suggest.hebo import HEBOSearch
-from ray.tune.suggest.bayesopt import BayesOptSearch
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.suggest.nevergrad import NevergradSearch
 from ray.tune.suggest.skopt import SkOptSearch
-import nevergrad as ng
 
 
 def get_raytune_search_alg(raytune_cfg, seeds=False):
     if (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "pb2"):
         if raytune_cfg["search_alg"] is not None:
             print(
-                "INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(
-                    raytune_cfg["sched"]
-                )
+                "INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(raytune_cfg["sched"])
             )
             print("INFO: Uing the Ray Tune {} scheduler without search algorithm".format(raytune_cfg["sched"]))
         return None
