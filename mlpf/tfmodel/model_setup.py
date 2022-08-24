@@ -3,31 +3,26 @@ try:
 except ModuleNotFoundError:
     print("hvd not enabled, ignoring")
 
-from .model import PFNetTransformer, PFNetDense
+import glob
+import json
+import os
+import pickle
+from pathlib import Path
 
+import awkward
+import fastjet
+import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-import pickle
-import numpy as np
-import os
-import matplotlib.pyplot as plt
-import json
-from tqdm import tqdm
-from pathlib import Path
-import glob
-
 import tf2onnx
-
-import fastjet
 import vector
-import awkward
-
-
+from tensorflow.keras.metrics import Recall
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
+from tqdm import tqdm
 
-
-from tensorflow.keras.metrics import Recall
+from .model import PFNetDense, PFNetTransformer
 
 
 class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
