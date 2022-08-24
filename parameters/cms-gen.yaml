@@ -46,17 +46,17 @@ loss:
     type: Huber
     delta: 0.1
   event_loss: gen_jet
-  event_loss_coef: 0.0001
+  event_loss_coef: 1.0
 
 tensorflow:
-  eager: yes
+  eager: no
 
 setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_events_validation: 1000
+  lr: 0.0005
+  num_events_validation: 100
   num_epochs: 100
   dtype: float32
   trainable:
@@ -134,8 +134,8 @@ parameters:
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 0
-  num_graph_layers_reg: 0
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -166,7 +166,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: no
-    mask_reg_cls0: yes
+    mask_reg_cls0: no
     energy_multimodal: yes
 
   skip_connection: yes
@@ -222,7 +222,7 @@ raytune:
 
 train_test_datasets:
   physical: 
-    batch_per_gpu: 1
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
 
