@@ -25,11 +25,6 @@ repos:
     language_version: python3
     args: [--line-length=125]
 
-# - repo: https://github.com/PyCQA/isort
-#   rev: 5.10.1
-#   hooks:
-#   - id: isort
-
 - repo: https://gitlab.com/pycqa/flake8
   rev: 3.9.2
   hooks:
@@ -37,3 +32,8 @@ repos:
     # black-compatible flake-8 config
     args: ['--max-line-length=125',  # github viewer width
            '--extend-ignore=E203,W605']  # E203 is not PEP8 compliant
+
+- repo: https://github.com/PyCQA/isort
+  rev: 5.10.1
+  hooks:
+  - id: isort
