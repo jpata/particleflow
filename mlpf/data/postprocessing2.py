@@ -100,49 +100,6 @@ def get_charge(pid):
         raise Exception("Unknown pid: ", pid)
 
 
-def save_ego_graph(g, node, radius=4, undirected=False):
-    sg = nx.ego_graph(g, node, radius, undirected=undirected).reverse()
-
-    # remove BREM PFElements from plotting
-    nodes_to_remove = [
-        n
-        for n in sg.nodes
-        if (
-            n[0] == "elem"
-            and sg.nodes[n]["typ"]
-            in [
-                7,
-            ]
-        )
-    ]
-    sg.remove_nodes_from(nodes_to_remove)
-
-    fig = plt.figure(figsize=(2 * len(sg.nodes) + 2, 10))
-    sg_pos = graphviz_layout(sg, prog="dot")
-
-    edge_labels = {}
-    for e in sg.edges:
-        if e[1][iev] == "elem" and not (sg.nodes[e[1]]["typ"] in [1, 10]):
-            edge_labels[e] = "{:.2f} GeV".format(sg.edges[e].get("weight", 0))
-        else:
-            edge_labels[e] = ""
-
-    node_labels = {}
-    for node in sg.nodes:
-        labels = {"sc": "CaloParticle", "elem": "PFElement", "tp": "TrackingParticle", "pfcand": "PFCandidate"}
-        node_labels[node] = "[{label} {idx}] \ntype: {typ}\ne: {e:.4f} GeV\neta: {eta:.4f}".format(
-            label=labels[node[0]], idx=node[1], **sg.nodes[node]
-        )
-
-    nx.draw_networkx(sg, pos=sg_pos, node_shape=".", node_color="grey", edge_color="grey", node_size=0, alpha=0.5, labels={})
-    nx.draw_networkx_labels(sg, pos=sg_pos, labels=node_labels)
-    nx.draw_networkx_edge_labels(sg, pos=sg_pos, edge_labels=edge_labels)
-    plt.tight_layout()
-    plt.axis("off")
-
-    return fig
-
-
 def draw_event(g):
     pos = {}
     for node in g.nodes:
