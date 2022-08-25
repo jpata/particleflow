@@ -46,7 +46,7 @@ loss:
     type: Huber
     delta: 0.1
   event_loss: gen_jet
-  event_loss_coef: 0.0001
+  event_loss_coef: 1.0
 
 tensorflow:
   eager: no
