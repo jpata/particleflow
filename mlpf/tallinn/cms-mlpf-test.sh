@@ -6,6 +6,8 @@
 IMG=/home/software/singularity/tf-2.9.0.simg
 cd ~/particleflow
 
+env
+
 #TF training
 singularity exec -B /scratch-persistent --nv \
     --env PYTHONPATH=hep_tfds \
