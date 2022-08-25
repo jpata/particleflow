@@ -14,24 +14,34 @@ from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleSchedu
 
 
 @tf.function
-def histogram_2d(eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
+def histogram_2d(mask, eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
     eta_bins = tf.histogram_fixed_width_bins(eta, eta_range, nbins=nbins, dtype=bin_dtype)
     phi_bins = tf.histogram_fixed_width_bins(phi, phi_range, nbins=nbins, dtype=bin_dtype)
 
+    # create empty histograms
     hist_px = tf.zeros((nbins, nbins), dtype=weights_px.dtype)
     hist_py = tf.zeros((nbins, nbins), dtype=weights_py.dtype)
-    indices = tf.transpose(tf.stack([phi_bins, eta_bins]))
+    indices = tf.transpose(tf.stack([eta_bins, phi_bins]))
 
-    hist_px = tf.tensor_scatter_nd_add(hist_px, indices, weights_px)
-    hist_py = tf.tensor_scatter_nd_add(hist_py, indices, weights_py)
+    indices_masked = tf.boolean_mask(indices, mask)
+    weights_px_masked = tf.boolean_mask(weights_px, mask)
+    weights_py_masked = tf.boolean_mask(weights_py, mask)
+
+    hist_px = tf.tensor_scatter_nd_add(hist_px, indices=indices_masked, updates=weights_px_masked)
+    hist_py = tf.tensor_scatter_nd_add(hist_py, indices=indices_masked, updates=weights_py_masked)
     hist_pt = tf.sqrt(hist_px**2 + hist_py**2)
     return hist_pt
 
 
 @tf.function
-def batched_histogram_2d(eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
-    return tf.vectorized_map(
-        lambda a: histogram_2d(a[0], a[1], a[2], a[3], x_range, y_range, nbins, bin_dtype), (eta, phi, w_px, w_py)
+def batched_histogram_2d(mask, eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.map_fn(
+        lambda a: histogram_2d(a[0], a[1], a[2], a[3], a[4], x_range, y_range, nbins, bin_dtype),
+        (mask, eta, phi, w_px, w_py),
+        fn_output_signature=tf.TensorSpec(
+            [nbins, nbins],
+            dtype=tf.float32,
+        ),
     )
 
 
@@ -469,12 +479,13 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
 
 @tf.function
-def hist_loss_2d(y_true, y_pred):
+def hist_2d_loss(y_true, y_pred):
 
     eta_true = y_true[..., 2]
     eta_pred = y_pred[..., 2]
-    phi_true = tf.math.atan2(y_true[..., 3], y_true[..., 4])
-    phi_pred = tf.math.atan2(y_pred[..., 3], y_pred[..., 4])
+
+    sin_phi_true = y_true[..., 3]
+    sin_phi_pred = y_pred[..., 3]
 
     pt_true = y_true[..., 0]
     pt_pred = y_pred[..., 0]
@@ -484,12 +495,30 @@ def hist_loss_2d(y_true, y_pred):
     px_pred = pt_pred * y_pred[..., 4]
     py_pred = pt_pred * y_pred[..., 3]
 
+    mask = eta_true != 0.0
+
+    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi,cos_phi)
+    # introduces a numerical instability which can lead to NaN.
     pt_hist_true = batched_histogram_2d(
-        eta_true, phi_true, px_true, py_true, tf.cast([-6.0, 6.0], tf.float32), tf.cast([-4.0, 4.0], tf.float32), 20
+        mask,
+        eta_true,
+        sin_phi_true,
+        px_true,
+        py_true,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
     )
 
     pt_hist_pred = batched_histogram_2d(
-        eta_pred, phi_pred, px_pred, py_pred, tf.cast([-6.0, 6.0], tf.float32), tf.cast([-4.0, 4.0], tf.float32), 20
+        mask,
+        eta_pred,
+        sin_phi_pred,
+        px_pred,
+        py_pred,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
     )
 
     mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true - pt_hist_pred) ** 2, axis=[-1, -2]))
@@ -598,7 +627,7 @@ def get_loss_dict(config):
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     if config["loss"]["event_loss"] == "hist_2d":
-        loss_dict["pt_e_eta_phi"] = hist_loss_2d
+        loss_dict["pt_e_eta_phi"] = hist_2d_loss
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     if config["loss"]["event_loss"] == "gen_jet":

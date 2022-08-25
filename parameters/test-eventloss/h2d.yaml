@@ -46,7 +46,7 @@ loss:
     type: Huber
     delta: 0.1
   event_loss: hist_2d
-  event_loss_coef: 0.000001
+  event_loss_coef: 1.0
 
 tensorflow:
   eager: no
