@@ -497,7 +497,7 @@ def hist_2d_loss(y_true, y_pred):
 
     mask = eta_true != 0.0
 
-    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi,cos_phi)
+    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi, cos_phi)
     # introduces a numerical instability which can lead to NaN.
     pt_hist_true = batched_histogram_2d(
         mask,

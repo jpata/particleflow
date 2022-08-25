@@ -13,6 +13,7 @@ import awkward
 import fastjet
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tf2onnx
@@ -114,41 +115,63 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
 
         with self.writer.as_default():
-            jet_ratio = yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0]
+            jet_ratio_pred = yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0]
+            jet_ratio_cand = yvals["jets_pt_gen_to_cand"][:, 1] / yvals["jets_pt_gen_to_cand"][:, 0]
+            met_ratio_pred = pred_met[:, 0] / gen_met[:, 0]
+            met_ratio_cand = cand_met[:, 0] / gen_met[:, 0]
 
             plt.figure()
             b = np.linspace(0, 5, 100)
-            plt.hist(yvals["jets_pt_gen_to_cand"][:, 1] / yvals["jets_pt_gen_to_cand"][:, 0], bins=b, histtype="step", lw=2)
-            plt.hist(yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0], bins=b, histtype="step", lw=2)
+            plt.hist(jet_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
+            plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
             image_path = str(cp_dir / "jet_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
             if comet_experiment:
                 comet_experiment.log_image(image_path, step=epoch - 1)
+            plt.xlabel("jet pT reco/gen")
+            plt.ylabel("number of matched jets")
+            plt.legend(loc="best")
             plt.clf()
 
             plt.figure()
             b = np.linspace(0, 5, 100)
-            plt.hist(cand_met / gen_met, bins=b, histtype="step", lw=2)
-            plt.hist(pred_met / gen_met, bins=b, histtype="step", lw=2)
+            plt.hist(met_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
+            plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
             image_path = str(cp_dir / "met_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
             if comet_experiment:
                 comet_experiment.log_image(image_path, step=epoch - 1)
+            plt.xlabel("MET reco/gen")
+            plt.ylabel("number of events")
+            plt.legend(loc="best")
             plt.clf()
 
-            tf.summary.histogram("jet_pt_pred_over_gen", jet_ratio, step=epoch - 1, buckets=None, description=None)
-            tf.summary.scalar("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch - 1, description=None)
-            tf.summary.scalar("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch - 1, description=None)
+            jet_pred_wd = scipy.stats.wasserstein_distance(
+                yvals["jets_pt_gen_to_pred"][:, 0], yvals["jets_pt_gen_to_pred"][:, 1]
+            )
+            jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
+            jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
+            jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
 
-            tf.summary.histogram("met_pred_over_gen", pred_met / gen_met, step=epoch - 1, buckets=None, description=None)
-            tf.summary.scalar("met_pred_over_gen_mean", np.mean(pred_met / gen_met), step=epoch - 1, description=None)
-            tf.summary.scalar("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1, description=None)
+            met_pred_wd = scipy.stats.wasserstein_distance(gen_met[:, 0], pred_met[:, 0])
+            met_pred_p25 = np.percentile(met_ratio_pred, 25)
+            met_pred_p50 = np.percentile(met_ratio_pred, 50)
+            met_pred_p75 = np.percentile(met_ratio_pred, 75)
 
-            if comet_experiment:
-                comet_experiment.log_metric("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch - 1)
-                comet_experiment.log_metric("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch - 1)
-                comet_experiment.log_metric("met_pred_over_gen_mean", np.mean(pred_met / gen_met), step=epoch - 1)
-                comet_experiment.log_metric("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1)
+            for name, val in [
+                ("jet_pt_wd", jet_pred_wd),
+                ("jet_pt_p25", jet_pred_p25),
+                ("jet_pt_p50", jet_pred_p50),
+                ("jet_pt_p75", jet_pred_p75),
+                ("met_pred_wd", met_pred_wd),
+                ("met_p25", met_pred_p25),
+                ("met_p50", met_pred_p50),
+                ("met_p75", met_pred_p75),
+            ]:
+                tf.summary.scalar(name, val, step=epoch - 1, description=None)
+
+                if comet_experiment:
+                    comet_experiment.log_metric(name, val, step=epoch - 1)
 
 
 def prepare_callbacks(
