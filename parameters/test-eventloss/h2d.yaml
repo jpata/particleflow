@@ -57,7 +57,7 @@ setup:
   weights_config:
   lr: 0.00005
   num_events_validation: 100
-  num_epochs: 20
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -134,16 +134,12 @@ parameters:
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 2
+  num_graph_layers_reg: 2
   output_decoding:
     activation: elu
     regression_use_classification: yes
     dropout: 0.0
-
-    pt_skip_gate: no
-    eta_skip_gate: yes
-    phi_skip_gate: yes
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -166,8 +162,8 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: yes
     energy_multimodal: yes
+    mask_reg_cls0: no
 
   skip_connection: yes
   debug: no
@@ -231,18 +227,6 @@ validation_datasets:
 
 datasets: 
   cms_pf_ttbar:
-    version: 1.3.1
-    data_dir:
-    manual_dir:
-  cms_pf_ztt:
-    version: 1.3.1
-    data_dir:
-    manual_dir:
-  cms_pf_qcd:
-    version: 1.3.1
-    data_dir:
-    manual_dir:
-  cms_pf_qcd_high_pt:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:

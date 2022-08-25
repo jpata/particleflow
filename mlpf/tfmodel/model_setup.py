@@ -53,22 +53,23 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False):
+    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False, comet_experiment=None):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.dataset = dataset
         self.outpath = outpath
         self.config = config
         self.horovod_enabled = horovod_enabled
+        self.comet_experiment = comet_experiment
 
         self.writer = tf.summary.create_file_writer(outpath)
 
     def on_epoch_end(self, epoch, logs=None):
         if not self.horovod_enabled or hvd.rank() == 0:
-            epoch_end(self, epoch, logs)
+            epoch_end(self, epoch, logs, comet_experiment=self.comet_experiment)
 
 
-def epoch_end(self, epoch, logs):
+def epoch_end(self, epoch, logs, comet_experiment=None):
     # first epoch is 1, not 0
     epoch = epoch + 1
 
@@ -119,14 +120,20 @@ def epoch_end(self, epoch, logs):
             b = np.linspace(0, 5, 100)
             plt.hist(yvals["jets_pt_gen_to_cand"][:, 1] / yvals["jets_pt_gen_to_cand"][:, 0], bins=b, histtype="step", lw=2)
             plt.hist(yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0], bins=b, histtype="step", lw=2)
-            plt.savefig(str(cp_dir / "jet_res.png"), bbox_inches="tight", dpi=100)
+            image_path = str(cp_dir / "jet_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch-1)
             plt.clf()
 
             plt.figure()
             b = np.linspace(0, 5, 100)
             plt.hist(cand_met / gen_met, bins=b, histtype="step", lw=2)
             plt.hist(pred_met / gen_met, bins=b, histtype="step", lw=2)
-            plt.savefig(str(cp_dir / "met_res.png"), bbox_inches="tight", dpi=100)
+            image_path = str(cp_dir / "met_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch-1)
             plt.clf()
 
             tf.summary.histogram("jet_pt_pred_over_gen", jet_ratio, step=epoch - 1, buckets=None, description=None)
@@ -136,6 +143,12 @@ def epoch_end(self, epoch, logs):
             tf.summary.histogram("met_pred_over_gen", pred_met / gen_met, step=epoch - 1, buckets=None, description=None)
             tf.summary.scalar("met_pred_over_gen_mean", np.mean(pred_met / gen_met), step=epoch - 1, description=None)
             tf.summary.scalar("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1, description=None)
+
+            if comet_experiment:
+                comet_experiment.log_metric("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch-1)
+                comet_experiment.log_metric("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch-1)
+                comet_experiment.log_metric("met_pred_over_gen_mean", np.mean(pred_met/gen_met), step=epoch-1)
+                comet_experiment.log_metric("met_pred_over_gen_std", np.std(pred_met/gen_met), step=epoch-1)
 
 
 def prepare_callbacks(
@@ -179,6 +192,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
+        comet_experiment=comet_experiment
     )
 
     callbacks += [cb]

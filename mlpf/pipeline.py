@@ -1,3 +1,5 @@
+import comet_ml # isort:skip
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
