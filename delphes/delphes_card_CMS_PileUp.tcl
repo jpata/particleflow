@@ -210,14 +210,14 @@ module TrackSmearing TrackSmearing {
   set ApplyToPileUp true
 
   set Bz 3.8
- 
-  set D0ResolutionFormula { 0.0 } 
-  set DZResolutionFormula { 0.0 } 
-  set PResolutionFormula { 0.0 } 
+
+  set D0ResolutionFormula { 0.0 }
+  set DZResolutionFormula { 0.0 }
+  set PResolutionFormula { 0.0 }
   set CtgThetaResolutionFormula { 0.0 }
   set PhiResolutionFormula { 0.001 }
 }
- 
+
 module AngularSmearing AngularSmearing {
   set InputArray TrackMerger/tracks
 
@@ -445,7 +445,7 @@ module Merger Calorimeter {
 module PdgCodeFilter EFlowFilter {
   set InputArray HCal/eflowTracks
   set OutputArray eflow
-  
+
   add PdgCode {11}
   add PdgCode {-11}
   add PdgCode {13}
@@ -864,7 +864,7 @@ module TreeWriter TreeWriter {
 
   #EFlow reco outputs, including PU
   #add Branch EFlowMergerAllTracks/eflow PFParticles Particle
-  
+
   #Here the same as above, but split into separate collections
   add Branch EFlowFilter/eflow PFChargedHadron Track
   add Branch HCal/eflowNeutralHadrons PFNeutralHadron Tower
@@ -873,7 +873,7 @@ module TreeWriter TreeWriter {
   add Branch MuonMomentumSmearing/muons PFMuon Muon
 
   #optionally enable PF efficiency for muons, electrons and photons
-  #add Branch ElectronEfficiency/electrons PFElectron Electron  
+  #add Branch ElectronEfficiency/electrons PFElectron Electron
   #add Branch PhotonEfficiency/photons PFPhoton Photon
   #add Branch MuonEfficiency/muons PFMuon Muon
 
@@ -881,4 +881,3 @@ module TreeWriter TreeWriter {
 
 # #not sure if this does anything?
 # set MaxEvents 100
-

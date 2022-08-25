@@ -24,7 +24,7 @@ Top:qqbar2ttbar=on
 PDF:pSet = LHAPDF6:NNPDF23_lo_as_0130_qed
 PDF:extrapolate = on
 
-Tune:ee = 7 
+Tune:ee = 7
 Tune:pp = 14
 # PDF:useLHAPDF = on
 SpaceShower:rapidityOrder = on
@@ -39,7 +39,7 @@ MultipartonInteractions:pT0Ref = 2.09
 MultipartonInteractions:alphaSvalue = 0.126
 # BeamRemnants:reconnectRange  = 1.71
 
-#Pythia settings 
+#Pythia settings
 #PhaseSpace:mHatMin = 100.
 #PhaseSpace:mHatMax = 10000
 #PhaseSpace:pTHatMin = 40

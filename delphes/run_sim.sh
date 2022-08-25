@@ -6,7 +6,7 @@ source /opt/hepsim.sh
 make -f Makefile
 
 XDIR="out/pythia8_ttbar"
-mkdir -p $XDIR 
+mkdir -p $XDIR
 
 ./run_pileup.sh
 
