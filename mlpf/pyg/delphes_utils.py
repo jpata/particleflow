@@ -18,7 +18,7 @@ from pyg.utils import one_hot_embedding
 matplotlib.use("Agg")
 
 
-def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epoch):
+def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epoch, num_classes):
 
     print("Making predictions...")
     t0 = time.time()
@@ -41,6 +41,7 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
 
         gen_p4 = X.ygen.detach().to("cpu")
         cand_ids_one_hot = one_hot_embedding(X.ycand_id.detach().to("cpu"), num_classes)
+        gen_ids_one_hot = one_hot_embedding(X.ygen_id.detach().to("cpu"), num_classes)
         cand_p4 = X.ycand.detach().to("cpu")
 
         tf = time.time()

@@ -20,7 +20,7 @@ def process_func(args):
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield lst[i : i + n]
+        yield lst[i: i + n]
 
 
 class PFGraphDataset(Dataset):
@@ -88,6 +88,7 @@ class PFGraphDataset(Dataset):
             with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
                 data = pickle.load(fi, encoding="iso-8859-1")
 
+            batched_data = []
             for i in range(len(data["X"])):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
