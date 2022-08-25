@@ -18,7 +18,7 @@
 #include "promc/ProMCBook.h"
 
 #include "Pythia8/Pythia.h"
-using namespace Pythia8; 
+using namespace Pythia8;
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
@@ -64,7 +64,7 @@ void readPDG( ProMCHeader * header  ) {
     return;
   }
 
-  // first three lines of the file are useless 
+  // first three lines of the file are useless
   getline(fichier_a_lire,temp_string);
   getline(fichier_a_lire,temp_string);
   getline(fichier_a_lire,temp_string);
@@ -79,7 +79,7 @@ void readPDG( ProMCHeader * header  ) {
     //  the lifetime is ctau in mm
     curstring >> ID >> name >> charge >> mass >> width >> lifetime;
     ProMCHeader_ParticleData* pp= header->add_particledata();
-    pp->set_id(ID); 
+    pp->set_id(ID);
     pp->set_mass(mass);
     pp->set_name(name);
     pp->set_width(width);
@@ -104,8 +104,8 @@ int main(int argc, char* argv[]) {
 
    cout << "HepSim:  Pythia8 Input Configuration =" << argv[1] << endl;
    cout << "HepSim:  ProMC Output =" << argv[2] << endl;
- 
-   
+
+
 
   // Generator. Process selection. Tevatron initialization. Histogram.
   Pythia pythia;
@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
             while(getline(myfile,line))
 	  {
             //the following line trims white space from the beginning of the string
-            line.erase(line.begin(), find_if(line.begin(), line.end(), not1(ptr_fun<int, int>(isspace)))); 
+            line.erase(line.begin(), find_if(line.begin(), line.end(), not1(ptr_fun<int, int>(isspace))));
             if(line[0] == '#') continue;
             if (line.length()<3) continue;
             string tmp=string(line);
@@ -140,23 +140,23 @@ int main(int argc, char* argv[]) {
             tmp.erase(end_pos, tmp.end());
             bool special=false;
             int found1=tmp.find("EventsNumber");
-            if (found1!=(int)std::string::npos) {events=tmp; special=true;} 
+            if (found1!=(int)std::string::npos) {events=tmp; special=true;}
             int found2=tmp.find("ApplyParticleSlim=on");
-            if (found2!=(int)std::string::npos) {apply_slim=true; special=true;} 
+            if (found2!=(int)std::string::npos) {apply_slim=true; special=true;}
             int found3=tmp.find("ApplyParticleSlim=off");
-            if (found3!=(int)std::string::npos) {apply_slim=false; special=true;} 
-            if (!special)  {sets1=sets1+tmp+"; "; pythia.readString(line); } 
-            configs.push_back(line); 
-            } 
+            if (found3!=(int)std::string::npos) {apply_slim=false; special=true;}
+            if (!special)  {sets1=sets1+tmp+"; "; pythia.readString(line); }
+            configs.push_back(line);
+            }
     myfile.close();
     vector<string> readnum=split(events,'=');
-    Ntot= atoi(readnum[1].c_str()); 
+    Ntot= atoi(readnum[1].c_str());
     cout << "Reading events. " << events << " Total number is=" << Ntot<< endl;
     for (unsigned int i=0; i<configs.size(); i++) {
            cout << ".. input ="+configs[i] << endl;
            sets=sets+configs[i]+";";
     }
-   } // end else 
+   } // end else
   pythia.init();
 
   pythia.settings.listChanged(); // Show changed settings
@@ -167,7 +167,7 @@ int main(int argc, char* argv[]) {
   string version=s.str();
 
 
-    // book a histogram, make sure that the output name is Analysis.root 
+    // book a histogram, make sure that the output name is Analysis.root
     TString  ffile("AnalysisHisto.root");
     cout << "\n -> Output file is =" << ffile << endl;
     TFile * RootFile = TFile::Open(ffile, "RECREATE", "Histogram file");
@@ -182,7 +182,7 @@ int main(int argc, char* argv[]) {
   epbook->setDescription(Ntot,"PYTHIA-"+version+"; "+sets);
   // **************** Set a header ***************************
   ProMCHeader header;
-  // cross section in pb 
+  // cross section in pb
   header.set_cross_section( pythia.info.sigmaGen() * 1e9 );
   header.set_cross_section_error( pythia.info.sigmaErr() * 1e9 );
   // the rest
@@ -199,12 +199,12 @@ int main(int argc, char* argv[]) {
   header.set_ecm(pythia.info.eCM());
   header.set_s(pythia.info.s());
 
- // Use the range 0.01 MeV to 20 TeV using varints (integers)  
+ // Use the range 0.01 MeV to 20 TeV using varints (integers)
  // if particle in GeV, we mutiple it by kEV, to get 0.01 MeV =1 unit
  // const double kEV=1000*100;
  // for 13 TeV, increase the precision
   double kEV=1000*100;
-  double slimPT=0.3; 
+  double slimPT=0.3;
   // special run
   double kL=1000;
 
@@ -225,7 +225,7 @@ int main(int argc, char* argv[]) {
 
   }
 
-  if (pythia.info.eCM() >=20000) { // larger energy, i.e. 100 TeV 
+  if (pythia.info.eCM() >=20000) { // larger energy, i.e. 100 TeV
         kEV=1000*10;
         slimPT=0.4;
         kL=1000;
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
    // let's store a map with most common masses:
   readPDG( &header );
 
-  epbook->setHeader(header); // write header 
+  epbook->setHeader(header); // write header
 
 
         std::map <int,float> charges;
@@ -268,7 +268,7 @@ int main(int argc, char* argv[]) {
   for (int n = 0; n < Ntot; n++) {
     if (!pythia.next()) continue;
     // if (n < 1) {pythia.info.list(); pythia.event.list();}
-    // Loop over particles in event. Find last Z0 copy. Fill its pT. 
+    // Loop over particles in event. Find last Z0 copy. Fill its pT.
 
     if ((n<=10) ||
         ((n<=100 && (n%10) == 0)) ||
@@ -288,36 +288,36 @@ int main(int argc, char* argv[]) {
   // fill event information
   ProMCEvent_Event  *eve= promc.mutable_event();
   eve->set_number(n);
-  eve->set_process_id(pythia.info.code());     // process ID 
+  eve->set_process_id(pythia.info.code());     // process ID
   eve->set_scale(pythia.info.pTHat());
   eve->set_alpha_qed(pythia.info.alphaEM());
   eve->set_alpha_qcd(pythia.info.alphaS());
   eve->set_scale_pdf(pythia.info.QFac());
   eve->set_weight(pythia.info.weight());
-  eve->set_pdf1(pythia.info.weightSum() );     // special for Pythia 
-  eve->set_pdf2(pythia.info.mergingWeight() ); // special for Pythia 
+  eve->set_pdf1(pythia.info.weightSum() );     // special for Pythia
+  eve->set_pdf2(pythia.info.mergingWeight() ); // special for Pythia
   eve->set_x1(pythia.info.x1pdf());
   eve->set_x2(pythia.info.x2pdf());
   eve->set_id1(pythia.info.id1pdf());
   eve->set_id2(pythia.info.id2pdf());
 
 
-  // fill truth particle information 
+  // fill truth particle information
   ProMCEvent_Particles  *pa= promc.mutable_particles();
 
 for (int i =0; i<pythia.event.size(); i++) {
 
   int pdgid=pythia.event[i].id();
-  int status=pythia.event[i].statusHepMC(); 
+  int status=pythia.event[i].statusHepMC();
 
 
   if (apply_slim) {
     int take=false;
-    if (i<9) take=true;                               // first original  
-    if (abs(pdgid)==5 ||  abs(pdgid)==6 )             take=true; // top and b 
-    if (abs(pdgid)>10 && abs(pdgid)<17)               take=true; // leptons etc. 
-    if (abs(pdgid)>22 && abs(pdgid)<37)               take=true; // exotic 
-    if (status ==1 && pythia.event[i].pT()>slimPT)    take=true; // final state  
+    if (i<9) take=true;                               // first original
+    if (abs(pdgid)==5 ||  abs(pdgid)==6 )             take=true; // top and b
+    if (abs(pdgid)>10 && abs(pdgid)<17)               take=true; // leptons etc.
+    if (abs(pdgid)>22 && abs(pdgid)<37)               take=true; // exotic
+    if (status ==1 && pythia.event[i].pT()>slimPT)    take=true; // final state
     if (take==false) continue;
   }
 
@@ -334,29 +334,29 @@ for (int i =0; i<pythia.event.size(); i++) {
 
   //if (pythia.event[i].tProd()>100) cout << "Time is " << pythia.event[i].tProd() << endl;
 
-/* just a check. do we truncate energy? 
-  double maxval=2147483647; // std::numeric_limits<int>::min() 
+/* just a check. do we truncate energy?
+  double maxval=2147483647; // std::numeric_limits<int>::min()
   double minval=0.5;
   bool  err=false;
-  if (abs(px)>=maxval || abs(py)>=maxval || abs(pz)>= maxval || 
-      abs(ee)>=maxval || abs(mm)>=maxval || abs(xx)>= maxval || 
-      abs(yy)>=maxval || abs(zz)>=maxval || abs(tt)>= maxval) err=true; 
+  if (abs(px)>=maxval || abs(py)>=maxval || abs(pz)>= maxval ||
+      abs(ee)>=maxval || abs(mm)>=maxval || abs(xx)>= maxval ||
+      abs(yy)>=maxval || abs(zz)>=maxval || abs(tt)>= maxval) err=true;
   if (err){
           cout << "Event =" << i << " Value is too large for varint. Change units: " << kEV << " or " << kL << endl;
-          cout << ee << " " << px << " " << pz << " " << ee << " " << mm << " " << xx << " " << yy << " " << zz << " " << tt << endl; 
+          cout << ee << " " << px << " " << pz << " " << ee << " " << mm << " " << xx << " " << yy << " " << zz << " " << tt << endl;
           exit(1);
-          } 
+          }
 
    err=false;
     if ((abs(px)<minval && abs(px)>0) ||
-        (abs(py)<minval && abs(py)>0) ||  
+        (abs(py)<minval && abs(py)>0) ||
         (abs(pz)<minval && abs(pz)>0) ||
         (abs(ee)<minval && abs(ee)>0) ||
         (abs(mm)<minval && abs(mm)>0) ||
         (abs(xx)<minval && abs(xx)>0) ||
         (abs(yy)<minval && abs(yy)>0) ||
         (abs(zz)<minval && abs(zz)>0) ||
-        (abs(tt)<minval && abs(tt)>0) ) err=true; 
+        (abs(tt)<minval && abs(tt)>0) ) err=true;
     if (err){
           //cout << "Event =" << i << " Value is too small for varint. Change units: kEV=" << kEV << " kL=" << kL << endl;
           //cout << ee << " " << px << " " << pz << " " << ee << " " << mm << " " << xx << " " << yy << " " << zz << " " << tt << endl;
@@ -365,7 +365,7 @@ for (int i =0; i<pythia.event.size(); i++) {
 */
 
   pa->add_pdg_id( pdgid );
-  pa->add_status(  status ); 
+  pa->add_status(  status );
   pa->add_px( (int)px );
   pa->add_py( (int)py );
   pa->add_pz( (int)pz  );
@@ -375,9 +375,9 @@ for (int i =0; i<pythia.event.size(); i++) {
   pa->add_mother2( pythia.event[i].mother2()  );
   pa->add_daughter1( pythia.event[i].daughter1()  );
   pa->add_daughter2( pythia.event[i].daughter2()   );
-  pa->add_barcode( 0 ); // dummy 
-  pa->add_weight( 1 ); // dummy 
-  pa->add_charge( charges[pdgid]  ); // dummy 
+  pa->add_barcode( 0 ); // dummy
+  pa->add_weight( 1 ); // dummy
+  pa->add_charge( charges[pdgid]  ); // dummy
   pa->add_id( i  );
   pa->add_x( (int)xx  );
   pa->add_y( (int)yy  );
@@ -391,10 +391,10 @@ for (int i =0; i<pythia.event.size(); i++) {
 
 
 
-  } // endl loop over events 
+  } // endl loop over events
 
 
-   // To check which changes have actually taken effect 
+   // To check which changes have actually taken effect
    pythia.settings.listChanged();
    // pythia.particleData.listChanged();
    pythia.particleData.list(25);
@@ -410,7 +410,7 @@ for (int i =0; i<pythia.event.size(); i++) {
   double sigmapb_err = pythia.info.sigmaErr() * 1.0E9;
 
   cout << "== Run statistics: " << endl;
-  cout << "== Cross section    =" <<  sigmapb << " +- " << sigmapb_err << " pb" << endl; 
+  cout << "== Cross section    =" <<  sigmapb << " +- " << sigmapb_err << " pb" << endl;
   cout << "== Generated Events =" <<  Ntot << endl;
   double lumi=(Ntot/sigmapb)/1000;
   cout << "== Luminosity       =" <<  lumi  << " fb-1" << endl;
@@ -424,7 +424,7 @@ for (int i =0; i<pythia.event.size(); i++) {
 
 // save post-generation statistics for ProMC
   ProMCStat stat;
-  stat.set_cross_section_accumulated( sigmapb ); // in pb 
+  stat.set_cross_section_accumulated( sigmapb ); // in pb
   stat.set_cross_section_error_accumulated( pythia.info.sigmaErr() * 1e9 );
   stat.set_luminosity_accumulated(  Ntot/sigmapb );
   stat.set_ntried(pythia.info.nTried());
@@ -438,4 +438,3 @@ for (int i =0; i<pythia.event.size(); i++) {
 
   return 0;
 }
-

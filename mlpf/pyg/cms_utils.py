@@ -1,14 +1,10 @@
-import pickle
 import bz2
+import pickle
 
 import numpy as np
-from numpy.lib.recfunctions import append_fields
-
 import torch
-import torch_geometric
-import torch_geometric.utils
-from torch_geometric.data import Dataset, Data, Batch
-
+from numpy.lib.recfunctions import append_fields
+from torch_geometric.data import Data
 
 """Based on https://github.com/jpata/hep_tfds/blob/master/heptfds/cms_utils.py#L10"""
 
@@ -26,18 +22,47 @@ CLASS_NAMES_LONG_CMS = ["none" "charged hadron", "neutral hadron", "hfem", "hfha
 CMS_PF_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 
 X_FEATURES = [
-    "typ_idx", "pt", "eta", "phi", "e",
-    "layer", "depth", "charge", "trajpoint",
-    "eta_ecal", "phi_ecal", "eta_hcal", "phi_hcal", "muon_dt_hits", "muon_csc_hits", "muon_type",
-    "px", "py", "pz", "deltap", "sigmadeltap",
+    "typ_idx",
+    "pt",
+    "eta",
+    "phi",
+    "e",
+    "layer",
+    "depth",
+    "charge",
+    "trajpoint",
+    "eta_ecal",
+    "phi_ecal",
+    "eta_hcal",
+    "phi_hcal",
+    "muon_dt_hits",
+    "muon_csc_hits",
+    "muon_type",
+    "px",
+    "py",
+    "pz",
+    "deltap",
+    "sigmadeltap",
     "gsf_electronseed_trkorecal",
     "gsf_electronseed_dnn1",
     "gsf_electronseed_dnn2",
     "gsf_electronseed_dnn3",
     "gsf_electronseed_dnn4",
     "gsf_electronseed_dnn5",
-    "num_hits", "cluster_flags", "corr_energy",
-    "corr_energy_err", "vx", "vy", "vz", "pterror", "etaerror", "phierror", "lambd", "lambdaerror", "theta", "thetaerror"
+    "num_hits",
+    "cluster_flags",
+    "corr_energy",
+    "corr_energy_err",
+    "vx",
+    "vy",
+    "vz",
+    "pterror",
+    "etaerror",
+    "phierror",
+    "lambd",
+    "lambdaerror",
+    "theta",
+    "thetaerror",
 ]
 
 Y_FEATURES = [
@@ -85,24 +110,15 @@ def prepare_data_cms(fn):
         )
 
         Xelem_flat = np.stack(
-            [
-                Xelem[k].view(np.float32).data
-                for k in X_FEATURES
-            ],
+            [Xelem[k].view(np.float32).data for k in X_FEATURES],
             axis=-1,
         )
         ygen_flat = np.stack(
-            [
-                ygen[k].view(np.float32).data
-                for k in Y_FEATURES
-            ],
+            [ygen[k].view(np.float32).data for k in Y_FEATURES],
             axis=-1,
         )
         ycand_flat = np.stack(
-            [
-                ycand[k].view(np.float32).data
-                for k in Y_FEATURES
-            ],
+            [ycand[k].view(np.float32).data for k in Y_FEATURES],
             axis=-1,
         )
 
