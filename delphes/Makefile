@@ -21,20 +21,20 @@ ROOTGTTLIBS   = $(shell root-config --nonew --glibs)
 CXXFLAGS     += $(ROOTCFLAGS)
 
 LIBDIRARCH=lib/
-OutPutOpt     = -o  
-LIBS         += -L$(PROMC)/lib -lpromc -lprotoc -lprotobuf -lprotobuf-lite -lcbook -lz 
+OutPutOpt     = -o
+LIBS         += -L$(PROMC)/lib -lpromc -lprotoc -lprotobuf -lprotobuf-lite -lcbook -lz
 LIBS         += -L$(PYTHIA8_DIR)/$(LIBDIRARCH) -lpythia8
 
 SOURCE_FILES1 := $(shell ls -1 main.cc)
 
 INCLUDE1=-I./src
 INCLUDE2=-I.
-INCLUDE3=-I$(PROMC)/include -I$(PROMC)/src 
+INCLUDE3=-I$(PROMC)/include -I$(PROMC)/src
 INCLUDE4=-I$(HEPMC)/include
 INCLUDE5=-I$(PYTHIA8_DIR)/include
 
 
-# build object files 
+# build object files
 objects1       = $(patsubst %.cc,%.o,$(SOURCE_FILES1))
 
 
@@ -50,4 +50,4 @@ main.exe: $(objects1)
 	$(LD) $(LDFLAGS) $^ $(LIBS) $(OutPutOpt)$@
 
 clean:
-	        @rm -f *.o *~ main.exe src/*.o ;  echo "Clear.." 
+	        @rm -f *.o *~ main.exe src/*.o ;  echo "Clear.."

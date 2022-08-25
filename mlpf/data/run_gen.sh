@@ -19,4 +19,3 @@
 ./genjob_pu.sh TTbar_14TeV_TuneCUETP8M1_cfi 1
 ./genjob_pu.sh ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi 1
 #./genjob_pu.sh TTbar_14TeV_TuneCUETP8M1_cfi 2
-

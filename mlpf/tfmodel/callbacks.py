@@ -1,10 +1,11 @@
-import pickle
-import tensorflow as tf
-from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.keras.callbacks import ModelCheckpoint
-from pathlib import Path
-import numpy as np
 import json
+import pickle
+from pathlib import Path
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
+
 
 class CustomTensorBoard(TensorBoard):
     """
@@ -16,6 +17,7 @@ class CustomTensorBoard(TensorBoard):
 
     Also logs momemtum for supported optimizers that use momemtum.
     """
+
     def __init__(self, *args, **kwargs):
         self.dump_history = kwargs.pop("dump_history")
         super().__init__(*args, **kwargs)
@@ -62,6 +64,7 @@ class CustomTensorBoard(TensorBoard):
         if isinstance(self.update_freq, int) and batch % self.update_freq == 0:
             logs.update(self._collect_learning_rate(logs))
         super().on_train_batch_end(batch, logs)
+
 
 class CustomModelCheckpoint(ModelCheckpoint):
     """Extends tensorflow.keras.callbacks.ModelCheckpoint to also save optimizer"""
