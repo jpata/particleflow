@@ -9,7 +9,6 @@ import numpy as np
 import tqdm
 import uproot
 import vector
-from networkx.drawing.nx_pydot import graphviz_layout
 
 matplotlib.use("Agg")
 
