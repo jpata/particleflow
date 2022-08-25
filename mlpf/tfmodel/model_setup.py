@@ -123,7 +123,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             image_path = str(cp_dir / "jet_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
             if comet_experiment:
-                comet_experiment.log_image(image_path, step=epoch-1)
+                comet_experiment.log_image(image_path, step=epoch - 1)
             plt.clf()
 
             plt.figure()
@@ -133,7 +133,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             image_path = str(cp_dir / "met_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
             if comet_experiment:
-                comet_experiment.log_image(image_path, step=epoch-1)
+                comet_experiment.log_image(image_path, step=epoch - 1)
             plt.clf()
 
             tf.summary.histogram("jet_pt_pred_over_gen", jet_ratio, step=epoch - 1, buckets=None, description=None)
@@ -145,10 +145,10 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             tf.summary.scalar("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1, description=None)
 
             if comet_experiment:
-                comet_experiment.log_metric("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch-1)
-                comet_experiment.log_metric("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch-1)
-                comet_experiment.log_metric("met_pred_over_gen_mean", np.mean(pred_met/gen_met), step=epoch-1)
-                comet_experiment.log_metric("met_pred_over_gen_std", np.std(pred_met/gen_met), step=epoch-1)
+                comet_experiment.log_metric("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch - 1)
+                comet_experiment.log_metric("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch - 1)
+                comet_experiment.log_metric("met_pred_over_gen_mean", np.mean(pred_met / gen_met), step=epoch - 1)
+                comet_experiment.log_metric("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1)
 
 
 def prepare_callbacks(
@@ -192,7 +192,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
-        comet_experiment=comet_experiment
+        comet_experiment=comet_experiment,
     )
 
     callbacks += [cb]
