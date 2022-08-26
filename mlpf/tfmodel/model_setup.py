@@ -126,12 +126,12 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
             image_path = str(cp_dir / "jet_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
-            if comet_experiment:
-                comet_experiment.log_image(image_path, step=epoch - 1)
             plt.xlabel("jet pT reco/gen")
             plt.ylabel("number of matched jets")
             plt.legend(loc="best")
             plt.clf()
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch - 1)
 
             plt.figure()
             b = np.linspace(0, 5, 100)
@@ -139,12 +139,12 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
             image_path = str(cp_dir / "met_res.png")
             plt.savefig(image_path, bbox_inches="tight", dpi=100)
-            if comet_experiment:
-                comet_experiment.log_image(image_path, step=epoch - 1)
             plt.xlabel("MET reco/gen")
             plt.ylabel("number of events")
             plt.legend(loc="best")
             plt.clf()
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch - 1)
 
             jet_pred_wd = scipy.stats.wasserstein_distance(
                 yvals["jets_pt_gen_to_pred"][:, 0], yvals["jets_pt_gen_to_pred"][:, 1]
