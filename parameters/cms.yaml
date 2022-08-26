@@ -148,8 +148,6 @@ parameters:
     layernorm: yes
     mask_reg_cls0: no
 
-    energy_multimodal: no
-
   skip_connection: yes
   debug: no
 

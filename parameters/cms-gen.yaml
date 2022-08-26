@@ -164,7 +164,6 @@ parameters:
     energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: no
-    energy_multimodal: yes
 
   skip_connection: yes
   debug: no

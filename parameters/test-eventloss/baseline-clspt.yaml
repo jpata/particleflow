@@ -163,7 +163,6 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    energy_multimodal: yes
     mask_reg_cls0: no
 
   skip_connection: yes

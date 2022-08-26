@@ -526,7 +526,6 @@ class OutputDecoding(tf.keras.Model):
         energy_num_layers=3,
         layernorm=False,
         mask_reg_cls0=True,
-        energy_multimodal=True,
         event_set_output=False,
         **kwargs
     ):
@@ -538,8 +537,6 @@ class OutputDecoding(tf.keras.Model):
         self.dropout = dropout
 
         self.mask_reg_cls0 = mask_reg_cls0
-
-        self.energy_multimodal = energy_multimodal
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
@@ -598,7 +595,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            num_output_classes if self.energy_multimodal else 1,
+            1,
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
@@ -625,7 +622,6 @@ class OutputDecoding(tf.keras.Model):
         msk_input_outtype = tf.cast(msk_input, out_id_logits.dtype)
 
         out_id_softmax = tf.nn.softmax(out_id_logits, axis=-1)
-        out_id_hard_softmax = tf.stop_gradient(tf.nn.softmax(100 * out_id_logits, axis=-1))
 
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
@@ -665,10 +661,7 @@ class OutputDecoding(tf.keras.Model):
         pred_energy_corr = pred_energy_corr * msk_input_outtype
 
         # In case of a multimodal prediction, weight the per-class energy predictions by the approximately one-hot vector
-        if self.energy_multimodal:
-            pred_energy = orig_energy + tf.reduce_sum(out_id_hard_softmax * pred_energy_corr, axis=-1, keepdims=True)
-        else:
-            pred_energy = orig_energy + pred_energy_corr
+        pred_energy = orig_energy + pred_energy_corr
         pred_energy = tf.abs(pred_energy)
 
         # compute pt=E/cosh(eta)
@@ -682,15 +675,15 @@ class OutputDecoding(tf.keras.Model):
         pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
-        msk_output = tf.expand_dims(tf.cast(tf.argmax(out_id_hard_softmax, axis=-1) != 0, tf.float32), axis=-1)
+        sigmoid_turnon = tf.sigmoid(-out_id_logits[..., 0:1])
 
         if self.mask_reg_cls0:
-            out_charge = out_charge * msk_output
-            pred_pt = pred_pt * msk_output
-            pred_eta = pred_eta * msk_output
-            pred_sin_phi = pred_sin_phi * msk_output
-            pred_cos_phi = pred_cos_phi * msk_output
-            pred_energy = pred_energy * msk_output
+            out_charge = out_charge * sigmoid_turnon
+            pred_pt = pred_pt * sigmoid_turnon
+            pred_eta = pred_eta * sigmoid_turnon
+            pred_sin_phi = pred_sin_phi * sigmoid_turnon
+            pred_cos_phi = pred_cos_phi * sigmoid_turnon
+            pred_energy = pred_energy * sigmoid_turnon
 
         ret = {
             "cls": out_id_softmax,
