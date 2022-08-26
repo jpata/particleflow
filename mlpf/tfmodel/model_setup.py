@@ -115,33 +115,37 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
 
         with self.writer.as_default():
-            jet_ratio_pred = yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0]
-            jet_ratio_cand = yvals["jets_pt_gen_to_cand"][:, 1] / yvals["jets_pt_gen_to_cand"][:, 0]
-            met_ratio_pred = pred_met[:, 0] / gen_met[:, 0]
-            met_ratio_cand = cand_met[:, 0] / gen_met[:, 0]
+            jet_ratio_pred = (yvals["jets_pt_gen_to_pred"][:, 1] - yvals["jets_pt_gen_to_pred"][:, 0]) / yvals[
+                "jets_pt_gen_to_pred"
+            ][:, 0]
+            jet_ratio_cand = (yvals["jets_pt_gen_to_cand"][:, 1] - yvals["jets_pt_gen_to_cand"][:, 0]) / yvals[
+                "jets_pt_gen_to_cand"
+            ][:, 0]
+            met_ratio_pred = (pred_met[:, 0] - gen_met[:, 0]) / gen_met[:, 0]
+            met_ratio_cand = (cand_met[:, 0] - cand_met[:, 0]) / gen_met[:, 0]
 
             plt.figure()
-            b = np.linspace(0, 5, 100)
+            b = np.linspace(-2, 5, 100)
             plt.hist(jet_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
             plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-            image_path = str(cp_dir / "jet_res.png")
-            plt.savefig(image_path, bbox_inches="tight", dpi=100)
-            plt.xlabel("jet pT reco/gen")
+            plt.xlabel("jet pT (reco-gen)/gen")
             plt.ylabel("number of matched jets")
             plt.legend(loc="best")
+            image_path = str(cp_dir / "jet_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
             plt.clf()
             if comet_experiment:
                 comet_experiment.log_image(image_path, step=epoch - 1)
 
             plt.figure()
-            b = np.linspace(0, 5, 100)
+            b = np.linspace(-2, 5, 100)
             plt.hist(met_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
             plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-            image_path = str(cp_dir / "met_res.png")
-            plt.savefig(image_path, bbox_inches="tight", dpi=100)
-            plt.xlabel("MET reco/gen")
+            plt.xlabel("MET (reco-gen)/gen")
             plt.ylabel("number of events")
             plt.legend(loc="best")
+            image_path = str(cp_dir / "met_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
             plt.clf()
             if comet_experiment:
                 comet_experiment.log_image(image_path, step=epoch - 1)
@@ -152,21 +156,21 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
             jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
             jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
+            jet_pred_iqr = jet_pred_p75 - jet_pred_p25
 
             met_pred_wd = scipy.stats.wasserstein_distance(gen_met[:, 0], pred_met[:, 0])
             met_pred_p25 = np.percentile(met_ratio_pred, 25)
             met_pred_p50 = np.percentile(met_ratio_pred, 50)
             met_pred_p75 = np.percentile(met_ratio_pred, 75)
+            met_pred_iqr = met_pred_p75 - met_pred_p25
 
             for name, val in [
-                ("jet_pt_wd", jet_pred_wd),
-                ("jet_pt_p25", jet_pred_p25),
-                ("jet_pt_p50", jet_pred_p50),
-                ("jet_pt_p75", jet_pred_p75),
-                ("met_pred_wd", met_pred_wd),
-                ("met_p25", met_pred_p25),
-                ("met_p50", met_pred_p50),
-                ("met_p75", met_pred_p75),
+                ("jet_wd", jet_pred_wd),
+                ("jet_iqr", jet_pred_iqr),
+                ("jet_med", jet_pred_p50),
+                ("met_wd", met_pred_wd),
+                ("met_iqr", met_pred_iqr),
+                ("met_med", met_pred_p50),
             ]:
                 tf.summary.scalar(name, val, step=epoch - 1, description=None)
 

@@ -254,50 +254,6 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
         )
 
 
-def compute_weights_invsqrt(X, y, w):
-    wn = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    # wn /= tf.reduce_sum(wn)
-    return X, y, wn
-
-
-def compute_weights_none(X, y, w):
-    wn = tf.ones_like(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    return X, y, wn
-
-
-def make_weight_function(config):
-    def weight_func(X, y, w):
-
-        w_signal_only = tf.where(y[:, 0] == 0, 0.0, 1.0)
-        w_signal_only *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_none = tf.ones_like(w)
-        w_none *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
-        w_invsqrt *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_signal_only_invsqrt = tf.where(y[:, 0] == 0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w))
-        w_signal_only_invsqrt *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        weight_d = {
-            "none": w_none,
-            "signal_only": w_signal_only,
-            "signal_only_inverse_sqrt": w_signal_only_invsqrt,
-            "inverse_sqrt": w_invsqrt,
-        }
-
-        ret_w = {}
-        for loss_component, weight_type in config["sample_weights"].items():
-            ret_w[loss_component] = weight_d[weight_type]
-
-        return X, y, ret_w
-
-    return weight_func
-
-
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
 
@@ -594,9 +550,23 @@ def gen_jet_loss(y_true, y_pred):
         px = y[typ][..., 0] * y[typ][..., 4]
         py = y[typ][..., 0] * y[typ][..., 3]
         jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
+    return jet_pt
 
+
+@tf.function
+def gen_jet_mse_loss(y_true, y_pred):
+
+    jet_pt = gen_jet_loss(y_true, y_pred)
     mse = tf.math.sqrt(tf.reduce_mean((jet_pt["true"] - jet_pt["pred"]) ** 2, axis=[-1, -2]))
     return mse
+
+
+@tf.function
+def gen_jet_logcosh_loss(y_true, y_pred):
+
+    jet_pt = gen_jet_loss(y_true, y_pred)
+    loss = tf.keras.losses.log_cosh(jet_pt["true"], jet_pt["pred"])
+    return loss
 
 
 def get_loss_dict(config):
@@ -622,16 +592,19 @@ def get_loss_dict(config):
         "energy": config["loss"]["energy_loss_coef"],
     }
 
+    if config["loss"]["event_loss"] != "none":
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     if config["loss"]["event_loss"] == "sliced_wasserstein":
         loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     if config["loss"]["event_loss"] == "hist_2d":
         loss_dict["pt_e_eta_phi"] = hist_2d_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
-    if config["loss"]["event_loss"] == "gen_jet":
-        loss_dict["pt_e_eta_phi"] = gen_jet_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+    if config["loss"]["event_loss"] == "gen_jet_mse":
+        loss_dict["pt_e_eta_phi"] = gen_jet_mse_loss
+
+    if config["loss"]["event_loss"] == "gen_jet_logcosh":
+        loss_dict["pt_e_eta_phi"] = gen_jet_logcosh_loss
 
     return loss_dict, loss_weights
