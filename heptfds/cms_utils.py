@@ -135,9 +135,10 @@ def prepare_data_cms(fn, padded_num_elem_size):
         cls_id = ygen[:, :, 0]
         valid = (cls_id != 0)
         # save mapping of index after masking -> index before masking as numpy array
-        # inspired from: https://stackoverflow.com/a/1044443
+        # inspired from:
+        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
         cumsum = np.cumsum(valid) - 1
-        index_mapping = np.nonzero(np.r_[1, np.diff(cumsum)[:-1]])[0]
+        _, index_mapping = np.unique(cumsum, return_index=True)
 
         pt = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("pt")], valid)])
         eta = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("eta")], valid)])
