@@ -94,6 +94,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         yvals = {}
         for fi in glob.glob(str(cp_dir / "*.npz")):
             dd = np.load(fi)
+            os.remove(fi)
             keys_in_file = list(dd.keys())
             for k in keys_in_file:
                 if k == "X":
