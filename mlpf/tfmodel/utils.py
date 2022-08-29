@@ -560,7 +560,7 @@ def compute_jet_pt(y_true, y_pred, max_jets=201):
 @tf.function
 def gen_jet_mse_loss(y_true, y_pred):
 
-    jet_pt = gen_jet_loss(y_true, y_pred)
+    jet_pt = compute_jet_pt(y_true, y_pred)
     mse = tf.math.sqrt(tf.reduce_mean((jet_pt["true"] - jet_pt["pred"]) ** 2, axis=[-1, -2]))
     return mse
 
@@ -568,7 +568,7 @@ def gen_jet_mse_loss(y_true, y_pred):
 @tf.function
 def gen_jet_logcosh_loss(y_true, y_pred):
 
-    jet_pt = gen_jet_loss(y_true, y_pred)
+    jet_pt = compute_jet_pt(y_true, y_pred)
     loss = tf.keras.losses.log_cosh(jet_pt["true"], jet_pt["pred"])
     return loss
 
