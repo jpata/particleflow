@@ -23,6 +23,7 @@ dataset:
   padded_num_elem_size: 12000
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
+  cls_weight_by_pt: no
 
 loss:
   classification_loss_coef: 100.0
@@ -146,8 +147,6 @@ parameters:
     energy_num_layers: 3
     layernorm: yes
     mask_reg_cls0: no
-
-    energy_multimodal: no
 
   skip_connection: yes
   debug: no

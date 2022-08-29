@@ -14,24 +14,34 @@ from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleSchedu
 
 
 @tf.function
-def histogram_2d(eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
+def histogram_2d(mask, eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
     eta_bins = tf.histogram_fixed_width_bins(eta, eta_range, nbins=nbins, dtype=bin_dtype)
     phi_bins = tf.histogram_fixed_width_bins(phi, phi_range, nbins=nbins, dtype=bin_dtype)
 
+    # create empty histograms
     hist_px = tf.zeros((nbins, nbins), dtype=weights_px.dtype)
     hist_py = tf.zeros((nbins, nbins), dtype=weights_py.dtype)
-    indices = tf.transpose(tf.stack([phi_bins, eta_bins]))
+    indices = tf.transpose(tf.stack([eta_bins, phi_bins]))
 
-    hist_px = tf.tensor_scatter_nd_add(hist_px, indices, weights_px)
-    hist_py = tf.tensor_scatter_nd_add(hist_py, indices, weights_py)
+    indices_masked = tf.boolean_mask(indices, mask)
+    weights_px_masked = tf.boolean_mask(weights_px, mask)
+    weights_py_masked = tf.boolean_mask(weights_py, mask)
+
+    hist_px = tf.tensor_scatter_nd_add(hist_px, indices=indices_masked, updates=weights_px_masked)
+    hist_py = tf.tensor_scatter_nd_add(hist_py, indices=indices_masked, updates=weights_py_masked)
     hist_pt = tf.sqrt(hist_px**2 + hist_py**2)
     return hist_pt
 
 
 @tf.function
-def batched_histogram_2d(eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
-    return tf.vectorized_map(
-        lambda a: histogram_2d(a[0], a[1], a[2], a[3], x_range, y_range, nbins, bin_dtype), (eta, phi, w_px, w_py)
+def batched_histogram_2d(mask, eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.map_fn(
+        lambda a: histogram_2d(a[0], a[1], a[2], a[3], a[4], x_range, y_range, nbins, bin_dtype),
+        (mask, eta, phi, w_px, w_py),
+        fn_output_signature=tf.TensorSpec(
+            [nbins, nbins],
+            dtype=tf.float32,
+        ),
     )
 
 
@@ -244,50 +254,6 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
         )
 
 
-def compute_weights_invsqrt(X, y, w):
-    wn = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    # wn /= tf.reduce_sum(wn)
-    return X, y, wn
-
-
-def compute_weights_none(X, y, w):
-    wn = tf.ones_like(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    return X, y, wn
-
-
-def make_weight_function(config):
-    def weight_func(X, y, w):
-
-        w_signal_only = tf.where(y[:, 0] == 0, 0.0, 1.0)
-        w_signal_only *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_none = tf.ones_like(w)
-        w_none *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
-        w_invsqrt *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        w_signal_only_invsqrt = tf.where(y[:, 0] == 0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w))
-        w_signal_only_invsqrt *= tf.cast(X[:, 0] != 0, tf.float32)
-
-        weight_d = {
-            "none": w_none,
-            "signal_only": w_signal_only,
-            "signal_only_inverse_sqrt": w_signal_only_invsqrt,
-            "inverse_sqrt": w_invsqrt,
-        }
-
-        ret_w = {}
-        for loss_component, weight_type in config["sample_weights"].items():
-            ret_w[loss_component] = weight_d[weight_type]
-
-        return X, y, ret_w
-
-    return weight_func
-
-
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
 
@@ -469,12 +435,13 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
 
 @tf.function
-def hist_loss_2d(y_true, y_pred):
+def hist_2d_loss(y_true, y_pred):
 
     eta_true = y_true[..., 2]
     eta_pred = y_pred[..., 2]
-    phi_true = tf.math.atan2(y_true[..., 3], y_true[..., 4])
-    phi_pred = tf.math.atan2(y_pred[..., 3], y_pred[..., 4])
+
+    sin_phi_true = y_true[..., 3]
+    sin_phi_pred = y_pred[..., 3]
 
     pt_true = y_true[..., 0]
     pt_pred = y_pred[..., 0]
@@ -484,12 +451,30 @@ def hist_loss_2d(y_true, y_pred):
     px_pred = pt_pred * y_pred[..., 4]
     py_pred = pt_pred * y_pred[..., 3]
 
+    mask = eta_true != 0.0
+
+    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi, cos_phi)
+    # introduces a numerical instability which can lead to NaN.
     pt_hist_true = batched_histogram_2d(
-        eta_true, phi_true, px_true, py_true, tf.cast([-6.0, 6.0], tf.float32), tf.cast([-4.0, 4.0], tf.float32), 20
+        mask,
+        eta_true,
+        sin_phi_true,
+        px_true,
+        py_true,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
     )
 
     pt_hist_pred = batched_histogram_2d(
-        eta_pred, phi_pred, px_pred, py_pred, tf.cast([-6.0, 6.0], tf.float32), tf.cast([-4.0, 4.0], tf.float32), 20
+        mask,
+        eta_pred,
+        sin_phi_pred,
+        px_pred,
+        py_pred,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
     )
 
     mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true - pt_hist_pred) ** 2, axis=[-1, -2]))
@@ -552,22 +537,40 @@ def batched_jet_reco(px, py, jet_idx, max_jets):
     )
 
 
+# y_true: [nbatch, nptcl, 5] array of true particle properties.
+# y_pred: [nbatch, nptcl, 5] array of predicted particle properties
+# last dim corresponds to [pt, energy, eta, sin_phi, cos_phi, gen_jet_idx]
+# max_jets: integer of the max number of jets to consider
+# returns: dict of true and predicted jet pts.
 @tf.function
-def gen_jet_loss(y_true, y_pred):
+def compute_jet_pt(y_true, y_pred, max_jets=201):
     y = {}
     y["true"] = y_true
     y["pred"] = y_pred
     jet_pt = {}
 
-    max_jets = 201
     jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
     for typ in ["true", "pred"]:
         px = y[typ][..., 0] * y[typ][..., 4]
         py = y[typ][..., 0] * y[typ][..., 3]
         jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
+    return jet_pt
 
+
+@tf.function
+def gen_jet_mse_loss(y_true, y_pred):
+
+    jet_pt = compute_jet_pt(y_true, y_pred)
     mse = tf.math.sqrt(tf.reduce_mean((jet_pt["true"] - jet_pt["pred"]) ** 2, axis=[-1, -2]))
     return mse
+
+
+@tf.function
+def gen_jet_logcosh_loss(y_true, y_pred):
+
+    jet_pt = compute_jet_pt(y_true, y_pred)
+    loss = tf.keras.losses.log_cosh(jet_pt["true"], jet_pt["pred"])
+    return loss
 
 
 def get_loss_dict(config):
@@ -593,16 +596,19 @@ def get_loss_dict(config):
         "energy": config["loss"]["energy_loss_coef"],
     }
 
+    if config["loss"]["event_loss"] != "none":
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     if config["loss"]["event_loss"] == "sliced_wasserstein":
         loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
 
     if config["loss"]["event_loss"] == "hist_2d":
-        loss_dict["pt_e_eta_phi"] = hist_loss_2d
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+        loss_dict["pt_e_eta_phi"] = hist_2d_loss
 
-    if config["loss"]["event_loss"] == "gen_jet":
-        loss_dict["pt_e_eta_phi"] = gen_jet_loss
-        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+    if config["loss"]["event_loss"] == "gen_jet_mse":
+        loss_dict["pt_e_eta_phi"] = gen_jet_mse_loss
+
+    if config["loss"]["event_loss"] == "gen_jet_logcosh":
+        loss_dict["pt_e_eta_phi"] = gen_jet_logcosh_loss
 
     return loss_dict, loss_weights

@@ -13,6 +13,7 @@ import awkward
 import fastjet
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tf2onnx
@@ -53,22 +54,23 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False):
+    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False, comet_experiment=None):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.dataset = dataset
         self.outpath = outpath
         self.config = config
         self.horovod_enabled = horovod_enabled
+        self.comet_experiment = comet_experiment
 
         self.writer = tf.summary.create_file_writer(outpath)
 
     def on_epoch_end(self, epoch, logs=None):
         if not self.horovod_enabled or hvd.rank() == 0:
-            epoch_end(self, epoch, logs)
+            epoch_end(self, epoch, logs, comet_experiment=self.comet_experiment)
 
 
-def epoch_end(self, epoch, logs):
+def epoch_end(self, epoch, logs, comet_experiment=None):
     # first epoch is 1, not 0
     epoch = epoch + 1
 
@@ -92,50 +94,106 @@ def epoch_end(self, epoch, logs):
         yvals = {}
         for fi in glob.glob(str(cp_dir / "*.npz")):
             dd = np.load(fi)
+            os.remove(fi)
             keys_in_file = list(dd.keys())
             for k in keys_in_file:
-                if k == "X":
-                    continue
                 if not (k in yvals):
                     yvals[k] = []
                 yvals[k].append(dd[k])
         yvals = {k: np.concatenate(v) for k, v in yvals.items()}
 
-        gen_px = yvals["gen_pt"] * yvals["gen_cos_phi"]
-        gen_py = yvals["gen_pt"] * yvals["gen_sin_phi"]
-        pred_px = yvals["pred_pt"] * yvals["pred_cos_phi"]
-        pred_py = yvals["pred_pt"] * yvals["pred_sin_phi"]
-        cand_px = yvals["cand_pt"] * yvals["cand_cos_phi"]
-        cand_py = yvals["cand_pt"] * yvals["cand_sin_phi"]
+        # compute the mask of badly-predicted particles and save to a file bad.npz
+        denom = np.maximum(yvals["gen_pt"], yvals["pred_pt"])
+        ratio = np.abs(yvals["gen_pt"] - yvals["pred_pt"]) / denom
+        ratio[np.isnan(ratio)] = 0
+        msk_bad = (ratio > 0.8)[:, :, 0]
+        yvals_bad = {
+            k: yvals[k][msk_bad]
+            for k in yvals.keys()
+            if (k.startswith("gen_") or k.startswith("pred_") or k.startswith("cand_"))
+        }
+        print("Number of bad particles: {}".format(len(yvals_bad["gen_cls"])))
+        with open("{}/bad.npz".format(str(cp_dir)), "wb") as fi:
+            np.savez(fi, **yvals_bad)
+
+        msk_gen = (np.argmax(yvals["gen_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
+        gen_px = yvals["gen_pt"] * yvals["gen_cos_phi"] * msk_gen
+        gen_py = yvals["gen_pt"] * yvals["gen_sin_phi"] * msk_gen
+
+        msk_pred = (np.argmax(yvals["pred_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
+        pred_px = yvals["pred_pt"] * yvals["pred_cos_phi"] * msk_pred
+        pred_py = yvals["pred_pt"] * yvals["pred_sin_phi"] * msk_pred
+
+        msk_cand = (np.argmax(yvals["cand_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
+        cand_px = yvals["cand_pt"] * yvals["cand_cos_phi"] * msk_cand
+        cand_py = yvals["cand_pt"] * yvals["cand_sin_phi"] * msk_cand
 
         gen_met = np.sqrt(np.sum(gen_px**2 + gen_py**2, axis=1))
         pred_met = np.sqrt(np.sum(pred_px**2 + pred_py**2, axis=1))
         cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
 
         with self.writer.as_default():
-            jet_ratio = yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0]
+            jet_ratio_pred = (yvals["jets_pt_gen_to_pred"][:, 1] - yvals["jets_pt_gen_to_pred"][:, 0]) / yvals[
+                "jets_pt_gen_to_pred"
+            ][:, 0]
+            jet_ratio_cand = (yvals["jets_pt_gen_to_cand"][:, 1] - yvals["jets_pt_gen_to_cand"][:, 0]) / yvals[
+                "jets_pt_gen_to_cand"
+            ][:, 0]
+            met_ratio_pred = (pred_met[:, 0] - gen_met[:, 0]) / gen_met[:, 0]
+            met_ratio_cand = (cand_met[:, 0] - gen_met[:, 0]) / gen_met[:, 0]
 
             plt.figure()
-            b = np.linspace(0, 5, 100)
-            plt.hist(yvals["jets_pt_gen_to_cand"][:, 1] / yvals["jets_pt_gen_to_cand"][:, 0], bins=b, histtype="step", lw=2)
-            plt.hist(yvals["jets_pt_gen_to_pred"][:, 1] / yvals["jets_pt_gen_to_pred"][:, 0], bins=b, histtype="step", lw=2)
-            plt.savefig(str(cp_dir / "jet_res.png"), bbox_inches="tight", dpi=100)
+            b = np.linspace(-2, 5, 100)
+            plt.hist(jet_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
+            plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
+            plt.xlabel("jet pT (reco-gen)/gen")
+            plt.ylabel("number of matched jets")
+            plt.legend(loc="best")
+            image_path = str(cp_dir / "jet_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
             plt.clf()
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch - 1)
 
             plt.figure()
-            b = np.linspace(0, 5, 100)
-            plt.hist(cand_met / gen_met, bins=b, histtype="step", lw=2)
-            plt.hist(pred_met / gen_met, bins=b, histtype="step", lw=2)
-            plt.savefig(str(cp_dir / "met_res.png"), bbox_inches="tight", dpi=100)
+            b = np.linspace(-1, 1, 100)
+            plt.hist(met_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
+            plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
+            plt.xlabel("MET (reco-gen)/gen")
+            plt.ylabel("number of events")
+            plt.legend(loc="best")
+            image_path = str(cp_dir / "met_res.png")
+            plt.savefig(image_path, bbox_inches="tight", dpi=100)
             plt.clf()
+            if comet_experiment:
+                comet_experiment.log_image(image_path, step=epoch - 1)
 
-            tf.summary.histogram("jet_pt_pred_over_gen", jet_ratio, step=epoch - 1, buckets=None, description=None)
-            tf.summary.scalar("jet_pt_pred_over_gen_mean", np.mean(jet_ratio), step=epoch - 1, description=None)
-            tf.summary.scalar("jet_pt_pred_over_gen_std", np.std(jet_ratio), step=epoch - 1, description=None)
+            jet_pred_wd = scipy.stats.wasserstein_distance(
+                yvals["jets_pt_gen_to_pred"][:, 0], yvals["jets_pt_gen_to_pred"][:, 1]
+            )
+            jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
+            jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
+            jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
+            jet_pred_iqr = jet_pred_p75 - jet_pred_p25
 
-            tf.summary.histogram("met_pred_over_gen", pred_met / gen_met, step=epoch - 1, buckets=None, description=None)
-            tf.summary.scalar("met_pred_over_gen_mean", np.mean(pred_met / gen_met), step=epoch - 1, description=None)
-            tf.summary.scalar("met_pred_over_gen_std", np.std(pred_met / gen_met), step=epoch - 1, description=None)
+            met_pred_wd = scipy.stats.wasserstein_distance(gen_met[:, 0], pred_met[:, 0])
+            met_pred_p25 = np.percentile(met_ratio_pred, 25)
+            met_pred_p50 = np.percentile(met_ratio_pred, 50)
+            met_pred_p75 = np.percentile(met_ratio_pred, 75)
+            met_pred_iqr = met_pred_p75 - met_pred_p25
+
+            for name, val in [
+                ("jet_wd", jet_pred_wd),
+                ("jet_iqr", jet_pred_iqr),
+                ("jet_med", jet_pred_p50),
+                ("met_wd", met_pred_wd),
+                ("met_iqr", met_pred_iqr),
+                ("met_med", met_pred_p50),
+            ]:
+                tf.summary.scalar(name, val, step=epoch - 1, description=None)
+
+                if comet_experiment:
+                    comet_experiment.log_metric(name, val, step=epoch - 1)
 
 
 def prepare_callbacks(
@@ -179,6 +237,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
+        comet_experiment=comet_experiment,
     )
 
     callbacks += [cb]
@@ -282,7 +341,7 @@ def deltar(a, b):
 
 # Given a model, evaluates it on each batch of the validation dataset
 # For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
-def eval_model(model, dataset, config, outdir):
+def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
 
     ibatch = 0
 
@@ -290,6 +349,12 @@ def eval_model(model, dataset, config, outdir):
 
     for elem in tqdm(dataset, desc="Evaluating model"):
         y_pred = model.predict(elem["X"], verbose=False)
+
+        # mask the predictions where there was no predicted particles
+        msk = (np.argmax(y_pred["cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
+        for k in y_pred.keys():
+            if k != "cls":
+                y_pred[k] = y_pred[k] * msk
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
@@ -321,8 +386,8 @@ def eval_model(model, dataset, config, outdir):
 
             jets = cluster.inclusive_jets()
             jet_constituents = cluster.constituent_index()
-            jets_coll[typ] = jets[jets.pt > 5.0]
-            jets_const[typ] = jet_constituents[jets.pt > 5.0]
+            jets_coll[typ] = jets[jets.pt > jet_ptcut]
+            jets_const[typ] = jet_constituents[jets.pt > jet_ptcut]
 
         for key in ["pt", "eta", "phi", "energy"]:
             outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
@@ -333,7 +398,7 @@ def eval_model(model, dataset, config, outdir):
         cart = awkward.cartesian([jets_coll["gen"], jets_coll["pred"]], nested=True)
         jets_a, jets_b = awkward.unzip(cart)
         drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < 0.1) for d in drs]
+        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
         m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
         m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
         j1s = jets_coll["gen"][m0]
@@ -346,7 +411,7 @@ def eval_model(model, dataset, config, outdir):
         cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
         jets_a, jets_b = awkward.unzip(cart)
         drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < 0.1) for d in drs]
+        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
         m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
         m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
         j1s = jets_coll["gen"][m0]

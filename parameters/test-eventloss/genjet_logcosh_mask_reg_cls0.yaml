@@ -46,8 +46,8 @@ loss:
   eta_loss:
     type: Huber
     delta: 0.1
-  event_loss: none
-  event_loss_coef: 0.0
+  event_loss: gen_jet_logcosh
+  event_loss_coef: 1.0
 
 tensorflow:
   eager: no
@@ -163,7 +163,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: no
+    mask_reg_cls0: yes
 
   skip_connection: yes
   debug: no
