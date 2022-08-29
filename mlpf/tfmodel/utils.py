@@ -537,11 +537,11 @@ def batched_jet_reco(px, py, jet_idx, max_jets):
     )
 
 
-#y_true: [nbatch, nptcl, 5] array of true particle properties.
-#y_pred: [nbatch, nptcl, 5] array of predicted particle properties
-#last dim corresponds to [pt, energy, eta, sin_phi, cos_phi, gen_jet_idx]
-#max_jets: integer of the max number of jets to consider
-#returns: dict of true and predicted jet pts.  
+# y_true: [nbatch, nptcl, 5] array of true particle properties.
+# y_pred: [nbatch, nptcl, 5] array of predicted particle properties
+# last dim corresponds to [pt, energy, eta, sin_phi, cos_phi, gen_jet_idx]
+# max_jets: integer of the max number of jets to consider
+# returns: dict of true and predicted jet pts.
 @tf.function
 def compute_jet_pt(y_true, y_pred, max_jets=201):
     y = {}
