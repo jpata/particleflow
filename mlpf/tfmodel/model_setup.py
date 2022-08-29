@@ -97,12 +97,24 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             os.remove(fi)
             keys_in_file = list(dd.keys())
             for k in keys_in_file:
-                if k == "X":
-                    continue
                 if not (k in yvals):
                     yvals[k] = []
                 yvals[k].append(dd[k])
         yvals = {k: np.concatenate(v) for k, v in yvals.items()}
+
+        # compute the mask of badly-predicted particles and save to a file bad.npz
+        denom = np.maximum(yvals["gen_pt"], yvals["pred_pt"])
+        ratio = np.abs(yvals["gen_pt"] - yvals["pred_pt"]) / denom
+        ratio[np.isnan(ratio)] = 0
+        msk_bad = (ratio > 0.8)[:, :, 0]
+        yvals_bad = {
+            k: yvals[k][msk_bad]
+            for k in yvals.keys()
+            if (k.startswith("gen_") or k.startswith("pred_") or k.startswith("cand_"))
+        }
+        print("Number of bad particles: {}".format(len(yvals_bad["gen_cls"])))
+        with open("{}/bad.npz".format(str(cp_dir)), "wb") as fi:
+            np.savez(fi, **yvals_bad)
 
         msk_gen = (np.argmax(yvals["gen_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
         gen_px = yvals["gen_pt"] * yvals["gen_cos_phi"] * msk_gen
