@@ -1,6 +1,7 @@
 awkward
 boost_histogram
 click
+comet-ml
 fastjet
 keras
 keras-tuner

@@ -1,3 +1,5 @@
+from comet_ml import OfflineExperiment, Experiment  # isort:skip
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
@@ -114,7 +116,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     try:
         if comet_offline:
             print("Using comet-ml OfflineExperiment, saving logs locally.")
-            from comet_ml import OfflineExperiment
 
             experiment = OfflineExperiment(
                 project_name="particleflow-tf",
@@ -127,7 +128,6 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
             )
         else:
             print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
-            from comet_ml import Experiment
 
             experiment = Experiment(
                 project_name="particleflow-tf",
