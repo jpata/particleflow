@@ -184,7 +184,7 @@ raytune:
     reduction_factor: 3
 
 train_test_datasets:
-  physical: 
+  physical:
     batch_per_gpu: 1
     datasets:
       - cms_pf_ttbar
@@ -193,7 +193,7 @@ train_test_datasets:
 
 validation_dataset: cms_pf_ttbar
 
-datasets: 
+datasets:
   cms_pf_ttbar:
     version: 1.3.1
     data_dir:

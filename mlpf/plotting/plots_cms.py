@@ -1,17 +1,10 @@
-import sklearn
-import sklearn.metrics
-
-import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
-import pandas
-import mplhep
-
-import sys
 import os.path as osp
 
-from plot_utils import plot_confusion_matrix, cms_label, particle_label, sample_label
-from plot_utils import plot_E_reso, plot_eta_reso, plot_phi_reso, bins
+import matplotlib.pyplot as plt
+import numpy as np
+import sklearn
+import sklearn.metrics
+from plot_utils import plot_confusion_matrix, plot_E_reso, plot_eta_reso, plot_phi_reso
 
 class_labels = list(range(8))
 
@@ -20,9 +13,9 @@ def deltaphi(phi1, phi2):
     return np.fmod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
 
 
-def prepare_resolution_plots(big_df, pid, bins, target='cand', outpath='./'):
-    msk_true = (big_df["{}_pid".format(target)] == pid)
-    msk_pred = (big_df["pred_pid"] == pid)
+def prepare_resolution_plots(big_df, pid, bins, target="cand", outpath="./"):
+    msk_true = big_df["{}_pid".format(target)] == pid
+    msk_pred = big_df["pred_pid"] == pid
     msk_both = msk_true & msk_pred
     v0 = big_df[["{}_e".format(target), "pred_e"]].values
     v1 = big_df[["{}_eta".format(target), "pred_eta"]].values
@@ -37,7 +30,6 @@ def load_np(npfile):
     X = np.load(npfile)["X"]
     ycand = np.load(npfile)["ycand"]
     ypred = np.load(npfile)["ypred"]
-    ypred_raw = np.load(npfile)["ypred_raw"]
     return X, ycand, ypred
 
 
@@ -47,26 +39,24 @@ def flatten(arr):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand")
+    parser.add_argument(
+        "--target", type=str, choices=["cand", "gen"], help="Regress to PFCandidates or GenParticles", default="cand"
+    )
     parser.add_argument("--input", type=str, required=True)
     args = parser.parse_args()
 
-    X, ycand, ypred, ypred_raw = load_np(args.input)
+    X, ycand, ypred = load_np(args.input)
 
     X_flat = flatten(X)
     ycand_flat = flatten(ycand)
     ypred_flat = flatten(ypred)
     msk = X_flat[:, 0] != 0
 
-    confusion = sklearn.metrics.confusion_matrix(
-        ycand_flat[msk, 0], ypred_flat[msk, 0],
-        labels=range(8)
-    )
+    confusion = sklearn.metrics.confusion_matrix(ycand_flat[msk, 0], ypred_flat[msk, 0], labels=range(8))
 
-    fig, ax = plot_confusion_matrix(
-        cm=confusion, target_names=[int(x) for x in class_labels], normalize=True
-    )
+    fig, ax = plot_confusion_matrix(cm=confusion, target_names=[int(x) for x in class_labels], normalize=True)
 
     plt.savefig(osp.join(osp.dirname(args.input), "confusion_mlpf.pdf"), bbox_inches="tight")
 

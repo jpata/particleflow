@@ -1,35 +1,49 @@
-import os
-import yaml
-from pathlib import Path
 import datetime
-import platform
-import random
-import glob
-import numpy as np
-from tqdm import tqdm
-import re
 import logging
+import os
+import platform
+import re
+from pathlib import Path
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-
-from tfmodel.data import Dataset
-from tfmodel.onecycle_scheduler import OneCycleScheduler, MomentumOneCycleScheduler
+import yaml
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
 
 @tf.function
-def histogram_2d(x, y, weights, x_range, y_range, nbins, bin_dtype=tf.float32):
-    x_bins = tf.histogram_fixed_width_bins(x, x_range, nbins=nbins, dtype=bin_dtype)
-    y_bins = tf.histogram_fixed_width_bins(y, y_range, nbins=nbins, dtype=bin_dtype)
-    hist = tf.zeros((nbins, nbins), dtype=weights.dtype)
-    indices = tf.transpose(tf.stack([y_bins, x_bins]))
-    hist = tf.tensor_scatter_nd_add(hist, indices, weights)
-    return hist
+def histogram_2d(mask, eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
+    eta_bins = tf.histogram_fixed_width_bins(eta, eta_range, nbins=nbins, dtype=bin_dtype)
+    phi_bins = tf.histogram_fixed_width_bins(phi, phi_range, nbins=nbins, dtype=bin_dtype)
+
+    # create empty histograms
+    hist_px = tf.zeros((nbins, nbins), dtype=weights_px.dtype)
+    hist_py = tf.zeros((nbins, nbins), dtype=weights_py.dtype)
+    indices = tf.transpose(tf.stack([eta_bins, phi_bins]))
+
+    indices_masked = tf.boolean_mask(indices, mask)
+    weights_px_masked = tf.boolean_mask(weights_px, mask)
+    weights_py_masked = tf.boolean_mask(weights_py, mask)
+
+    hist_px = tf.tensor_scatter_nd_add(hist_px, indices=indices_masked, updates=weights_px_masked)
+    hist_py = tf.tensor_scatter_nd_add(hist_py, indices=indices_masked, updates=weights_py_masked)
+    hist_pt = tf.sqrt(hist_px**2 + hist_py**2)
+    return hist_pt
+
 
 @tf.function
-def batched_histogram_2d(x, y, w, x_range, y_range, nbins, bin_dtype=tf.float32):
-    return tf.vectorized_map(lambda a: histogram_2d(a[0], a[1], a[2], x_range, y_range, nbins, bin_dtype), (x,y,w))
+def batched_histogram_2d(mask, eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+    return tf.map_fn(
+        lambda a: histogram_2d(a[0], a[1], a[2], a[3], a[4], x_range, y_range, nbins, bin_dtype),
+        (mask, eta, phi, w_px, w_py),
+        fn_output_signature=tf.TensorSpec(
+            [nbins, nbins],
+            dtype=tf.float32,
+        ),
+    )
+
 
 def load_config(config_file_path):
     with open(config_file_path, "r") as ymlfile:
@@ -42,8 +56,7 @@ def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
     config = load_config(config)
 
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
-    n_epochs = config["setup"]["num_epochs"]
-    
+
     if ntrain:
         config["setup"]["num_events_train"] = ntrain
 
@@ -105,8 +118,10 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
 def get_strategy():
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
-        print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
-            If you don't have or intend to use GPUs, this message can be ignored.")
+        print(
+            "WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
+            If you don't have or intend to use GPUs, this message can be ignored."
+        )
     else:
         gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
     if gpus[0] == -1:
@@ -169,7 +184,7 @@ def get_lr_schedule(config, steps):
     else:
         lr_schedule = None
         callbacks = []
-    return lr_schedule, callbacks
+    return lr_schedule, callbacks, lr
 
 
 def get_optimizer(config, lr_schedule=None):
@@ -183,6 +198,7 @@ def get_optimizer(config, lr_schedule=None):
         opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
         if cfg_adam["pcgrad"]:
             from tfmodel.PCGrad_tf import PCGrad
+
             opt = PCGrad(opt)
         return opt
     if config["setup"]["optimizer"] == "adamw":
@@ -192,11 +208,14 @@ def get_optimizer(config, lr_schedule=None):
         cfg_sgd = config["optimizer"]["sgd"]
         return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
     else:
-        raise ValueError("Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
+        raise ValueError(
+            "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
+        )
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
     import keras_tuner as kt
+
     if cfg_hypertune["algorithm"] == "random":
         print("Keras Tuner: Using RandomSearch")
         cfg_rand = cfg_hypertune["random"]
@@ -235,159 +254,33 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
         )
 
 
-def compute_weights_invsqrt(X, y, w):
-    wn = tf.cast(tf.shape(w)[-1], tf.float32) / tf.sqrt(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    # wn /= tf.reduce_sum(wn)
-    return X, y, wn
-
-
-def compute_weights_none(X, y, w):
-    wn = tf.ones_like(w)
-    wn *= tf.cast(X[:, 0] != 0, tf.float32)
-    return X, y, wn
-
-
-def make_weight_function(config):
-    def weight_func(X,y,w):
-
-        w_signal_only = tf.where(y[:, 0]==0, 0.0, 1.0)
-        w_signal_only *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        w_none = tf.ones_like(w)
-        w_none *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        w_invsqrt = tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w)
-        w_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        w_signal_only_invsqrt = tf.where(y[:, 0]==0, 0.0, tf.cast(tf.shape(w)[-1], tf.float32)/tf.sqrt(w))
-        w_signal_only_invsqrt *= tf.cast(X[:, 0]!=0, tf.float32)
-
-        weight_d = {
-            "none": w_none,
-            "signal_only": w_signal_only,
-            "signal_only_inverse_sqrt": w_signal_only_invsqrt,
-            "inverse_sqrt": w_invsqrt
-        }
-
-        ret_w = {}
-        for loss_component, weight_type in config["sample_weights"].items():
-            ret_w[loss_component] = weight_d[weight_type]
-
-        return X,y,ret_w
-    return weight_func
-
-
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
 
-        msk = tf.expand_dims(tf.cast(y[:, :, 0]!=0, tf.float32), axis=-1)
+        msk = tf.expand_dims(tf.cast(y[:, :, 0] != 0, tf.float32), axis=-1)
         return (
             X,
             {
                 "cls": tf.one_hot(tf.cast(y[:, :, 0], tf.int32), num_output_classes),
-                "charge": y[:, :, 1:2]*msk,
-                "pt": y[:, :, 2:3]*msk,
-                "eta": y[:, :, 3:4]*msk,
-                "sin_phi": y[:, :, 4:5]*msk,
-                "cos_phi": y[:, :, 5:6]*msk,
-                "energy": y[:, :, 6:7]*msk,
+                "charge": y[:, :, 1:2] * msk,
+                "pt": y[:, :, 2:3] * msk,
+                "eta": y[:, :, 3:4] * msk,
+                "sin_phi": y[:, :, 4:5] * msk,
+                "cos_phi": y[:, :, 5:6] * msk,
+                "energy": y[:, :, 6:7] * msk,
             },
             w,
         )
 
     return func
 
-def get_dataset_def(config):
-    cds = config["dataset"]
-
-    return Dataset(
-        num_input_features=int(cds["num_input_features"]),
-        num_output_features=int(cds["num_output_features"]),
-        padded_num_elem_size=int(cds["padded_num_elem_size"]),
-        schema=cds["schema"],
-    )
-
-
-def get_train_val_datasets(config, global_batch_size, n_train, n_test, repeat=True):
-    dataset_def = get_dataset_def(config)
-
-    tfr_files = sorted(glob.glob(dataset_def.processed_path))
-    if len(tfr_files) == 0:
-        raise Exception("Could not find any files in {}".format(dataset_def.processed_path))
-
-    random.shuffle(tfr_files)
-    dataset = tf.data.TFRecordDataset(tfr_files).map(
-        dataset_def.parse_tfr_element, num_parallel_calls=tf.data.experimental.AUTOTUNE
-    )
-
-    # Due to TFRecords format, the length of the dataset is not known beforehand
-    num_events = 0
-    for _ in dataset:
-        num_events += 1
-    print("dataset loaded, len={}".format(num_events))
-
-    weight_func = make_weight_function(config)
-    assert(n_train + n_test <= num_events)
-
-    # Padded shapes
-    ps = (
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_input_features]),
-        tf.TensorShape([dataset_def.padded_num_elem_size, dataset_def.num_output_features]),
-        {
-            "cls": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "charge": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "energy": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "pt": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "eta": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "sin_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-            "cos_phi": tf.TensorShape([dataset_def.padded_num_elem_size, ]),
-        }
-    )
-
-    ds_train = dataset.take(n_train).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-    ds_test = dataset.skip(n_train).take(n_test).map(weight_func).padded_batch(global_batch_size, padded_shapes=ps)
-
-    if config["setup"]["multi_output"]:
-        dataset_transform = targets_multi_output(config["dataset"]["num_output_classes"])
-        ds_train = ds_train.map(dataset_transform)
-        ds_test = ds_test.map(dataset_transform)
-    else:
-        dataset_transform = None
-
-    return ds_train, ds_test, dataset_transform
-
-def prepare_val_data(config, dataset_def, single_file=False):
-    if single_file:
-        val_filelist = dataset_def.val_filelist[:1]
-    else:
-        val_filelist = dataset_def.val_filelist
-    if config["setup"]["num_val_files"] > 0:
-        val_filelist = val_filelist[: config["setup"]["num_val_files"]]
-
-    Xs = []
-    ygens = []
-    ycands = []
-    for fi in tqdm(val_filelist, desc="Preparing validation data"):
-        X, ygen, ycand = dataset_def.prepare_data(fi)
-        Xs.append(np.concatenate(X))
-        ygens.append(np.concatenate(ygen))
-        ycands.append(np.concatenate(ycand))
-
-    assert(len(Xs) > 0, "Xs is empty")
-    X_val = np.concatenate(Xs)
-    ygen_val = np.concatenate(ygens)
-    ycand_val = np.concatenate(ycands)
-
-    return X_val, ygen_val, ycand_val
-
 
 def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, supervised=True):
     cds = config["dataset"]
 
-    if cds['schema'] == "cms":
+    if cds["schema"] == "cms":
         dsf = CMSDatasetFactory(config)
-    elif cds['schema'] == "delphes":
+    elif cds["schema"] == "delphes":
         dsf = DelphesDatasetFactory(config)
     else:
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
@@ -402,6 +295,7 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, 
 
     return ds, ds_info
 
+
 def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     datasets = []
     steps = []
@@ -410,17 +304,17 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
         ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
         num_steps = ds.cardinality().numpy()
         total_num_steps += num_steps
-        assert(num_steps > 0)
+        assert num_steps > 0
         print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
         datasets.append(ds)
         steps.append(num_steps)
 
-    #Now interleave elements from the datasets randomly
+    # Now interleave elements from the datasets randomly
     ids = 0
     indices = []
     for ds, num_steps in zip(datasets, steps):
-        indices += num_steps*[ids]
+        indices += num_steps * [ids]
         ids += 1
     indices = np.array(indices, np.int64)
     np.random.shuffle(indices)
@@ -429,18 +323,20 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
 
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
     bs = batch_size
-    if num_gpus>1:
-        bs = bs*num_gpus
+    if not config["setup"]["horovod_enabled"]:
+        if num_gpus > 1:
+            bs = bs * num_gpus
     ds = ds.batch(bs)
 
     total_num_steps = total_num_steps // bs
-    #num_steps = 0
-    #for _ in ds:
+    # num_steps = 0
+    # for _ in ds:
     #    num_steps += 1
-    #assert(total_num_steps == num_steps)
+    # assert(total_num_steps == num_steps)
     return ds, total_num_steps
 
-#Load multiple datasets and mix them together
+
+# Load multiple datasets and mix them together
 def get_datasets(datasets_to_interleave, config, num_gpus, split):
     datasets = []
     steps = []
@@ -449,16 +345,18 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds, num_steps = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
+            interleaved_ds, num_steps = load_and_interleave(
+                ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"]
+            )
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
-    
+
     ids = 0
     indices = []
     total_num_steps = 0
     for ds, num_steps in zip(datasets, steps):
-        indices += num_steps*[ids]
+        indices += num_steps * [ids]
         total_num_steps += num_steps
         ids += 1
     indices = np.array(indices, np.int64)
@@ -466,13 +364,14 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    #num_steps = 0
-    #for elem in ds:
+    # num_steps = 0
+    # for elem in ds:
     #    num_steps += 1
-    #assert(total_num_steps == num_steps)
+    # assert(total_num_steps == num_steps)
 
     print("Final dataset with {} steps".format(total_num_steps))
     return ds, total_num_steps
+
 
 def set_config_loss(config, trainable):
     if trainable == "classification":
@@ -495,7 +394,9 @@ def set_config_loss(config, trainable):
 
 def get_class_loss(config):
     if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-        cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False, label_smoothing=config["setup"].get("classification_label_smoothing", 0.0))
+        cls_loss = tf.keras.losses.CategoricalCrossentropy(
+            from_logits=False, label_smoothing=config["setup"].get("classification_label_smoothing", 0.0)
+        )
     elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
         cls_loss = tfa.losses.sigmoid_focal_crossentropy
     else:
@@ -509,10 +410,167 @@ def get_loss_from_params(input_dict):
     loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
-# class MyLoss(tf.keras.losses.Loss):
-#   def call(self, y_true, y_pred):
-#       import pdb;pdb.set_trace()
-#       return tf.reduce_mean(tf.square(y_pred - y_true), axis=-1)
+
+# batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
+@tf.function
+def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
+
+    # take everything but the jet_idx
+    y_true = y_true[..., :5]
+    y_pred = y_pred[..., :5]
+
+    # create normalized random basis vectors
+    theta = tf.random.normal((num_projections, y_true.shape[-1]))
+    theta = theta / tf.sqrt(tf.reduce_sum(theta**2, axis=1, keepdims=True))
+
+    # project the features with the random basis
+    A = tf.linalg.matmul(y_true, theta, False, True)
+    B = tf.linalg.matmul(y_pred, theta, False, True)
+
+    A_sorted = tf.sort(A, axis=-2)
+    B_sorted = tf.sort(B, axis=-2)
+
+    ret = tf.math.sqrt(tf.reduce_sum(tf.math.pow(A_sorted - B_sorted, 2), axis=[-1, -2]))
+    return ret
+
+
+@tf.function
+def hist_2d_loss(y_true, y_pred):
+
+    eta_true = y_true[..., 2]
+    eta_pred = y_pred[..., 2]
+
+    sin_phi_true = y_true[..., 3]
+    sin_phi_pred = y_pred[..., 3]
+
+    pt_true = y_true[..., 0]
+    pt_pred = y_pred[..., 0]
+
+    px_true = pt_true * y_true[..., 4]
+    py_true = pt_true * y_true[..., 3]
+    px_pred = pt_pred * y_pred[..., 4]
+    py_pred = pt_pred * y_pred[..., 3]
+
+    mask = eta_true != 0.0
+
+    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi, cos_phi)
+    # introduces a numerical instability which can lead to NaN.
+    pt_hist_true = batched_histogram_2d(
+        mask,
+        eta_true,
+        sin_phi_true,
+        px_true,
+        py_true,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
+    )
+
+    pt_hist_pred = batched_histogram_2d(
+        mask,
+        eta_pred,
+        sin_phi_pred,
+        px_pred,
+        py_pred,
+        tf.cast([-6.0, 6.0], tf.float32),
+        tf.cast([-1.0, 1.0], tf.float32),
+        20,
+    )
+
+    mse = tf.math.sqrt(tf.reduce_mean((pt_hist_true - pt_hist_pred) ** 2, axis=[-1, -2]))
+    return mse
+
+
+@tf.function
+def jet_reco(px, py, jet_idx, max_jets):
+
+    tf.debugging.assert_shapes(
+        [
+            (px, ("N")),
+            (py, ("N")),
+            (jet_idx, ("N")),
+        ]
+    )
+
+    jet_idx_capped = tf.where(jet_idx <= max_jets, jet_idx, 0)
+
+    jet_px = tf.zeros(
+        [
+            max_jets,
+        ],
+        dtype=px.dtype,
+    )
+    jet_py = tf.zeros(
+        [
+            max_jets,
+        ],
+        dtype=py.dtype,
+    )
+
+    jet_px_new = tf.tensor_scatter_nd_add(jet_px, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=px)
+    jet_py_new = tf.tensor_scatter_nd_add(jet_py, indices=tf.expand_dims(jet_idx_capped, axis=-1), updates=py)
+
+    jet_pt = tf.math.sqrt(jet_px_new**2 + jet_py_new**2)
+
+    return jet_pt
+
+
+@tf.function
+def batched_jet_reco(px, py, jet_idx, max_jets):
+    tf.debugging.assert_shapes(
+        [
+            (px, ("B", "N")),
+            (py, ("B", "N")),
+            (jet_idx, ("B", "N")),
+        ]
+    )
+
+    return tf.map_fn(
+        lambda a: jet_reco(a[0], a[1], a[2], max_jets),
+        (px, py, jet_idx),
+        fn_output_signature=tf.TensorSpec(
+            [
+                max_jets,
+            ],
+            dtype=tf.float32,
+        ),
+    )
+
+
+# y_true: [nbatch, nptcl, 5] array of true particle properties.
+# y_pred: [nbatch, nptcl, 5] array of predicted particle properties
+# last dim corresponds to [pt, energy, eta, sin_phi, cos_phi, gen_jet_idx]
+# max_jets: integer of the max number of jets to consider
+# returns: dict of true and predicted jet pts.
+@tf.function
+def compute_jet_pt(y_true, y_pred, max_jets=201):
+    y = {}
+    y["true"] = y_true
+    y["pred"] = y_pred
+    jet_pt = {}
+
+    jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
+    for typ in ["true", "pred"]:
+        px = y[typ][..., 0] * y[typ][..., 4]
+        py = y[typ][..., 0] * y[typ][..., 3]
+        jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
+    return jet_pt
+
+
+@tf.function
+def gen_jet_mse_loss(y_true, y_pred):
+
+    jet_pt = compute_jet_pt(y_true, y_pred)
+    mse = tf.math.sqrt(tf.reduce_mean((jet_pt["true"] - jet_pt["pred"]) ** 2, axis=[-1, -2]))
+    return mse
+
+
+@tf.function
+def gen_jet_logcosh_loss(y_true, y_pred):
+
+    jet_pt = compute_jet_pt(y_true, y_pred)
+    loss = tf.keras.losses.log_cosh(jet_pt["true"], jet_pt["pred"])
+    return loss
 
 
 def get_loss_dict(config):
@@ -521,24 +579,36 @@ def get_loss_dict(config):
     default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
         "cls": cls_loss,
-        "charge": get_loss_from_params(config["dataset"].get("charge_loss", default_loss)),
-        "pt": get_loss_from_params(config["dataset"].get("pt_loss", default_loss)),
-        "eta": get_loss_from_params(config["dataset"].get("eta_loss", default_loss)),
-        "sin_phi": get_loss_from_params(config["dataset"].get("sin_phi_loss", default_loss)),
-        "cos_phi": get_loss_from_params(config["dataset"].get("cos_phi_loss", default_loss)),
-        "energy": get_loss_from_params(config["dataset"].get("energy_loss", default_loss)),
-        "met": tf.keras.losses.MeanAbsoluteError(),
-        "pt_hist": tf.keras.losses.MeanAbsoluteError(),
+        "charge": get_loss_from_params(config["loss"].get("charge_loss", default_loss)),
+        "pt": get_loss_from_params(config["loss"].get("pt_loss", default_loss)),
+        "eta": get_loss_from_params(config["loss"].get("eta_loss", default_loss)),
+        "sin_phi": get_loss_from_params(config["loss"].get("sin_phi_loss", default_loss)),
+        "cos_phi": get_loss_from_params(config["loss"].get("cos_phi_loss", default_loss)),
+        "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
     }
     loss_weights = {
-        "cls": config["dataset"]["classification_loss_coef"],
-        "charge": config["dataset"]["charge_loss_coef"],
-        "pt": config["dataset"]["pt_loss_coef"],
-        "eta": config["dataset"]["eta_loss_coef"],
-        "sin_phi": config["dataset"]["sin_phi_loss_coef"],
-        "cos_phi": config["dataset"]["cos_phi_loss_coef"],
-        "energy": config["dataset"]["energy_loss_coef"],
-        "met": config["dataset"]["met_loss_coef"],
-        "pt_hist": config["dataset"]["pt_hist_loss_coef"],
+        "cls": config["loss"]["classification_loss_coef"],
+        "charge": config["loss"]["charge_loss_coef"],
+        "pt": config["loss"]["pt_loss_coef"],
+        "eta": config["loss"]["eta_loss_coef"],
+        "sin_phi": config["loss"]["sin_phi_loss_coef"],
+        "cos_phi": config["loss"]["cos_phi_loss_coef"],
+        "energy": config["loss"]["energy_loss_coef"],
     }
+
+    if config["loss"]["event_loss"] != "none":
+        loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
+    if config["loss"]["event_loss"] == "sliced_wasserstein":
+        loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
+
+    if config["loss"]["event_loss"] == "hist_2d":
+        loss_dict["pt_e_eta_phi"] = hist_2d_loss
+
+    if config["loss"]["event_loss"] == "gen_jet_mse":
+        loss_dict["pt_e_eta_phi"] = gen_jet_mse_loss
+
+    if config["loss"]["event_loss"] == "gen_jet_logcosh":
+        loss_dict["pt_e_eta_phi"] = gen_jet_logcosh_loss
+
     return loss_dict, loss_weights

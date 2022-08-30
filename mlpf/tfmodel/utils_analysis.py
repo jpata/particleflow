@@ -1,9 +1,9 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import pandas as pd
-from tqdm import tqdm
-from pathlib import Path
 import seaborn as sns
-
+from tqdm import tqdm
 
 
 def get_hp_str(result):
@@ -21,7 +21,7 @@ def get_hp_str(result):
 
 def plot_ray_analysis(analysis, save=False, skip=0):
     to_plot = [
-        #'adam_beta_1',
+        # 'adam_beta_1',
         "charge_loss",
         "cls_acc_unweighted",
         "cls_loss",
@@ -239,7 +239,8 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
 
 
 def analyze_ray_experiment(exp_dir, default_metric, default_mode):
-    from ray.tune import Analysis, ExperimentAnalysis
+    from ray.tune import Analysis
+
     analysis = Analysis(exp_dir, default_metric=default_metric, default_mode=default_mode)
 
     topk_summary_plot_v2(analysis, 5, save_dir=exp_dir)
@@ -254,7 +255,7 @@ def count_skipped_configurations(exp_dir):
             lines = f.readlines()
             count = 0
             for line in lines:
-                if line == "#"*80 + "\n":
+                if line == "#" * 80 + "\n":
                     count += 1
         if count % 2 != 0:
             print("WARNING: counts is not divisible by two")

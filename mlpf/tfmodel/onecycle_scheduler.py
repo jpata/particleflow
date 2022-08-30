@@ -1,10 +1,10 @@
-import numpy as np
 import logging
 
+import numpy as np
 import tensorflow as tf
-from tensorflow.python.framework import ops
-from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
+from tensorflow.python.framework import ops
 
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 

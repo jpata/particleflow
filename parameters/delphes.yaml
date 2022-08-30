@@ -7,10 +7,13 @@ dataset:
   num_output_features: 7
   #(none=0, track=1, cluster=2)
   num_input_classes: 3
-  #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5) 
+  #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5)
   num_output_classes: 6
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
+  cls_weight_by_pt: no
+
+loss:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 100.0
@@ -35,6 +38,8 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
+  event_loss: none
+  event_loss_coef: 0.0
 
 tensorflow:
   eager: no
@@ -46,7 +51,7 @@ setup:
   lr: 1e-4
   num_events_train: 45000
   num_events_test: 5000
-  num_events_validation: 5000
+  num_events_validation: 10
   num_epochs: 10
   num_val_files: 5
   dtype: float32
@@ -54,6 +59,7 @@ setup:
   classification_loss_type: categorical_cross_entropy
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
 
 optimizer:
   adam:
@@ -121,10 +127,6 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
-    pt_skip_gate: yes
-    eta_skip_gate: yes
-    phi_skip_gate: yes
-
     id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
@@ -154,11 +156,6 @@ parameters:
 timing:
   num_ev: 100
   num_iter: 3
-
-exponentialdecay:
-  decay_steps: 10000
-  decay_rate: 0.99
-  staircase: yes
 
 callbacks:
   checkpoint:
@@ -205,7 +202,7 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  delphes: 
+  delphes:
     batch_per_gpu: 5
     datasets:
       - delphes_pf

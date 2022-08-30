@@ -23,6 +23,9 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
+  cls_weight_by_pt: no
+
+loss:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
@@ -30,8 +33,6 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
-  met_loss_coef: 0.00001
-  pt_hist_loss_coef: 0.00001
   energy_loss:
     type: Huber
   pt_loss:
@@ -45,6 +46,8 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
+  event_loss: none #none, sliced_wasserstein, gen_jet, hist_2d
+  event_loss_coef: 0.0
 
 tensorflow:
   eager: no
@@ -54,13 +57,14 @@ setup:
   weights:
   weights_config:
   lr: 0.00002
-  num_events_validation: 1000
+  num_events_validation: 100
   num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
 
 optimizer:
   adam:
@@ -138,10 +142,6 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
-    pt_skip_gate: no
-    eta_skip_gate: yes
-    phi_skip_gate: yes
-
     id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
@@ -163,8 +163,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: yes
-    energy_multimodal: yes
+    mask_reg_cls0: no
 
   skip_connection: yes
   debug: no
@@ -218,31 +217,31 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  physical: 
+  physical:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
+      - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
-      - cms_pf_ztt
 
 validation_datasets:
   - cms_pf_ttbar
 
-datasets: 
+datasets:
   cms_pf_ttbar:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:

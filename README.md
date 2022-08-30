@@ -25,4 +25,4 @@ The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4559324.
 The software setup for the ML training is available in the singularity spec file [scripts/base.singularity](scripts/base.singularity).
 
 ## Acknowledgements
-This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Research Council. Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**. 
+This project is supported by the Mobilitas Pluss Returning Researcher Grant MOBTP187 of the Estonian Research Council. Part of this work was conducted at **iBanks**, the AI GPU cluster at Caltech. We acknowledge NVIDIA, SuperMicro and the Kavli Foundation for their support of **iBanks**.

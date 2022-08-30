@@ -1,28 +1,22 @@
 #!/usr/bin/env fpad
 
-#Run in the HEPSIM environment
-#https://hub.docker.com/r/chekanov/centos7hepsim
-#source /opt/hepsim.sh
-#source /opt/jas4pp.sh
-#fpad dumper.py
+# Run in the HEPSIM environment
+# https://hub.docker.com/r/chekanov/centos7hepsim
+# source /opt/hepsim.sh
+# source /opt/jas4pp.sh
+# fpad dumper.py
 
-#code adapted from https://github.com/nhanvtran/VHEPPStudies/blob/master/sclioProcessing/mc_Zprime1TeVqq.py
-#by J. Pata
+# code adapted from https://github.com/nhanvtran/VHEPPStudies/blob/master/sclioProcessing/mc_Zprime1TeVqq.py
+# by J. Pata
 
-from org.lcsim.lcio import LCIOReader
-from hep.io.sio import SIOReader
-from hep.lcio.implementation.sio import SIOLCReader
-from hep.lcio.implementation.io import LCFactory
-from hep.lcio.event import * 
-from hep.lcio.io import *
-from jhplot import *    # import graphics
-from hephysics.particle import LParticle
-import math
-import json
 import bz2
+import json
 import sys
 
+from hep.lcio.implementation.io import LCFactory
+
 perfile = 10
+
 
 def genParticleToDict(par):
     mom = par.getMomentum()
@@ -50,9 +44,10 @@ def genParticleToDict(par):
         "pdgid_parent0": parent_pdgid0,
         "idx_parent0": parent_idx0,
         "pdgid_parent1": parent_pdgid1,
-        "idx_parent1": parent_idx1
+        "idx_parent1": parent_idx1,
     }
     return vec
+
 
 def pfParticleToDict(par):
     mom = par.getMomentum()
@@ -62,9 +57,10 @@ def pfParticleToDict(par):
         "py": mom[1],
         "pz": mom[2],
         "energy": par.getEnergy(),
-        "charge": par.getCharge()
+        "charge": par.getCharge(),
     }
     return vec
+
 
 def clusterToDict(par):
     pos = par.getPosition()
@@ -77,7 +73,7 @@ def clusterToDict(par):
         "energy": par.getEnergy(),
         "gp_contributions": [],
         "nhits_ecal": 0,
-        "nhits_hcal": 0
+        "nhits_hcal": 0,
     }
     for recohit in par.getCalorimeterHits():
         if recohit in set_hcal_hits:
@@ -85,6 +81,7 @@ def clusterToDict(par):
         elif recohit in set_ecal_hits:
             vec["nhits_ecal"] += 1
     return vec
+
 
 def trackHitToDict(par):
     pos = par.getPosition()
@@ -98,7 +95,7 @@ def trackHitToDict(par):
     if par in sim_trackhit_to_gen:
         for gp in sim_trackhit_to_gen[par]:
             gpid = genparticle_dict[gp]
-            if not gpid in gps:
+            if gpid not in gps:
                 gps[gpid] = 0
             gps[gpid] += 1
 
@@ -106,6 +103,7 @@ def trackHitToDict(par):
     vec["gp_contributions"] = gp_contributions
 
     return vec
+
 
 def trackToDict(par):
     ts = par.getTrackStates()[0]
@@ -115,48 +113,44 @@ def trackToDict(par):
         "omega": ts.getOmega(),
         "phi": ts.getPhi(),
         "tan_lambda": ts.getTanLambda(),
-        "nhits": len(par.getTrackerHits())
+        "nhits": len(par.getTrackerHits()),
     }
 
-    #for each hit in the track, find the associated genparticle
+    # for each hit in the track, find the associated genparticle
     gps = {}
     for hit in par.getTrackerHits():
         if hit in sim_trackhit_to_gen:
             for gp in sim_trackhit_to_gen[hit]:
                 gpid = genparticle_dict[gp]
-                if not gpid in gps:
+                if gpid not in gps:
                     gps[gpid] = 0
                 gps[gpid] += 1
 
-    #assign the track to the genparticle which was associated to the most hits
+    # assign the track to the genparticle which was associated to the most hits
     gp_contributions = sorted(gps.items(), key=lambda x: x[1], reverse=True)
     vec["gp_contributions"] = {c[0]: c[1] for c in gp_contributions}
 
     return vec
 
+
 def caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim):
     pos = par.getPosition()
-    vec = {
-       "x": pos[0],
-       "y": pos[1],
-       "z": pos[2],
-       "energy": par.getEnergy(),
-       "cluster_idx": calohit_to_cluster.get(par, -1)
-    }
+    vec = {"x": pos[0], "y": pos[1], "z": pos[2], "energy": par.getEnergy(), "cluster_idx": calohit_to_cluster.get(par, -1)}
 
-    #get the simhit corresponding to this calohit
+    # get the simhit corresponding to this calohit
     simhit = calohit_recotosim[par]
     gp_contributions = []
     for iptcl in range(simhit.getNMCParticles()):
         ptcl = simhit.getParticleCont(iptcl)
         idx_ptcl = genparticle_dict[ptcl]
-        energy_cont = par.getEnergy() * (simhit.getEnergyCont(iptcl)/simhit.getEnergy())
+        energy_cont = par.getEnergy() * (simhit.getEnergyCont(iptcl) / simhit.getEnergy())
         gp_contributions.append([idx_ptcl, energy_cont])
 
     gp_contributions = sorted(gp_contributions, key=lambda x: x[1], reverse=True)
     vec["gp_contributions"] = gp_contributions
 
     return vec
+
 
 if __name__ == "__main__":
     infile = sys.argv[1]
@@ -165,15 +159,15 @@ if __name__ == "__main__":
     reader = factory.createLCReader()
     reader.open(infile)
     event_data = []
-    
+
     nEvent = 0
     ioutfile = 0
     while True:
         evt = reader.readNextEvent()
-        if (evt == None):
+        if evt is None:
             print("EOF at event %d" % nEvent)
             break
-    
+
         col = evt.getCollection("MCParticle")
         colPF = evt.getCollection("PandoraPFOCollection")
         colCl = evt.getCollection("ReconClusters")
@@ -186,14 +180,14 @@ if __name__ == "__main__":
         reco_trackhit_to_sim = {}
         sim_trackhit_to_gen = {}
         for shr in simTrackHitToReco:
-            sh = shr.from
+            sh = getattr(shr, "from")
             rh = shr.to
             if not (rh in reco_trackhit_to_sim):
                 reco_trackhit_to_sim[rh] = []
             reco_trackhit_to_sim[rh].append(sh)
 
         for shg in simTrackHitToGen:
-            sh = shg.from
+            sh = getattr(shg, "from")
             gp = shg.to
             if not (sh in sim_trackhit_to_gen):
                 sim_trackhit_to_gen[sh] = []
@@ -207,37 +201,40 @@ if __name__ == "__main__":
         colECE = evt.getCollection("EM_ENDCAP")
         set_ecal_hits = set(list(colECB) + list(colECE))
 
-        nMc=col.getNumberOfElements()
-        nPF=colPF.getNumberOfElements()
-        nCl=colCl.getNumberOfElements()
-        nTr=colTr.getNumberOfElements()
-        nHit=simTrackHits.getNumberOfElements()
-        nHCB=colHCB.getNumberOfElements()
-        nHCE=colHCE.getNumberOfElements()
-        nECB=colECB.getNumberOfElements()
-        nECE=colECE.getNumberOfElements()
-        
+        nMc = col.getNumberOfElements()
+        nPF = colPF.getNumberOfElements()
+        nCl = colCl.getNumberOfElements()
+        nTr = colTr.getNumberOfElements()
+        nHit = simTrackHits.getNumberOfElements()
+        nHCB = colHCB.getNumberOfElements()
+        nHCE = colHCE.getNumberOfElements()
+        nECB = colECB.getNumberOfElements()
+        nECE = colECE.getNumberOfElements()
+
         calohit_relations = evt.getCollection("CalorimeterHitRelations")
         calohit_recotosim = {}
         for c in calohit_relations:
-            recohit = c.from
+            recohit = getattr(c, "from")
             simhit = c.to
-            assert(not (recohit in calohit_recotosim))
+            assert not (recohit in calohit_recotosim)
             calohit_recotosim[recohit] = simhit
- 
-        print "Event %d, nGen=%d, nPF=%d, nClusters=%d, nTracks=%d, nHCAL=%d, nECAL=%d, nHits=%d" % (nEvent, nMc, nPF, nCl, nTr, nHCB+nHCE, nECB+nECE, nHit)
-    
+
+        print(
+            "Event %d, nGen=%d, nPF=%d, nClusters=%d, nTracks=%d, nHCAL=%d, nECAL=%d, nHits=%d"
+            % (nEvent, nMc, nPF, nCl, nTr, nHCB + nHCE, nECB + nECE, nHit)
+        )
+
         genparticles = []
         genparticle_dict = {}
         for i in range(nMc):
-            par=col.getElementAt(i)
+            par = col.getElementAt(i)
             genparticle_dict[par] = i
 
         for i in range(nMc):
-            par=col.getElementAt(i)
+            par = col.getElementAt(i)
             vec = genParticleToDict(par)
             genparticles.append(vec)
-    
+
         clusters = []
         cluster_dict = {}
         calohit_to_cluster = {}
@@ -249,36 +246,35 @@ if __name__ == "__main__":
             clusters.append(vec)
             for hit in parCl.getCalorimeterHits():
                 calohit_to_cluster[hit] = i
-    
-        tracks = [] 
+
+        tracks = []
         track_dict = {}
         for i in range(nTr):
             parTr = colTr.getElementAt(i)
             track_dict[parTr] = i
             vec = trackToDict(parTr)
             tracks.append(vec)
-    
+
         pfs = []
-        for i in range(nPF): # loop over all particles
-            parPF = colPF.getElementAt(i) 
+        for i in range(nPF):  # loop over all particles
+            parPF = colPF.getElementAt(i)
             vec = pfParticleToDict(parPF)
 
             cluster_index = -1
-            assert(len(parPF.getClusters())<=1)
+            assert len(parPF.getClusters()) <= 1
             for cl in parPF.getClusters():
                 cluster_index = cluster_dict[cl]
                 break
-          
+
             track_index = -1
             for tr in parPF.getTracks():
                 track_index = track_dict[tr]
                 break
- 
+
             vec["cluster_idx"] = cluster_index
             vec["track_idx"] = track_index
 
             pfs.append(vec)
-
 
         track_hits = []
         for i in range(len(simTrackHits)):
@@ -295,10 +291,10 @@ if __name__ == "__main__":
 
         ecal_hits = []
         for i in range(nECB):
-            par = colECB.getElementAt(i);
+            par = colECB.getElementAt(i)
             ecal_hits.append(caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim))
         for i in range(nECE):
-            par = colECE.getElementAt(i);
+            par = colECE.getElementAt(i)
             ecal_hits.append(caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim))
 
         for hit in hcal_hits + ecal_hits:
@@ -327,21 +323,21 @@ if __name__ == "__main__":
             "hcal_hits": hcal_hits,
             "ecal_hits": ecal_hits,
         }
- 
+
         event_data.append(event)
 
-        #save the current events
+        # save the current events
         if len(event_data) >= perfile:
-            ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
+            ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2" % ioutfile), "w")
             json.dump(event_data, ofi, indent=2, sort_keys=True)
             ofi.close()
             event_data = []
             ioutfile += 1
         nEvent += 1
-   
-    #save the events data to a file 
-    ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2"%ioutfile), "w")
+
+    # save the events data to a file
+    ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2" % ioutfile), "w")
     json.dump(event_data, ofi, indent=2, sort_keys=True)
     ofi.close()
-    
-    reader.close() # close the file
+
+    reader.close()  # close the file
