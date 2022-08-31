@@ -1,8 +1,9 @@
 """CMS PF TTbar dataset."""
 
+import cms_utils
 import tensorflow as tf
+
 import tensorflow_datasets as tfds
-from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
 Y_FEATURES = cms_utils.Y_FEATURES
