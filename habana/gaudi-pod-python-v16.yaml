@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mlpf-hpu-strategy-v16
+  labels:
+          app: something
+          rel:  dev
+spec:
+      restartPolicy: Never
+
+      nodeSelector:
+        brightcomputing.com/node-category: 'gaudi'
+      volumes:
+      - name: home
+        hostPath:
+          path: /home/jduarte
+          type: Directory
+      - name: scratch
+        emptyDir: {}
+      - name: ceph
+        hostPath:
+          path: /voyager/ceph/users/jduarte
+          type: Directory
+      containers:
+      - name: tensorflow-2-9-1-ubuntu-20-04-habana-1-6-0-gaudi
+        image: jmduarte/particleflow:habana
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 8
+            memory: 200Gi
+            habana.ai/gaudi: 1
+            hugepages-2Mi: 3800Mi
+          limits:
+            cpu: 12
+            memory: 200Gi
+            habana.ai/gaudi: 1
+            hugepages-2Mi: 3800Mi
+        volumeMounts:
+        - name: home
+          mountPath: /home/jduarte
+        - name: scratch
+          mountPath: /scratch
+        - name: ceph
+          mountPath: /voyager/ceph/users/jduarte
+        env:
+        - name: POD_NAME_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NODE_HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        workingDir: /home/jduarte/particleflow
+        command: ["/bin/bash", "-c"]
+        args:
+                        - >-
+                         declare -xr VGR_POD_ID="${POD_NAME_ID}.$(date +'%s').${RANDOM}.${POD_NODE_HOSTNAME}";
+                         declare -xr HOME_DIR='/home/jduarte';
+                         declare -xr WORK_DIR="${PWD}";
+                         declare -xr SCRATCH_DIR='/scratch';
+
+                         export HOME=/home/jduarte;
+                         export TFDS_DATA_DIR=/voyager/ceph/users/jduarte/tensorflow_datasets;
+
+                         free -h;
+                         hl-smi -q;                        
+
+                         cd $HOME/particleflow;
+                         python3 mlpf/pipeline.py train -g -c parameters/cms.yaml --customize pipeline_test --nepochs 2 -p testing_ > ${WORK_DIR}/logs_output/output.${VGR_POD_ID}
