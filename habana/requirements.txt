@@ -1,6 +1,6 @@
 awkward
-boost_histogram
 bayesian-optimization
+boost_histogram
 click
 comet-ml
 dill
@@ -26,13 +26,13 @@ scipy
 seaborn
 setGPU
 sklearn
-tensorflow-probability
-tensorflow-hub
-tensorflow-metadata
-tensorflow-estimator
-tensorflow_datasets==4.3.0
 tensorboard_plugin_profile
 tensorflow-addons
+tensorflow-estimator
+tensorflow-hub
+tensorflow-metadata
+tensorflow-probability
+tensorflow_datasets==4.3.0
 tqdm
 typeguard
 uproot

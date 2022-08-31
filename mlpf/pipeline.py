@@ -108,8 +108,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         num_gpus = initialize_horovod()
     elif habana:
         import habana_frameworks.tensorflow as htf
+
         htf.load_habana_module()
         from habana_frameworks.tensorflow.distribute import HPUStrategy
+
         logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
         strategy = HPUStrategy()
         num_gpus = 1

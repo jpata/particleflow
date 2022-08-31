@@ -65,7 +65,7 @@ spec:
                          export TFDS_DATA_DIR=/voyager/ceph/users/jduarte/tensorflow_datasets;
 
                          free -h;
-                         hl-smi -q;                        
+                         hl-smi -q;
 
                          cd $HOME/particleflow;
                          python3 mlpf/pipeline.py train -g -c parameters/cms.yaml --customize pipeline_test --nepochs 2 -p testing_ > ${WORK_DIR}/logs_output/output.${VGR_POD_ID}
