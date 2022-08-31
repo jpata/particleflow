@@ -1,9 +1,7 @@
 """CMS PF TTbar dataset."""
 
-from pathlib import Path
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -21,6 +19,7 @@ _CITATION = """
 
 PADDED_NUM_ELEM_SIZE = 6400
 
+
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
@@ -31,7 +30,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information"
+        "1.4.0": "Add gen jet index information",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     mkdir -p data
@@ -61,7 +60,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
+        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)

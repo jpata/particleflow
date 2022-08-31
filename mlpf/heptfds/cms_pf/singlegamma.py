@@ -1,9 +1,7 @@
-"""CMS PF QCD dataset."""
+"""CMS PF SinglePi dataset."""
 
-from pathlib import Path
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -12,26 +10,26 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-QCD events with PU~55 in a Run3 setup.
+SingleGamma events.
 """
 
 # TODO(cms_pf): BibTeX citation
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 6400
+PADDED_NUM_ELEM_SIZE = 320
 
-class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.4.0")
+class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_singlegamma dataset."""
+
+    VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
-        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
-        "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information"
+        "1.1.0": "Initial release",
+        "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    FIXME
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleGammaFlatPt10To100_pythia8_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -56,8 +54,8 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
+        sample_dir = "SingleGammaFlatPt10To100_pythia8_cfi"
+        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)

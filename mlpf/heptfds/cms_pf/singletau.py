@@ -1,9 +1,7 @@
 """CMS PF SinglePi dataset."""
 
-from pathlib import Path
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -20,6 +18,7 @@ _CITATION = """
 """
 
 PADDED_NUM_ELEM_SIZE = 320
+
 
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
@@ -56,7 +55,7 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "SingleTauFlatPt2To150_cfi"
-        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
+        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)

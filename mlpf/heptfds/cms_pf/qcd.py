@@ -1,9 +1,7 @@
-"""CMS PF ZTT dataset."""
+"""CMS PF QCD dataset."""
 
-from pathlib import Path
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -12,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-ZTT events with PU~55 in a Run3 setup.
+QCD events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -21,18 +19,18 @@ _CITATION = """
 
 PADDED_NUM_ELEM_SIZE = 6400
 
-class CmsPfZtt(tfds.core.GeneratorBasedBuilder):
+
+class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
     VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information"
+        "1.4.0": "Add gen jet index information",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    mkdir -p data
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi data/
+    FIXME
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -57,8 +55,8 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
+        sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)

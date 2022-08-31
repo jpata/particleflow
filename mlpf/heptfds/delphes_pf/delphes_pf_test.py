@@ -1,14 +1,15 @@
-"""cms_pf dataset."""
+"""delphes_pf dataset."""
 
 import tensorflow_datasets as tfds
-from . import cms_pf
+
+from . import delphes_pf
 
 
-class CmsPfTest(tfds.testing.DatasetBuilderTestCase):
-    """Tests for cms_pf dataset."""
+class DelphesPfTest(tfds.testing.DatasetBuilderTestCase):
+    """Tests for delphes_pf dataset."""
 
-    # TODO(cms_pf):
-    DATASET_CLASS = cms_pf.CmsPf
+    # TODO(delphes_pf):
+    DATASET_CLASS = delphes_pf.DelphesPf
     SPLITS = {
         "train": 3,  # Number of fake train example
         "test": 1,  # Number of fake test example

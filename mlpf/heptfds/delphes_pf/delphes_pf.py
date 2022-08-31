@@ -1,16 +1,14 @@
 """delphes_pf dataset."""
 
-import os
-from pathlib import Path
-import numpy as np
-import pickle
 import bz2
+import os
+import pickle
+import resource
+from pathlib import Path
+
+import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-from numpy.lib.recfunctions import append_fields
-
-import resource
 
 # Increase python's soft limit on number of open files to accomodate tensorflow_datasets sharding
 # https://github.com/tensorflow/datasets/issues/1441
@@ -31,10 +29,9 @@ _CITATION = """
 DELPHES_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 PADDED_NUM_ELEM_SIZE = 6400
 
-#based on delphes/ntuplizer.py
+# based on delphes/ntuplizer.py
 X_FEATURES = [
-    "typ_idx"
-    "pt",
+    "typ_idx" "pt",
     "eta",
     "sin_phi",
     "cos_phi",
@@ -46,6 +43,7 @@ X_FEATURES = [
     "is_gen_muon",
     "is_gen_electron",
 ]
+
 
 class DelphesPf(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for delphes_pf dataset."""
@@ -106,7 +104,7 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         """Yields examples."""
         for fi in path.glob("*.pkl.bz2"):
             X, ygen, ycand = self.prepare_data_delphes(str(fi))
-            for ibatch in range(X.shape[0]): 
+            for ibatch in range(X.shape[0]):
                 yield str(fi) + "_" + str(ibatch), {
                     "X": X[ibatch],
                     "ygen": ygen[ibatch],

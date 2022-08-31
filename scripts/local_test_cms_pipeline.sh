@@ -25,7 +25,7 @@ done
 
 mkdir -p experiments
 
-tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
+tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 #Run a simple training on a few events
 python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test

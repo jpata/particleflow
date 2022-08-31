@@ -1,9 +1,7 @@
 """CMS PF SinglePi dataset."""
 
-from pathlib import Path
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 from heptfds import cms_utils
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -12,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-SingleMu events.
+SinglePi events.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -21,7 +19,8 @@ _CITATION = """
 
 PADDED_NUM_ELEM_SIZE = 320
 
-class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
+
+class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
     VERSION = tfds.core.Version("1.2.0")
@@ -31,7 +30,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleMuFlatPt0p7To10_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SinglePiFlatPt0p7To10_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -56,8 +55,8 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleMuFlatPt0p7To10_cfi"
-        return cms_utils.split_sample(path/sample_dir/"raw", PADDED_NUM_ELEM_SIZE)
+        sample_dir = "SinglePiFlatPt0p7To10_cfi"
+        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)
