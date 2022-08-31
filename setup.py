@@ -1,6 +1,6 @@
 import os
-import setuptools
 
+import setuptools
 
 this_dir = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(this_dir, "README.md"), "r") as fh:
