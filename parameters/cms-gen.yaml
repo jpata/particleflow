@@ -163,7 +163,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: no
+    mask_reg_cls0: yes
 
   skip_connection: yes
   debug: no
