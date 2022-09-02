@@ -57,7 +57,7 @@ setup:
   weights:
   weights_config:
   lr: 0.0005
-  num_events_validation: 100
+  num_events_validation: 200
   num_epochs: 50
   dtype: float32
   trainable:
@@ -221,12 +221,27 @@ train_test_datasets:
     batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
+      - cms_pf_ztt
+      - cms_pf_qcd
+      - cms_pf_qcd_high_pt
 
 validation_datasets:
-  - cms_pf_ttbar
+  - cms_pf_qcd_high_pt
 
 datasets:
   cms_pf_ttbar:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_ztt:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd_high_pt:
     version: 1.4.0
     data_dir:
     manual_dir:

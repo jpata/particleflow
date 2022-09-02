@@ -12,9 +12,10 @@ SEED=$2
 WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 
-PILEUP=NoPileUp
+PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
-N=1000
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -34,6 +35,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
@@ -63,6 +65,6 @@ cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
+python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
 #rm step*.root
