@@ -31,7 +31,8 @@ PADDED_NUM_ELEM_SIZE = 6400
 
 # based on delphes/ntuplizer.py
 X_FEATURES = [
-    "typ_idx" "pt",
+    "typ_idx",
+    "pt",
     "eta",
     "sin_phi",
     "cos_phi",
