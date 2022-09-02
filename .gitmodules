@@ -1,3 +1,0 @@
-[submodule "hep_tfds"]
-    path = hep_tfds
-    url = https://github.com/jpata/hep_tfds
