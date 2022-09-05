@@ -1128,6 +1128,7 @@ class PFNetTransformer(tf.keras.Model):
         output_decoding={},
         multi_output=True,
         event_set_output=False,
+        met_output=False,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1147,6 +1148,7 @@ class PFNetTransformer(tf.keras.Model):
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
+        output_decoding["met_output"] = met_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):

@@ -331,6 +331,7 @@ def make_transformer(config, dtype):
         num_output_classes=config["dataset"]["num_output_classes"],
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
+        met_output=config["loss"]["met_loss"] != "none",
         **kwargs
     )
     return model

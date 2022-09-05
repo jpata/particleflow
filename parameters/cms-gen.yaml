@@ -228,7 +228,7 @@ train_test_datasets:
       - cms_pf_qcd_high_pt
 
 validation_datasets:
-  - cms_pf_ttbar
+  - cms_pf_qcd_high_pt
 
 datasets:
   cms_pf_ttbar:
