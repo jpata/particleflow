@@ -48,7 +48,9 @@ loss:
     delta: 0.1
   event_loss: gen_jet_logcosh #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
   event_loss_coef: 1.0
-  met_loss: none
+  met_loss:
+    type: Huber
+    delta: 1.0
   met_loss_coef: 1.0
 
 tensorflow:
@@ -137,8 +139,8 @@ parameters:
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 2
+  num_graph_layers_reg: 2
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -220,7 +222,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 5
+    batch_per_gpu: 10
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
