@@ -527,6 +527,7 @@ class OutputDecoding(tf.keras.Model):
         layernorm=False,
         mask_reg_cls0=True,
         event_set_output=False,
+        met_output=False,
         **kwargs
     ):
 
@@ -543,6 +544,7 @@ class OutputDecoding(tf.keras.Model):
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, name="output_layernorm")
 
         self.event_set_output = event_set_output
+        self.met_output = met_output
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -708,6 +710,12 @@ class OutputDecoding(tf.keras.Model):
             )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
+        if self.met_output:
+            px = pred_pt * pred_cos_phi * msk_input_outtype
+            py = pred_pt * pred_sin_phi * msk_input_outtype
+            met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-1))
+            ret["met"] = met
+
         return ret
 
     def set_trainable_regression(self):
@@ -836,6 +844,7 @@ class PFNetDense(tf.keras.Model):
         schema="cms",
         node_update_mode="concat",
         event_set_output=False,
+        met_output=False,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -876,6 +885,7 @@ class PFNetDense(tf.keras.Model):
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
+        output_decoding["met_output"] = met_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):

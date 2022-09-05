@@ -598,6 +598,8 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] != "none":
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+    if config["loss"]["met_loss"] != "none":
+        loss_weights["met"] = config["loss"]["met_loss_coef"]
 
     if config["loss"]["event_loss"] == "sliced_wasserstein":
         loss_dict["pt_e_eta_phi"] = sliced_wasserstein_loss
@@ -610,5 +612,8 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] == "gen_jet_logcosh":
         loss_dict["pt_e_eta_phi"] = gen_jet_logcosh_loss
+
+    if config["loss"]["met_loss"] == "Huber":
+        loss_dict["met"] = tf.keras.losses.Huber()
 
     return loss_dict, loss_weights

@@ -21,8 +21,6 @@ loss:
   sin_phi_loss_coef: 100.0
   cos_phi_loss_coef: 100.0
   energy_loss_coef: 100.0
-  met_loss_coef: 0.00000001
-  pt_hist_loss_coef: 0.00000001
   energy_loss:
     type: Huber
     delta: 1.0
@@ -40,6 +38,8 @@ loss:
     delta: 0.1
   event_loss: none
   event_loss_coef: 0.0
+  met_loss: none
+  met_loss_coef: 1.0
 
 tensorflow:
   eager: no
