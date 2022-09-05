@@ -146,6 +146,8 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
+    pt_as_correction: no
+
     id_dim_decrease: yes
     charge_dim_decrease: yes
     pt_dim_decrease: yes
