@@ -613,7 +613,7 @@ def get_loss_dict(config):
     if config["loss"]["event_loss"] == "gen_jet_logcosh":
         loss_dict["pt_e_eta_phi"] = gen_jet_logcosh_loss
 
-    if config["loss"]["met_loss"] == "Huber":
-        loss_dict["met"] = tf.keras.losses.Huber()
+    if config["loss"]["met_loss"] != "none":
+        loss_dict["met"] = get_loss_from_params(config["loss"].get("met_loss", default_loss))
 
     return loss_dict, loss_weights
