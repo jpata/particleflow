@@ -137,8 +137,8 @@ parameters:
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 2
-  num_graph_layers_reg: 2
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -220,7 +220,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 10
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
@@ -228,7 +228,7 @@ train_test_datasets:
       - cms_pf_qcd_high_pt
 
 validation_datasets:
-  - cms_pf_ttbar
+  - cms_pf_qcd_high_pt
 
 datasets:
   cms_pf_ttbar:
