@@ -561,10 +561,12 @@ def make_graph(ev, iev):
     pfcandidate_eta = ev["pfcandidate_eta"][iev]
     pfcandidate_phi = ev["pfcandidate_phi"][iev]
 
-    # gen_pt = ev['gen_pt'][iev]
-    # gen_e = ev['gen_energy'][iev]
-    # gen_eta = ev['gen_eta'][iev]
-    # gen_phi = ev['gen_phi'][iev]
+    gen_pdgid = ev['gen_pdgid'][iev]
+    gen_pt = ev['gen_pt'][iev]
+    gen_e = ev['gen_energy'][iev]
+    gen_eta = ev['gen_eta'][iev]
+    gen_phi = ev['gen_phi'][iev]
+    gen_status = ev['gen_status'][iev]
 
     g = nx.DiGraph()
     for iobj in range(len(element_type)):
@@ -611,6 +613,16 @@ def make_graph(ev, iev):
             vx=element_vx[iobj],
             vy=element_vy[iobj],
             vz=element_vz[iobj],
+        )
+    for iobj in range(len(gen_pdgid)):
+        g.add_node(
+            ("gen", iobj),
+            typ=gen_pdgid[iobj],
+            pt=gen_pt[iobj],
+            e=gen_e[iobj],
+            eta=gen_eta[iobj],
+            phi=gen_phi[iobj],
+            status=gen_status[iobj],
         )
     for iobj in range(len(trackingparticle_pid)):
         g.add_node(
