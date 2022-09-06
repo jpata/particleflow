@@ -739,11 +739,17 @@ def process(args):
         Xelem, ycand, ygen = prepare_normalized_table(g)
         data = {}
 
+        #produce a list of status=1 pythia particles
+        ptcls_pythia = [n for n in g.nodes if n[0] == "gen" and g.nodes[n]["status"] == 1]
+        feats = ["typ", "pt", "eta", "phi", "e"]
+        arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])  
+
         if args.save_normalized_table:
             data = {
                 "Xelem": Xelem,
                 "ycand": ycand,
                 "ygen": ygen,
+                "pythia": arr_ptcls_pythia
             }
 
         if args.save_full_graph:

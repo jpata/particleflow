@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 
+
 pid_to_text = {
     211: r"charged hadrons ($\pi^\pm$, ...)",
     130: r"neutral hadrons (K, ...)",
@@ -13,6 +14,12 @@ pid_to_text = {
     13: r"$\mu^{\pm}$",
     22: r"$\gamma$",
 }
+
+ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
+
+CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
+CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "$\gamma$", "$e^\pm$", "$\mu^\pm$"]
 
 bins = {
     211: {
@@ -132,14 +139,23 @@ def get_fake(df, pid):
     return v0 / len(df), np.sqrt(v0) / len(df)
 
 
-def cms_label(x0=0.12, x1=0.23, x2=0.67, y=0.90):
-    plt.figtext(x0, y, "CMS", fontweight="bold", wrap=True, horizontalalignment="left", fontsize=12)
-    plt.figtext(x1, y, "Simulation Preliminary", style="italic", wrap=True, horizontalalignment="left", fontsize=10)
-    plt.figtext(x2, y, "Run 3 (14 TeV)", wrap=True, horizontalalignment="left", fontsize=10)
+def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
+    plt.figtext(x0, y, "CMS", fontweight="bold", wrap=True, horizontalalignment="left", transform=ax.transAxes)
+    plt.figtext(
+        x1, y, "Simulation Preliminary", style="italic", wrap=True, horizontalalignment="left", transform=ax.transAxes
+    )
+    plt.figtext(x2, y, "Run 3 (14 TeV)", wrap=False, horizontalalignment="right", transform=ax.transAxes)
 
+def sample_label(ax, sample, additional_text="", x=0.01, y=0.87):
+    text_d = {
+        "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events", 
+        "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
+        "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
+        "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
+    }
 
-def sample_label(ax, y=0.98):
-    plt.text(0.03, y, "$\mathrm{t}\overline{\mathrm{t}}$ events", va="top", ha="left", size=10, transform=ax.transAxes)
+    text = text_d[sample]
+    plt.text(x, y, text + additional_text, ha="left", transform=ax.transAxes)
 
 
 def particle_label(ax, pid):
