@@ -5,6 +5,21 @@ import mplhep as hep
 import numpy as np
 
 
+SAMPLE_LABEL_CMS = {
+    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events", 
+    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
+    "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
+    "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
+    "SingleElectronFlatPt1To1000_pythia8_cfi": r"single $e^\pm$ events",
+    "SingleGammaFlatPt1To1000_pythia8_cfi": r"single $\gamma$ events",
+    "SingleMuFlatLogPt_100MeVto2TeV_cfi": r"single $\mu^\pm$ events",
+    "SingleNeutronFlatPt0p7To1000_cfi": "single neutron events",
+    "SinglePi0Pt1To1000_pythia8_cfi": r"single $\pi^0$ events",
+    "SinglePiMinusFlatPt0p7To1000_cfi": r"single $\pi^\pm$ events",
+    "SingleProtonMinusFlatPt0p7To1000_cfi": r"single proton events",
+    "SingleTauFlatPt1To1000_cfi": r"single $\tau^\pm$ events",
+}
+
 pid_to_text = {
     211: r"charged hadrons ($\pi^\pm$, ...)",
     130: r"neutral hadrons (K, ...)",
@@ -147,14 +162,7 @@ def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
     plt.figtext(x2, y, "Run 3 (14 TeV)", wrap=False, horizontalalignment="right", transform=ax.transAxes)
 
 def sample_label(ax, sample, additional_text="", x=0.01, y=0.87):
-    text_d = {
-        "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events", 
-        "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
-        "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
-        "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
-    }
-
-    text = text_d[sample]
+    text = SAMPLE_LABEL_CMS[sample]
     plt.text(x, y, text + additional_text, ha="left", transform=ax.transAxes)
 
 
