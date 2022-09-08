@@ -190,6 +190,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
                 ("met_iqr", met_pred_iqr),
                 ("met_med", met_pred_p50),
             ]:
+                logs[name] = val
                 tf.summary.scalar(name, val, step=epoch - 1, description=None)
 
                 if comet_experiment:
