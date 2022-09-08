@@ -32,5 +32,5 @@ tf-models-official
 tf2onnx
 tqdm
 uproot
-vector
+vector==0.8.5
 zenodo_get
