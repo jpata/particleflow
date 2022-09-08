@@ -4,9 +4,8 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 
-
 SAMPLE_LABEL_CMS = {
-    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events", 
+    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
     "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
     "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
@@ -163,18 +162,7 @@ def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
 
 
 def sample_label(ax, sample, additional_text="", x=0.01, y=0.87):
-<<<<<<< HEAD
     text = SAMPLE_LABEL_CMS[sample]
-=======
-    text_d = {
-        "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
-        "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
-        "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
-        "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
-    }
-
-    text = text_d[sample]
->>>>>>> d81610da6edf9367276239edd264275dd27491f8
     plt.text(x, y, text + additional_text, ha="left", transform=ax.transAxes)
 
 
