@@ -372,7 +372,6 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
             outs["pred_{}".format(key)] = y_pred[key]
 
         jets_coll = {}
-        jets_const = {}
         for typ in ["gen", "cand", "pred"]:
             cls_id = np.argmax(outs["{}_cls".format(typ)], axis=-1)
             valid = cls_id != 0
@@ -383,14 +382,11 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
             phi = awkward.from_iter([y[m][:, 0] for y, m in zip(phi, valid)])
             e = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_energy".format(typ)], valid)])
 
-            vec = vector.arr({"pt": pt, "eta": eta, "phi": phi, "e": e})
+            vec = vector.arr(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
-            jets = cluster.inclusive_jets()
-            jet_constituents = cluster.constituent_index()
-            jets_coll[typ] = jets[jets.pt > jet_ptcut]
-            jets_const[typ] = jet_constituents[jets.pt > jet_ptcut]
+            jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
         for key in ["pt", "eta", "phi", "energy"]:
             outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
