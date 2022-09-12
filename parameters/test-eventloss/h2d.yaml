@@ -48,6 +48,8 @@ loss:
     delta: 0.1
   event_loss: hist_2d
   event_loss_coef: 1.0
+  met_loss: none
+  met_loss_coef: 0.0
 
 tensorflow:
   eager: no

@@ -23,6 +23,9 @@ dataset:
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
+  cls_weight_by_pt: no
+
+loss:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
@@ -30,8 +33,6 @@ dataset:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
-  sum_energy_loss_coef: 0.0
-  sum_pt_loss_coef: 0.0
   energy_loss:
     type: Huber
   pt_loss:
@@ -45,6 +46,10 @@ dataset:
   eta_loss:
     type: Huber
     delta: 0.1
+  event_loss: gen_jet_logcosh #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+  event_loss_coef: 1.0
+  met_loss: none
+  met_loss_coef: 1.0
 
 tensorflow:
   eager: no
@@ -54,13 +59,14 @@ setup:
   weights:
   weights_config:
   lr: 0.0001
-  num_events_validation: 1000
+  num_events_validation: 200
   num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
 
 optimizer:
   adam:
@@ -94,9 +100,7 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
-    pt_skip_gate: no
-    eta_skip_gate: yes
-    phi_skip_gate: yes
+    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -119,8 +123,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: yes
-    energy_multimodal: yes
+    mask_reg_cls0: no
 
 timing:
   num_ev: 100
@@ -129,7 +132,7 @@ timing:
 callbacks:
   checkpoint:
     monitor: "val_loss"
-  plot_freq: 10
+  plot_freq: 1
   tensorboard:
     dump_history: yes
     hist_freq: 1
@@ -188,21 +191,27 @@ train_test_datasets:
     batch_per_gpu: 1
     datasets:
       - cms_pf_ttbar
-      - cms_pf_qcd
       - cms_pf_ztt
+      - cms_pf_qcd
+      - cms_pf_qcd_high_pt
 
-validation_dataset: cms_pf_ttbar
+validation_datasets:
+  - cms_pf_qcd_high_pt
 
 datasets:
   cms_pf_ttbar:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.3.1
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd_high_pt:
+    version: 1.4.0
     data_dir:
     manual_dir:
