@@ -151,7 +151,7 @@ def prepare_data_cms(fn, padded_num_elem_size):
         phi = np.arctan2(ygen[:, :, Y_FEATURES.index("sin_phi")], ygen[:, :, Y_FEATURES.index("cos_phi")])
         phi = ak.from_iter([y[m] for y, m in zip(phi, valid)])
         e = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("e")], valid)])
-        vec = vector.arr({"pt": pt, "eta": eta, "phi": phi, "e": e})
+        vec = vector.arr(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
         # cluster jets, sort jet indices in descending order by pt
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
