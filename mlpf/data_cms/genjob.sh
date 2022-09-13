@@ -14,7 +14,7 @@ mkdir -p $WORKDIR
 
 PILEUP=NoPileUp
 
-N=1000
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -63,6 +63,6 @@ cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
 cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
+python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
 #rm step*.root

@@ -13,9 +13,9 @@ SEED=$2
 mkdir -p $WORKDIR
 cd $WORKDIR
 
-/home/joosep/particleflow/mlpf/data/genjob.sh $SAMPLE $SEED
+/home/joosep/particleflow/mlpf/data_cms/genjob.sh $SAMPLE $SEED
 
-#cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.root /hdfs/local/joosep/mlpf/gen/v2/$SAMPLE/root/
+cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.root /hdfs/local/joosep/mlpf/gen/v2/$SAMPLE/root/
 cp $WORKDIR/$SAMPLE/$SEED/pfntuple_*.pkl.bz2 /hdfs/local/joosep/mlpf/gen/v2/$SAMPLE/raw/
 
 rm -Rf $WORKDIR
