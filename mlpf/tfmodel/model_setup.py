@@ -353,7 +353,7 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
         msk = (np.argmax(y_pred["cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
         for k in y_pred.keys():
             if k != "cls":
-                y_pred[k] = y_pred[k] * msk
+                y_pred[k] = np.atleast_3d(y_pred[k]) * np.atleast_3d(msk)
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
 
