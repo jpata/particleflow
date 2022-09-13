@@ -30,6 +30,7 @@ ls *.root
 cmsDriver.py step4 --conditions $CONDITIONS -s HARVESTING:@standardValidation+@standardDQM+@ExtraHLT+@miniAODValidation+@miniAODDQM+@nanoAODDQM --era $ERA --filetype DQM --filein file:step3_inDQM.root --fileout file:step4.root
 ls *.root
 
+mkdir -p /home/joosep/particleflow/data/QCDPU_baseline/
 cp DQM_*.root /home/joosep/particleflow/data/QCDPU_baseline/DQM_${NJOB}.root
 
 rm -Rf $WORKDIR

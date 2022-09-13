@@ -100,20 +100,6 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
                 yvals[k].append(dd[k])
         yvals = {k: np.concatenate(v) for k, v in yvals.items()}
 
-        # compute the mask of badly-predicted particles and save to a file bad.npz
-        denom = np.maximum(yvals["gen_pt"], yvals["pred_pt"])
-        ratio = np.abs(yvals["gen_pt"] - yvals["pred_pt"]) / denom
-        ratio[np.isnan(ratio)] = 0
-        msk_bad = (ratio > 0.8)[:, :, 0]
-        yvals_bad = {
-            k: yvals[k][msk_bad]
-            for k in yvals.keys()
-            if (k.startswith("gen_") or k.startswith("pred_") or k.startswith("cand_"))
-        }
-        print("Number of bad particles: {}".format(len(yvals_bad["gen_cls"])))
-        with open("{}/bad.npz".format(str(cp_dir)), "wb") as fi:
-            np.savez(fi, **yvals_bad)
-
         msk_gen = (np.argmax(yvals["gen_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
         gen_px = yvals["gen_pt"] * yvals["gen_cos_phi"] * msk_gen
         gen_py = yvals["gen_pt"] * yvals["gen_sin_phi"] * msk_gen
@@ -349,10 +335,12 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
     for elem in tqdm(dataset, desc="Evaluating model"):
         y_pred = model.predict(elem["X"], verbose=False)
 
-        # mask the predictions where there was no predicted particles
+        # mask where there were no predicted particles (the prediction class was 0)
         msk = (np.argmax(y_pred["cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
         for k in y_pred.keys():
-            if k != "cls":
+            # do not mask the classification outputs (we are using the classification outputs as a mask in the first place)
+            # do not mask the MET output (if it exists), it is a per-event quantity, rather than a per-particle as the mask
+            if k != "cls" and k != "met":
                 y_pred[k] = y_pred[k] * msk
 
         np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)

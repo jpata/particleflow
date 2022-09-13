@@ -714,7 +714,7 @@ class OutputDecoding(tf.keras.Model):
         if self.met_output:
             px = pred_pt * pred_cos_phi * msk_input_outtype
             py = pred_pt * pred_sin_phi * msk_input_outtype
-            met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-1))
+            met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
             ret["met"] = met
 
         return ret
