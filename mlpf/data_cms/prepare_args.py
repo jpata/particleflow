@@ -3,17 +3,17 @@ from __future__ import print_function
 
 import os
 
-outdir = "/hdfs/local/joosep/mlpf/gen/v2"
+outdir = "/scratch/datastore/joosep/mlpf/gen/v2/"
 
 samples = [
-    "SingleElectronFlatPt1To1000_pythia8_cfi",
-    "SingleGammaFlatPt1To1000_pythia8_cfi",
-    "SingleMuFlatLogPt_100MeVto2TeV_cfi",
+#    "SingleElectronFlatPt1To1000_pythia8_cfi",
+#    "SingleGammaFlatPt1To1000_pythia8_cfi",
+#    "SingleMuFlatLogPt_100MeVto2TeV_cfi",
     "SingleNeutronFlatPt0p7To1000_cfi",
-    "SinglePi0Pt1To1000_pythia8_cfi",
-    "SinglePiMinusFlatPt0p7To1000_cfi",
-    "SingleProtonMinusFlatPt0p7To1000_cfi",
-    "SingleTauFlatPt1To1000_cfi",
+#    "SinglePi0Pt1To1000_pythia8_cfi",
+#    "SinglePiMinusFlatPt0p7To1000_cfi",
+#    "SingleProtonMinusFlatPt0p7To1000_cfi",
+#    "SingleTauFlatPt1To1000_cfi",
 ]
 
 samples_pu = [
@@ -24,7 +24,7 @@ samples_pu = [
     # "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi",
 ]
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 1000
 
 if __name__ == "__main__":
 
