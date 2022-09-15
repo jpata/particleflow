@@ -88,7 +88,8 @@ def main():
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
 @click.option("-j", "--jobid", help="log log the Slurm job ID in experiments dir", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid):
+@click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid, horovod_enabled):
 
     # tf.debugging.enable_check_numerics()
 
@@ -103,7 +104,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         config = customization_functions[customize](config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    horovod_enabled = config["setup"]["horovod_enabled"]
+    if horovod_enabled:
+        pass
+    else:
+        horovod_enabled = config["setup"]["horovod_enabled"]
     if horovod_enabled:
         num_gpus = initialize_horovod()
     else:
@@ -148,7 +152,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         experiment.log_code(config_file_path)
 
     if jobid is not None:
-        with open(f"{outdir}/{jobid}.txt", 'w') as f:
+        with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
