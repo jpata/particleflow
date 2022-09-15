@@ -37,6 +37,7 @@ from tfmodel.utils import (
     get_best_checkpoint,
     get_datasets,
     get_heptfds_dataset,
+    get_latest_checkpoint,
     get_loss_dict,
     get_lr_schedule,
     get_optimizer,
@@ -203,7 +204,7 @@ def train(
     model.fit(
         ds_train.repeat(),
         validation_data=ds_test.repeat(),
-        epochs=initial_epoch + config["setup"]["num_epochs"],
+        epochs=config["setup"]["num_epochs"],
         callbacks=callbacks,
         steps_per_epoch=num_train_steps,
         validation_steps=num_test_steps,
@@ -229,7 +230,7 @@ def model_save(outdir, fit_result, model, weights):
     print("Training done.")
 
 
-def model_scope(config, total_steps, weights, horovod_enabled=False):
+def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
     opt = get_optimizer(config, lr_schedule)
 
@@ -580,6 +581,8 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
 
 def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False):
+    from collections import Counter
+
     from ray import tune
     from ray.tune.integration.keras import TuneReportCheckpointCallback
     from raytune.search_space import set_raytune_search_parameters
@@ -632,6 +635,10 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
     total_steps = num_train_steps * full_config["setup"]["num_epochs"]
     print("total_steps", total_steps)
 
+    with strategy.scope():
+        weights = get_latest_checkpoint(Path(checkpoint_dir).parent) if (checkpoint_dir is not None) else None
+        model, optim_callbacks, initial_epoch = model_scope(full_config, total_steps, weights=weights)
+
     callbacks = prepare_callbacks(
         full_config,
         tune.get_trial_dir(),
@@ -640,85 +647,65 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         horovod_enabled=False,
     )
 
-    # callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
+    callbacks.append(optim_callbacks)
 
-    with strategy.scope():
-        lr_schedule, optim_callbacks, lr = get_lr_schedule(full_config, steps=total_steps)
-        callbacks.append(optim_callbacks)
-        opt = get_optimizer(full_config, lr_schedule)
+    tune_report_checkpoint_callback = TuneReportCheckpointCallback(
+        metrics=[
+            "adam_beta_1",
+            "charge_loss",
+            "cls_acc_unweighted",
+            "cls_loss",
+            "cos_phi_loss",
+            "energy_loss",
+            "eta_loss",
+            "learning_rate",
+            "loss",
+            "pt_loss",
+            "sin_phi_loss",
+            "val_charge_loss",
+            "val_cls_acc_unweighted",
+            "val_cls_acc_weighted",
+            "val_cls_loss",
+            "val_cos_phi_loss",
+            "val_energy_loss",
+            "val_eta_loss",
+            "val_loss",
+            "val_pt_loss",
+            "val_sin_phi_loss",
+        ],
+    )
 
-        model = make_model(full_config, dtype=tf.dtypes.float32)
+    # To make TuneReportCheckpointCallback continue the numbering of checkpoints correctly
+    if weights is not None:
+        print("INFO: using checkpointed weights from: {}".format(weights))
+        latest_saved_checkpoint_number = int(Path(weights).name.split("-")[1])
+        print("INFO: setting TuneReportCheckpointCallback epoch number to {}".format(latest_saved_checkpoint_number))
+        tune_report_checkpoint_callback._checkpoint._counter = Counter()
+        tune_report_checkpoint_callback._checkpoint._counter["epoch_end"] = latest_saved_checkpoint_number
+        tune_report_checkpoint_callback._checkpoint._cp_count = latest_saved_checkpoint_number
+    callbacks.append(tune_report_checkpoint_callback)
 
-        # Run model once to build the layers
-        model.build((1, full_config["dataset"]["padded_num_elem_size"], full_config["dataset"]["num_input_features"]))
-
-        full_config = set_config_loss(full_config, full_config["setup"]["trainable"])
-        configure_model_weights(model, full_config["setup"]["trainable"])
-        model.build((1, full_config["dataset"]["padded_num_elem_size"], full_config["dataset"]["num_input_features"]))
-
-        loss_dict, loss_weights = get_loss_dict(full_config)
-        model.compile(
-            loss=loss_dict,
-            optimizer=opt,
-            sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-            },
+    try:
+        model.fit(
+            ds_train.repeat(),
+            validation_data=ds_test.repeat(),
+            epochs=full_config["setup"]["num_epochs"],
+            callbacks=callbacks,
+            steps_per_epoch=num_train_steps,
+            validation_steps=num_test_steps,
+            initial_epoch=initial_epoch,
         )
-        model.summary()
+    except tf.errors.ResourceExhaustedError:
+        logging.warning("Resource exhausted, skipping this hyperparameter configuration.")
+        skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
+        lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
 
-        callbacks.append(
-            TuneReportCheckpointCallback(
-                metrics=[
-                    "adam_beta_1",
-                    "charge_loss",
-                    "cls_acc_unweighted",
-                    "cls_loss",
-                    "cos_phi_loss",
-                    "energy_loss",
-                    "eta_loss",
-                    "learning_rate",
-                    "loss",
-                    "pt_loss",
-                    "sin_phi_loss",
-                    "val_charge_loss",
-                    "val_cls_acc_unweighted",
-                    "val_cls_acc_weighted",
-                    "val_cls_loss",
-                    "val_cos_phi_loss",
-                    "val_energy_loss",
-                    "val_eta_loss",
-                    "val_loss",
-                    "val_pt_loss",
-                    "val_sin_phi_loss",
-                ],
-            ),
-        )
-
-        try:
-            model.fit(
-                ds_train.repeat(),
-                validation_data=ds_test.repeat(),
-                epochs=full_config["setup"]["num_epochs"],
-                callbacks=callbacks,
-                steps_per_epoch=num_train_steps,
-                validation_steps=num_test_steps,
-            )
-        except tf.errors.ResourceExhaustedError:
-            logging.warning("Resource exhausted, skipping this hyperparameter configuration.")
-            skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
-            lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
-
-            with open(skiplog_file_path, "a") as f:
-                f.write("#" * 80 + "\n")
-                for line in lines:
-                    f.write(line)
-                    logging.warning(line[:-1])
-                f.write("#" * 80 + "\n\n")
+        with open(skiplog_file_path, "a") as f:
+            f.write("#" * 80 + "\n")
+            for line in lines:
+                f.write(line)
+                logging.warning(line[:-1])
+            f.write("#" * 80 + "\n\n")
 
 
 @main.command()
