@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import os
 
-outdir = "/hdfs/local/joosep/mlpf/gen/v2"
+outdir = "/scratch/datastore/joosep/mlpf/gen/v2/"
 
 samples = [
     "SingleElectronFlatPt1To1000_pythia8_cfi",
@@ -17,14 +17,14 @@ samples = [
 ]
 
 samples_pu = [
-    # "TTbar_14TeV_TuneCUETP8M1_cfi",
-    # "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
-    # "QCDForPF_14TeV_TuneCUETP8M1_cfi",
-    # "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",
-    # "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi",
+    "TTbar_14TeV_TuneCUETP8M1_cfi",
+    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
+    "QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",
+    "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi",
 ]
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 1000
 
 if __name__ == "__main__":
 
