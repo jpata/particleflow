@@ -251,12 +251,13 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     loaded_opt = None
 
     if weights:
-        if lr_schedule:
-            raise Exception("Restoring the optimizer state with a learning rate schedule is currently not supported")
+        if lr_schedule and (opt.__class__.__module__ == "tfmodel.PCGrad_tf"):
+            raise Exception("Restoring the PCGrad optimizer state with a learning rate schedule is currently not supported")
 
         # We need to load the weights in the same trainable configuration as the model was set up
         configure_model_weights(model, config["setup"].get("weights_config", "all"))
         model.load_weights(weights, by_name=True)
+        print("INFO: using checkpointed weights from: {}".format(weights))
         opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
         if os.path.isfile(opt_weight_file):
             loaded_opt = pickle.load(open(opt_weight_file, "rb"))
@@ -677,7 +678,6 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
     # To make TuneReportCheckpointCallback continue the numbering of checkpoints correctly
     if weights is not None:
-        print("INFO: using checkpointed weights from: {}".format(weights))
         latest_saved_checkpoint_number = int(Path(weights).name.split("-")[1])
         print("INFO: setting TuneReportCheckpointCallback epoch number to {}".format(latest_saved_checkpoint_number))
         tune_report_checkpoint_callback._checkpoint._counter = Counter()
