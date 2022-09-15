@@ -87,7 +87,8 @@ def main():
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline):
+@click.option("-j", "--jobid", help="log log the Slurm job ID in experiments dir", type=str, default=None)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid):
 
     # tf.debugging.enable_check_numerics()
 
@@ -145,6 +146,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         experiment.log_code("mlpf/tfmodel/model.py")
         experiment.log_code("mlpf/tfmodel/utils.py")
         experiment.log_code(config_file_path)
+
+    if jobid is not None:
+        with open(f"{outdir}/{jobid}.txt", 'w') as f:
+            f.write(f"{jobid}\n")
 
     ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
     ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
