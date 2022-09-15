@@ -97,6 +97,7 @@ def train(
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem = parse_config(config, nepochs=nepochs, weights=weights)
+    print(f"loaded config file: {config_file_path}")
 
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
@@ -639,10 +640,10 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         horovod_enabled=False,
     )
 
-    callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
+    # callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
 
     with strategy.scope():
-        lr_schedule, optim_callbacks = get_lr_schedule(full_config, steps=total_steps)
+        lr_schedule, optim_callbacks, lr = get_lr_schedule(full_config, steps=total_steps)
         callbacks.append(optim_callbacks)
         opt = get_optimizer(full_config, lr_schedule)
 
