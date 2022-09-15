@@ -2,6 +2,7 @@
 #SBATCH -p main
 #SBATCH --mem-per-cpu=7G
 #SBATCH --cpus-per-task=1
+#SBATCH -o logs/slurm-%x-%j-%N.out
 
 NJOB=$1
 INPUT_FILELIST=/home/joosep/reco/mlpf/CMSSW_12_3_0_pre6/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt

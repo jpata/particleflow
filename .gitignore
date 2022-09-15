@@ -23,3 +23,5 @@ nohup.out
 
 *.pkl
 *.pkl.bz2
+
+slurm-*.out
