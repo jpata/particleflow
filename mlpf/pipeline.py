@@ -89,8 +89,9 @@ def main():
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
 @click.option("-j", "--jobid", help="log log the Slurm job ID in experiments dir", type=str, default=None)
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid, horovod_enabled):
-
+def train(
+    config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid, horovod_enabled
+):
     # tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
@@ -185,9 +186,7 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         with strategy.scope():
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
-    callbacks = prepare_callbacks(
-        config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=config["setup"]["horovod_enabled"]
-    )
+    callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
 
     verbose = 1
     if horovod_enabled:
@@ -595,6 +594,17 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
     if config is not None:
         full_config = set_raytune_search_parameters(search_space=config, config=full_config)
 
+    print("Using comet-ml OfflineExperiment, saving logs locally.")
+    experiment = OfflineExperiment(
+        project_name="particleflow-tf-gen",
+        auto_metric_logging=True,
+        auto_param_logging=True,
+        auto_histogram_weight_logging=True,
+        auto_histogram_gradient_logging=False,
+        auto_histogram_activation_logging=False,
+        offline_directory=tune.get_trial_dir() + "/cometml",
+    )
+
     strategy, num_gpus = get_strategy()
 
     ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
@@ -625,6 +635,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         full_config,
         tune.get_trial_dir(),
         ds_val,
+        comet_experiment=experiment,
+        horovod_enabled=False,
     )
 
     callbacks = callbacks[:-1]  # remove the CustomCallback at the end of the list
