@@ -36,7 +36,7 @@ ls ./experiments/cms*/weights/
 python mlpf/pipeline.py evaluate --customize pipeline_test --nevents 10 -t ./experiments/cms* -w ./experiments/cms*/weights/weights-01-*.hdf5
 
 #Evaluate the notebook
-papermill --inject-output-path --log-output -p path ./experiments/cms*/evaluation/epoch_1/cms_pf_ttbar/ notebooks/cms-mlpf.ipynb ./out.ipynb
+papermill --inject-output-path --log-output --cwd notebooks -p path ./experiments/cms*/evaluation/epoch_1/cms_pf_ttbar/ notebooks/cms-mlpf.ipynb ./out.ipynb
 
 #Retrain from existing weights
 python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test -w ./experiments/cms*/weights/weights-01-*.hdf5
