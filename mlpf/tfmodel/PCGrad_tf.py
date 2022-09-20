@@ -17,6 +17,13 @@ class PCGrad(optimizer.Optimizer):
         super(PCGrad, self).__init__(use_locking, name)
         self.optimizer = optimizer
 
+    def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+        super(PCGrad, self).apply_gradients(grads_and_vars, global_step=global_step, name=name)
+        # When using the legacy optimizer, the iterations attribute is not
+        # incremented automatically when calling apply_gradients(), so we do it
+        # manually here.
+        self.optimizer.iterations.assign_add(1)
+
     def compute_gradients(
         self,
         loss,
