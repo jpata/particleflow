@@ -32,7 +32,10 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         weightfile_path = self.opt_path.format(epoch=epoch + 1, **logs)
         try:
             # PCGrad is derived from the legacy optimizer
-            if self.model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1":
+            # module name differs in different TF versions
+            if (self.model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1") or (
+                self.model.optimizer.__class__.__module__ == "keras.optimizer_v1"
+            ):
                 # lr = self.model.optimizer.optimizer.optimizer.lr
                 weights = self.model.optimizer.optimizer.optimizer.get_weights()
             else:

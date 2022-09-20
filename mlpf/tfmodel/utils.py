@@ -69,7 +69,7 @@ def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
     if "multi_output" not in config["setup"]:
         config["setup"]["multi_output"] = True
 
-    if weights is None:
+    if weights is not None:
         config["setup"]["weights"] = weights
 
     return config, config_file_stem
@@ -92,9 +92,17 @@ def create_experiment_dir(prefix=None, suffix=None):
 def get_best_checkpoint(train_dir):
     checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
     # Sort the checkpoints according to the loss in their filenames
-    checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
+    checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x.name))[0].split("-")[-1]))
     # Return the checkpoint with smallest loss
     return str(checkpoint_list[0])
+
+
+def get_latest_checkpoint(train_dir):
+    checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
+    # Sort the checkpoints according to the epoch number in their filenames
+    checkpoint_list.sort(key=lambda x: int(re.search("\d+-\d+.\d+", str(x.name))[0].split("-")[0]))
+    # Return the checkpoint with highest epoch number
+    return str(checkpoint_list[-1])
 
 
 def delete_all_but_best_checkpoint(train_dir, dry_run):
