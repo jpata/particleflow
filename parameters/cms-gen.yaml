@@ -60,7 +60,7 @@ setup:
   weights_config:
   lr: 0.0006
   num_events_validation: 500
-  num_epochs: 100
+  num_epochs: 20
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -228,6 +228,13 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
+  gun:
+    batch_per_gpu: 150
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
 
 validation_datasets:
   - cms_pf_qcd_high_pt
@@ -246,6 +253,22 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_electron:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_gamma:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi0:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_neutron:
     version: 1.4.0
     data_dir:
     manual_dir:

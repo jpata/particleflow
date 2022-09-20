@@ -23,7 +23,7 @@ PADDED_NUM_ELEM_SIZE = 200
 class CmsPfSinglePi0(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi0 dataset."""
 
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.1.0": "Initial release",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
