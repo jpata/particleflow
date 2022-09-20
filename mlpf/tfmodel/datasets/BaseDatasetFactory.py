@@ -30,7 +30,7 @@ def unpack_target(y, num_output_classes, config):
     if config["loss"]["met_loss"] != "none":
         px = pt * cos_phi
         py = pt * sin_phi
-        met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-1))
+        met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
         ret["met"] = met
 
     return ret

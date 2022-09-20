@@ -14,7 +14,7 @@ mkdir -p $WORKDIR
 
 PILEUP=NoPileUp
 
-N=50
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
