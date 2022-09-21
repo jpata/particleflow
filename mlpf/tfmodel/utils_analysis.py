@@ -21,7 +21,7 @@ def get_hp_str(result):
 
 def plot_ray_analysis(analysis, save=False, skip=0):
     to_plot = [
-        # 'adam_beta_1',
+        "adam_beta_1",
         "charge_loss",
         "cls_acc_unweighted",
         "cls_loss",
