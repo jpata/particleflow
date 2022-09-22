@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import os
 
-outdir = "/data/joosep/mlpf/gen/v2/"
+outdir = "/hdfs/local/joosep/mlpf/gen/v2_gun/"
 
 samples = [
     "SingleElectronFlatPt1To1000_pythia8_cfi",

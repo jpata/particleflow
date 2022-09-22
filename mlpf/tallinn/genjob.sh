@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p short
+#SBATCH -p main
 #SBATCH --mem-per-cpu=4G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -10,7 +10,7 @@ df -h
 WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
 SAMPLE=$1
 SEED=$2
-OUTDIR=/scratch/datastore/joosep/mlpf/gen/v2/
+OUTDIR=/hdfs/local/joosep/mlpf/gen/v2_gun/
 
 mkdir -p $WORKDIR
 cd $WORKDIR
