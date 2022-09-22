@@ -251,9 +251,6 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     loaded_opt = None
 
     if weights:
-        if lr_schedule and (opt.__class__.__module__ == "tfmodel.PCGrad_tf"):
-            raise Exception("Restoring the PCGrad optimizer state with a learning rate schedule is currently not supported")
-
         # We need to load the weights in the same trainable configuration as the model was set up
         configure_model_weights(model, config["setup"].get("weights_config", "all"))
         model.load_weights(weights, by_name=True)
