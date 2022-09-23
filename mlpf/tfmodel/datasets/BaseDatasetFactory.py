@@ -57,9 +57,9 @@ class BaseDatasetFactory:
 
             target = unpack_target(y, num_output_classes, self.cfg)
 
-            cls_weights = msk_elems
+            pt_weights = msk_elems
             if self.cfg["dataset"]["cls_weight_by_pt"]:
-                cls_weights *= target["pt"]
+                pt_weights *= X[:, 1:2]
 
             # inputs: X
             # targets: dict by classification (cls) and regression feature columns
@@ -68,7 +68,7 @@ class BaseDatasetFactory:
                 X,
                 target,
                 {
-                    "cls": cls_weights,
+                    "cls": pt_weights,
                     "charge": msk_elems * msk_signal,
                     "pt": msk_elems * msk_signal,
                     "eta": msk_elems * msk_signal,
