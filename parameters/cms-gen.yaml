@@ -26,7 +26,7 @@ dataset:
   cls_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 100.0
+  classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
   eta_loss_coef: 1.0
@@ -58,7 +58,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0006
+  lr: 0.0001
   num_events_validation: 500
   num_epochs: 100
   dtype: float32
@@ -95,9 +95,9 @@ onecycle:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 128
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 1024
 
   combined_graph_layer:
     bin_size: 100
@@ -131,14 +131,14 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 1024
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 8
-  num_graph_layers_reg: 8
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -169,7 +169,7 @@ parameters:
     layernorm: yes
     mask_reg_cls0: no
 
-  skip_connection: yes
+  skip_connection: no
   debug: no
 
 timing:
@@ -222,14 +222,14 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 2
+    batch_per_gpu: 1
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 50
+    batch_per_gpu: 30
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
