@@ -30,8 +30,8 @@ if __name__ == "__main__":
     expressions = []
     expressions.append(
         Expression(
-            "ak4PFJetsCHS",
-            "vector<reco::PFJet>",
+            "slimmedJets",
+            "vector<pat::Jet>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("eta", "[o.eta() for o in obj]"),
@@ -42,8 +42,8 @@ if __name__ == "__main__":
     )
     expressions.append(
         Expression(
-            "ak4PFJetsPuppi",
-            "vector<reco::PFJet>",
+            "slimmedJetsPuppi",
+            "vector<pat::Jet>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("eta", "[o.eta() for o in obj]"),
@@ -54,8 +54,8 @@ if __name__ == "__main__":
     )
     expressions.append(
         Expression(
-            "pfMet",
-            "vector<reco::PFMET>",
+            "slimmedMETs",
+            "vector<pat::MET>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("phi", "[o.phi() for o in obj]"),
@@ -64,8 +64,8 @@ if __name__ == "__main__":
     )
     expressions.append(
         Expression(
-            "pfMetPuppi",
-            "vector<reco::PFMET>",
+            "slimmedMETsPuppi",
+            "vector<pat::MET>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("phi", "[o.phi() for o in obj]"),
@@ -74,8 +74,31 @@ if __name__ == "__main__":
     )
     expressions.append(
         Expression(
-            "particleFlow",
-            "vector<reco::PFCandidate>",
+            "slimmedGenJets",
+            "vector<reco::GenJet>",
+            [
+                ("pt", "[o.pt() for o in obj]"),
+                ("eta", "[o.eta() for o in obj]"),
+                ("phi", "[o.phi() for o in obj]"),
+                ("energy", "[o.energy() for o in obj]"),
+            ],
+        )
+    )
+    expressions.append(
+        Expression(
+            "genMetTrue",
+            "vector<reco::GenMET>",
+            [
+                ("pt", "[o.pt() for o in obj]"),
+                ("phi", "[o.phi() for o in obj]"),
+            ],
+        )
+    )
+
+    expressions.append(
+        Expression(
+            "packedPFCandidates",
+            "vector<pat::PackedCandidate>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("eta", "[o.eta() for o in obj]"),
