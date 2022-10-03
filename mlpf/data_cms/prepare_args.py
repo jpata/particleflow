@@ -34,7 +34,7 @@ if __name__ == "__main__":
         os.makedirs(outdir + "/" + s + "/raw", exist_ok=True)
         os.makedirs(outdir + "/" + s + "/root", exist_ok=True)
 
-        for nsamples in range(NUM_SAMPLES):
+        for nsamples in range(1, NUM_SAMPLES+1):
             if not os.path.isfile(outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(nsamples)):
                 if is_pu:
                     print("sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(s, nsamples))
