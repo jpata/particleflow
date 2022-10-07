@@ -17,7 +17,7 @@ cd ../../..
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
-	python mlpf/data/postprocessing2.py \
+	python mlpf/data_cms/postprocessing2.py \
 	  --input $file \
 	  --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
 	  --save-normalized-table --num-events 10
@@ -25,7 +25,7 @@ done
 
 mkdir -p experiments
 
-tfds build hep_tfds/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
+tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 #Run a simple training on a few events
 python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test

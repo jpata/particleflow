@@ -505,13 +505,13 @@ class OutputDecoding(tf.keras.Model):
         num_output_classes=8,
         schema="cms",
         dropout=0.0,
-        energy_skip_gate=True,
         id_dim_decrease=True,
         charge_dim_decrease=True,
         pt_dim_decrease=False,
         eta_dim_decrease=False,
         phi_dim_decrease=False,
         energy_dim_decrease=False,
+        pt_as_correction=True,
         id_hidden_dim=128,
         charge_hidden_dim=128,
         pt_hidden_dim=128,
@@ -527,6 +527,7 @@ class OutputDecoding(tf.keras.Model):
         layernorm=False,
         mask_reg_cls0=True,
         event_set_output=False,
+        met_output=False,
         **kwargs
     ):
 
@@ -537,12 +538,14 @@ class OutputDecoding(tf.keras.Model):
         self.dropout = dropout
 
         self.mask_reg_cls0 = mask_reg_cls0
+        self.pt_as_correction = pt_as_correction
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
             self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, name="output_layernorm")
 
         self.event_set_output = event_set_output
+        self.met_output = met_output
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -666,12 +669,12 @@ class OutputDecoding(tf.keras.Model):
 
         # compute pt=E/cosh(eta)
         # FIXME: check if this is actually useful
-        orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
-
-        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)
-        pred_pt_corr = pred_pt_corr * msk_input_outtype
-        pred_pt = orig_pt * pred_pt_corr[:, :, 0:1] + pred_pt_corr[:, :, 1:2]
-
+        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
+        if self.pt_as_correction:
+            orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
+            pred_pt = orig_pt * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+        else:
+            pred_pt = pred_pt_corr[..., 0:1]
         pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
@@ -707,6 +710,12 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
+
+        if self.met_output:
+            px = pred_pt * pred_cos_phi * msk_input_outtype
+            py = pred_pt * pred_sin_phi * msk_input_outtype
+            met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
+            ret["met"] = met
 
         return ret
 
@@ -836,6 +845,7 @@ class PFNetDense(tf.keras.Model):
         schema="cms",
         node_update_mode="concat",
         event_set_output=False,
+        met_output=False,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -876,6 +886,7 @@ class PFNetDense(tf.keras.Model):
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
+        output_decoding["met_output"] = met_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
@@ -1118,6 +1129,7 @@ class PFNetTransformer(tf.keras.Model):
         output_decoding={},
         multi_output=True,
         event_set_output=False,
+        met_output=False,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1137,6 +1149,7 @@ class PFNetTransformer(tf.keras.Model):
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
+        output_decoding["met_output"] = met_output
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):

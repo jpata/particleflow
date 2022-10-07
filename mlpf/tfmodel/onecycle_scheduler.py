@@ -118,7 +118,27 @@ class MomentumOneCycleScheduler(Callback):
 
         self.phases = [CosineAnnealer(mom_max, mom_min, phase_1_steps), CosineAnnealer(mom_min, mom_max, phase_2_steps)]
 
+    def _get_opt(self):  # needed for compatibility with PCGrad
+        if hasattr(self.model.optimizer, "lr"):
+            opt = self.model.optimizer
+        elif hasattr(self.model.optimizer.optimizer, "optimizer"):
+            opt = self.model.optimizer.optimizer.optimizer
+        assert opt is not None
+        return opt
+
+    def set_step(self, step):
+        "Set the step of the schedule, 1 step is one batch"
+        self.step = step
+        if self.step >= self.phase_1_steps:
+            self.phase = 1
+            self.phases[1].n = step - self.phase_1_steps
+            assert (self.phases[1].n >= 0) and (self.phases[1].n < self.phase_2_steps)
+        else:
+            self.phase = 0
+            self.phases[0].n = step
+
     def on_train_begin(self, logs=None):
+        self.set_step(tf.keras.backend.get_value(self._get_opt().iterations))  # in case we resume a training
         self.set_momentum(self.mom_schedule().step())
 
     def on_train_batch_end(self, batch, logs=None):
@@ -129,16 +149,15 @@ class MomentumOneCycleScheduler(Callback):
         self.set_momentum(self.mom_schedule().step())
 
     def set_momentum(self, mom):
+        opt = self._get_opt()
         # In Adam, the momentum parameter is called beta_1
-        if hasattr(self.model.optimizer, "beta_1"):
-            tf.keras.backend.set_value(self.model.optimizer.beta_1, mom)
+        if hasattr(opt, "beta_1"):
+            tf.keras.backend.set_value(opt.beta_1, mom)
         # In SDG, the momentum parameter is called momentum
-        elif hasattr(self.model.optimizer, "momentum"):
-            tf.keras.backend.set_value(self.model.optimizer.momentum, mom)
+        elif hasattr(opt, "momentum"):
+            tf.keras.backend.set_value(opt.momentum, mom)
         else:
-            raise NotImplementedError(
-                "Only SGD and Adam are supported by MomentumOneCycleScheduler: {}".format(type(self.model.optimizer))
-            )
+            raise NotImplementedError("Only SGD and Adam are supported by MomentumOneCycleScheduler: {}".format(type(opt)))
 
     def mom_schedule(self):
         return self.phases[self.phase]

@@ -22,6 +22,21 @@ search_space = {
     "clip_value_low": samp([0.0]),
     "normalize_degrees": samp([True]),
     "output_dim": samp([128]),
+    # "event_loss": samp(["none", "sliced_wasserstein", "gen_jet_logcosh", "hist_2d"]),
+    # "met_loss": samp([
+    #         "none",
+    #         {"type": "Huber", "delta": 10.0}
+    #     ]),
+    "event_and_met_loss": samp(
+        [
+            ("none", "none"),
+            ("sliced_wasserstein", "none"),
+            ("gen_jet_logcosh", "none"),
+            ("hist_2d", "none"),
+            ("none", "met"),
+        ]
+    ),
+    # "mask_reg_cls0": samp([False, True]),
 }
 
 # search_space = {
@@ -107,6 +122,40 @@ def set_raytune_search_parameters(search_space, config):
 
     if "expdecay_decay_rate" in search_space.keys():
         config["exponentialdecay"]["decay_rate"] = search_space["expdecay_decay_rate"]
+
+    if "event_loss" in search_space.keys():
+        config["loss"]["event_loss"] = search_space["event_loss"]
+        if search_space["event_loss"] == "none":
+            config["loss"]["event_loss_coef"] = 0.0
+        else:
+            config["loss"]["event_loss_coef"] = 1.0
+
+    if "met_loss" in search_space.keys():
+        config["loss"]["met_loss"] = search_space["event_loss"]
+        if search_space["met_loss"] == "none":
+            config["loss"]["met_loss_coef"] = 0.0
+        else:
+            config["loss"]["met_loss_coef"] = 1.0
+
+    if "event_and_met_loss" in search_space.keys():
+        event_l, met_l = search_space["event_and_met_loss"]
+
+        config["loss"]["event_loss"] = event_l
+
+        if event_l == "none":
+            config["loss"]["event_loss_coef"] = 0.0
+        else:
+            config["loss"]["event_loss_coef"] = 1.0
+
+        if met_l == "none":
+            config["loss"]["met_loss"] = met_l
+            config["loss"]["met_loss_coef"] = 0.0
+        else:
+            config["loss"]["met_loss"] = {"type": "Huber", "delta": 10.0}
+            config["loss"]["met_loss_coef"] = 1.0
+
+    if "mask_reg_cls0" in search_space.keys():
+        config["parameters"]["output_decoding"]["mask_reg_cls0"] = search_space["mask_reg_cls0"]
 
     if "lr_schedule" in search_space.keys():
         config["setup"]["lr_schedule"] = search_space["lr_schedule"]
