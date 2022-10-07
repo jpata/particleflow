@@ -92,7 +92,19 @@ def main():
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
 @click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
 def train(
-    config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid, horovod_enabled, habana
+    config,
+    weights,
+    ntrain,
+    ntest,
+    nepochs, 
+    recreate,
+    prefix,
+    plot_freq,
+    customize,
+    comet_offline,
+    jobid,
+    horovod_enabled,
+    habana,
 ):
     # tf.debugging.enable_check_numerics()
 
@@ -199,9 +211,7 @@ def train(
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
     with strategy.scope():
-        callbacks = prepare_callbacks(
-            config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled
-        )
+        callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
 
         verbose = 1
         if horovod_enabled:
