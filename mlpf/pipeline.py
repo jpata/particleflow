@@ -96,7 +96,7 @@ def train(
     weights,
     ntrain,
     ntest,
-    nepochs, 
+    nepochs,
     recreate,
     prefix,
     plot_freq,
