@@ -212,6 +212,8 @@ train_test_datasets:
 validation_datasets:
  - delphes_pf
 
+validation_batch_size: 5
+
 datasets:
   delphes_pf:
     version: 1.0.0
