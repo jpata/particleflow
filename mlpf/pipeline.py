@@ -168,7 +168,7 @@ def train(
         config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(5)
+    ds_val = ds_val.batch(config["validation_batch_size"])
 
     if ntrain:
         ds_train = ds_train.take(ntrain)

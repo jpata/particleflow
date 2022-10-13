@@ -25,7 +25,7 @@ pid_to_text = {
     211: r"charged hadrons ($\pi^\pm$, ...)",
     130: r"neutral hadrons (K, ...)",
     1: r"HF hadron (EM)",
-    2: r"HF-HAD hadron (HAD)",
+    2: r"HF hadron (HAD)",
     11: r"$e^{\pm}$",
     13: r"$\mu^{\pm}$",
     22: r"$\gamma$",
