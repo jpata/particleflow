@@ -1079,7 +1079,7 @@ class PFNetTransformer(tf.keras.Model):
         self.encoders = []
         for i in range(4):
             self.encoders.append(KernelEncoder(key_dim=key_dim, name="enc{}".format(i)))
-        
+
         self.decoders_cls = []
         for i in range(4):
             self.decoders_cls.append(KernelEncoder(key_dim=key_dim, name="dec-cls-{}".format(i)))
@@ -1093,15 +1093,23 @@ class PFNetTransformer(tf.keras.Model):
         output_decoding["event_set_output"] = event_set_output
         output_decoding["met_output"] = met_output
         self.output_dec = OutputDecoding(**output_decoding)
-        
+
         self.Q_cls = self.add_weight(
-            shape=(1, 1,128,),
+            shape=(
+                1,
+                1,
+                128,
+            ),
             name="Q_cls",
             initializer="random_normal",
             trainable=True,
         )
         self.Q_reg = self.add_weight(
-            shape=(1, 1,128, ),
+            shape=(
+                1,
+                1,
+                128,
+            ),
             name="Q_reg",
             initializer="random_normal",
             trainable=True,
@@ -1122,12 +1130,24 @@ class PFNetTransformer(tf.keras.Model):
             X_enc = enc([X_enc, X_enc, msk], training=training) * msk_input
 
         X_cls = X_enc
-        Q_cls = tf.repeat(self.Q_cls, repeats=[batch_size, ], axis=0)
+        Q_cls = tf.repeat(
+            self.Q_cls,
+            repeats=[
+                batch_size,
+            ],
+            axis=0,
+        )
         for dec in self.decoders_cls:
             X_cls = dec([Q_cls, X_cls, msk], training=training) * msk_input
-        
+
         X_reg = X_enc
-        Q_reg = tf.repeat(self.Q_reg, repeats=[batch_size, ], axis=0)
+        Q_reg = tf.repeat(
+            self.Q_reg,
+            repeats=[
+                batch_size,
+            ],
+            axis=0,
+        )
         for dec in self.decoders_reg:
             X_reg = dec([Q_reg, X_reg, msk], training=training) * msk_input
 
