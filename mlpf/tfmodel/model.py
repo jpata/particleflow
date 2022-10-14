@@ -714,15 +714,14 @@ class OutputDecoding(tf.keras.Model):
         pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
-        sigmoid_turnon = tf.sigmoid(-out_id_logits[..., 0:1])
-
         if self.mask_reg_cls0:
-            out_charge = out_charge * sigmoid_turnon
-            pred_pt = pred_pt * sigmoid_turnon
-            pred_eta = pred_eta * sigmoid_turnon
-            pred_sin_phi = pred_sin_phi * sigmoid_turnon
-            pred_cos_phi = pred_cos_phi * sigmoid_turnon
-            pred_energy = pred_energy * sigmoid_turnon
+            softmax_cls = tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1] * msk_input_outtype
+            out_charge = out_charge * softmax_cls
+            pred_pt = pred_pt * softmax_cls
+            pred_eta = pred_eta * softmax_cls
+            pred_sin_phi = pred_sin_phi * softmax_cls
+            pred_cos_phi = pred_cos_phi * softmax_cls
+            pred_energy = pred_energy * softmax_cls
 
         ret = {
             "cls": out_id_softmax,
