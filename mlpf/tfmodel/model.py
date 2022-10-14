@@ -466,6 +466,14 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         # compute the number of LSH bins to divide the input points into on the fly
         # n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
+        tf.debugging.assert_greater(
+            n_bins, 0, "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size)
+        )
+        tf.debugging.assert_equal(
+            tf.math.floormod(n_points, self.bin_size),
+            0,
+            "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
+        )
 
         # put each input item into a bin defined by the argmax output across the LSH embedding
         mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)])
