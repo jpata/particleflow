@@ -715,12 +715,12 @@ class OutputDecoding(tf.keras.Model):
 
         # mask the regression outputs for the nodes with a class prediction 0
         if self.mask_reg_cls0:
-            softmax_cls = tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1] * msk_input_outtype
-            out_charge = out_charge * softmax_cls
+            softmax_cls = (1.0 - tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+            out_charge = out_charge
             pred_pt = pred_pt * softmax_cls
-            pred_eta = pred_eta * softmax_cls
-            pred_sin_phi = pred_sin_phi * softmax_cls
-            pred_cos_phi = pred_cos_phi * softmax_cls
+            pred_eta = pred_eta
+            pred_sin_phi = pred_sin_phi
+            pred_cos_phi = pred_cos_phi
             pred_energy = pred_energy * softmax_cls
 
         ret = {
