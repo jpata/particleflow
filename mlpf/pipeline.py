@@ -88,10 +88,23 @@ def main():
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
-@click.option("-j", "--jobid", help="log log the Slurm job ID in experiments dir", type=str, default=None)
+@click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
+@click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
 def train(
-    config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, comet_offline, jobid, horovod_enabled
+    config,
+    weights,
+    ntrain,
+    ntest,
+    nepochs,
+    recreate,
+    prefix,
+    plot_freq,
+    customize,
+    comet_offline,
+    jobid,
+    horovod_enabled,
+    habana,
 ):
     # tf.debugging.enable_check_numerics()
 
@@ -113,6 +126,15 @@ def train(
         horovod_enabled = config["setup"]["horovod_enabled"]
     if horovod_enabled:
         num_gpus = initialize_horovod()
+    elif habana:
+        import habana_frameworks.tensorflow as htf
+
+        htf.load_habana_module()
+        from habana_frameworks.tensorflow.distribute import HPUStrategy
+
+        logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
+        strategy = HPUStrategy()
+        num_gpus = 1
     else:
         strategy, num_gpus = get_strategy()
 
@@ -188,29 +210,30 @@ def train(
         with strategy.scope():
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
-    callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
+    with strategy.scope():
+        callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
 
-    verbose = 1
-    if horovod_enabled:
-        callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
-        callbacks.append(hvd.callbacks.MetricAverageCallback())
-        verbose = 1 if hvd.rank() == 0 else 0
+        verbose = 1
+        if horovod_enabled:
+            callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
+            callbacks.append(hvd.callbacks.MetricAverageCallback())
+            verbose = 1 if hvd.rank() == 0 else 0
 
-        num_train_steps /= hvd.size()
-        num_test_steps /= hvd.size()
+            num_train_steps /= hvd.size()
+            num_test_steps /= hvd.size()
 
-    callbacks.append(optim_callbacks)
+        callbacks.append(optim_callbacks)
 
-    model.fit(
-        ds_train.repeat(),
-        validation_data=ds_test.repeat(),
-        epochs=config["setup"]["num_epochs"],
-        callbacks=callbacks,
-        steps_per_epoch=num_train_steps,
-        validation_steps=num_test_steps,
-        initial_epoch=initial_epoch,
-        verbose=verbose,
-    )
+        model.fit(
+            ds_train.repeat(),
+            validation_data=ds_test.repeat(),
+            epochs=config["setup"]["num_epochs"],
+            callbacks=callbacks,
+            steps_per_epoch=num_train_steps,
+            validation_steps=num_test_steps,
+            initial_epoch=initial_epoch,
+            verbose=verbose,
+        )
 
     # if not horovod_enabled or hvd.rank()==0:
     #     model_save(outdir, fit_result, model, weights)
