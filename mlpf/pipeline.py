@@ -284,11 +284,9 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
             print("INFO: using checkpointed optimizer weights from: {}".format(opt_weight_file))
 
         initial_epoch = int(weights.split("/")[-1].split("-")[1])
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
     config = set_config_loss(config, config["setup"]["trainable"])
     configure_model_weights(model, config["setup"]["trainable"])
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
     print("model weights")
     tw_names = [m.name for m in model.trainable_weights]

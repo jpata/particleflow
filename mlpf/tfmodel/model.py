@@ -673,10 +673,12 @@ class OutputDecoding(tf.keras.Model):
             orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
             orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
             orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
+            orig_pt = X_input[:, :, 1:2]
         elif self.schema == "delphes":
             orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_id_logits.dtype)
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_id_logits.dtype)
+            orig_pt = X_input[:, :, 1:2]
 
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), X_encoded.dtype)], axis=-1)
@@ -703,11 +705,8 @@ class OutputDecoding(tf.keras.Model):
         pred_energy = orig_energy + pred_energy_corr
         pred_energy = tf.abs(pred_energy)
 
-        # compute pt=E/cosh(eta)
-        # FIXME: check if this is actually useful
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
         if self.pt_as_correction:
-            orig_pt = tf.stop_gradient(pred_energy / tf.math.cosh(tf.clip_by_value(pred_eta, -8, 8)))
             pred_pt = orig_pt * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
         else:
             pred_pt = pred_pt_corr[..., 0:1]

@@ -60,7 +60,7 @@ setup:
   weights_config:
   lr: 0.0005
   num_events_validation: 500
-  num_epochs: 100
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -95,9 +95,9 @@ onecycle:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 32
+  node_update_mode: concat #concat, append. if append, must have node_encoding_hidden_dim==node_message.output_dim
+  do_node_encoding: no #if enabled, project the node features to node_encoding_hidden_dim before graph layers
+  node_encoding_hidden_dim: 32 #only meaningful if do_node_encoding enabled
 
   combined_graph_layer:
     bin_size: 256
@@ -228,13 +228,13 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
-#  gun:
-#    batch_per_gpu: 120
-#    datasets:
-#      - cms_pf_single_electron
-#      - cms_pf_single_gamma
-#      - cms_pf_single_neutron
-#      - cms_pf_single_pi0
+  gun:
+    batch_per_gpu: 120
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
 
 validation_datasets:
   - cms_pf_qcd_high_pt
