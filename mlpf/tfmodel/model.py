@@ -714,14 +714,6 @@ class OutputDecoding(tf.keras.Model):
         pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
-        if self.mask_reg_cls0:
-            softmax_cls = (1.0 - tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
-            out_charge = out_charge
-            pred_pt = pred_pt * softmax_cls
-            pred_eta = pred_eta
-            pred_sin_phi = pred_sin_phi
-            pred_cos_phi = pred_cos_phi
-            pred_energy = pred_energy * softmax_cls
 
         ret = {
             "cls": out_id_softmax,
@@ -734,13 +726,15 @@ class OutputDecoding(tf.keras.Model):
         }
 
         if self.event_set_output:
-            pt_e_eta_phi = tf.concat(
+            if self.mask_reg_cls0:
+                softmax_cls = (1.0 - tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+                pt_e_eta_phi = tf.concat(
                 [
-                    pred_pt * msk_input_outtype,
-                    pred_energy * msk_input_outtype,
-                    pred_eta * msk_input_outtype,
-                    pred_sin_phi * msk_input_outtype,
-                    pred_cos_phi * msk_input_outtype,
+                    pred_pt * msk_input_outtype * softmax_cls,
+                    pred_energy * msk_input_outtype * softmax_cls,
+                    pred_eta * msk_input_outtype * softmax_cls,
+                    pred_sin_phi * msk_input_outtype * softmax_cls,
+                    pred_cos_phi * msk_input_outtype * softmax_cls,
                 ],
                 axis=-1,
             )

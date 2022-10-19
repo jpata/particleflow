@@ -17,7 +17,7 @@ SingleElectron events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 200
+PADDED_NUM_ELEM_SIZE = 256
 
 
 class CmsPfSingleElectron(tfds.core.GeneratorBasedBuilder):

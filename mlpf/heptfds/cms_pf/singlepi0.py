@@ -17,7 +17,7 @@ SinglePi0 events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 200
+PADDED_NUM_ELEM_SIZE = 256
 
 
 class CmsPfSinglePi0(tfds.core.GeneratorBasedBuilder):

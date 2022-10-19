@@ -17,7 +17,7 @@ SingleMu events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 320
+PADDED_NUM_ELEM_SIZE = 512
 
 
 class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
