@@ -17,13 +17,15 @@ SAMPLE_LABEL_CMS = {
     "SinglePiMinusFlatPt0p7To1000_cfi": r"single $\pi^\pm$ events",
     "SingleProtonMinusFlatPt0p7To1000_cfi": r"single proton events",
     "SingleTauFlatPt1To1000_cfi": r"single $\tau^\pm$ events",
+    "RelValQCD_FlatPt_15_3000HS_14": r"QCD $15 < p_T < 3000$ GeV + PU events",
+    "RelValTTbar_14TeV": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
 }
 
 pid_to_text = {
     211: r"charged hadrons ($\pi^\pm$, ...)",
     130: r"neutral hadrons (K, ...)",
     1: r"HF hadron (EM)",
-    2: r"HF-HAD hadron (HAD)",
+    2: r"HF hadron (HAD)",
     11: r"$e^{\pm}$",
     13: r"$\mu^{\pm}$",
     22: r"$\gamma$",

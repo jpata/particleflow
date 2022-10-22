@@ -18,15 +18,15 @@ dataset:
 #       SC = 10,
 #       HO = 11,
   num_input_classes: 12
-  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7, tau=8)
-  num_output_classes: 9
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
+  num_output_classes: 8
   padded_num_elem_size: 6400
   #(pt, eta, sin phi, cos phi, E)
   num_momentum_outputs: 5
   cls_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
   eta_loss_coef: 1.0
@@ -59,12 +59,12 @@ setup:
   weights:
   weights_config:
   lr: 0.0005
-  num_events_validation: 200
-  num_epochs: 200
+  num_events_validation: 500
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: none  # exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
 
@@ -95,19 +95,19 @@ onecycle:
 parameters:
   model: gnn_dense
   input_encoding: cms
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 128
+  node_update_mode: concat #concat, append. if append, must have node_encoding_hidden_dim==node_message.output_dim
+  do_node_encoding: no #if enabled, project the node features to node_encoding_hidden_dim before graph layers
+  node_encoding_hidden_dim: 32 #only meaningful if do_node_encoding enabled
 
   combined_graph_layer:
-    bin_size: 100
+    bin_size: 256
     max_num_bins: 200
-    distance_dim: 64
+    distance_dim: 128
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
     ffn_dist_num_layers: 2
-    ffn_dist_hidden_dim: 128
+    ffn_dist_hidden_dim: 32
 
     # MPNN
     #kernel:
@@ -128,17 +128,17 @@ parameters:
       dist_mult: 0.1
       clip_value_low: 0.0
       dist_norm: l2
-    num_node_messages: 2
+    num_node_messages: 1
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: yes
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 4
+  num_graph_layers_reg: 4
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -153,12 +153,12 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
-    charge_hidden_dim: 256
-    pt_hidden_dim: 256
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    id_hidden_dim: 64
+    charge_hidden_dim: 64
+    pt_hidden_dim: 64
+    eta_hidden_dim: 64
+    phi_hidden_dim: 64
+    energy_hidden_dim: 64
 
     id_num_layers: 2
     charge_num_layers: 2
@@ -222,15 +222,24 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 5
+    batch_per_gpu: 4
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
+  gun:
+    batch_per_gpu: 100
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
 
 validation_datasets:
   - cms_pf_qcd_high_pt
+
+validation_batch_size: 4
 
 datasets:
   cms_pf_ttbar:
@@ -246,6 +255,22 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_electron:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_gamma:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi0:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_neutron:
     version: 1.4.0
     data_dir:
     manual_dir:

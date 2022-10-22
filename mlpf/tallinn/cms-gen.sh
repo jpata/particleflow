@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 8
+#SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
+#SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/tf-2.9.0.simg
 cd ~/particleflow

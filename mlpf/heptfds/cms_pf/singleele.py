@@ -17,17 +17,18 @@ SingleElectron events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 320
+PADDED_NUM_ELEM_SIZE = 256
 
 
 class CmsPfSingleElectron(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Initial release.",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
+        "1.4.0": "Add gen jet index information",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleElectronFlatPt1To100_pythia8_cfi data/
@@ -55,7 +56,7 @@ class CmsPfSingleElectron(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleElectronFlatPt1To100_pythia8_cfi"
+        sample_dir = "SingleElectronFlatPt1To1000_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):

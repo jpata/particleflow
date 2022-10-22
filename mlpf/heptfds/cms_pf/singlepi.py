@@ -17,17 +17,18 @@ SinglePi events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 320
+PADDED_NUM_ELEM_SIZE = 256
 
 
 class CmsPfSinglePi(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
+        "1.4.0": "Add genjet information",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SinglePiFlatPt0p7To10_cfi data/

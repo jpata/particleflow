@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-SingleGamma events.
+SingleNeutron events.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -20,8 +20,8 @@ _CITATION = """
 PADDED_NUM_ELEM_SIZE = 256
 
 
-class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_singlegamma dataset."""
+class CmsPfSingleNeutron(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_singleneutron dataset."""
 
     VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
@@ -30,7 +30,7 @@ class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
         "1.4.0": "Add gen jet index information",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleGammaFlatPt10To100_pythia8_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleNeutronFlatPt0p7To1000_cfi/data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -55,7 +55,7 @@ class CmsPfSingleGamma(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleGammaFlatPt1To1000_pythia8_cfi"
+        sample_dir = "SingleNeutronFlatPt0p7To1000_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
 
     def _generate_examples(self, files):
