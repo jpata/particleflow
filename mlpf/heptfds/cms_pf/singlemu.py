@@ -17,13 +17,13 @@ SingleMu events.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 320
+PADDED_NUM_ELEM_SIZE = 512
 
 
 class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi dataset."""
 
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",

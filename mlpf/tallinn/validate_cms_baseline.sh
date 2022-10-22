@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH --mem-per-cpu=5G
+#SBATCH --mem-per-cpu=7G
 #SBATCH --cpus-per-task=1
+#SBATCH -o logs/slurm-%x-%j-%N.out
 
 NJOB=$1
 INPUT_FILELIST=/home/joosep/reco/mlpf/CMSSW_12_3_0_pre6/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt
@@ -24,7 +25,7 @@ WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
 mkdir -p $WORKDIR
 cd $WORKDIR
 
-cmsDriver.py step3 --conditions $CONDITIONS -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT,VALIDATION:@standardValidation+@miniAODValidation,DQM:@standardDQM+@ExtraHLT+@miniAODDQM+@nanoAODDQM --datatier RECOSIM,DQMIO --nThreads 1 -n -1 --era $ERA --eventcontent RECOSIM,DQM --geometry=$GEOM --filein $FILENAME --fileout file:step3.root
+cmsDriver.py step3 --conditions $CONDITIONS -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT,VALIDATION:@standardValidation+@miniAODValidation,DQM:@standardDQM+@ExtraHLT+@miniAODDQM+@nanoAODDQM --datatier RECOSIM,MINIAODSIM,DQMIO --nThreads 1 -n -1 --era $ERA --eventcontent RECOSIM,MINIAODSIM,DQM --geometry=$GEOM --filein $FILENAME --fileout file:step3.root
 ls *.root
 
 cmsDriver.py step4 --conditions $CONDITIONS -s HARVESTING:@standardValidation+@standardDQM+@ExtraHLT+@miniAODValidation+@miniAODDQM+@nanoAODDQM --era $ERA --filetype DQM --filein file:step3_inDQM.root --fileout file:step4.root
@@ -32,5 +33,6 @@ ls *.root
 
 mkdir -p /home/joosep/particleflow/data/QCDPU_baseline/
 cp DQM_*.root /home/joosep/particleflow/data/QCDPU_baseline/DQM_${NJOB}.root
+cp step3_inMINIAODSIM.root /home/joosep/particleflow/data/QCDPU_baseline/step3_MINI_${NJOB}.root
 
 rm -Rf $WORKDIR

@@ -2,6 +2,7 @@
 #SBATCH -p main
 #SBATCH --mem-per-cpu=6G
 #SBATCH --cpus-per-task=1
+#SBATCH -o logs/slurm-%x-%j-%N.out
 
 env
 df -h
