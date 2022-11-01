@@ -659,8 +659,12 @@ class OutputDecoding(tf.keras.Model):
             X_encoded = self.layernorm(X_encoded)
 
         out_id_logits = self.ffn_id(X_encoded, training=training)
-        out_id_logits = out_id_logits * tf.cast(msk_input, out_id_logits.dtype)
-        msk_input_outtype = tf.cast(msk_input, out_id_logits.dtype)
+        in_dtype = X_encoded.dtype
+        out_dtype = out_id_logits.dtype
+        msk_input_outtype = tf.cast(msk_input, out_dtype)
+
+        # mask the classification outputs for zero-padded inputs across batches
+        out_id_logits = out_id_logits * msk_input_outtype
 
         if self.cls_output_as_logits:
             out_id_transformed = out_id_logits
@@ -670,23 +674,23 @@ class OutputDecoding(tf.keras.Model):
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
-        orig_eta = tf.cast(X_input[:, :, 2:3], out_id_logits.dtype)
+        orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         # FIXME: better schema propagation between hep_tfds
         # skip connection from raw input values
         if self.schema == "cms":
-            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
-            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
-            orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
+            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
+            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
+            orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
         elif self.schema == "delphes":
-            orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_id_logits.dtype)
-            orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
-            orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_id_logits.dtype)
+            orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
+            orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
+            orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
 
         if self.regression_use_classification:
-            X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), X_encoded.dtype)], axis=-1)
+            X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
 
         pred_eta_corr = self.ffn_eta(X_encoded, training=training)
         pred_eta_corr = pred_eta_corr * msk_input_outtype
@@ -699,9 +703,7 @@ class OutputDecoding(tf.keras.Model):
 
         X_encoded_energy = tf.concat([X_encoded, X_encoded_energy], axis=-1)
         if self.regression_use_classification:
-            X_encoded_energy = tf.concat(
-                [X_encoded_energy, tf.cast(tf.stop_gradient(out_id_logits), X_encoded.dtype)], axis=-1
-            )
+            X_encoded_energy = tf.concat([X_encoded_energy, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)
         pred_energy_corr = pred_energy_corr * msk_input_outtype
@@ -712,7 +714,7 @@ class OutputDecoding(tf.keras.Model):
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
         if self.pt_as_correction:
-            pred_pt = orig_pt * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+            pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
         else:
             pred_pt = pred_pt_corr[..., 0:1]
         pred_pt = tf.abs(pred_pt)
@@ -721,7 +723,7 @@ class OutputDecoding(tf.keras.Model):
 
         ret = {
             "cls": out_id_transformed,
-            "charge": out_charge * msk_input_outtype,
+            "charge": out_charge,
             "pt": pred_pt * msk_input_outtype,
             "eta": pred_eta * msk_input_outtype,
             "sin_phi": pred_sin_phi * msk_input_outtype,
