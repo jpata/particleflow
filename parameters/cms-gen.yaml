@@ -67,6 +67,7 @@ setup:
   lr_schedule: cosinedecay  # exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
+  cls_output_as_logits: True
 
 optimizer:
   adam:

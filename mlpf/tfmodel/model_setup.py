@@ -298,6 +298,7 @@ def make_gnn_dense(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
+        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
         **kwargs
     )
 
@@ -521,7 +522,7 @@ def make_focal_loss(config):
             y,
             alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
             gamma=float(config["setup"].get("focal_loss_gamma", 2.0)),
-            from_logits=bool(config["setup"].get("focal_loss_from_logits", False)),
+            from_logits=config["setup"]["cls_output_as_logits"],
         )
 
     return loss

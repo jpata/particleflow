@@ -564,6 +564,7 @@ class OutputDecoding(tf.keras.Model):
         mask_reg_cls0=True,
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
         **kwargs
     ):
 
@@ -582,6 +583,7 @@ class OutputDecoding(tf.keras.Model):
 
         self.event_set_output = event_set_output
         self.met_output = met_output
+        self.cls_output_as_logits = cls_output_as_logits
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -660,7 +662,10 @@ class OutputDecoding(tf.keras.Model):
         out_id_logits = out_id_logits * tf.cast(msk_input, out_id_logits.dtype)
         msk_input_outtype = tf.cast(msk_input, out_id_logits.dtype)
 
-        out_id_softmax = tf.nn.softmax(out_id_logits, axis=-1)
+        if self.cls_output_as_logits:
+            out_id_transformed = out_id_logits
+        else:
+            out_id_transformed = tf.nn.softmax(out_id_logits, axis=-1)
 
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
@@ -715,7 +720,7 @@ class OutputDecoding(tf.keras.Model):
         # mask the regression outputs for the nodes with a class prediction 0
 
         ret = {
-            "cls": out_id_softmax,
+            "cls": out_id_transformed,
             "charge": out_charge * msk_input_outtype,
             "pt": pred_pt * msk_input_outtype,
             "eta": pred_eta * msk_input_outtype,
@@ -879,6 +884,7 @@ class PFNetDense(tf.keras.Model):
         node_update_mode="concat",
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -920,6 +926,7 @@ class PFNetDense(tf.keras.Model):
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
         output_decoding["met_output"] = met_output
+        output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
