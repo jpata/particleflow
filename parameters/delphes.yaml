@@ -14,7 +14,7 @@ dataset:
   cls_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 100.0
+  classification_loss_coef: 1.0
   charge_loss_coef: 1.0
   pt_loss_coef: 1.0
   eta_loss_coef: 1.0
@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-5
   num_events_train: 45000
   num_events_test: 5000
   num_events_validation: 10
@@ -60,7 +60,7 @@ setup:
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
-  cls_output_as_logits: True
+  cls_output_as_logits: False
 
 optimizer:
   adam:
