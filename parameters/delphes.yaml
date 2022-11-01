@@ -14,13 +14,13 @@ dataset:
   cls_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 100.0
-  eta_loss_coef: 100.0
-  sin_phi_loss_coef: 100.0
-  cos_phi_loss_coef: 100.0
-  energy_loss_coef: 100.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
   energy_loss:
     type: Huber
     delta: 1.0
