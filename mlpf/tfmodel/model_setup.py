@@ -230,7 +230,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs",
         histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
-        write_graph=False,
+        write_graph=True,
         write_images=False,
         update_freq="epoch",
         # profile_batch=(10,90),
@@ -319,6 +319,7 @@ def make_transformer(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
+        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
         **kwargs
     )
     return model

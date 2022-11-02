@@ -58,8 +58,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_events_validation: 200
+  lr: 0.0005
+  num_events_validation: 10
   num_epochs: 50
   dtype: float32
   trainable:
@@ -67,6 +67,7 @@ setup:
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
+  cls_output_as_logits: True
 
 optimizer:
   adam:
@@ -100,7 +101,7 @@ parameters:
     regression_use_classification: yes
     dropout: 0.0
 
-    pt_as_correction: no
+    pt_as_correction: yes
 
     id_hidden_dim: 256
     charge_hidden_dim: 256
@@ -181,19 +182,19 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 1
+    batch_per_gpu: 4
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
-#  gun:
-#    batch_per_gpu: 32
-#    datasets:
-#      - cms_pf_single_electron
-#      - cms_pf_single_gamma
-#      - cms_pf_single_neutron
-#      - cms_pf_single_pi0
+  gun:
+    batch_per_gpu: 100
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
 
 validation_datasets:
   - cms_pf_qcd_high_pt

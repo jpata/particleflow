@@ -1068,10 +1068,10 @@ class KernelEncoder(tf.keras.layers.Layer):
         from official.nlp.modeling.layers.kernel_attention import KernelAttention
 
         self.key_dim = kwargs.pop("key_dim")
-        num_heads = 8
+        self.num_heads = 8
 
         self.attn = KernelAttention(
-            feature_transform="elu", num_heads=num_heads, key_dim=self.key_dim, name=kwargs.get("name") + "_attention"
+            feature_transform="elu", num_heads=self.num_heads, key_dim=self.key_dim, name=kwargs.get("name") + "_attention"
         )
         self.ffn = point_wise_feed_forward_network(
             self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu"
@@ -1084,13 +1084,44 @@ class KernelEncoder(tf.keras.layers.Layer):
         Q, X, mask = args
         msk_input = tf.expand_dims(tf.cast(mask, tf.float32), -1)
 
-        X = self.norm1(X)
+        X = self.norm1(X, training=training)
         attn_output = self.attn(query=Q, value=X, key=X, training=training, attention_mask=mask) * msk_input
-        out1 = self.norm2(X + attn_output)
+        out1 = self.norm2(X + attn_output, training=training)
 
-        out2 = self.ffn(out1)
+        out2 = self.ffn(out1, training=training)
 
         return out2
+
+
+class QueryLayer(tf.keras.layers.Layer):
+    def __init__(self, key_dim):
+        super(QueryLayer, self).__init__()
+        self.key_dim = key_dim
+
+    def build(self, input_shape):
+        self.q_cls = self.add_weight(
+            shape=(
+                1,
+                1,
+                self.key_dim,
+            ),
+            name="q_cls",
+            initializer="random_normal",
+            trainable=True,
+        )
+        self.q_reg = self.add_weight(
+            shape=(
+                1,
+                1,
+                self.key_dim,
+            ),
+            name="q_reg",
+            initializer="random_normal",
+            trainable=True,
+        )
+
+    def call(self, inputs):
+        return self.q_cls, self.q_reg
 
 
 class PFNetTransformer(tf.keras.Model):
@@ -1104,6 +1135,11 @@ class PFNetTransformer(tf.keras.Model):
         multi_output=True,
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
+        num_layers_encoder=2,
+        num_layers_decoder_reg=2,
+        num_layers_decoder_cls=2,
+        hiddem_dim=64,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1114,48 +1150,30 @@ class PFNetTransformer(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        key_dim = 128
+        self.key_dim = hiddem_dim
 
-        self.ffn = point_wise_feed_forward_network(key_dim, key_dim, "ffn", num_layers=1, activation="elu")
+        self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, "ffn", num_layers=1, activation="elu")
 
         self.encoders = []
-        for i in range(4):
-            self.encoders.append(KernelEncoder(key_dim=key_dim, name="enc{}".format(i)))
+        for i in range(num_layers_encoder):
+            self.encoders.append(KernelEncoder(key_dim=self.key_dim, name="enc{}".format(i)))
 
         self.decoders_cls = []
-        for i in range(4):
-            self.decoders_cls.append(KernelEncoder(key_dim=key_dim, name="dec-cls-{}".format(i)))
+        for i in range(num_layers_decoder_reg):
+            self.decoders_cls.append(KernelEncoder(key_dim=self.key_dim, name="dec-cls-{}".format(i)))
 
         self.decoders_reg = []
-        for i in range(4):
-            self.decoders_reg.append(KernelEncoder(key_dim=key_dim, name="dec-reg-{}".format(i)))
+        for i in range(num_layers_decoder_cls):
+            self.decoders_reg.append(KernelEncoder(key_dim=self.key_dim, name="dec-reg-{}".format(i)))
+
+        self.queries = QueryLayer(self.key_dim)
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
         output_decoding["met_output"] = met_output
+        output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
-
-        self.Q_cls = self.add_weight(
-            shape=(
-                1,
-                1,
-                128,
-            ),
-            name="Q_cls",
-            initializer="random_normal",
-            trainable=True,
-        )
-        self.Q_reg = self.add_weight(
-            shape=(
-                1,
-                1,
-                128,
-            ),
-            name="Q_reg",
-            initializer="random_normal",
-            trainable=True,
-        )
 
     def call(self, inputs, training=False):
         X = inputs
@@ -1165,26 +1183,33 @@ class PFNetTransformer(tf.keras.Model):
         msk = tf.cast(X[:, :, 0] != 0, tf.float32)
         msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
 
-        X_enc = self.enc(X)
-        X_enc = self.ffn(X_enc)
+        X_enc = self.enc(X, training=training)
+        X_enc = self.ffn(X_enc, training=training)
 
         for enc in self.encoders:
             X_enc = enc([X_enc, X_enc, msk], training=training) * msk_input
 
-        X_cls = X_enc
+        X_cls = tf.identity(X_enc)
+        X_reg = tf.identity(X_enc)
+
+        q_cls, q_reg = self.queries(inputs)
+
+        # repeat along batch dimension
         Q_cls = tf.repeat(
-            self.Q_cls,
+            q_cls,
             repeats=[
                 batch_size,
             ],
             axis=0,
         )
+
+        # query the encoded state with the trainable classification query
+        # broadcast over the element dimension
         for dec in self.decoders_cls:
             X_cls = dec([Q_cls, X_cls, msk], training=training) * msk_input
 
-        X_reg = X_enc
         Q_reg = tf.repeat(
-            self.Q_reg,
+            q_reg,
             repeats=[
                 batch_size,
             ],
@@ -1201,3 +1226,27 @@ class PFNetTransformer(tf.keras.Model):
             return tf.concat(
                 [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
             )
+
+    # def train_step(self, data):
+    #     import numpy as np
+    #     x, y, sample_weights = data
+    #     if not hasattr(self, "step"):
+    #         self.step = 0
+
+    #     with tf.GradientTape() as tape:
+    #         y_pred = self(x, training=True)  # Forward pass
+    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+
+    #     for var, grad in zip(trainable_vars, gradients):
+    #         grad_np = grad.numpy()
+    #         #print(var.name, grad.shape, grad_np.mean(), grad_np.std(), grad_np.min(), grad_np.max())
+    #         tf.summary.histogram("{}_grad".format(var.name), grad_np)
+
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     self.compiled_metrics.update_state(y, y_pred)
+
+    #     self.step += 1
+    #     return {m.name: m.result() for m in self.metrics}
