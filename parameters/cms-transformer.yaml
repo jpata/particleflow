@@ -59,7 +59,7 @@ setup:
   weights:
   weights_config:
   lr: 0.0005
-  num_events_validation: 10
+  num_events_validation: 500
   num_epochs: 50
   dtype: float32
   trainable:
@@ -103,12 +103,19 @@ parameters:
 
     pt_as_correction: yes
 
-    id_hidden_dim: 256
-    charge_hidden_dim: 256
-    pt_hidden_dim: 256
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    id_dim_decrease: yes
+    charge_dim_decrease: yes
+    pt_dim_decrease: yes
+    eta_dim_decrease: yes
+    phi_dim_decrease: yes
+    energy_dim_decrease: yes
+
+    id_hidden_dim: 64
+    charge_hidden_dim: 64
+    pt_hidden_dim: 64
+    eta_hidden_dim: 64
+    phi_hidden_dim: 64
+    energy_hidden_dim: 64
 
     id_num_layers: 2
     charge_num_layers: 2
@@ -118,6 +125,9 @@ parameters:
     energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: no
+
+  skip_connection: yes
+  debug: no
 
 timing:
   num_ev: 100
@@ -149,36 +159,23 @@ hypertune:
 
 raytune:
   local_dir:  # Note: please specify an absolute path
-  sched: "asha"  # asha, hyperband
-  parameters:
-    # optimizer parameters
-    lr: [1e-4]
-    batch_size: [32]
-    expdecay_decay_steps: [10000]
-    # model parameters
-    combined_graph_layer:
-      layernorm: [False]
-      hidden_dim: [64, 128, 256]
-      distance_dim: [128, 256]
-      num_node_messages: [1]
-      node_message:
-        normalize_degrees: [True]
-        output_dim: [64, 128, 256]
-      dropout: [0.0]
-      bin_size: [80, 160, 320]
-      kernel:
-        clip_value_low: [0.0]
-    num_graph_layers_common: [2, 3, 4]
-    num_graph_layers_energy: [2, 3, 4]
+  sched:  asha # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
   # Tune schedule specific parameters
   asha:
-    max_t: 100
-    reduction_factor: 3
+    max_t: 200
+    reduction_factor: 4
     brackets: 1
-    grace_period: 5
+    grace_period: 10
   hyperband:
-    max_t: 100
-    reduction_factor: 3
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
 
 train_test_datasets:
   physical:
@@ -199,7 +196,7 @@ train_test_datasets:
 validation_datasets:
   - cms_pf_qcd_high_pt
 
-validation_batch_size: 1
+validation_batch_size: 4
 
 datasets:
   cms_pf_ttbar:
