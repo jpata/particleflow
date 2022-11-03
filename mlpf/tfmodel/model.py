@@ -3,6 +3,8 @@ import tensorflow as tf
 # FIXME: this should be configurable
 regularizer_weight = 0.0
 
+SEED_KERNELATTENTION = 0
+
 
 def split_indices_to_bins(cmul, nbins, bin_size):
     bin_idx = tf.argmax(cmul, axis=-1)
@@ -245,7 +247,6 @@ class GHConvDense(tf.keras.layers.Layer):
 
         # compute the normalization of the adjacency matrix
         if self.normalize_degrees:
-            # in_degrees = tf.clip_by_value(tf.reduce_sum(tf.abs(adj), axis=-1), 0, 1000)
             in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
 
             # add epsilon to prevent numerical issues from 1/sqrt(x)
@@ -1065,14 +1066,21 @@ class PFNetDense(tf.keras.Model):
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
-        from official.nlp.modeling.layers.kernel_attention import KernelAttention
+        global SEED_KERNELATTENTION
+        from .kernel_attention import KernelAttention
 
         self.key_dim = kwargs.pop("key_dim")
         self.num_heads = 8
 
         self.attn = KernelAttention(
-            feature_transform="elu", num_heads=self.num_heads, key_dim=self.key_dim, name=kwargs.get("name") + "_attention"
+            feature_transform="relu",
+            num_heads=self.num_heads,
+            key_dim=self.key_dim,
+            seed=SEED_KERNELATTENTION,
+            num_random_features=128,
+            name=kwargs.get("name") + "_attention",
         )
+        SEED_KERNELATTENTION += 1
         self.ffn = point_wise_feed_forward_network(
             self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu"
         )
@@ -1082,14 +1090,11 @@ class KernelEncoder(tf.keras.layers.Layer):
 
     def call(self, args, training=False):
         Q, X, mask = args
-        msk_input = tf.expand_dims(tf.cast(mask, tf.float32), -1)
-
+        msk_input = tf.expand_dims(tf.cast(mask, X.dtype), -1)
         X = self.norm1(X, training=training)
         attn_output = self.attn(query=Q, value=X, key=X, training=training, attention_mask=mask) * msk_input
         out1 = self.norm2(X + attn_output, training=training)
-
         out2 = self.ffn(out1, training=training)
-
         return out2
 
 
@@ -1136,10 +1141,10 @@ class PFNetTransformer(tf.keras.Model):
         event_set_output=False,
         met_output=False,
         cls_output_as_logits=False,
-        num_layers_encoder=2,
-        num_layers_decoder_reg=2,
-        num_layers_decoder_cls=2,
-        hiddem_dim=128,
+        num_layers_encoder=4,
+        num_layers_decoder_reg=4,
+        num_layers_decoder_cls=4,
+        hiddem_dim=256,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1181,7 +1186,7 @@ class PFNetTransformer(tf.keras.Model):
 
         # mask padded elements
         msk = tf.cast(X[:, :, 0] != 0, tf.float32)
-        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
+        msk_input = tf.expand_dims(msk, -1)
 
         X_enc = self.enc(X, training=training)
         X_enc = self.ffn(X_enc, training=training)
@@ -1226,27 +1231,3 @@ class PFNetTransformer(tf.keras.Model):
             return tf.concat(
                 [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
             )
-
-    # def train_step(self, data):
-    #     import numpy as np
-    #     x, y, sample_weights = data
-    #     if not hasattr(self, "step"):
-    #         self.step = 0
-
-    #     with tf.GradientTape() as tape:
-    #         y_pred = self(x, training=True)  # Forward pass
-    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-
-    #     for var, grad in zip(trainable_vars, gradients):
-    #         grad_np = grad.numpy()
-    #         #print(var.name, grad.shape, grad_np.mean(), grad_np.std(), grad_np.min(), grad_np.max())
-    #         tf.summary.histogram("{}_grad".format(var.name), grad_np)
-
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     self.compiled_metrics.update_state(y, y_pred)
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}

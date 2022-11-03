@@ -204,12 +204,8 @@ def get_optimizer(config, lr_schedule=None):
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
         opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
-        if cfg_adam["pcgrad"]:
-            from tfmodel.PCGrad_tf import PCGrad
-
-            opt = PCGrad(opt)
         return opt
-    if config["setup"]["optimizer"] == "adamw":
+    elif config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
         return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
     elif config["setup"]["optimizer"] == "sgd":
@@ -372,10 +368,10 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    # num_steps = 0
-    # for elem in ds:
-    #    num_steps += 1
-    # assert(total_num_steps == num_steps)
+
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    ds = ds.with_options(options)
 
     print("Final dataset with {} steps".format(total_num_steps))
     return ds, total_num_steps

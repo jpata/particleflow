@@ -64,16 +64,14 @@ setup:
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: cosinedecay  # exponentialdecay, onecycle, none
-  optimizer: adam  # adam, adamw, sgd
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
+  optimizer: adamw  # adam, adamw, sgd
   horovod_enabled: False
   cls_output_as_logits: True
 
 optimizer:
   adam:
     amsgrad: no
-    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
-    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -134,8 +132,7 @@ parameters:
       type: GHConvDense
       output_dim: 256
       activation: elu
-      #if this is enabled, it will break float16 training
-      normalize_degrees: yes
+      normalize_degrees: yes #disable for float16
     activation: elu
 
   num_graph_layers_id: 4
