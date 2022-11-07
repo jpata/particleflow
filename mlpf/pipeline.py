@@ -55,6 +55,8 @@ from tfmodel.utils_analysis import (
     topk_summary_plot_v2,
 )
 
+from tfmodel.callbacks import BenchmarkLogggerCallback
+
 
 def customize_pipeline_test(config):
     # for cms.yaml, keep only ttbar
@@ -91,6 +93,10 @@ def main():
 @click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
 @click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option("-b", "--benchmark_dir", help="dir to save becnhmark results", type=str, default=None)
+@click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
+@click.option("-D", "--num_devices", help="number of devices to use", type=int, default=1)
+@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
     config,
     weights,
@@ -105,7 +111,17 @@ def train(
     jobid,
     horovod_enabled,
     habana,
+    benchmark_dir,
+    batch_size,
+    num_devices,
+    seeds,
 ):
+
+    if seeds:
+        random.seed(1234)
+        np.random.seed(1234)
+        tf.random.set_seed(1234)
+
     # tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
@@ -115,6 +131,9 @@ def train(
 
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
+
+    if batch_size:
+        config["train_test_datasets"]["delphes"]["batch_per_gpu"] = batch_size
 
     if customize:
         config = customization_functions[customize](config)
@@ -199,10 +218,12 @@ def train(
         ds_test = ds_test.take(ntest)
         num_test_steps = ntest
 
-    print("num_train_steps", num_train_steps)
-    print("num_test_steps", num_test_steps)
-    total_steps = num_train_steps * config["setup"]["num_epochs"]
-    print("total_steps", total_steps)
+    epochs = config["setup"]["num_epochs"]
+    total_steps = num_train_steps * epochs
+    print("num_train_steps:", num_train_steps, "num_train_samples:", train_samples)
+    print("epochs:", epochs, "total_train_steps:", total_steps)
+
+    print("num_test_steps:", num_test_steps, "num_test_samples:", test_samples)
 
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
@@ -223,6 +244,19 @@ def train(
             num_test_steps /= hvd.size()
 
         callbacks.append(optim_callbacks)
+
+        if benchmark_dir:
+            Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+            callbacks.append(
+                BenchmarkLogggerCallback(
+                    outdir=benchmark_dir,
+                    steps_per_epoch=num_train_steps,
+                    batch_size_per_gpu=config["train_test_datasets"]["delphes"]["batch_per_gpu"],
+                    num_gpus=num_gpus,
+                    num_devices=num_devices,
+                    train_set_size=train_samples,
+                )
+            )
 
         model.fit(
             ds_train.repeat(),

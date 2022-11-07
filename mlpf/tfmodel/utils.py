@@ -123,7 +123,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy():
+def get_strategy(num_devices=1):
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print(
@@ -137,16 +137,23 @@ def get_strategy():
     else:
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
+
     if num_gpus > 1:
-        print("Using tf.distribute.MirroredStrategy()")
+        # multiple GPUs selected
+        print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
+        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
+    elif num_devices > 1:
+        # CPU parallelization
+        print("Attempting CPU parallelization with tf.distribute.MirroredStrategy()...")
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
-        print("Using tf.distribute.OneDeviceStrategy('gpu:0')")
-        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    elif num_gpus == 0:
-        print("fallback to CPU")
+        # single GPU
+        print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
+        strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
+    else:
+        print("Fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
-        num_gpus = 0
+
     return strategy, num_gpus
 
 
@@ -190,6 +197,7 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
+        print("INFO: Not using LR schedule")
         lr_schedule = None
         callbacks = []
     return lr_schedule, callbacks, lr
@@ -335,30 +343,33 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
         if num_gpus > 1:
             bs = bs * num_gpus
     ds = ds.batch(bs)
+    # return ds, len(indices)  #  From Eduard's bmk branch
 
     total_num_steps = total_num_steps // bs
     # num_steps = 0
     # for _ in ds:
     #    num_steps += 1
     # assert(total_num_steps == num_steps)
-    return ds, total_num_steps
+    return ds, total_num_steps, len(indices)  #  TODO: revisit the need to return `len(indices)`
 
 
 # Load multiple datasets and mix them together
 def get_datasets(datasets_to_interleave, config, num_gpus, split):
     datasets = []
     steps = []
+    num_samples = 0
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds, num_steps = load_and_interleave(
+            interleaved_ds, num_steps, ds_samples = load_and_interleave(
                 ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"]
             )
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
+            num_samples += ds_samples
 
     ids = 0
     indices = []
@@ -378,7 +389,7 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
     # assert(total_num_steps == num_steps)
 
     print("Final dataset with {} steps".format(total_num_steps))
-    return ds, total_num_steps
+    return ds, total_num_steps, num_samples
 
 
 def set_config_loss(config, trainable):
