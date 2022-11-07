@@ -61,6 +61,7 @@ setup:
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
   cls_output_as_logits: False
+  small_graph_opt: no
 
 optimizer:
   adam:
