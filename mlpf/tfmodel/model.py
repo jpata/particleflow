@@ -90,23 +90,36 @@ def reverse_lsh(bins_split, points_binned_enc):
     tf.debugging.assert_shapes(
         [
             (bins_split, ("n_batch", "n_bins", "n_points_bin")),
-            (points_binned_enc, ("n_batch", "n_bins", "n_points_bin", "num_features")),
+            (points_binned_enc, ("n_batch", "n_bins", "n_points_bin", "n_features")),
         ]
     )
 
     shp = tf.shape(points_binned_enc)
-    batch_dim = shp[0]
-    n_points = shp[1] * shp[2]
-    n_features = shp[-1]
+    n_bins = shp[1]
 
-    bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+    def multiple_bins():
+        shp = tf.shape(points_binned_enc)
+        batch_dim = shp[0]
+        n_points = shp[1] * shp[2]
+        n_features = shp[-1]
+        bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
+        points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
 
-    batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
-    bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
+        batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
+        bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
 
-    ret = tf.scatter_nd(bins_split_flat_batch, points_binned_enc_flat, shape=(batch_dim, n_points, n_features))
+        ret = tf.scatter_nd(bins_split_flat_batch, points_binned_enc_flat, shape=(batch_dim, n_points, n_features))
+        return ret
 
+    def single_bin():
+        return tf.squeeze(points_binned_enc, axis=1)
+
+    ret = tf.cond(n_bins > 1, multiple_bins, single_bin)
+    tf.debugging.assert_shapes(
+        [
+            (ret, ("n_batch", "n_elems", "n_features")),
+        ]
+    )
     return ret
 
 
@@ -450,6 +463,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
     x_node: (n_batch, n_points, n_node_features)
     """
 
+    @tf.function
     def call(self, x_msg, x_node, msk, training=False):
         msk_f = tf.expand_dims(tf.cast(msk, x_msg.dtype), -1)
 
@@ -467,24 +481,47 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         # compute the number of LSH bins to divide the input points into on the fly
         # n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
-        tf.debugging.assert_greater(
-            n_bins, 0, "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size)
-        )
-        tf.debugging.assert_equal(
-            tf.math.floormod(n_points, self.bin_size),
-            0,
-            "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
-        )
+
+        # if we have more than one bin, divide the points into bins
+        # (n_batch, n_points, n_features) -> (n_batch, n_bins, n_points_per_bin, n_features)
+        def dobin():
+            shp = tf.shape(x_msg)
+            n_points = shp[1]
+
+            # compute the number of LSH bins to divide the input points into on the fly
+            # n_points must be divisible by bin_size exactly due to the use of reshape
+            n_bins = tf.math.floordiv(n_points, self.bin_size)
+
+            tf.debugging.assert_greater(
+                n_bins, 0, "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size)
+            )
+            tf.debugging.assert_equal(
+                tf.math.floormod(n_points, self.bin_size),
+                0,
+                "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
+            )
+            mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)])
+            cmul = tf.concat([mul, -mul], axis=-1)
+            bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
+            x_msg_binned = tf.gather(x_msg, bins_split, batch_dims=1)
+            x_features_binned = tf.gather(x_node, bins_split, batch_dims=1)
+            msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
+            return bins_split, x_msg_binned, x_features_binned, msk_f_binned
+
+        # if we only have one bin, just add a new dimension
+        # (n_batch, n_points, n_features) -> (n_batch, 1, n_points, n_features)
+        def nobin():
+            x_msg_binned = tf.expand_dims(x_msg, axis=1)
+            x_features_binned = tf.expand_dims(x_node, axis=1)
+            msk_f_binned = tf.expand_dims(msk_f, axis=1)
+            shp = tf.shape(x_msg_binned)
+            bins_split = tf.zeros([shp[0], shp[1], shp[2]], dtype=tf.int32)
+            return bins_split, x_msg_binned, x_features_binned, msk_f_binned
 
         # put each input item into a bin defined by the argmax output across the LSH embedding
-        mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)])
-        cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
-        x_msg_binned = tf.gather(x_msg, bins_split, batch_dims=1)
-        x_features_binned = tf.gather(x_node, bins_split, batch_dims=1)
-        msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
+        bins_split, x_msg_binned, x_features_binned, msk_f_binned = tf.cond(n_bins > 1, dobin, nobin)
 
-        tf.debugging.assert_equal(tf.shape(x_msg_binned)[1], n_bins)
+        # bins_split, x_msg_binned, x_features_binned, msk_f_binned = dobin()
 
         # Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
@@ -918,6 +955,8 @@ class PFNetDense(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
+        self.bin_size = combined_graph_layer["bin_size"]
+
         self.cg_id = [
             CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)
         ]
@@ -932,8 +971,17 @@ class PFNetDense(tf.keras.Model):
         output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
 
+    @tf.function
     def call(self, inputs, training=False):
         X = inputs
+
+        shp = tf.shape(X)
+        n_points = shp[1]
+
+        bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
+        pad_size = [[0, 0], [0, bins_to_pad_to * self.bin_size - n_points], [0, 0]]
+        X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
+
         debugging_data = {}
 
         # encode the elements for classification (id)
@@ -998,7 +1046,10 @@ class PFNetDense(tf.keras.Model):
             debugging_data["dec_output_id"] = dec_output_id
             debugging_data["dec_output_reg"] = dec_output_reg
 
-        ret = self.output_dec([X, dec_output_id, dec_output_reg, msk_input], training=training)
+        ret = self.output_dec(
+            [X[:, :n_points], dec_output_id[:, :n_points], dec_output_reg[:, :n_points], msk_input[:, :n_points]],
+            training=training,
+        )
 
         if self.debug:
             for k in debugging_data.keys():
@@ -1028,6 +1079,7 @@ class PFNetDense(tf.keras.Model):
 
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
+    #         import pdb;pdb.set_trace()
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
     #     trainable_vars = self.trainable_variables

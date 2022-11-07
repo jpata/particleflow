@@ -330,7 +330,7 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     if not config["setup"]["horovod_enabled"]:
         if num_gpus > 1:
             bs = bs * num_gpus
-    ds = ds.batch(bs)
+    ds = ds.padded_batch(bs)
 
     total_num_steps = total_num_steps // bs
     # num_steps = 0

@@ -1,5 +1,4 @@
-import tensorflow as tf
-from tfmodel.model_setup import FlattenedCategoricalAccuracy, make_model
+from tfmodel.model_setup import make_model
 from tfmodel.utils import get_loss_dict, get_lr_schedule, get_optimizer
 
 
@@ -43,12 +42,6 @@ def get_model_builder(config, total_steps):
             optimizer=opt,
             sample_weight_mode="temporal",
             loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-            },
         )
         return model
 

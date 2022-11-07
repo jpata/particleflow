@@ -220,14 +220,14 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 4
+    batch_per_gpu: 5
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 100
+    batch_per_gpu: 200
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
@@ -235,40 +235,40 @@ train_test_datasets:
       - cms_pf_single_pi0
 
 validation_datasets:
-  - cms_pf_qcd_high_pt
+  - cms_pf_ttbar
 
-validation_batch_size: 4
+validation_batch_size: 5
 
 datasets:
   cms_pf_ttbar:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_electron:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_gamma:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_pi0:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_neutron:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:

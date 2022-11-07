@@ -23,8 +23,6 @@ from tensorflow.keras import mixed_precision
 from tfmodel import hypertuning
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import (
-    FlattenedCategoricalAccuracy,
-    SingleClassRecall,
     configure_model_weights,
     eval_model,
     freeze_model,
@@ -190,7 +188,7 @@ def train(
         config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(config["validation_batch_size"])
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -300,16 +298,6 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
         optimizer=opt,
         sample_weight_mode="temporal",
         loss_weights=loss_weights,
-        metrics={
-            "cls": [
-                FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-            ]
-            + [
-                SingleClassRecall(icls, name="rec_cls{}".format(icls), dtype=tf.float64)
-                for icls in range(config["dataset"]["num_output_classes"])
-            ]
-        },
     )
 
     model.summary()
@@ -386,16 +374,6 @@ def compute_validation_loss(config, train_dir, weights):
             loss=loss_dict,
             # sample_weight_mode="temporal",
             loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-                + [
-                    SingleClassRecall(icls, name="rec_cls{}".format(icls), dtype=tf.float64)
-                    for icls in range(config["dataset"]["num_output_classes"])
-                ]
-            },
         )
 
         losses = model.evaluate(
@@ -502,12 +480,6 @@ def find_lr(config, outdir, figname, logscale):
             optimizer=opt,
             sample_weight_mode="temporal",
             loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-            },
         )
         model.summary()
 

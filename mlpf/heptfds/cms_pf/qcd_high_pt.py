@@ -17,11 +17,9 @@ QCD highpt events with PU~55 in a Run3 setup.
 _CITATION = """
 """
 
-PADDED_NUM_ELEM_SIZE = 6400
-
 
 class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf dataset."""
+    """DatasetBuilder for cms_pf_qcd_high_pt dataset."""
 
     VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
@@ -41,9 +39,9 @@ class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(X_FEATURES)), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(Y_FEATURES)), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=("X", "ycand"),
@@ -56,7 +54,7 @@ class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
+        return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):
-        return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)
+        return cms_utils.generate_examples(files)

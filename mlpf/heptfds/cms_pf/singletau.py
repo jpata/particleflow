@@ -23,11 +23,12 @@ PADDED_NUM_ELEM_SIZE = 256
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
 
-    VERSION = tfds.core.Version("1.4.0")
+    VERSION = tfds.core.Version("1.5.0")
     RELEASE_NOTES = {
         "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
         "1.4.0": "Add genjet information",
+        "1.5.0": "Without padding",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt2To150_cfi data/
@@ -41,9 +42,9 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(X_FEATURES)), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(PADDED_NUM_ELEM_SIZE, len(Y_FEATURES)), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=("X", "ycand"),
@@ -56,7 +57,7 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "SingleTauFlatPt2To150_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw", PADDED_NUM_ELEM_SIZE)
+        return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):
-        return cms_utils.generate_examples(files, PADDED_NUM_ELEM_SIZE)
+        return cms_utils.generate_examples(files)
