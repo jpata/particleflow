@@ -97,13 +97,9 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         self.steps_per_epoch = kwargs.pop("steps_per_epoch")
         self.batch_size_per_gpu = kwargs.pop("batch_size_per_gpu")
         self.num_gpus = kwargs.pop("num_gpus")
+        self.num_devices = kwargs.pop("num_devices")
+        self.train_set_size = kwargs.pop("train_set_size")
 
-        if self.num_gpus == 0:
-            self.no_gpu = True
-            logging.warning("No GPUs were found")
-            self.num_gpus = 1  # in order to compute global batch size later
-        else:
-            self.no_gpu = False
         super().__init__(*args, **kwargs)
 
     def on_train_begin(self, logs=None):
@@ -149,30 +145,37 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         stop_time = tf.timestamp().numpy()
         total_time = round(stop_time - self.start_time, 2)
 
-        events_per_epoch = self.num_gpus * self.batch_size_per_gpu * self.steps_per_epoch
-        throughput_per_epoch = np.repeat(events_per_epoch, len(self.times)) / np.array(
-            self.times
-        )  # event throughput [1/s]
-        mean_throughput = round(np.mean(throughput_per_epoch), 2)
+        # event throughput [1/s]
+        #   - ignore batch padding
+        throughput_per_epoch = self.train_set_size / np.array(self.times)
+
+        # mean throughput
+        #   - ignore first epoch (lazy graph construction)
+        mean_throughput = round(np.mean(throughput_per_epoch[1:]), 2)
+
+        # mean epoch time
+        #   - ignore first epoch (lazy graph construction)
+        mean_epoch_time = round(np.mean(self.times[1:]), 2)
+        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_devices)
 
         data = {
             "wl-scores": {
-                "throughput_mean": mean_throughput,
+                "mean_throughput": mean_throughput,
+                "mean_epoch_time": mean_epoch_time,
             },
             "wl-stats": {
-                # may need to generate this array if # epochs is variable...
                 "num_epochs": len(self.times),
                 "epoch_times": self.times,
                 "train_start": self.start_time,
                 "train_stop": stop_time,
                 "train_time": total_time,
-                "GPU": bool(self.num_gpus),
-                "CPU": not self.num_gpus,
-                "num_gpus": self.num_gpus,
-                "batch_size_per_gpu": self.batch_size_per_gpu,
-                "batch_total_size": self.batch_size_per_gpu * self.num_gpus,
+                "GPU": self.num_gpus,
+                "CPU": self.num_devices,
+                "train_set_size": self.train_set_size,
+                "batch_size_per_device": self.batch_size_per_gpu,
+                "batch_size_total": batch_size_total,
                 "steps_per_epoch": self.steps_per_epoch,
-                "events_per_epoch": events_per_epoch,
+                "events_per_epoch": batch_size_total * self.steps_per_epoch,
                 "throughput_per_epoch": list(throughput_per_epoch),
             },
         }

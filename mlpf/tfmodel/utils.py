@@ -31,7 +31,7 @@ def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
 
     tf.config.run_functions_eagerly(config["tensorflow"]["eager"])
     n_epochs = config["setup"]["num_epochs"]
-    
+
     if ntrain:
         config["setup"]["num_events_train"] = ntrain
 
@@ -90,7 +90,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy():
+def get_strategy(num_devices=1):
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print("WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
@@ -102,14 +102,20 @@ def get_strategy():
     else:
         num_gpus = len(gpus)
     print("num_gpus=", num_gpus)
+
     if num_gpus > 1:
+        # multiple GPUs selected
+        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
+    elif num_devices > 1:
+        # CPU parallelization
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
-        strategy = tf.distribute.OneDeviceStrategy("gpu:0")
-    elif num_gpus == 0:
-        print("fallback to CPU")
+        # single GPU
+        strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
+    else:
+        print("Fallback to CPU")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
-        num_gpus = 0
+
     return strategy, num_gpus
 
 
@@ -372,12 +378,10 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None):
         raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
 
     ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-    #bs = config["datasets"][dataset_name]["batch_per_gpu"]
 
     if not (num_events is None):
         ds = ds.take(num_events)
 
-    #ds = ds.batch(bs)
     ds = ds.map(dsf.get_map_to_supervised())
 
     return ds, ds_info
@@ -412,25 +416,27 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     if num_gpus>1:
         bs = bs*num_gpus
     ds = ds.batch(bs)
-    return ds
+    return ds, len(indices)
 
 #Load multiple datasets and mix them together
 def get_datasets(datasets_to_interleave, config, num_gpus, split):
     datasets = []
     steps = []
+    num_samples = 0
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
+            interleaved_ds, ds_samples = load_and_interleave(ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"])
             num_steps = 0
-            for elem in interleaved_ds:
+            for _ in interleaved_ds:
                 num_steps += 1
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
-    
+            num_samples += ds_samples
+
     ids = 0
     indices = []
     for ds, num_steps in zip(datasets, steps):
@@ -441,12 +447,10 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    num_steps = 0
-    for elem in ds:
-        num_steps += 1
+    num_steps = len(indices)
 
     print("Final dataset with {} steps".format(num_steps))
-    return ds, num_steps
+    return ds, num_steps, num_samples
 
 def set_config_loss(config, trainable):
     if trainable == "classification":

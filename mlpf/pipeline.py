@@ -100,7 +100,7 @@ customization_functions = {
 @click.help_option("-h", "--help")
 def main():
     pass
-        
+
 
 @main.command()
 @click.help_option("-h", "--help")
@@ -114,7 +114,10 @@ def main():
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("-b", "--benchmark_dir", help="dir to save becnhmark results", type=str, default=None)
-def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, benchmark_dir):
+@click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
+@click.option("-D", "--num_devices", help="number of devices to use", type=int, default=1)
+@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
+def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, customize, benchmark_dir, batch_size, num_devices, seeds):
 
     try:
         from comet_ml import Experiment
@@ -130,6 +133,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         print("Failed to initialize comet-ml dashboard")
         experiment = None
 
+    if seeds:
+        random.seed(1234)
+        np.random.seed(1234)
+        tf.random.set_seed(1234)
 
     """Train a model defined by config"""
     config_file_path = config
@@ -140,6 +147,9 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
+    if batch_size:
+        config["train_test_datasets"]["delphes"]["batch_per_gpu"] = batch_size
+
     if customize:
         config = customization_functions[customize](config)
 
@@ -149,14 +159,16 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         outdir = str(Path(weights).parent)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, num_gpus = get_strategy()
+    strategy, num_gpus = get_strategy(num_devices=num_devices)
+    devices = num_gpus or num_devices
+
     #if "CPU" not in strategy.extended.worker_devices[0]:
     #    nvidia_smi_call = "nvidia-smi --query-gpu=timestamp,name,pci.bus_id,pstate,power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f {}/nvidia_smi_log.csv".format(outdir)
     #    p = subprocess.Popen(shlex.split(nvidia_smi_call))
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
-    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
+    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, devices, "train")
+    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, devices, "test")
+    ds_val, ds_info = get_heptfds_dataset(config["validation_dataset"], config, devices, "test", config["setup"]["num_events_validation"])
     ds_val = ds_val.batch(5)
 
     if ntrain:
@@ -166,10 +178,12 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
         ds_test = ds_test.take(ntest)
         num_test_steps = ntest
 
-    print("num_train_steps", num_train_steps)
-    print("num_test_steps", num_test_steps)
-    total_steps = num_train_steps * config["setup"]["num_epochs"]
-    print("total_steps", total_steps)
+    epochs = config["setup"]["num_epochs"]
+    total_steps = num_train_steps * epochs
+    print("num_train_steps:", num_train_steps, "num_train_samples:", train_samples)
+    print("epochs:", epochs, "total_train_steps:", total_steps)
+
+    print("num_test_steps:", num_test_steps, "num_test_samples:", test_samples)
 
     if experiment:
         experiment.set_name(outdir)
@@ -250,8 +264,10 @@ def train(config, weights, ntrain, ntest, nepochs, recreate, prefix, plot_freq, 
                 steps_per_epoch=num_train_steps,
                 batch_size_per_gpu=config["train_test_datasets"]["delphes"]["batch_per_gpu"],
                 num_gpus=num_gpus,
-                )
+                num_devices=num_devices,
+                train_set_size=train_samples,
             )
+        )
 
     fit_result = model.fit(
         ds_train.repeat(),
@@ -323,7 +339,7 @@ def evaluate(config, train_dir, weights, evaluation_dir):
         weights = get_best_checkpoint(train_dir)
         print("Loading best weights that could be found from {}".format(weights))
         model.load_weights(weights, by_name=True)
-    
+
     eval_model(model, ds_test, config, eval_dir)
     freeze_model(model, config, ds_test.take(1), train_dir)
 
@@ -416,7 +432,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
     strategy, num_gpus = get_strategy()
- 
+
     ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"])
     ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
     ds_val, _ = get_heptfds_dataset(config["validation_dataset"], config, num_gpus, "test", config["setup"]["num_events_validation"])
@@ -473,8 +489,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
 
         strategy, num_gpus = get_strategy()
 
-        ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
-        ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
+        ds_train, num_train_steps, train_samples = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
+        ds_test, num_test_steps, test_samples = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
         ds_val, ds_info = get_heptfds_dataset(full_config["validation_dataset"], full_config, num_gpus, "test", full_config["setup"]["num_events_validation"])
 
         if ntrain:
