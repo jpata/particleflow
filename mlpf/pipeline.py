@@ -411,7 +411,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     strategy, num_gpus = get_strategy()
 
-    #disable small graph optimization for onnx export (tf.cond not well supported)
+    # disable small graph optimization for onnx export (tf.cond not well supported)
     if "small_graph_opt" in config["setup"]:
         config["setup"]["small_graph_opt"] = False
 
