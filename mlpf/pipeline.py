@@ -21,6 +21,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 from tfmodel import hypertuning
+from tfmodel.callbacks import BenchmarkLogggerCallback
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import (
     FlattenedCategoricalAccuracy,
@@ -54,8 +55,6 @@ from tfmodel.utils_analysis import (
     summarize_top_k,
     topk_summary_plot_v2,
 )
-
-from tfmodel.callbacks import BenchmarkLogggerCallback
 
 
 def customize_pipeline_test(config):
@@ -199,8 +198,8 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
+    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
+    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
     ds_val, ds_info = get_heptfds_dataset(
         config["validation_datasets"][0],
         config,

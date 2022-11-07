@@ -11,7 +11,6 @@ from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.suggest.nevergrad import NevergradSearch
 from ray.tune.suggest.skopt import SkOptSearch
-import nevergrad as ng
 
 # from ray.tune.suggest.hebo import HEBOSearch # HEBO is not yet supported
 

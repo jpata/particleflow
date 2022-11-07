@@ -343,14 +343,13 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
         if num_gpus > 1:
             bs = bs * num_gpus
     ds = ds.batch(bs)
-    # return ds, len(indices)  #  From Eduard's bmk branch
 
     total_num_steps = total_num_steps // bs
     # num_steps = 0
     # for _ in ds:
     #    num_steps += 1
     # assert(total_num_steps == num_steps)
-    return ds, total_num_steps, len(indices)  #  TODO: revisit the need to return `len(indices)`
+    return ds, total_num_steps, len(indices)  # TODO: revisit the need to return `len(indices)`
 
 
 # Load multiple datasets and mix them together

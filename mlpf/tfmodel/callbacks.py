@@ -1,14 +1,13 @@
 import json
 import pickle
+from datetime import datetime
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 
-import json
-import matplotlib.pyplot as plt
-from datetime import datetime
 
 class CustomTensorBoard(TensorBoard):
     """
@@ -131,24 +130,25 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
 
     def plot(self, times):
         plt.figure()
-        plt.xlabel('Epoch')
-        plt.ylabel('Time [s]')
-        plt.plot(times, 'o')
+        plt.xlabel("Epoch")
+        plt.ylabel("Time [s]")
+        plt.plot(times, "o")
         for i in range(len(times)):
             if isinstance(times[i], tf.Tensor):
                 j = times[i].numpy()
             else:
                 j = times[i]
             if i == 0:
-                plt.text(i+0.02, j+0.2, str(round(j, 2)))
+                plt.text(i + 0.02, j + 0.2, str(round(j, 2)))
             else:
-                if isinstance(times[i-1], tf.Tensor):
-                    j_prev = times[i-1].numpy()
+                if isinstance(times[i - 1], tf.Tensor):
+                    j_prev = times[i - 1].numpy()
                 else:
-                    j_prev = times[i-1]
-                plt.text(i+0.02, j+0.2, str(round(j-j_prev, 2)))
+                    j_prev = times[i - 1]
+                plt.text(i + 0.02, j + 0.2, str(round(j - j_prev, 2)))
         plt.ylim(bottom=0)
-        txt = "Time in seconds per epoch. The numbers next to each data point\nshow the difference in seconds compared to the previous epoch."
+        txt = "Time in seconds per epoch. The numbers next to each data point\n\
+            show the difference in seconds compared to the previous epoch."
         plt.title(txt)
 
         filename = "time_per_epoch_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
