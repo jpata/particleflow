@@ -410,9 +410,8 @@ def evaluate(config, train_dir, weights, customize, nevents):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    # physical_devices = tf.config.list_physical_devices('GPU')
-    # for dev in physical_devices:
-    #    tf.config.experimental.set_memory_growth(dev, True)
+
+    config["setup"]["small_graph_opt"] = False
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))

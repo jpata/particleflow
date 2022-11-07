@@ -1,8 +1,9 @@
 import tensorflow as tf
 
-# FIXME: this should be configurable
+# FIXME: this should be configurable in a central place
 regularizer_weight = 0.0
 
+# for PFNetTransformer-based, we need to set a different random seed for each subsequent attention layer
 SEED_KERNELATTENTION = 0
 
 
@@ -86,7 +87,7 @@ def sparse_dense_matmult_batch(sp_a, b):
 
 
 @tf.function
-def reverse_lsh(bins_split, points_binned_enc):
+def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
     tf.debugging.assert_shapes(
         [
             (bins_split, ("n_batch", "n_bins", "n_points_bin")),
@@ -114,7 +115,11 @@ def reverse_lsh(bins_split, points_binned_enc):
     def single_bin():
         return tf.squeeze(points_binned_enc, axis=1)
 
-    ret = tf.cond(n_bins > 1, multiple_bins, single_bin)
+    if small_graph_opt:
+        ret = tf.cond(n_bins > 1, multiple_bins, single_bin)
+    else:
+        ret = multiple_bins()
+
     tf.debugging.assert_shapes(
         [
             (ret, ("n_batch", "n_elems", "n_features")),
@@ -439,11 +444,20 @@ def build_kernel_from_conf(kernel_dict, name):
 
 
 class MessageBuildingLayerLSH(tf.keras.layers.Layer):
-    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
+    def __init__(
+        self,
+        distance_dim=128,
+        max_num_bins=200,
+        bin_size=128,
+        kernel=NodePairGaussianKernel(),
+        small_graph_opt=False,
+        **kwargs
+    ):
         self.distance_dim = distance_dim
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.kernel = kernel
+        self.small_graph_opt = small_graph_opt
 
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
@@ -463,7 +477,6 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
     x_node: (n_batch, n_points, n_node_features)
     """
 
-    @tf.function
     def call(self, x_msg, x_node, msk, training=False):
         msk_f = tf.expand_dims(tf.cast(msk, x_msg.dtype), -1)
 
@@ -519,9 +532,10 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
             return bins_split, x_msg_binned, x_features_binned, msk_f_binned
 
         # put each input item into a bin defined by the argmax output across the LSH embedding
-        bins_split, x_msg_binned, x_features_binned, msk_f_binned = tf.cond(n_bins > 1, dobin, nobin)
-
-        # bins_split, x_msg_binned, x_features_binned, msk_f_binned = dobin()
+        if self.small_graph_opt:
+            bins_split, x_msg_binned, x_features_binned, msk_f_binned = tf.cond(n_bins > 1, dobin, nobin)
+        else:
+            bins_split, x_msg_binned, x_features_binned, msk_f_binned = dobin()
 
         # Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
@@ -825,6 +839,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
+        self.small_graph_opt = kwargs.pop("small_graph_opt")
 
         if self.do_layernorm:
             self.layernorm1 = tf.keras.layers.LayerNormalization(
@@ -846,6 +861,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
             kernel=build_kernel_from_conf(self.kernel, kwargs.get("name") + "_kernel"),
+            small_graph_opt=self.small_graph_opt,
         )
 
         self.message_passing_layers = [
@@ -896,7 +912,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
                 x = self.dropout_layer(x, training=training)
 
         # undo the binning according to the element-to-bin indices
-        x = reverse_lsh(bins_split, x)
+        x = reverse_lsh(bins_split, x, self.small_graph_opt)
 
         return {"enc": x, "dist": x_dist, "bins": bins_split, "dm": dm}
 
@@ -925,6 +941,7 @@ class PFNetDense(tf.keras.Model):
         event_set_output=False,
         met_output=False,
         cls_output_as_logits=False,
+        small_graph_opt=False,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -938,7 +955,10 @@ class PFNetDense(tf.keras.Model):
         self.node_encoding_hidden_dim = node_encoding_hidden_dim
         self.dropout = dropout
         self.node_update_mode = node_update_mode
+        self.small_graph_opt = small_graph_opt
         self.activation = getattr(tf.keras.activations, activation)
+
+        combined_graph_layer["small_graph_opt"] = self.small_graph_opt
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
@@ -971,7 +991,6 @@ class PFNetDense(tf.keras.Model):
         output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
 
-    @tf.function
     def call(self, inputs, training=False):
         X = inputs
 
@@ -980,7 +999,11 @@ class PFNetDense(tf.keras.Model):
 
         bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
         pad_size = [[0, 0], [0, bins_to_pad_to * self.bin_size - n_points], [0, 0]]
-        X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
+
+        if self.small_graph_opt:
+            X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
+        else:
+            X = tf.pad(X, pad_size)
 
         debugging_data = {}
 
