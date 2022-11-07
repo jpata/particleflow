@@ -177,14 +177,14 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 1
+    batch_per_gpu: 2
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 25
+    batch_per_gpu: 50
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
@@ -194,7 +194,7 @@ train_test_datasets:
 validation_datasets:
   - cms_pf_qcd_high_pt
 
-validation_batch_size: 1
+validation_batch_size: 2
 
 datasets:
   cms_pf_ttbar:

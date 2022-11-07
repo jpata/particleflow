@@ -411,7 +411,9 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     strategy, num_gpus = get_strategy()
 
-    config["setup"]["small_graph_opt"] = False
+    #disable small graph optimization for onnx export (tf.cond not well supported)
+    if "small_graph_opt" in config["setup"]:
+        config["setup"]["small_graph_opt"] = False
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
