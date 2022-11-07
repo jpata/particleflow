@@ -170,7 +170,7 @@ def prepare_data_cms(fn):
 
 
 def split_sample(path, test_frac=0.8):
-    files = sorted(list(path.glob("*.pkl*")))
+    files = sorted(list(path.glob("*.pkl*")))[:20]
     print("Found {} files in {}".format(files, path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
