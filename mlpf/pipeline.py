@@ -432,7 +432,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
         ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
         if nevents:
             ds_test = ds_test.take(nevents)
-        ds_test = ds_test.batch(5)
+        ds_test = ds_test.padded_batch(config["validation_batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test, config, eval_dir)
@@ -535,7 +535,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(5)
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     num_train_steps = 0
     for _ in ds_train:
@@ -615,7 +615,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         full_config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(5)
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
