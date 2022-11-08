@@ -1004,6 +1004,7 @@ class PFNetDense(tf.keras.Model):
             X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
         else:
             X = tf.pad(X, pad_size)
+        # tf.print("\nshape:", shp, tf.shape(X))
 
         debugging_data = {}
 
