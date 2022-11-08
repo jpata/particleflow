@@ -60,7 +60,7 @@ setup:
   weights_config:
   lr: 0.0005
   num_events_validation: 500
-  num_epochs: 50
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -166,7 +166,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: no
+    mask_reg_cls0: yes
 
   skip_connection: yes
   debug: no

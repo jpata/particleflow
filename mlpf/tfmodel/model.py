@@ -7,12 +7,6 @@ regularizer_weight = 0.0
 SEED_KERNELATTENTION = 0
 
 
-def split_indices_to_bins(cmul, nbins, bin_size):
-    bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
-    return bins_split
-
-
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
@@ -60,30 +54,15 @@ def pairwise_sigmoid_dist(A, B):
 
 
 """
-sp_a: (nbatch, nelem, nelem) sparse distance matrices
-b: (nbatch, nelem, ncol) dense per-element feature matrices
+Given feature vectors in LSH bins, and the assignment index of each feature vector into bins,
+reverse the binning: (batch, n_bin, n_points_bin, n_features) - > (batch, n_points, n_features)
+
+Arguments:
+  bins_split: (n_batch, n_bins, n_points_bin) int32 matrix, assigning each feature vector to a bin
+  points_binned_enc: (n_batch, n_bins, n_points_bin, n_features) float32 matrix of binned feature vectors
+
+Returns: (n_batch, n_bins, n_features) float32 matrix, after the binning operation is undone
 """
-
-
-def sparse_dense_matmult_batch(sp_a, b):
-
-    dtype = b.dtype
-    b = tf.cast(b, tf.float32)
-
-    num_batches = tf.shape(b)[0]
-
-    def map_function(x):
-        i, dense_slice = x[0], x[1]
-        num_points = tf.shape(b)[1]
-        sparse_slice = tf.sparse.reshape(
-            tf.sparse.slice(tf.cast(sp_a, tf.float32), [i, 0, 0], [1, num_points, num_points]), [num_points, num_points]
-        )
-        mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
-        return mult_slice
-
-    elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
-    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
-    return tf.cast(ret, dtype)
 
 
 @tf.function
@@ -98,6 +77,7 @@ def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
     shp = tf.shape(points_binned_enc)
     n_bins = shp[1]
 
+    # in case n_bins>1, scatter the feature vectors into the full shape
     def multiple_bins():
         shp = tf.shape(points_binned_enc)
         batch_dim = shp[0]
@@ -112,6 +92,7 @@ def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
         ret = tf.scatter_nd(bins_split_flat_batch, points_binned_enc_flat, shape=(batch_dim, n_points, n_features))
         return ret
 
+    # in case of n_bins==1, we can just remove the bin dimension
     def single_bin():
         return tf.squeeze(points_binned_enc, axis=1)
 
@@ -783,24 +764,44 @@ class OutputDecoding(tf.keras.Model):
             "energy": pred_energy * msk_input_outtype,
         }
 
+        # p(particle) = 1 - p(no particle)
+        # multiply the logits by a coefficient 10 to make the probabilities "harder",
+        # i.e. p(particle | no particle) would be close to 0
+        hard_proba_particle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+
+        # Return the full particle output array
         if self.event_set_output:
             if self.mask_reg_cls0:
-                softmax_cls = (1.0 - tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
                 pt_e_eta_phi = tf.concat(
                     [
-                        pred_pt * msk_input_outtype * softmax_cls,
-                        pred_energy * msk_input_outtype * softmax_cls,
-                        pred_eta * msk_input_outtype * softmax_cls,
-                        pred_sin_phi * msk_input_outtype * softmax_cls,
-                        pred_cos_phi * msk_input_outtype * softmax_cls,
+                        pred_pt * msk_input_outtype * hard_proba_particle,
+                        pred_energy * msk_input_outtype * hard_proba_particle,
+                        pred_eta * msk_input_outtype * hard_proba_particle,
+                        pred_sin_phi * msk_input_outtype * hard_proba_particle,
+                        pred_cos_phi * msk_input_outtype * hard_proba_particle,
+                    ],
+                    axis=-1,
+                )
+            else:
+                pt_e_eta_phi = tf.concat(
+                    [
+                        pred_pt * msk_input_outtype,
+                        pred_energy * msk_input_outtype,
+                        pred_eta * msk_input_outtype,
+                        pred_sin_phi * msk_input_outtype,
+                        pred_cos_phi * msk_input_outtype,
                     ],
                     axis=-1,
                 )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
+        # Compute the MET across the predicted particles in the event
         if self.met_output:
             px = pred_pt * pred_cos_phi * msk_input_outtype
             py = pred_pt * pred_sin_phi * msk_input_outtype
+            if self.mask_reg_cls0:
+                px = px * hard_proba_particle
+                py = py * hard_proba_particle
             met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
             ret["met"] = met
 
