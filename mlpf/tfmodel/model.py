@@ -1150,7 +1150,7 @@ class KernelEncoder(tf.keras.layers.Layer):
         self.num_heads = 8
 
         self.attn = KernelAttention(
-            feature_transform="relu",
+            feature_transform="elu",
             num_heads=self.num_heads,
             key_dim=self.key_dim,
             seed=SEED_KERNELATTENTION,
@@ -1218,10 +1218,10 @@ class PFNetTransformer(tf.keras.Model):
         event_set_output=False,
         met_output=False,
         cls_output_as_logits=False,
-        num_layers_encoder=4,
-        num_layers_decoder_reg=4,
-        num_layers_decoder_cls=4,
-        hiddem_dim=256,
+        num_layers_encoder=2,
+        num_layers_decoder_reg=2,
+        num_layers_decoder_cls=2,
+        hiddem_dim=128,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1265,18 +1265,23 @@ class PFNetTransformer(tf.keras.Model):
         msk = tf.cast(X[:, :, 0] != 0, tf.float32)
         msk_input = tf.expand_dims(msk, -1)
 
-        X_enc = self.enc(X, training=training)
-        X_enc = self.ffn(X_enc, training=training)
+        # encode the inputs elementwise
+        X_enc = self.enc(X, training=training) * msk_input
+        X_enc = self.ffn(X_enc, training=training) * msk_input
 
+        # run a self-attention encoding across the elements
         for enc in self.encoders:
             X_enc = enc([X_enc, X_enc, msk], training=training) * msk_input
 
-        X_cls = tf.identity(X_enc)
-        X_reg = tf.identity(X_enc)
+        # X_cls = tf.identity(X_enc)
+        # X_reg = tf.identity(X_enc)
+        X_cls = X_enc
+        X_reg = X_enc
 
+        # retrieve the trainable query vectors for classification and regression
         q_cls, q_reg = self.queries(inputs)
 
-        # repeat along batch dimension
+        # repeat the learnable query along batch dimension
         Q_cls = tf.repeat(
             q_cls,
             repeats=[
@@ -1285,11 +1290,11 @@ class PFNetTransformer(tf.keras.Model):
             axis=0,
         )
 
-        # query the encoded state with the trainable classification query
-        # broadcast over the element dimension
+        # query the encoded state of each element with the trainable classification query
         for dec in self.decoders_cls:
             X_cls = dec([Q_cls, X_cls, msk], training=training) * msk_input
 
+        # repeat the learnable query along batch dimension
         Q_reg = tf.repeat(
             q_reg,
             repeats=[
@@ -1297,9 +1302,12 @@ class PFNetTransformer(tf.keras.Model):
             ],
             axis=0,
         )
+
+        # query the encoded state of each element with the trainable regression query
         for dec in self.decoders_reg:
             X_reg = dec([Q_reg, X_reg, msk], training=training) * msk_input
 
+        # decode the outputs to classification and regression values
         ret = self.output_dec([X, X_cls, X_reg, msk_input], training=training)
 
         if self.multi_output:

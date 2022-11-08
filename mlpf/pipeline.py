@@ -59,7 +59,7 @@ def customize_pipeline_test(config):
     if "physical" in config["train_test_datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
-        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 2
         config["validation_datasets"] = ["cms_pf_ttbar"]
 
     return config
