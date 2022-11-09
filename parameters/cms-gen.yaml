@@ -228,7 +228,7 @@ train_test_datasets:
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 100
+    batch_per_gpu: 50
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
