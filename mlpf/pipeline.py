@@ -92,7 +92,14 @@ def main():
 @click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
 @click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
-@click.option("-b", "--benchmark_dir", help="dir to save becnhmark results", type=str, default=None)
+@click.option(
+    "-b",
+    "--benchmark_dir",
+    help="dir to save becnhmark results. If -b exp_dir results will be saved in the \
+    experiment folder",
+    type=str,
+    default=None,
+)
 @click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
 @click.option("-D", "--num_devices", help="number of devices to use", type=int, default=1)
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
@@ -132,7 +139,8 @@ def train(
         config["callbacks"]["plot_freq"] = plot_freq
 
     if batch_size:
-        config["train_test_datasets"]["delphes"]["batch_per_gpu"] = batch_size
+        for key in config["train_test_datasets"]:
+            config["train_test_datasets"][key]["batch_per_gpu"] = batch_size
 
     if customize:
         config = customization_functions[customize](config)
@@ -245,12 +253,31 @@ def train(
         callbacks.append(optim_callbacks)
 
         if benchmark_dir:
+            if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+                benchmark_dir = outdir
+            if config["dataset"]["schema"] == "delphes":
+                bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
+            elif config["dataset"]["schema"] == "cms":
+                assert (
+                    len(config["train_test_datasets"]) == 1
+                ), "Expected exactly 1 key, physical OR delphes, \
+                    found {}".format(
+                    config["train_test_datasets"].keys()
+                )
+                bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
+            else:
+                raise ValueError(
+                    "Benchmark callback only supports delphes or \
+                    cms dataset schema. {}".format(
+                        config["dataset"]["schema"]
+                    )
+                )
             Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
             callbacks.append(
                 BenchmarkLogggerCallback(
                     outdir=benchmark_dir,
                     steps_per_epoch=num_train_steps,
-                    batch_size_per_gpu=config["train_test_datasets"]["delphes"]["batch_per_gpu"],
+                    batch_size_per_gpu=bmk_bs,
                     num_gpus=num_gpus,
                     num_devices=num_devices,
                     train_set_size=train_samples,
