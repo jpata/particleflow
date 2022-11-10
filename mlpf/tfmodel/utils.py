@@ -326,17 +326,36 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
 
     ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-    bs = batch_size
-    if not config["setup"]["horovod_enabled"]:
-        if num_gpus > 1:
-            bs = bs * num_gpus
-    ds = ds.padded_batch(bs)
 
-    total_num_steps = total_num_steps // bs
-    # num_steps = 0
-    # for _ in ds:
-    #    num_steps += 1
-    # assert(total_num_steps == num_steps)
+    # use dynamic batching depending on the sequence length
+    if config["batching"]["bucket_by_sequence_length"]:
+        bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
+
+        assert bucket_batch_sizes[-1][0] == float("inf")
+
+        ds = ds.bucket_by_sequence_length(
+            # length is determined by the number of elements in the input set
+            element_length_func=lambda X, y, mask: tf.shape(X)[0],
+            # bucket boundaries are set by the max sequence length
+            # the last bucket size is implicitly 'inf'
+            bucket_boundaries=[int(x[0]) for x in bucket_batch_sizes[:-1]],
+            # for multi-GPU, we need to multiply the batch size by the number of GPUs
+            bucket_batch_sizes=[int(x[1]) * num_gpus * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes],
+        )
+    # use fixed-size batching
+    else:
+        bs = batch_size
+        if not config["setup"]["horovod_enabled"]:
+            if num_gpus > 1:
+                bs = bs * num_gpus
+        ds = ds.padded_batch(bs)
+
+    # now iterate over the full dataset to get the number of steps
+    isteps = 0
+    for elem in ds:
+        isteps += 1
+    total_num_steps = isteps
+
     return ds, total_num_steps
 
 

@@ -63,6 +63,27 @@ setup:
   cls_output_as_logits: False
   small_graph_opt: no
 
+batching:
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: yes
+  # these sizes were sort of tuned for an 8GB GPU
+  # - max_sequence_length, batch_size_per_gpu
+  bucket_batch_sizes:
+    - 25, 400
+    - 50, 200
+    - 100, 100
+    - 200, 50
+    - 500, 25
+    - 1000, 10
+    - 2000, 8
+    - 3000, 7
+    - 4000, 6
+    - 5000, 5
+    - 6000, 4
+    - inf, 2
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 1
+
 optimizer:
   adam:
     amsgrad: no

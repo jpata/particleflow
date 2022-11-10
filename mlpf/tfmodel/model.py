@@ -996,6 +996,7 @@ class PFNetDense(tf.keras.Model):
         X = inputs
 
         shp = tf.shape(X)
+        # tf.print("\nX.shape=", shp, "\n")
         n_points = shp[1]
 
         bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
@@ -1266,7 +1267,10 @@ class PFNetTransformer(tf.keras.Model):
         msk_input = tf.expand_dims(msk, -1)
 
         # encode the inputs elementwise
-        X_enc = self.enc(X, training=training) * msk_input
+        X_enc = self.enc(X, training=training)
+        X_enc = X_enc * tf.cast(msk_input, X_enc.dtype)
+
+        # embed into the dimensionality of the encoder
         X_enc = self.ffn(X_enc, training=training) * msk_input
 
         # run a self-attention encoding across the elements
