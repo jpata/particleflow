@@ -113,7 +113,7 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         self.steps_per_epoch = kwargs.pop("steps_per_epoch")
         self.batch_size_per_gpu = kwargs.pop("batch_size_per_gpu")
         self.num_gpus = kwargs.pop("num_gpus")
-        self.num_devices = kwargs.pop("num_devices")
+        self.num_cpus = kwargs.pop("num_cpus")
         self.train_set_size = kwargs.pop("train_set_size")
 
         super().__init__(*args, **kwargs)
@@ -173,7 +173,7 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
         # mean epoch time
         #   - ignore first epoch (lazy graph construction)
         mean_epoch_time = round(np.mean(self.times[1:]), 2)
-        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_devices)
+        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_cpus)
 
         data = {
             "wl-scores": {
@@ -187,7 +187,7 @@ class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
                 "train_stop": stop_time,
                 "train_time": total_time,
                 "GPU": self.num_gpus,
-                "CPU": self.num_devices,
+                "CPU": self.num_cpus,
                 "train_set_size": self.train_set_size,
                 "batch_size_per_device": self.batch_size_per_gpu,
                 "batch_size_total": batch_size_total,

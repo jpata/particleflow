@@ -101,7 +101,7 @@ def main():
     default=None,
 )
 @click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
-@click.option("-D", "--num_devices", help="number of devices to use", type=int, default=1)
+@click.option("-D", "--num_cpus", help="number of CPU cores to use, ignored if CUDA GPUs are found", type=int, default=1)
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
     config,
@@ -119,7 +119,7 @@ def train(
     habana,
     benchmark_dir,
     batch_size,
-    num_devices,
+    num_cpus,
     seeds,
 ):
 
@@ -162,7 +162,8 @@ def train(
         strategy = HPUStrategy()
         num_gpus = 1
     else:
-        strategy, num_gpus = get_strategy()
+        strategy, num_gpus = get_strategy(num_cpus=num_cpus)
+    devices = num_gpus or num_cpus  # devices = num_cpus if num_gpus is 0 or None
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
@@ -206,12 +207,12 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
+    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, devices, "train")
+    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, devices, "test")
     ds_val, ds_info = get_heptfds_dataset(
         config["validation_datasets"][0],
         config,
-        num_gpus,
+        devices,
         "test",
         config["setup"]["num_events_validation"],
         supervised=False,
@@ -279,7 +280,7 @@ def train(
                     steps_per_epoch=num_train_steps,
                     batch_size_per_gpu=bmk_bs,
                     num_gpus=num_gpus,
-                    num_devices=num_devices,
+                    num_cpus=num_cpus,
                     train_set_size=train_samples,
                 )
             )

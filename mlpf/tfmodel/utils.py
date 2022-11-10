@@ -123,7 +123,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy(num_devices=1):
+def get_strategy(num_cpus=1):
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print(
@@ -136,22 +136,22 @@ def get_strategy(num_devices=1):
         num_gpus = 0
     else:
         num_gpus = len(gpus)
-    print("num_gpus=", num_gpus)
+    print("num_gpus:", num_gpus)
 
     if num_gpus > 1:
         # multiple GPUs selected
         print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
         strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
-    elif num_devices > 1:
-        # CPU parallelization
-        print("Attempting CPU parallelization with tf.distribute.MirroredStrategy()...")
-        strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
         # single GPU
         print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
         strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
+    elif num_cpus > 1:
+        # CPU parallelization
+        print("Attempting CPU parallelization with tf.distribute.MirroredStrategy()...")
+        strategy = tf.distribute.MirroredStrategy()
     else:
-        print("Fallback to CPU")
+        print("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     return strategy, num_gpus
