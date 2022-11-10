@@ -56,6 +56,7 @@ from tfmodel.utils_analysis import (
 
 def customize_pipeline_test(config):
     # for cms.yaml, keep only ttbar
+    config["batching"]["bucket_by_sequence_length"] = False
     if "physical" in config["train_test_datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
