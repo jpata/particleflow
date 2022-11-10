@@ -58,7 +58,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.0002
   num_events_validation: 500
   num_epochs: 50
   dtype: float32
@@ -184,7 +184,7 @@ train_test_datasets:
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 50
+    batch_per_gpu: 100
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
