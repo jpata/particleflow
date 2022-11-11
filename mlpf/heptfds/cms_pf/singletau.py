@@ -31,7 +31,7 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt2To150_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt1To1000_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -56,7 +56,7 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleTauFlatPt2To150_cfi"
+        sample_dir = "SingleTauFlatPt1To1000_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):

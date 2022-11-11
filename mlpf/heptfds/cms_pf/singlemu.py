@@ -29,7 +29,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleMuFlatPt0p7To10_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleMuFlatLogPt_100MeVto2TeV_cfi data/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -54,7 +54,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleMuFlatPt0p7To10_cfi"
+        sample_dir = "SingleMuFlatLogPt_100MeVto2TeV_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):
