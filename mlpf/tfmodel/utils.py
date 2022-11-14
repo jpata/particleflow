@@ -341,7 +341,7 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
             bucket_boundaries=[int(x[0]) for x in bucket_batch_sizes[:-1]],
             # for multi-GPU, we need to multiply the batch size by the number of GPUs
             bucket_batch_sizes=[int(x[1]) * num_gpus * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes],
-            drop_remainder=True
+            drop_remainder=True,
         )
     # use fixed-size batching
     else:
