@@ -20,7 +20,7 @@ _CITATION = """
 PADDED_NUM_ELEM_SIZE = 256
 
 
-class CmsPfSingleNeutron(tfds.core.GeneratorBasedBuilder):
+class CmsPfSingleProton(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singleproton dataset."""
 
     VERSION = tfds.core.Version("1.5.0")
