@@ -11,5 +11,4 @@ cd ~/particleflow
 singularity exec -B /scratch-persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1 \
-    -w experiments/cms-gen_20221109_122841_284142.gpu0.local/weights/weights-11-3.077045.hdf5
+    $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1
