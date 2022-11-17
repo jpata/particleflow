@@ -25,15 +25,7 @@ class CustomTensorBoard(TensorBoard):
     def _collect_learning_rate(self, logs):
         logs = logs or {}
 
-        # Get the optimizer. This is necessary since when using e.g. PCGrad,
-        # the base optimizer is in self.model.optimizer.optimizer.optimizer
-        # instead of self.model.optimizer
-        opt = None
-        if hasattr(self.model.optimizer, "lr"):
-            opt = self.model.optimizer
-        elif hasattr(self.model.optimizer.optimizer, "optimizer"):
-            opt = self.model.optimizer.optimizer.optimizer
-        assert opt is not None
+        opt = self.model.optimizer
 
         if hasattr(opt, "lr"):
 

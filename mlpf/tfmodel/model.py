@@ -1,13 +1,10 @@
 import tensorflow as tf
 
-# FIXME: this should be configurable
+# FIXME: this should be configurable in a central place
 regularizer_weight = 0.0
 
-
-def split_indices_to_bins(cmul, nbins, bin_size):
-    bin_idx = tf.argmax(cmul, axis=-1)
-    bins_split = tf.reshape(tf.argsort(bin_idx), (nbins, bin_size))
-    return bins_split
+# for PFNetTransformer-based, we need to set a different random seed for each subsequent attention layer
+SEED_KERNELATTENTION = 0
 
 
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
@@ -57,54 +54,58 @@ def pairwise_sigmoid_dist(A, B):
 
 
 """
-sp_a: (nbatch, nelem, nelem) sparse distance matrices
-b: (nbatch, nelem, ncol) dense per-element feature matrices
+Given feature vectors in LSH bins, and the assignment index of each feature vector into bins,
+reverse the binning: (batch, n_bin, n_points_bin, n_features) - > (batch, n_points, n_features)
+
+Arguments:
+  bins_split: (n_batch, n_bins, n_points_bin) int32 matrix, assigning each feature vector to a bin
+  points_binned_enc: (n_batch, n_bins, n_points_bin, n_features) float32 matrix of binned feature vectors
+
+Returns: (n_batch, n_bins, n_features) float32 matrix, after the binning operation is undone
 """
 
 
-def sparse_dense_matmult_batch(sp_a, b):
-
-    dtype = b.dtype
-    b = tf.cast(b, tf.float32)
-
-    num_batches = tf.shape(b)[0]
-
-    def map_function(x):
-        i, dense_slice = x[0], x[1]
-        num_points = tf.shape(b)[1]
-        sparse_slice = tf.sparse.reshape(
-            tf.sparse.slice(tf.cast(sp_a, tf.float32), [i, 0, 0], [1, num_points, num_points]), [num_points, num_points]
-        )
-        mult_slice = tf.sparse.sparse_dense_matmul(sparse_slice, dense_slice)
-        return mult_slice
-
-    elems = (tf.range(0, num_batches, delta=1, dtype=tf.int64), b)
-    ret = tf.map_fn(map_function, elems, fn_output_signature=tf.TensorSpec((None, None), b.dtype), back_prop=True)
-    return tf.cast(ret, dtype)
-
-
 @tf.function
-def reverse_lsh(bins_split, points_binned_enc):
+def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
     tf.debugging.assert_shapes(
         [
             (bins_split, ("n_batch", "n_bins", "n_points_bin")),
-            (points_binned_enc, ("n_batch", "n_bins", "n_points_bin", "num_features")),
+            (points_binned_enc, ("n_batch", "n_bins", "n_points_bin", "n_features")),
         ]
     )
 
     shp = tf.shape(points_binned_enc)
-    batch_dim = shp[0]
-    n_points = shp[1] * shp[2]
-    n_features = shp[-1]
+    n_bins = shp[1]
 
-    bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+    # in case n_bins>1, scatter the feature vectors into the full shape
+    def multiple_bins():
+        shp = tf.shape(points_binned_enc)
+        batch_dim = shp[0]
+        n_points = shp[1] * shp[2]
+        n_features = shp[-1]
+        bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
+        points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
 
-    batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
-    bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
+        batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
+        bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
 
-    ret = tf.scatter_nd(bins_split_flat_batch, points_binned_enc_flat, shape=(batch_dim, n_points, n_features))
+        ret = tf.scatter_nd(bins_split_flat_batch, points_binned_enc_flat, shape=(batch_dim, n_points, n_features))
+        return ret
 
+    # in case of n_bins==1, we can just remove the bin dimension
+    def single_bin():
+        return tf.squeeze(points_binned_enc, axis=1)
+
+    if small_graph_opt:
+        ret = tf.cond(n_bins > 1, multiple_bins, single_bin)
+    else:
+        ret = multiple_bins()
+
+    tf.debugging.assert_shapes(
+        [
+            (ret, ("n_batch", "n_elems", "n_features")),
+        ]
+    )
     return ret
 
 
@@ -245,7 +246,6 @@ class GHConvDense(tf.keras.layers.Layer):
 
         # compute the normalization of the adjacency matrix
         if self.normalize_degrees:
-            # in_degrees = tf.clip_by_value(tf.reduce_sum(tf.abs(adj), axis=-1), 0, 1000)
             in_degrees = tf.reduce_sum(tf.abs(adj), axis=-1)
 
             # add epsilon to prevent numerical issues from 1/sqrt(x)
@@ -425,11 +425,20 @@ def build_kernel_from_conf(kernel_dict, name):
 
 
 class MessageBuildingLayerLSH(tf.keras.layers.Layer):
-    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
+    def __init__(
+        self,
+        distance_dim=128,
+        max_num_bins=200,
+        bin_size=128,
+        kernel=NodePairGaussianKernel(),
+        small_graph_opt=False,
+        **kwargs
+    ):
         self.distance_dim = distance_dim
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.kernel = kernel
+        self.small_graph_opt = small_graph_opt
 
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
@@ -466,24 +475,48 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         # compute the number of LSH bins to divide the input points into on the fly
         # n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = tf.math.floordiv(n_points, self.bin_size)
-        tf.debugging.assert_greater(
-            n_bins, 0, "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size)
-        )
-        tf.debugging.assert_equal(
-            tf.math.floormod(n_points, self.bin_size),
-            0,
-            "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
-        )
+
+        # if we have more than one bin, divide the points into bins
+        # (n_batch, n_points, n_features) -> (n_batch, n_bins, n_points_per_bin, n_features)
+        def dobin():
+            shp = tf.shape(x_msg)
+            n_points = shp[1]
+
+            # compute the number of LSH bins to divide the input points into on the fly
+            # n_points must be divisible by bin_size exactly due to the use of reshape
+            n_bins = tf.math.floordiv(n_points, self.bin_size)
+
+            tf.debugging.assert_greater(
+                n_bins, 0, "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size)
+            )
+            tf.debugging.assert_equal(
+                tf.math.floormod(n_points, self.bin_size),
+                0,
+                "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
+            )
+            mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)])
+            cmul = tf.concat([mul, -mul], axis=-1)
+            bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
+            x_msg_binned = tf.gather(x_msg, bins_split, batch_dims=1)
+            x_features_binned = tf.gather(x_node, bins_split, batch_dims=1)
+            msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
+            return bins_split, x_msg_binned, x_features_binned, msk_f_binned
+
+        # if we only have one bin, just add a new dimension
+        # (n_batch, n_points, n_features) -> (n_batch, 1, n_points, n_features)
+        def nobin():
+            x_msg_binned = tf.expand_dims(x_msg, axis=1)
+            x_features_binned = tf.expand_dims(x_node, axis=1)
+            msk_f_binned = tf.expand_dims(msk_f, axis=1)
+            shp = tf.shape(x_msg_binned)
+            bins_split = tf.zeros([shp[0], shp[1], shp[2]], dtype=tf.int32)
+            return bins_split, x_msg_binned, x_features_binned, msk_f_binned
 
         # put each input item into a bin defined by the argmax output across the LSH embedding
-        mul = tf.linalg.matmul(x_msg, self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)])
-        cmul = tf.concat([mul, -mul], axis=-1)
-        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
-        x_msg_binned = tf.gather(x_msg, bins_split, batch_dims=1)
-        x_features_binned = tf.gather(x_node, bins_split, batch_dims=1)
-        msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
-
-        tf.debugging.assert_equal(tf.shape(x_msg_binned)[1], n_bins)
+        if self.small_graph_opt:
+            bins_split, x_msg_binned, x_features_binned, msk_f_binned = tf.cond(n_bins > 1, dobin, nobin)
+        else:
+            bins_split, x_msg_binned, x_features_binned, msk_f_binned = dobin()
 
         # Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
@@ -564,6 +597,7 @@ class OutputDecoding(tf.keras.Model):
         mask_reg_cls0=True,
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
         **kwargs
     ):
 
@@ -582,6 +616,7 @@ class OutputDecoding(tf.keras.Model):
 
         self.event_set_output = event_set_output
         self.met_output = met_output
+        self.cls_output_as_logits = cls_output_as_logits
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -657,31 +692,38 @@ class OutputDecoding(tf.keras.Model):
             X_encoded = self.layernorm(X_encoded)
 
         out_id_logits = self.ffn_id(X_encoded, training=training)
-        out_id_logits = out_id_logits * tf.cast(msk_input, out_id_logits.dtype)
-        msk_input_outtype = tf.cast(msk_input, out_id_logits.dtype)
+        in_dtype = X_encoded.dtype
+        out_dtype = out_id_logits.dtype
+        msk_input_outtype = tf.cast(msk_input, out_dtype)
 
-        out_id_softmax = tf.nn.softmax(out_id_logits, axis=-1)
+        # mask the classification outputs for zero-padded inputs across batches
+        out_id_logits = out_id_logits * msk_input_outtype
+
+        if self.cls_output_as_logits:
+            out_id_transformed = out_id_logits
+        else:
+            out_id_transformed = tf.nn.softmax(out_id_logits, axis=-1)
 
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
-        orig_eta = tf.cast(X_input[:, :, 2:3], out_id_logits.dtype)
+        orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         # FIXME: better schema propagation between hep_tfds
         # skip connection from raw input values
         if self.schema == "cms":
-            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
-            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_id_logits.dtype)
-            orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
+            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
+            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
+            orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
         elif self.schema == "delphes":
-            orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_id_logits.dtype)
-            orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_id_logits.dtype)
-            orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_id_logits.dtype)
+            orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
+            orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
+            orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
 
         if self.regression_use_classification:
-            X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), X_encoded.dtype)], axis=-1)
+            X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
 
         pred_eta_corr = self.ffn_eta(X_encoded, training=training)
         pred_eta_corr = pred_eta_corr * msk_input_outtype
@@ -694,9 +736,7 @@ class OutputDecoding(tf.keras.Model):
 
         X_encoded_energy = tf.concat([X_encoded, X_encoded_energy], axis=-1)
         if self.regression_use_classification:
-            X_encoded_energy = tf.concat(
-                [X_encoded_energy, tf.cast(tf.stop_gradient(out_id_logits), X_encoded.dtype)], axis=-1
-            )
+            X_encoded_energy = tf.concat([X_encoded_energy, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)
         pred_energy_corr = pred_energy_corr * msk_input_outtype
@@ -707,7 +747,7 @@ class OutputDecoding(tf.keras.Model):
 
         pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
         if self.pt_as_correction:
-            pred_pt = orig_pt * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+            pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
         else:
             pred_pt = pred_pt_corr[..., 0:1]
         pred_pt = tf.abs(pred_pt)
@@ -715,8 +755,8 @@ class OutputDecoding(tf.keras.Model):
         # mask the regression outputs for the nodes with a class prediction 0
 
         ret = {
-            "cls": out_id_softmax,
-            "charge": out_charge * msk_input_outtype,
+            "cls": out_id_transformed,
+            "charge": out_charge,
             "pt": pred_pt * msk_input_outtype,
             "eta": pred_eta * msk_input_outtype,
             "sin_phi": pred_sin_phi * msk_input_outtype,
@@ -724,24 +764,44 @@ class OutputDecoding(tf.keras.Model):
             "energy": pred_energy * msk_input_outtype,
         }
 
+        # p(particle) = 1 - p(no particle)
+        # multiply the logits by a coefficient 10 to make the probabilities "harder",
+        # i.e. p(particle | no particle) would be close to 0
+        hard_proba_particle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+
+        # Return the full particle output array
         if self.event_set_output:
             if self.mask_reg_cls0:
-                softmax_cls = (1.0 - tf.nn.softmax(out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
                 pt_e_eta_phi = tf.concat(
                     [
-                        pred_pt * msk_input_outtype * softmax_cls,
-                        pred_energy * msk_input_outtype * softmax_cls,
-                        pred_eta * msk_input_outtype * softmax_cls,
-                        pred_sin_phi * msk_input_outtype * softmax_cls,
-                        pred_cos_phi * msk_input_outtype * softmax_cls,
+                        pred_pt * msk_input_outtype * hard_proba_particle,
+                        pred_energy * msk_input_outtype * hard_proba_particle,
+                        pred_eta * msk_input_outtype * hard_proba_particle,
+                        pred_sin_phi * msk_input_outtype * hard_proba_particle,
+                        pred_cos_phi * msk_input_outtype * hard_proba_particle,
+                    ],
+                    axis=-1,
+                )
+            else:
+                pt_e_eta_phi = tf.concat(
+                    [
+                        pred_pt * msk_input_outtype,
+                        pred_energy * msk_input_outtype,
+                        pred_eta * msk_input_outtype,
+                        pred_sin_phi * msk_input_outtype,
+                        pred_cos_phi * msk_input_outtype,
                     ],
                     axis=-1,
                 )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
+        # Compute the MET across the predicted particles in the event
         if self.met_output:
             px = pred_pt * pred_cos_phi * msk_input_outtype
             py = pred_pt * pred_sin_phi * msk_input_outtype
+            if self.mask_reg_cls0:
+                px = px * hard_proba_particle
+                py = py * hard_proba_particle
             met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
             ret["met"] = met
 
@@ -780,6 +840,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
+        self.small_graph_opt = kwargs.pop("small_graph_opt")
 
         if self.do_layernorm:
             self.layernorm1 = tf.keras.layers.LayerNormalization(
@@ -801,6 +862,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
             kernel=build_kernel_from_conf(self.kernel, kwargs.get("name") + "_kernel"),
+            small_graph_opt=self.small_graph_opt,
         )
 
         self.message_passing_layers = [
@@ -851,7 +913,7 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
                 x = self.dropout_layer(x, training=training)
 
         # undo the binning according to the element-to-bin indices
-        x = reverse_lsh(bins_split, x)
+        x = reverse_lsh(bins_split, x, self.small_graph_opt)
 
         return {"enc": x, "dist": x_dist, "bins": bins_split, "dm": dm}
 
@@ -879,6 +941,8 @@ class PFNetDense(tf.keras.Model):
         node_update_mode="concat",
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
+        small_graph_opt=False,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -892,7 +956,10 @@ class PFNetDense(tf.keras.Model):
         self.node_encoding_hidden_dim = node_encoding_hidden_dim
         self.dropout = dropout
         self.node_update_mode = node_update_mode
+        self.small_graph_opt = small_graph_opt
         self.activation = getattr(tf.keras.activations, activation)
+
+        combined_graph_layer["small_graph_opt"] = self.small_graph_opt
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
@@ -909,6 +976,8 @@ class PFNetDense(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
+        self.bin_size = combined_graph_layer["bin_size"]
+
         self.cg_id = [
             CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)
         ]
@@ -920,10 +989,25 @@ class PFNetDense(tf.keras.Model):
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
         output_decoding["met_output"] = met_output
+        output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
         X = inputs
+
+        shp = tf.shape(X)
+        # tf.print("\nX.shape=", shp, "\n")
+        n_points = shp[1]
+
+        bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
+        pad_size = [[0, 0], [0, bins_to_pad_to * self.bin_size - n_points], [0, 0]]
+
+        if self.small_graph_opt:
+            X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
+        else:
+            X = tf.pad(X, pad_size)
+        # tf.print("\nshape:", shp, tf.shape(X))
+
         debugging_data = {}
 
         # encode the elements for classification (id)
@@ -988,7 +1072,10 @@ class PFNetDense(tf.keras.Model):
             debugging_data["dec_output_id"] = dec_output_id
             debugging_data["dec_output_reg"] = dec_output_reg
 
-        ret = self.output_dec([X, dec_output_id, dec_output_reg, msk_input], training=training)
+        ret = self.output_dec(
+            [X[:, :n_points], dec_output_id[:, :n_points], dec_output_reg[:, :n_points], msk_input[:, :n_points]],
+            training=training,
+        )
 
         if self.debug:
             for k in debugging_data.keys():
@@ -1018,6 +1105,7 @@ class PFNetDense(tf.keras.Model):
 
     #     with tf.GradientTape() as tape:
     #         y_pred = self(x, training=True)  # Forward pass
+    #         import pdb;pdb.set_trace()
     #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
     #     trainable_vars = self.trainable_variables
@@ -1056,14 +1144,21 @@ class PFNetDense(tf.keras.Model):
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
-        from official.nlp.modeling.layers.kernel_attention import KernelAttention
+        global SEED_KERNELATTENTION
+        from .kernel_attention import KernelAttention
 
         self.key_dim = kwargs.pop("key_dim")
-        num_heads = 8
+        self.num_heads = 8
 
         self.attn = KernelAttention(
-            feature_transform="elu", num_heads=num_heads, key_dim=self.key_dim, name=kwargs.get("name") + "_attention"
+            feature_transform="elu",
+            num_heads=self.num_heads,
+            key_dim=self.key_dim,
+            seed=SEED_KERNELATTENTION,
+            num_random_features=128,
+            name=kwargs.get("name") + "_attention",
         )
+        SEED_KERNELATTENTION += 1
         self.ffn = point_wise_feed_forward_network(
             self.key_dim, self.key_dim, kwargs.get("name") + "_ffn", num_layers=1, activation="elu"
         )
@@ -1073,15 +1168,43 @@ class KernelEncoder(tf.keras.layers.Layer):
 
     def call(self, args, training=False):
         Q, X, mask = args
-        msk_input = tf.expand_dims(tf.cast(mask, tf.float32), -1)
-
-        X = self.norm1(X)
+        msk_input = tf.expand_dims(tf.cast(mask, X.dtype), -1)
+        X = self.norm1(X, training=training)
         attn_output = self.attn(query=Q, value=X, key=X, training=training, attention_mask=mask) * msk_input
-        out1 = self.norm2(X + attn_output)
-
-        out2 = self.ffn(out1)
-
+        out1 = self.norm2(X + attn_output, training=training)
+        out2 = self.ffn(out1, training=training)
         return out2
+
+
+class QueryLayer(tf.keras.layers.Layer):
+    def __init__(self, key_dim):
+        super(QueryLayer, self).__init__()
+        self.key_dim = key_dim
+
+    def build(self, input_shape):
+        self.q_cls = self.add_weight(
+            shape=(
+                1,
+                1,
+                self.key_dim,
+            ),
+            name="q_cls",
+            initializer="random_normal",
+            trainable=True,
+        )
+        self.q_reg = self.add_weight(
+            shape=(
+                1,
+                1,
+                self.key_dim,
+            ),
+            name="q_reg",
+            initializer="random_normal",
+            trainable=True,
+        )
+
+    def call(self, inputs):
+        return self.q_cls, self.q_reg
 
 
 class PFNetTransformer(tf.keras.Model):
@@ -1095,6 +1218,11 @@ class PFNetTransformer(tf.keras.Model):
         multi_output=True,
         event_set_output=False,
         met_output=False,
+        cls_output_as_logits=False,
+        num_layers_encoder=2,
+        num_layers_decoder_reg=2,
+        num_layers_decoder_cls=2,
+        hiddem_dim=128,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1105,48 +1233,30 @@ class PFNetTransformer(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        key_dim = 128
+        self.key_dim = hiddem_dim
 
-        self.ffn = point_wise_feed_forward_network(key_dim, key_dim, "ffn", num_layers=1, activation="elu")
+        self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, "ffn", num_layers=1, activation="elu")
 
         self.encoders = []
-        for i in range(4):
-            self.encoders.append(KernelEncoder(key_dim=key_dim, name="enc{}".format(i)))
+        for i in range(num_layers_encoder):
+            self.encoders.append(KernelEncoder(key_dim=self.key_dim, name="enc{}".format(i)))
 
         self.decoders_cls = []
-        for i in range(4):
-            self.decoders_cls.append(KernelEncoder(key_dim=key_dim, name="dec-cls-{}".format(i)))
+        for i in range(num_layers_decoder_reg):
+            self.decoders_cls.append(KernelEncoder(key_dim=self.key_dim, name="dec-cls-{}".format(i)))
 
         self.decoders_reg = []
-        for i in range(4):
-            self.decoders_reg.append(KernelEncoder(key_dim=key_dim, name="dec-reg-{}".format(i)))
+        for i in range(num_layers_decoder_cls):
+            self.decoders_reg.append(KernelEncoder(key_dim=self.key_dim, name="dec-reg-{}".format(i)))
+
+        self.queries = QueryLayer(self.key_dim)
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
         output_decoding["met_output"] = met_output
+        output_decoding["cls_output_as_logits"] = cls_output_as_logits
         self.output_dec = OutputDecoding(**output_decoding)
-
-        self.Q_cls = self.add_weight(
-            shape=(
-                1,
-                1,
-                128,
-            ),
-            name="Q_cls",
-            initializer="random_normal",
-            trainable=True,
-        )
-        self.Q_reg = self.add_weight(
-            shape=(
-                1,
-                1,
-                128,
-            ),
-            name="Q_reg",
-            initializer="random_normal",
-            trainable=True,
-        )
 
     def call(self, inputs, training=False):
         X = inputs
@@ -1154,36 +1264,54 @@ class PFNetTransformer(tf.keras.Model):
 
         # mask padded elements
         msk = tf.cast(X[:, :, 0] != 0, tf.float32)
-        msk_input = tf.expand_dims(tf.cast(msk, tf.float32), -1)
+        msk_input = tf.expand_dims(msk, -1)
 
-        X_enc = self.enc(X)
-        X_enc = self.ffn(X_enc)
+        # encode the inputs elementwise
+        X_enc = self.enc(X, training=training)
+        X_enc = X_enc * tf.cast(msk_input, X_enc.dtype)
 
+        # embed into the dimensionality of the encoder
+        X_enc = self.ffn(X_enc, training=training) * msk_input
+
+        # run a self-attention encoding across the elements
         for enc in self.encoders:
             X_enc = enc([X_enc, X_enc, msk], training=training) * msk_input
 
-        X_cls = X_enc
+        X_cls = tf.identity(X_enc)
+        X_reg = tf.identity(X_enc)
+
+        # retrieve the trainable query vectors for classification and regression
+        q_cls, q_reg = self.queries(inputs)
+
+        # repeat the learnable query along batch dimension
         Q_cls = tf.repeat(
-            self.Q_cls,
+            q_cls,
             repeats=[
                 batch_size,
             ],
             axis=0,
         )
-        for dec in self.decoders_cls:
-            X_cls = dec([Q_cls, X_cls, msk], training=training) * msk_input
 
-        X_reg = X_enc
+        # query the encoded state of each element with the trainable classification query
+        X_cls = self.decoders_cls[0]([Q_cls, X_cls, msk], training=training) * msk_input
+        for dec in self.decoders_cls[1:]:
+            X_cls = dec([X_cls, X_cls, msk], training=training) * msk_input
+
+        # repeat the learnable query along batch dimension
         Q_reg = tf.repeat(
-            self.Q_reg,
+            q_reg,
             repeats=[
                 batch_size,
             ],
             axis=0,
         )
-        for dec in self.decoders_reg:
-            X_reg = dec([Q_reg, X_reg, msk], training=training) * msk_input
 
+        # query the encoded state of each element with the trainable regression query
+        X_reg = self.decoders_reg[0]([Q_reg, X_reg, msk], training=training) * msk_input
+        for dec in self.decoders_reg[1:]:
+            X_reg = dec([X_reg, X_reg, msk], training=training) * msk_input
+
+        # decode the outputs to classification and regression values
         ret = self.output_dec([X, X_cls, X_reg, msk_input], training=training)
 
         if self.multi_output:

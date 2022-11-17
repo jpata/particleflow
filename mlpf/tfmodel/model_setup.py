@@ -18,7 +18,6 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import tf2onnx
 import vector
-from tensorflow.keras.metrics import Recall
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 from tqdm import tqdm
@@ -30,30 +29,16 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     def on_epoch_end(self, epoch, logs=None):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
         weightfile_path = self.opt_path.format(epoch=epoch + 1, **logs)
-        try:
-            # PCGrad is derived from the legacy optimizer
-            # module name differs in different TF versions
-            if (self.model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1") or (
-                self.model.optimizer.__class__.__module__ == "keras.optimizer_v1"
-            ):
-                # lr = self.model.optimizer.optimizer.optimizer.lr
-                weights = self.model.optimizer.optimizer.optimizer.get_weights()
-            else:
-                # lr = self.model.optimizer.lr
-                weights = self.model.optimizer.get_weights()
+        weights = self.model.optimizer.get_weights()
 
-            with open(weightfile_path, "wb") as fi:
-                pickle.dump(
-                    {
-                        # "lr": lr,
-                        "weights": weights
-                    },
-                    fi,
-                )
-        except Exception as e:
-            print("Could not save optimizer state: {}".format(e))
-            if os.path.isfile(weightfile_path):
-                os.remove(weightfile_path)
+        with open(weightfile_path, "wb") as fi:
+            pickle.dump(
+                {
+                    # "lr": lr,
+                    "weights": weights
+                },
+                fi,
+            )
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
@@ -92,41 +77,53 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         # run the model inference on the validation dataset
         eval_model(self.model, self.dataset, self.config, cp_dir)
 
-        yvals = {}
-        for fi in glob.glob(str(cp_dir / "*.npz")):
-            dd = np.load(fi)
+        # load the evaluation data
+        yvals = []
+        for fi in glob.glob(str(cp_dir / "*.parquet")):
+            dd = awkward.from_parquet(fi)
             os.remove(fi)
-            keys_in_file = list(dd.keys())
-            for k in keys_in_file:
-                if not (k in yvals):
-                    yvals[k] = []
-                yvals[k].append(dd[k])
-        yvals = {k: np.concatenate(v) for k, v in yvals.items()}
+            yvals.append(dd)
 
-        msk_gen = (np.argmax(yvals["gen_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
-        gen_px = yvals["gen_pt"] * yvals["gen_cos_phi"] * msk_gen
-        gen_py = yvals["gen_pt"] * yvals["gen_sin_phi"] * msk_gen
+        yvals_awk = awkward.concatenate(yvals, axis=0)
 
-        msk_pred = (np.argmax(yvals["pred_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
-        pred_px = yvals["pred_pt"] * yvals["pred_cos_phi"] * msk_pred
-        pred_py = yvals["pred_pt"] * yvals["pred_sin_phi"] * msk_pred
+        particles = {k: awkward.flatten(yvals_awk["particles"][k], axis=1) for k in yvals_awk["particles"].fields}
 
-        msk_cand = (np.argmax(yvals["cand_cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
-        cand_px = yvals["cand_pt"] * yvals["cand_cos_phi"] * msk_cand
-        cand_py = yvals["cand_pt"] * yvals["cand_sin_phi"] * msk_cand
+        msk_gen = np.argmax(particles["gen"]["cls"], axis=-1) != 0
+        gen_px = particles["gen"]["pt"][msk_gen] * particles["gen"]["cos_phi"][msk_gen]
+        gen_py = particles["gen"]["pt"][msk_gen] * particles["gen"]["sin_phi"][msk_gen]
+
+        msk_pred = np.argmax(particles["pred"]["cls"], axis=-1) != 0
+        pred_px = particles["pred"]["pt"][msk_pred] * particles["pred"]["cos_phi"][msk_pred]
+        pred_py = particles["pred"]["pt"][msk_pred] * particles["pred"]["sin_phi"][msk_pred]
+
+        msk_cand = np.argmax(particles["cand"]["cls"], axis=-1) != 0
+        cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
+        cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
 
         gen_met = np.sqrt(np.sum(gen_px**2 + gen_py**2, axis=1))
         pred_met = np.sqrt(np.sum(pred_px**2 + pred_py**2, axis=1))
         cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
 
-        jet_ratio_pred = (yvals["jets_pt_gen_to_pred"][:, 1] - yvals["jets_pt_gen_to_pred"][:, 0]) / yvals[
-            "jets_pt_gen_to_pred"
-        ][:, 0]
-        jet_ratio_cand = (yvals["jets_pt_gen_to_cand"][:, 1] - yvals["jets_pt_gen_to_cand"][:, 0]) / yvals[
-            "jets_pt_gen_to_cand"
-        ][:, 0]
-        met_ratio_pred = (pred_met[:, 0] - gen_met[:, 0]) / gen_met[:, 0]
-        met_ratio_cand = (cand_met[:, 0] - gen_met[:, 0]) / gen_met[:, 0]
+        met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
+        met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)
+
+        # flatten across file and event dimension
+        gen_to_pred_genpt = awkward.flatten(
+            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["gen_jet"]).pt, axis=1)
+        )
+        gen_to_pred_predpt = awkward.flatten(
+            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["pred_jet"]).pt, axis=1)
+        )
+
+        gen_to_cand_genpt = awkward.flatten(
+            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["gen_jet"]).pt, axis=1)
+        )
+        gen_to_cand_candpt = awkward.flatten(
+            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["cand_jet"]).pt, axis=1)
+        )
+
+        jet_ratio_pred = (gen_to_pred_predpt - gen_to_pred_genpt) / gen_to_pred_genpt
+        jet_ratio_cand = (gen_to_cand_candpt - gen_to_cand_genpt) / gen_to_cand_genpt
 
         plt.figure()
         b = np.linspace(-2, 5, 100)
@@ -154,15 +151,13 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         if comet_experiment:
             comet_experiment.log_image(image_path, step=epoch - 1)
 
-        jet_pred_wd = scipy.stats.wasserstein_distance(
-            yvals["jets_pt_gen_to_pred"][:, 0], yvals["jets_pt_gen_to_pred"][:, 1]
-        )
+        jet_pred_wd = scipy.stats.wasserstein_distance(gen_to_pred_genpt, gen_to_pred_predpt)
         jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
         jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
         jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
         jet_pred_iqr = jet_pred_p75 - jet_pred_p25
 
-        met_pred_wd = scipy.stats.wasserstein_distance(gen_met[:, 0], pred_met[:, 0])
+        met_pred_wd = scipy.stats.wasserstein_distance(gen_met, pred_met)
         met_pred_p25 = np.percentile(met_ratio_pred, 25)
         met_pred_p50 = np.percentile(met_ratio_pred, 50)
         met_pred_p75 = np.percentile(met_ratio_pred, 75)
@@ -230,7 +225,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs",
         histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
-        write_graph=False,
+        write_graph=True,
         write_images=False,
         update_freq="epoch",
         # profile_batch=(10,90),
@@ -298,6 +293,8 @@ def make_gnn_dense(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
+        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
+        small_graph_opt=config["setup"]["small_graph_opt"],
         **kwargs
     )
 
@@ -318,6 +315,7 @@ def make_transformer(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
+        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
         **kwargs
     )
     return model
@@ -327,60 +325,76 @@ def deltar(a, b):
     return a.deltaR(b)
 
 
+def squeeze_if_one(arr):
+    if arr.shape[-1] == 1:
+        return np.squeeze(arr, axis=-1)
+    else:
+        return arr
+
+
 # Given a model, evaluates it on each batch of the validation dataset
 # For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
-def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
+def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, verbose=False):
 
     ibatch = 0
 
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
     for elem in tqdm(dataset, desc="Evaluating model"):
-        y_pred = model.predict(elem["X"], verbose=False)
 
-        # mask where there were no predicted particles (the prediction class was 0)
-        msk = (np.argmax(y_pred["cls"], axis=-1, keepdims=True) != 0).astype(np.float32)
-        for k in y_pred.keys():
-            # do not mask the classification outputs (we are using the classification outputs as a mask in the first place)
-            # do not mask the MET output (if it exists), it is a per-event quantity, rather than a per-particle as the mask
-            if k != "cls" and k != "met":
-                y_pred[k] = y_pred[k] * msk
+        if verbose:
+            print("evaluating model")
+        ypred = model.predict(elem["X"], verbose=verbose)
 
-        np_outfile = "{}/pred_batch{}.npz".format(outdir, ibatch)
+        keys_particle = [k for k in ypred.keys() if k != "met"]
+
+        if verbose:
+            print("unpacking outputs")
 
         ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
         ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
 
-        outs = {}
+        X = awkward.Array(elem["X"].numpy())
+        ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})
+        ycand = awkward.Array({k: squeeze_if_one(ycand[k].numpy()) for k in keys_particle})
+        ypred = awkward.Array({k: squeeze_if_one(ypred[k]) for k in keys_particle})
 
-        for key in y_pred.keys():
-            outs["gen_{}".format(key)] = ygen[key].numpy()
-            outs["cand_{}".format(key)] = ycand[key].numpy()
-            outs["pred_{}".format(key)] = y_pred[key]
+        awkvals = {
+            "gen": ygen,
+            "cand": ycand,
+            "pred": ypred,
+        }
 
         jets_coll = {}
+        if verbose:
+            print("clustering jets")
+
         for typ in ["gen", "cand", "pred"]:
-            cls_id = np.argmax(outs["{}_cls".format(typ)], axis=-1)
+            phi = np.arctan2(awkvals[typ]["sin_phi"], awkvals[typ]["cos_phi"])
+
+            cls_id = awkward.argmax(awkvals[typ]["cls"], axis=-1, mask_identity=False)
             valid = cls_id != 0
-            pt = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_pt".format(typ)], valid)])
-            eta = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_eta".format(typ)], valid)])
 
-            phi = np.arctan2(outs["{}_sin_phi".format(typ)], outs["{}_cos_phi".format(typ)])
-            phi = awkward.from_iter([y[m][:, 0] for y, m in zip(phi, valid)])
-            e = awkward.from_iter([y[m][:, 0] for y, m in zip(outs["{}_energy".format(typ)], valid)])
+            if np.any(awkward.sum(valid, axis=1) == 0):
+                raise Exception("Model did not predict any particles for some events: {}".format(awkward.sum(valid, axis=1)))
 
-            vec = vector.arr(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+            # mask the particles in each event in the batch that were not predicted
+            pt = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["pt"], valid)])
+            eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])
+            energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
+            phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
 
+            vec = vector.arr(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
-        for key in ["pt", "eta", "phi", "energy"]:
-            outs["jets_gen_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["gen"], key)))
-            outs["jets_cand_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["cand"], key)))
-            outs["jets_pred_{}".format(key)] = awkward.to_numpy(awkward.flatten(getattr(jets_coll["pred"], key)))
+            if verbose:
+                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ]["px"], axis=1)))
 
-        # DeltaR match between genjets and PF/MLPF jets
+        matched_jets = {}
+
+        # DeltaR match between genjets and MLPF jets
         cart = awkward.cartesian([jets_coll["gen"], jets_coll["pred"]], nested=True)
         jets_a, jets_b = awkward.unzip(cart)
         drs = deltar(jets_a, jets_b)
@@ -389,11 +403,11 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
         m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
         j1s = jets_coll["gen"][m0]
         j2s = jets_coll["pred"][m1]
+        if verbose:
+            print("matched jets gen-pred", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
+        matched_jets["gen_to_pred"] = {"gen_jet": j1s, "pred_jet": j2s}
 
-        outs["jets_pt_gen_to_pred"] = np.stack(
-            [awkward.to_numpy(awkward.flatten(j1s.pt)), awkward.to_numpy(awkward.flatten(j2s.pt))], axis=-1
-        )
-
+        # DeltaR match between genjets and PF jets
         cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
         jets_a, jets_b = awkward.unzip(cart)
         drs = deltar(jets_a, jets_b)
@@ -402,12 +416,19 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1):
         m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
         j1s = jets_coll["gen"][m0]
         j2s = jets_coll["cand"][m1]
+        if verbose:
+            print("matched jets gen-cand", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
+        matched_jets["gen_to_cand"] = {"gen_jet": j1s, "cand_jet": j2s}
 
-        outs["jets_pt_gen_to_cand"] = np.stack(
-            [awkward.to_numpy(awkward.flatten(j1s.pt)), awkward.to_numpy(awkward.flatten(j2s.pt))], axis=-1
+        # Save output file
+        outfile = "{}/pred_batch{}.parquet".format(outdir, ibatch)
+        if verbose:
+            print("saving to {}".format(outfile))
+
+        awkward.to_parquet(
+            {"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets},
+            outfile,
         )
-
-        np.savez(np_outfile, X=elem["X"], **outs)
 
         ibatch += 1
 
@@ -430,47 +451,6 @@ def freeze_model(model, config, outdir):
         input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
         output_path=str(Path(outdir) / "model.onnx"),
     )
-
-
-class FlattenedCategoricalAccuracy(tf.keras.metrics.CategoricalAccuracy):
-    def __init__(self, use_weights=False, **kwargs):
-        super(FlattenedCategoricalAccuracy, self).__init__(**kwargs)
-        self.use_weights = use_weights
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        # flatten the batch dimension
-        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0] * tf.shape(y_true)[1], tf.shape(y_true)[2]))
-        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0] * tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
-        sample_weights = None
-
-        if self.use_weights:
-            sample_weights = _y_true * tf.reduce_sum(_y_true, axis=0)
-            sample_weights = 1.0 / sample_weights[sample_weights != 0]
-
-        super(FlattenedCategoricalAccuracy, self).update_state(_y_true, _y_pred, sample_weights)
-
-
-class SingleClassRecall(Recall):
-    def __init__(self, icls, **kwargs):
-        super(SingleClassRecall, self).__init__(**kwargs)
-        self.icls = icls
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        # flatten the batch dimension
-        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0] * tf.shape(y_true)[1], tf.shape(y_true)[2]))
-        _y_pred = tf.argmax(tf.reshape(y_pred, (tf.shape(y_pred)[0] * tf.shape(y_pred)[1], tf.shape(y_pred)[2])), axis=-1)
-        super(SingleClassRecall, self).update_state(_y_true[:, self.icls], tf.cast(_y_pred == self.icls, tf.float32))
-
-
-class FlattenedMeanIoU(tf.keras.metrics.MeanIoU):
-    def __init__(self, use_weights=False, **kwargs):
-        super(FlattenedMeanIoU, self).__init__(**kwargs)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        # flatten the batch dimension
-        _y_true = tf.reshape(y_true, (tf.shape(y_true)[0] * tf.shape(y_true)[1], tf.shape(y_true)[2]))
-        _y_pred = tf.reshape(y_pred, (tf.shape(y_pred)[0] * tf.shape(y_pred)[1], tf.shape(y_pred)[2]))
-        super(FlattenedMeanIoU, self).update_state(_y_true, _y_pred, None)
 
 
 class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
@@ -521,7 +501,7 @@ def make_focal_loss(config):
             y,
             alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
             gamma=float(config["setup"].get("focal_loss_gamma", 2.0)),
-            from_logits=bool(config["setup"].get("focal_loss_from_logits", False)),
+            from_logits=config["setup"]["cls_output_as_logits"],
         )
 
     return loss

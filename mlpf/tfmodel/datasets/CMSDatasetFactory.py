@@ -1,5 +1,6 @@
-import tensorflow_datasets as tfds
 from tfmodel.datasets import BaseDatasetFactory
+
+import tensorflow_datasets as tfds
 
 
 class CMSDatasetFactory(BaseDatasetFactory):

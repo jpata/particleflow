@@ -15,14 +15,14 @@ pandas
 papermill
 pre-commit
 pyarrow
-ray[default]==1.6.0
-ray[tune]==1.6.0
+ray[default]
+ray[tune]
 scikit-optimize
 scipy
 seaborn
 setGPU
 sklearn
-tensorflow==2.9.1
+tensorflow==2.10.0
 tensorflow-addons
 tensorflow-datasets
 tensorflow-estimator
