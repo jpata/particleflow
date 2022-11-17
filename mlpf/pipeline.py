@@ -23,8 +23,6 @@ from tensorflow.keras import mixed_precision
 from tfmodel import hypertuning
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import (
-    FlattenedCategoricalAccuracy,
-    SingleClassRecall,
     configure_model_weights,
     eval_model,
     freeze_model,
@@ -58,10 +56,11 @@ from tfmodel.utils_analysis import (
 
 def customize_pipeline_test(config):
     # for cms.yaml, keep only ttbar
+    config["batching"]["bucket_by_sequence_length"] = False
     if "physical" in config["train_test_datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
-        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
+        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 2
         config["validation_datasets"] = ["cms_pf_ttbar"]
 
     return config
@@ -190,7 +189,7 @@ def train(
         config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(config["validation_batch_size"])
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     if ntrain:
         ds_train = ds_train.take(ntrain)
@@ -300,16 +299,6 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
         optimizer=opt,
         sample_weight_mode="temporal",
         loss_weights=loss_weights,
-        metrics={
-            "cls": [
-                FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-            ]
-            + [
-                SingleClassRecall(icls, name="rec_cls{}".format(icls), dtype=tf.float64)
-                for icls in range(config["dataset"]["num_output_classes"])
-            ]
-        },
     )
 
     model.summary()
@@ -386,16 +375,6 @@ def compute_validation_loss(config, train_dir, weights):
             loss=loss_dict,
             # sample_weight_mode="temporal",
             loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-                + [
-                    SingleClassRecall(icls, name="rec_cls{}".format(icls), dtype=tf.float64)
-                    for icls in range(config["dataset"]["num_output_classes"])
-                ]
-            },
         )
 
         losses = model.evaluate(
@@ -432,9 +411,10 @@ def evaluate(config, train_dir, weights, customize, nevents):
         model_dtype = tf.dtypes.float32
 
     strategy, num_gpus = get_strategy()
-    # physical_devices = tf.config.list_physical_devices('GPU')
-    # for dev in physical_devices:
-    #    tf.config.experimental.set_memory_growth(dev, True)
+
+    # disable small graph optimization for onnx export (tf.cond is not well supported)
+    if "small_graph_opt" in config["setup"]:
+        config["setup"]["small_graph_opt"] = False
 
     model = make_model(config, model_dtype)
     model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
@@ -454,7 +434,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
         ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
         if nevents:
             ds_test = ds_test.take(nevents)
-        ds_test = ds_test.batch(5)
+        ds_test = ds_test.padded_batch(config["validation_batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test, config, eval_dir)
@@ -502,12 +482,6 @@ def find_lr(config, outdir, figname, logscale):
             optimizer=opt,
             sample_weight_mode="temporal",
             loss_weights=loss_weights,
-            metrics={
-                "cls": [
-                    FlattenedCategoricalAccuracy(name="acc_unweighted", dtype=tf.float64),
-                    FlattenedCategoricalAccuracy(use_weights=True, name="acc_weighted", dtype=tf.float64),
-                ]
-            },
         )
         model.summary()
 
@@ -563,7 +537,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(5)
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     num_train_steps = 0
     for _ in ds_train:
@@ -643,7 +617,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         full_config["setup"]["num_events_validation"],
         supervised=False,
     )
-    ds_val = ds_val.batch(5)
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
 
     if ntrain:
         ds_train = ds_train.take(ntrain)

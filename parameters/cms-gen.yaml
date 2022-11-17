@@ -60,19 +60,40 @@ setup:
   weights_config:
   lr: 0.0005
   num_events_validation: 500
-  num_epochs: 50
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: cosinedecay  # exponentialdecay, onecycle, none
+  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
-  horovod_enabled: False
+  horovod_enabled: no
+  cls_output_as_logits: yes
+  small_graph_opt: yes
+
+batching:
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: yes
+  # these sizes were sort of tuned for an 8GB GPU
+  # - max_sequence_length, batch_size_per_gpu
+  bucket_batch_sizes:
+    - 25, 400
+    - 50, 200
+    - 100, 100
+    - 200, 50
+    - 500, 25
+    - 1000, 10
+    - 2000, 8
+    - 3000, 7
+    - 4000, 6
+    - 5000, 5
+    - 6000, 4
+    - inf, 2
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 1
 
 optimizer:
   adam:
     amsgrad: no
-    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
-    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -133,8 +154,7 @@ parameters:
       type: GHConvDense
       output_dim: 256
       activation: elu
-      #if this is enabled, it will break float16 training
-      normalize_degrees: yes
+      normalize_degrees: yes #disable for float16
     activation: elu
 
   num_graph_layers_id: 4
@@ -153,12 +173,12 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 64
+    id_hidden_dim: 1024
     charge_hidden_dim: 64
     pt_hidden_dim: 64
     eta_hidden_dim: 64
     phi_hidden_dim: 64
-    energy_hidden_dim: 64
+    energy_hidden_dim: 1024
 
     id_num_layers: 2
     charge_num_layers: 2
@@ -229,12 +249,16 @@ train_test_datasets:
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
   gun:
-    batch_per_gpu: 100
+    batch_per_gpu: 50
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
       - cms_pf_single_neutron
       - cms_pf_single_pi0
+      - cms_pf_single_pi
+      - cms_pf_single_tau
+      - cms_pf_single_mu
+      - cms_pf_single_proton
 
 validation_datasets:
   - cms_pf_qcd_high_pt
@@ -243,34 +267,50 @@ validation_batch_size: 4
 
 datasets:
   cms_pf_ttbar:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_electron:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_gamma:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_pi0:
-    version: 1.4.0
+    version: 1.5.0
     data_dir:
     manual_dir:
   cms_pf_single_neutron:
-    version: 1.4.0
+    version: 1.5.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi:
+    version: 1.5.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_tau:
+    version: 1.5.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_mu:
+    version: 1.5.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_proton:
+    version: 1.5.0
     data_dir:
     manual_dir:

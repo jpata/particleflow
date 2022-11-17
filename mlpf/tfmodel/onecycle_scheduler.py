@@ -118,12 +118,8 @@ class MomentumOneCycleScheduler(Callback):
 
         self.phases = [CosineAnnealer(mom_max, mom_min, phase_1_steps), CosineAnnealer(mom_min, mom_max, phase_2_steps)]
 
-    def _get_opt(self):  # needed for compatibility with PCGrad
-        if hasattr(self.model.optimizer, "lr"):
-            opt = self.model.optimizer
-        elif hasattr(self.model.optimizer.optimizer, "optimizer"):
-            opt = self.model.optimizer.optimizer.optimizer
-        assert opt is not None
+    def _get_opt(self):
+        opt = self.model.optimizer
         return opt
 
     def set_step(self, step):

@@ -1,5 +1,5 @@
 default_language_version:
-    python: python3.9
+    python: python3.8
 exclude: ^(delphes/tev14_pythia8_*.)|^(images/)
 
 repos:
@@ -32,7 +32,7 @@ repos:
     language_version: python3
     args: [--line-length=125]
 
-- repo: https://gitlab.com/pycqa/flake8
+- repo: https://github.com/PyCQA/flake8
   rev: 3.9.2
   hooks:
   - id: flake8

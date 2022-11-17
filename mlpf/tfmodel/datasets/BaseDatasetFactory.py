@@ -50,16 +50,16 @@ class BaseDatasetFactory:
             y = data_item["y{}".format(target_particles)]
 
             # mask to keep only nonzero elements
-            msk_elems = tf.cast(X[:, 0:1] != 0, tf.float32)
+            msk_elems = tf.cast(X[..., 0:1] != 0, tf.float32)
 
             # mask to keep only nonzero target particles
-            msk_signal = tf.cast(y[:, 0:1] != 0, tf.float32)
+            msk_signal = tf.cast(y[..., 0:1] != 0, tf.float32)
 
             target = unpack_target(y, num_output_classes, self.cfg)
 
             pt_weights = msk_elems
             if self.cfg["dataset"]["cls_weight_by_pt"]:
-                pt_weights *= X[:, 1:2]
+                pt_weights *= X[..., 1:2]
 
             # inputs: X
             # targets: dict by classification (cls) and regression feature columns

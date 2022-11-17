@@ -4,7 +4,7 @@
 #SBATCH --mem-per-gpu=8G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/tf-2.9.0.simg
+IMG=/home/software/singularity/tf-2.10.0.simg
 cd ~/particleflow
 
 #TF training

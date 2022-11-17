@@ -3,13 +3,13 @@
 
 - for applying the focal loss, is there a way to do this for a softmax? I only really see how this works for a set of sigmoid outputs
   - we use the `tfa.losses.sigmoid_focal_crossentropy` function on softmax outputs. It would be good to check that there is no error in how we are using this.
-  
+
 - for the object condensation, how do choose which reconstructed object should be assigned the truth label and which ones should be labeled 0 when there are multiple signals?
   - In general, there are many-to-many energy deposits from truth particles to input elements. Truth particles are assigned to a primary input element according to the largest energy deposit, removing that input element for subsequent assignments. In practice, it's always completely straightforward for track-based particles (ch.had, ele, mu), and for calo-based particles, we can see a good correspondence between the truth particle and PFElement (eta,phi) based on this assignment.
 
 - do I understand correctly that from the LSH+kNN step you end up with some large number of smaller graphs, and they are not connected to each other, only internally?
   - Correct. Since we have multiple layers of this graph building + GCN steps, in principle, there can still be connectivity across all elements, just in different layers.
-  
+
 - for the study of adding additional physics terms to the loss, was the hyperparameter scan redone?
   - It was not redone. Most likely the story on the additional physics terms is not yet fully concluded, and we might have to revisit it with the new inputs we have received since.
 

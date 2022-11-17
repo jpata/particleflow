@@ -16,11 +16,11 @@ dataset:
 loss:
   classification_loss_coef: 1.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 100.0
-  eta_loss_coef: 100.0
-  sin_phi_loss_coef: 100.0
-  cos_phi_loss_coef: 100.0
-  energy_loss_coef: 100.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
   energy_loss:
     type: Huber
     delta: 1.0
@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 1e-4
+  lr: 1e-5
   num_events_train: 45000
   num_events_test: 5000
   num_events_validation: 10
@@ -60,6 +60,29 @@ setup:
   lr_schedule: exponentialdecay  # exponentialdecay, onecycle
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: False
+  cls_output_as_logits: False
+  small_graph_opt: no
+
+batching:
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: yes
+  # these sizes were sort of tuned for an 8GB GPU
+  # - max_sequence_length, batch_size_per_gpu
+  bucket_batch_sizes:
+    - 25, 400
+    - 50, 200
+    - 100, 100
+    - 200, 50
+    - 500, 25
+    - 1000, 10
+    - 2000, 8
+    - 3000, 7
+    - 4000, 6
+    - 5000, 5
+    - 6000, 4
+    - inf, 2
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 1
 
 optimizer:
   adam:
