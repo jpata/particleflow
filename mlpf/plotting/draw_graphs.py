@@ -6,6 +6,7 @@ import setGPU  # noqa F401
 import torch
 import tqdm
 from graph_data import PFGraphDataset
+
 from models import EdgeNet
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

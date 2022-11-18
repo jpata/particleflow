@@ -16,4 +16,4 @@ Datasets:
   - SinglePi0, 10k
 
 Script to generate datasets: https://github.com/jpata/particleflow/blob/main/mlpf/data_cms/prepare_args.py
-Software for datasets and inference: `CMSSW_12_3_0_pre6 + jpata/cmssw:547a0fce7251bfaa6e855aef068f5a45c2d321ec` 
+Software for datasets and inference: `CMSSW_12_3_0_pre6 + jpata/cmssw:547a0fce7251bfaa6e855aef068f5a45c2d321ec`
