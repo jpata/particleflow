@@ -9,6 +9,21 @@ on:
   workflow_dispatch:
 
 jobs:
+  clic-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      - name: Install python deps
+        run: |
+          pip install -r requirements.txt
+      - name: Run delphes TF model
+        run: ./scripts/local_test_clic_pipeline.sh
+
   delphes-pipeline:
     runs-on: ubuntu-latest
     steps:
