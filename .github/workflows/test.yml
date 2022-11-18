@@ -21,7 +21,7 @@ jobs:
       - name: Install python deps
         run: |
           pip install -r requirements.txt
-      - name: Run delphes TF model
+      - name: Run clic model
         run: ./scripts/local_test_clic_pipeline.sh
 
   delphes-pipeline:
