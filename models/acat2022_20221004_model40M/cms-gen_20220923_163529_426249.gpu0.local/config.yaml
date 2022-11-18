@@ -1,0 +1,274 @@
+backend: tensorflow
+
+dataset:
+  schema: cms
+  target_particles: gen
+  num_input_features: 41
+  num_output_features: 7
+#       NONE = 0,
+#       TRACK = 1,
+#       PS1 = 2,
+#       PS2 = 3,
+#       ECAL = 4,
+#       HCAL = 5,
+#       GSF = 6,
+#       BREM = 7,
+#       HFEM = 8,
+#       HFHAD = 9,
+#       SC = 10,
+#       HO = 11,
+  num_input_classes: 12
+  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
+  num_output_classes: 8
+  padded_num_elem_size: 6400
+  #(pt, eta, sin phi, cos phi, E)
+  num_momentum_outputs: 5
+  cls_weight_by_pt: no
+
+loss:
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
+  energy_loss:
+    type: Huber
+  pt_loss:
+    type: Huber
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
+  event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+  event_loss_coef: 1.0
+  met_loss: none
+  met_loss_coef: 1.0
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  weights_config:
+  lr: 0.0001
+  num_events_validation: 500
+  num_epochs: 100
+  dtype: float32
+  trainable:
+  classification_loss_type: sigmoid_focal_crossentropy
+  lr_schedule: none  # exponentialdecay, onecycle, none
+  optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
+
+optimizer:
+  adam:
+    amsgrad: no
+    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
+    pcgrad: yes
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
+
+# LR Schedules
+exponentialdecay:
+  decay_steps: 2000
+  decay_rate: 0.99
+  staircase: yes
+onecycle:
+  mom_min: 0.85
+  mom_max: 0.95
+  warmup_ratio: 0.3
+  div_factor: 25.0
+  final_div: 100000.0
+
+parameters:
+  model: gnn_dense
+  input_encoding: cms
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 1024
+
+  combined_graph_layer:
+    bin_size: 100
+    max_num_bins: 200
+    distance_dim: 64
+    layernorm: yes
+    dropout: 0.0
+    dist_activation: elu
+    ffn_dist_num_layers: 2
+    ffn_dist_hidden_dim: 128
+
+    # MPNN
+    #kernel:
+    # type: NodePairTrainableKernel
+    # activation: elu
+    #num_node_messages: 1
+    #node_message:
+    # type: NodeMessageLearnable
+    # output_dim: 64
+    # hidden_dim: 128
+    # num_layers: 2
+    # activation: elu
+    #activation: elu
+
+    # GCN
+    kernel:
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+      dist_norm: l2
+    num_node_messages: 2
+    node_message:
+      type: GHConvDense
+      output_dim: 1024
+      activation: elu
+      #if this is enabled, it will break float16 training
+      normalize_degrees: yes
+    activation: elu
+
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
+  output_decoding:
+    activation: elu
+    regression_use_classification: yes
+    dropout: 0.0
+
+    pt_as_correction: yes
+
+    id_dim_decrease: yes
+    charge_dim_decrease: yes
+    pt_dim_decrease: yes
+    eta_dim_decrease: yes
+    phi_dim_decrease: yes
+    energy_dim_decrease: yes
+
+    id_hidden_dim: 512
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
+
+    id_num_layers: 3
+    charge_num_layers: 2
+    pt_num_layers: 2
+    eta_num_layers: 2
+    phi_num_layers: 2
+    energy_num_layers: 2
+    layernorm: yes
+    mask_reg_cls0: no
+
+  skip_connection: no
+  debug: no
+
+timing:
+  num_ev: 100
+  num_iter: 3
+
+callbacks:
+  checkpoint:
+    monitor: "val_loss"
+  plot_freq: 1
+  tensorboard:
+    dump_history: yes
+    hist_freq: 1
+
+hypertune:
+  algorithm: hyperband  # random, bayesian, hyperband
+  random:
+    objective: val_loss
+    max_trials: 100
+  bayesian:
+    objective: val_loss
+    max_trials: 100
+    num_initial_points: 2
+  hyperband:
+    objective: val_loss
+    max_epochs: 10
+    factor: 3
+    iterations: 1
+    executions_per_trial: 1
+
+raytune:
+  local_dir:  # Note: please specify an absolute path
+  sched:  asha # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
+train_test_datasets:
+  physical:
+    batch_per_gpu: 1
+    datasets:
+      - cms_pf_ttbar
+      - cms_pf_ztt
+      - cms_pf_qcd
+      - cms_pf_qcd_high_pt
+  gun:
+    batch_per_gpu: 30
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
+
+validation_datasets:
+  - cms_pf_qcd_high_pt
+
+datasets:
+  cms_pf_ttbar:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_ztt:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd_high_pt:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_electron:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_gamma:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi0:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_neutron:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
