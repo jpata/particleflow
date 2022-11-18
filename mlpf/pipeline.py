@@ -21,6 +21,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import mixed_precision
 from tfmodel import hypertuning
+from tfmodel.callbacks import BenchmarkLogggerCallback
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import (
     configure_model_weights,
@@ -90,6 +91,17 @@ def main():
 @click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
 @click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
 @click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option(
+    "-b",
+    "--benchmark_dir",
+    help="dir to save becnhmark results. If -b exp_dir results will be saved in the \
+    experiment folder",
+    type=str,
+    default=None,
+)
+@click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
+@click.option("-D", "--num_cpus", help="number of CPU cores to use, ignored if CUDA GPUs are found", type=int, default=1)
+@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
     config,
     weights,
@@ -104,7 +116,17 @@ def train(
     jobid,
     horovod_enabled,
     habana,
+    benchmark_dir,
+    batch_size,
+    num_cpus,
+    seeds,
 ):
+
+    if seeds:
+        random.seed(1234)
+        np.random.seed(1234)
+        tf.random.set_seed(1234)
+
     # tf.debugging.enable_check_numerics()
 
     """Train a model defined by config"""
@@ -114,6 +136,10 @@ def train(
 
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
+
+    if batch_size:
+        for key in config["train_test_datasets"]:
+            config["train_test_datasets"][key]["batch_per_gpu"] = batch_size
 
     if customize:
         config = customization_functions[customize](config)
@@ -135,7 +161,8 @@ def train(
         strategy = HPUStrategy()
         num_gpus = 1
     else:
-        strategy, num_gpus = get_strategy()
+        strategy, num_gpus = get_strategy(num_cpus=num_cpus)
+    devices = num_gpus or num_cpus  # devices = num_cpus if num_gpus is 0 or None
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
@@ -179,12 +206,12 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
+    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, devices, "train")
+    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, devices, "test")
     ds_val, ds_info = get_heptfds_dataset(
         config["validation_datasets"][0],
         config,
-        num_gpus,
+        devices,
         "test",
         config["setup"]["num_events_validation"],
         supervised=False,
@@ -198,10 +225,12 @@ def train(
         ds_test = ds_test.take(ntest)
         num_test_steps = ntest
 
-    print("num_train_steps", num_train_steps)
-    print("num_test_steps", num_test_steps)
-    total_steps = num_train_steps * config["setup"]["num_epochs"]
-    print("total_steps", total_steps)
+    epochs = config["setup"]["num_epochs"]
+    total_steps = num_train_steps * epochs
+    print("num_train_steps:", num_train_steps, "num_train_samples:", train_samples)
+    print("epochs:", epochs, "total_train_steps:", total_steps)
+
+    print("num_test_steps:", num_test_steps, "num_test_samples:", test_samples)
 
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
@@ -222,6 +251,38 @@ def train(
             num_test_steps /= hvd.size()
 
         callbacks.append(optim_callbacks)
+
+        if benchmark_dir:
+            if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+                benchmark_dir = outdir
+            if config["dataset"]["schema"] == "delphes":
+                bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
+            elif config["dataset"]["schema"] == "cms":
+                assert (
+                    len(config["train_test_datasets"]) == 1
+                ), "Expected exactly 1 key, physical OR delphes, \
+                    found {}".format(
+                    config["train_test_datasets"].keys()
+                )
+                bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
+            else:
+                raise ValueError(
+                    "Benchmark callback only supports delphes or \
+                    cms dataset schema. {}".format(
+                        config["dataset"]["schema"]
+                    )
+                )
+            Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+            callbacks.append(
+                BenchmarkLogggerCallback(
+                    outdir=benchmark_dir,
+                    steps_per_epoch=num_train_steps,
+                    batch_size_per_gpu=bmk_bs,
+                    num_gpus=num_gpus,
+                    num_cpus=num_cpus,
+                    train_set_size=train_samples,
+                )
+            )
 
         model.fit(
             ds_train.repeat(),
