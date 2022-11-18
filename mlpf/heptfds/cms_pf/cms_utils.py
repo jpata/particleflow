@@ -63,7 +63,7 @@ X_FEATURES = [
 Y_FEATURES = ["typ_idx", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
 
 
-def prepare_data_cms(fn, padded_num_elem_size):
+def prepare_data_cms(fn):
     Xs = []
     ygens = []
     ycands = []
@@ -124,21 +124,12 @@ def prepare_data_cms(fn, padded_num_elem_size):
         ycand_flat[np.isnan(ycand_flat)] = 0
         ycand_flat[np.abs(ycand_flat) > 1e4] = 0
 
-        X = Xelem_flat[:padded_num_elem_size]
-        X = np.pad(X, [(0, padded_num_elem_size - X.shape[0]), (0, 0)])
-
-        ygen = ygen_flat[:padded_num_elem_size]
-        ygen = np.pad(ygen, [(0, padded_num_elem_size - ygen.shape[0]), (0, 0)])
-
-        ycand = ycand_flat[:padded_num_elem_size]
-        ycand = np.pad(ycand, [(0, padded_num_elem_size - ycand.shape[0]), (0, 0)])
-
-        X = np.expand_dims(X, 0)
-        ygen = np.expand_dims(ygen, 0)
-        ycand = np.expand_dims(ycand, 0)
+        X = Xelem_flat
+        ycand = ycand_flat
+        ygen = ygen_flat
 
         # prepare gen candidates for clustering
-        cls_id = ygen[:, :, 0]
+        cls_id = ygen[..., 0]
         valid = cls_id != 0
         # save mapping of index after masking -> index before masking as numpy array
         # inspired from:
@@ -146,19 +137,18 @@ def prepare_data_cms(fn, padded_num_elem_size):
         cumsum = np.cumsum(valid) - 1
         _, index_mapping = np.unique(cumsum, return_index=True)
 
-        pt = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("pt")], valid)])
-        eta = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("eta")], valid)])
-        phi = np.arctan2(ygen[:, :, Y_FEATURES.index("sin_phi")], ygen[:, :, Y_FEATURES.index("cos_phi")])
-        phi = ak.from_iter([y[m] for y, m in zip(phi, valid)])
-        e = ak.from_iter([y[m] for y, m in zip(ygen[:, :, Y_FEATURES.index("e")], valid)])
+        pt = ygen[valid, Y_FEATURES.index("pt")]
+        eta = ygen[valid, Y_FEATURES.index("eta")]
+        phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
+        e = ygen[valid, Y_FEATURES.index("e")]
         vec = vector.arr(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
         # cluster jets, sort jet indices in descending order by pt
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets = cluster.inclusive_jets(min_pt=min_jet_pt)
-        sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()[0]
+        jets = vector.arr(cluster.inclusive_jets(min_pt=min_jet_pt))
+        sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
         # retrieve corresponding indices of constituents
-        constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()[0]
+        constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
 
         # add index information to ygen and ycand
         # index jets in descending order by pt starting from 1:
@@ -169,21 +159,17 @@ def prepare_data_cms(fn, padded_num_elem_size):
             jet_constituents = [
                 index_mapping[idx] for idx in constituent_idx[jet_idx]
             ]  # map back to constituent index *before* masking
-            ygen[0, jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-            ycand[0, jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+            ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+            ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
         Xs.append(X)
         ygens.append(ygen)
         ycands.append(ycand)
 
-    X = [np.concatenate(Xs)]
-    ygen = [np.concatenate(ygens)]
-    ycand = [np.concatenate(ycands)]
-
-    return X, ygen, ycand
+    return Xs, ygens, ycands
 
 
-def split_sample(path, pad_size, test_frac=0.8):
+def split_sample(path, test_frac=0.8):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(files, path))
     assert len(files) > 0
@@ -192,18 +178,18 @@ def split_sample(path, pad_size, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
-    return {"train": generate_examples(files_train, pad_size), "test": generate_examples(files_test, pad_size)}
+    return {"train": generate_examples(files_train), "test": generate_examples(files_test)}
 
 
-def generate_examples(files, pad_size):
+def generate_examples(files):
     """Yields examples."""
 
     for fi in files:
-        X, ygen, ycand = prepare_data_cms(str(fi), pad_size)
-        for ii in range(X[0].shape[0]):
-            x = X[0][ii]
-            yg = ygen[0][ii]
-            yc = ycand[0][ii]
+        Xs, ygens, ycands = prepare_data_cms(str(fi))
+        for ii in range(len(Xs)):
+            x = Xs[ii]
+            yg = ygens[ii]
+            yc = ycands[ii]
             yield str(fi) + "_" + str(ii), {
                 "X": x,
                 "ygen": yg,
