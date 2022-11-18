@@ -2,8 +2,8 @@ from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
-
 import tensorflow_datasets as tfds
+
 from mlpf.data_clic.postprocessing import prepare_data_clic
 
 _DESCRIPTION = """
