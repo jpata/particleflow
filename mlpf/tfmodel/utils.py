@@ -123,7 +123,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_strategy(num_cpus=1):
+def get_num_gpus_cuda():
     if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
         gpus = [-1]
         print(
@@ -137,6 +137,22 @@ def get_strategy(num_cpus=1):
     else:
         num_gpus = len(gpus)
     print("num_gpus:", num_gpus)
+    return num_gpus, gpus
+
+
+def get_strategy(num_cpus=1):
+
+    # Always use the correct number of threads that were requested
+    if num_cpus == 1:
+        print("Warning: num_cpus==1, using explicitly only one CPU thread")
+
+    os.environ["OMP_NUM_THREADS"] = str(num_cpus)
+    os.environ["TF_NUM_INTRAOP_THREADS"] = str(num_cpus)
+    os.environ["TF_NUM_INTEROP_THREADS"] = str(num_cpus)
+    tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
+    tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
+
+    num_gpus, gpus = get_num_gpus_cuda()
 
     if num_gpus > 1:
         # multiple GPUs selected
@@ -146,15 +162,15 @@ def get_strategy(num_cpus=1):
         # single GPU
         print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
         strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
-    elif num_cpus > 1:
-        # CPU parallelization
-        print("Attempting CPU parallelization with tf.distribute.MirroredStrategy()...")
-        strategy = tf.distribute.MirroredStrategy()
     else:
         print("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
-    return strategy, num_gpus
+    num_batches_multiplier = 1
+    if num_gpus > 1:
+        num_batches_multiplier = num_gpus
+
+    return strategy, num_gpus, num_batches_multiplier
 
 
 def get_lr_schedule(config, steps):
@@ -287,7 +303,7 @@ def targets_multi_output(num_output_classes):
     return func
 
 
-def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, supervised=True):
+def get_heptfds_dataset(dataset_name, config, split, num_events=None, supervised=True):
     cds = config["dataset"]
 
     if cds["schema"] == "cms":
@@ -308,12 +324,12 @@ def get_heptfds_dataset(dataset_name, config, num_gpus, split, num_events=None, 
     return ds, ds_info
 
 
-def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
+def load_and_interleave(dataset_names, config, num_batches_multiplier, split, batch_size):
     datasets = []
     steps = []
     total_num_steps = 0
     for ds_name in dataset_names:
-        ds, _ = get_heptfds_dataset(ds_name, config, num_gpus, split)
+        ds, _ = get_heptfds_dataset(ds_name, config, split)
         num_steps = ds.cardinality().numpy()
         total_num_steps += num_steps
         assert num_steps > 0
@@ -348,15 +364,17 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
             # the last bucket size is implicitly 'inf'
             bucket_boundaries=[int(x[0]) for x in bucket_batch_sizes[:-1]],
             # for multi-GPU, we need to multiply the batch size by the number of GPUs
-            bucket_batch_sizes=[int(x[1]) * num_gpus * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes],
+            bucket_batch_sizes=[
+                int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes
+            ],
             drop_remainder=True,
         )
     # use fixed-size batching
     else:
         bs = batch_size
         if not config["setup"]["horovod_enabled"]:
-            if num_gpus > 1:
-                bs = bs * num_gpus
+            if num_batches_multiplier > 1:
+                bs = bs * num_batches_multiplier
         ds = ds.padded_batch(bs)
 
     # now iterate over the full dataset to get the number of steps
@@ -369,7 +387,7 @@ def load_and_interleave(dataset_names, config, num_gpus, split, batch_size):
 
 
 # Load multiple datasets and mix them together
-def get_datasets(datasets_to_interleave, config, num_gpus, split):
+def get_datasets(datasets_to_interleave, config, num_batches_to_load, split):
     datasets = []
     steps = []
     num_samples = 0
@@ -379,7 +397,7 @@ def get_datasets(datasets_to_interleave, config, num_gpus, split):
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
             interleaved_ds, num_steps, ds_samples = load_and_interleave(
-                ds_conf["datasets"], config, num_gpus, split, ds_conf["batch_per_gpu"]
+                ds_conf["datasets"], config, num_batches_to_load, split, ds_conf["batch_per_gpu"]
             )
             print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)

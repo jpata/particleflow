@@ -168,6 +168,9 @@ def prepare_data_clic(fn):
         df_cl = data[iev]["clusters"]
         df_tr = data[iev]["tracks"]
         df_pfs = data[iev]["pfs"]
+        print("Clusters={}, tracks={}, PFs={}, Gen={}".format(len(df_cl), len(df_tr), len(df_pfs), len(df_gen)))
+        if len(df_pfs) < 10:
+            continue
 
         # compute pt, px,py,pz
         df_tr["pt"] = track_pt(df_tr["omega"])
