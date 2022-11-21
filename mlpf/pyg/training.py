@@ -8,9 +8,9 @@ import numpy as np
 import sklearn.metrics
 import torch
 import torch_geometric
-from pyg import make_plot_from_lists
-from pyg.cms_utils import CLASS_NAMES_CMS
-from pyg.delphes_plots import plot_confusion_matrix
+from pyg import CLASS_NAMES_CMS, plot_confusion_matrix
+
+from .utils import make_plot_from_lists
 
 matplotlib.use("Agg")
 
@@ -96,7 +96,9 @@ def train(
 
     t0, tf = time.time(), 0
     for num, file in enumerate(file_loader):
-        print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s")
+        print(
+            f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s"
+        )
         tf = tf + (time.time() - t0)
 
         file = [x for t in file for x in t]  # unpack the list of tuples to a list
@@ -110,11 +112,6 @@ def train(
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            # print(
-            #     f"batch {i}/{len(loader)}, "
-            #     + f"forward pass on rank {rank} = {round(t1 - t0, 3)}s, "
-            #     + f"for batch with {batch.num_nodes} nodes"
-            # )
             t = t + (t1 - t0)
 
             # define the target
@@ -133,8 +130,12 @@ def train(
             msk2 = (pred_ids != 0) & (pred_ids == target_ids)
 
             # compute the loss
-            weights = compute_weights(rank, target_ids, num_classes)  # to accomodate class imbalance
-            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+            weights = compute_weights(
+                rank, target_ids, num_classes
+            )  # to accomodate class imbalance
+            loss_clf = torch.nn.functional.cross_entropy(
+                pred_ids_one_hot, target_ids, weight=weights
+            )  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(
                 pred_p4[msk2], target_p4[msk2]
             )  # for regressing p4 # TODO: add mse weights for scales to match? huber?
@@ -164,11 +165,15 @@ def train(
         # if num == 2:
         #     break
 
-        print(f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s")
+        print(
+            f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s"
+        )
 
         t0 = time.time()
 
-    print(f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s")
+    print(
+        f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s"
+    )
 
     losses_clf = losses_clf / (len(loader) * len(file_loader))
     losses_reg = losses_reg / (len(loader) * len(file_loader))
@@ -370,4 +375,6 @@ def training_loop(
         )
 
         print("----------------------------------------------------------")
-    print(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
+    print(
+        f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min"
+    )

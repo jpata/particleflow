@@ -15,87 +15,14 @@ from torch_geometric.loader import DataListLoader, DataLoader
 
 matplotlib.use("Agg")
 
-features_delphes = [
-    "Track|cluster",
-    "$p_{T}|E_{T}$",
-    r"$\eta$",
-    r"$Sin(\phi)$",
-    r"$Cos(\phi)$",
-    "P|E",
-    r"$\eta_\mathrm{out}|E_{em}$",
-    r"$Sin(\(phi)_\mathrm{out}|E_{had}$",
-    r"$Cos(\phi)_\mathrm{out}|E_{had}$",
-    "charge",
-    "is_gen_mu",
-    "is_gen_el",
-]
-
-features_cms = [
-    "typ_idx",
-    "pt",
-    "eta",
-    "phi",
-    "e",
-    "layer",
-    "depth",
-    "charge",
-    "trajpoint",
-    "eta_ecal",
-    "phi_ecal",
-    "eta_hcal",
-    "phi_hcal",
-    "muon_dt_hits",
-    "muon_csc_hits",
-    "muon_type",
-    "px",
-    "py",
-    "pz",
-    "deltap",
-    "sigmadeltap",
-    "gsf_electronseed_trkorecal",
-    "gsf_electronseed_dnn1",
-    "gsf_electronseed_dnn2",
-    "gsf_electronseed_dnn3",
-    "gsf_electronseed_dnn4",
-    "gsf_electronseed_dnn5",
-    "num_hits",
-    "cluster_flags",
-    "corr_energy",
-    "corr_energy_err",
-    "vx",
-    "vy",
-    "vz",
-    "pterror",
-    "etaerror",
-    "phierror",
-    "lambd",
-    "lambdaerror",
-    "theta",
-    "thetaerror",
-]
-
-target_p4 = [
+Y_FEATURES = [
     "charge",
     "pt",
     "eta",
     "sin_phi",
     "cos_phi",
-    "energy",
+    "e",
 ]
-
-
-def one_hot_embedding(labels, num_classes):
-    """
-    Embedding labels to one-hot form.
-
-    Args:
-      labels: (LongTensor) class labels, sized [N,].
-      num_classes: (int) number of classes.
-    Returns:
-      (tensor) encoded labels, sized [N, #classes].
-    """
-    y = torch.eye(num_classes)
-    return y[labels]
 
 
 def save_model(args, model_fname, outpath, model_kwargs):
@@ -110,12 +37,14 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
         print(f"model {model_fname} already exists, deleting it")
 
-        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
+        filelist = [
+            f for f in os.listdir(outpath) if not f.endswith(".txt")
+        ]  # don't remove the newly created logs.txt
         for f in filelist:
             try:
-                os.remove(os.path.join(outpath, f))
-            except IsADirectoryError:
                 shutil.rmtree(os.path.join(outpath, f))
+            except:
+                os.remove(os.path.join(outpath, f))
 
     with open(f"{outpath}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
@@ -305,7 +234,9 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2):
+def make_file_loaders(
+    world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2
+):
     """
     This function is only one line, but it's worth explaining why it's needed
     and what it's doing. It uses native torch Dataloaders with a custom collate_fn

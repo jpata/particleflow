@@ -50,11 +50,7 @@ class MLPF(nn.Module):
         for i in range(num_convs):
             self.conv.append(
                 GravNetConv_MLPF(
-                    embedding_dim,
-                    embedding_dim,
-                    space_dim,
-                    propagate_dim,
-                    k,
+                    embedding_dim, embedding_dim, space_dim, propagate_dim, k
                 )
             )
             # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
@@ -199,120 +195,16 @@ class GravNetConv_MLPF(MessagePassing):
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
 
-    def aggregate(self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None) -> Tensor:
+    def aggregate(
+        self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None
+    ) -> Tensor:
         out_mean = scatter(
-            inputs,
-            index,
-            dim=self.node_dim,
-            dim_size=dim_size,
-            reduce="sum",
+            inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum"
         )
         return out_mean
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.in_channels}, " f"{self.out_channels}, k={self.k})"
-
-
-# try:
-#     from torch_cmspepr import knn_graph
-# except ImportError:
-#     knn_graph = None
-#
-#
-# class GravNetConv_cmspepr(MessagePassing):
-#     """
-#     Gravnet implementation that uses an optimized version of knn.
-#     Copied from https://github.com/cms-pepr/pytorch_cmspepr/tree/main/torch_cmspepr
-#     """
-#
-#     def __init__(self, in_channels: int, out_channels: int,
-#                  space_dimensions: int, propagate_dimensions: int, k: int,
-#                  num_workers: int = 1, **kwargs):
-#         super(GravNetConv_cmspepr, self).__init__(flow='target_to_source', **kwargs)
-#
-#         if knn_graph is None:
-#             raise ImportError('`GravNetConv` requires `torch-cluster`.')
-#
-#         self.in_channels = in_channels
-#         self.out_channels = out_channels
-#         self.k = k
-#         self.num_workers = num_workers
-#
-#         self.lin_s = Linear(in_channels, space_dimensions)
-#         self.lin_h = Linear(in_channels, propagate_dimensions)
-#         self.lin = Linear(in_channels + 2 * propagate_dimensions, out_channels)
-#
-#         self.reset_parameters()
-#
-#     def reset_parameters(self):
-#         self.lin_s.reset_parameters()
-#         self.lin_h.reset_parameters()
-#         self.lin.reset_parameters()
-#
-#     def forward(
-#             self, x: Tensor,
-#             batch: OptTensor = None) -> Tensor:
-#         """"""
-#
-#         assert x.dim() == 2, 'Static graphs not supported in `GravNetConv`.'
-#
-#         b: OptTensor = None
-#         if isinstance(batch, Tensor):
-#             b = batch
-#
-#         h_l: Tensor = self.lin_h(x)
-#
-#         s_l: Tensor = self.lin_s(x)
-#
-#         edge_index = knn_graph(s_l, self.k, b)
-#
-#         edge_weight = (s_l[edge_index[1]] - s_l[edge_index[0]]).pow(2).sum(-1)
-#         edge_weight = torch.exp(-10. * edge_weight)  # 10 gives a better spread
-#
-#         # propagate_type: (x: OptPairTensor, edge_weight: OptTensor)
-#         out = self.propagate(edge_index, x=(h_l, None),
-#                              edge_weight=edge_weight,
-#                              size=(s_l.size(0), s_l.size(0)))
-#
-#         return self.lin(torch.cat([out, x], dim=-1))
-#
-#     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
-#         return x_j * edge_weight.unsqueeze(1)
-#
-#     def aggregate(self, inputs: Tensor, index: Tensor,
-#                   dim_size: Optional[int] = None) -> Tensor:
-#         out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size,
-#                            reduce='mean')
-#         out_max = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size,
-#                           reduce='max')
-#         return torch.cat([out_mean, out_max], dim=-1)
-#
-#     def __repr__(self):
-#         return '{}({}, {}, k={})'.format(self.__class__.__name__,
-#                                          self.in_channels, self.out_channels,
-#                                          self.k)
-#
-#
-# class EdgeConvBlock(nn.Module):
-#     """
-#     EdgeConv implementation as an alternative to GravnetConv.
-#     """
-#
-#     def __init__(self, in_size, layer_size, k):
-#         super(EdgeConvBlock, self).__init__()
-#
-#         layers = []
-#
-#         layers.append(nn.Linear(in_size * 2, layer_size))
-#         layers.append(nn.BatchNorm1d(layer_size))
-#         layers.append(nn.ReLU())
-#
-#         # for i in range(2):
-#         #     layers.append(nn.Linear(layer_size, layer_size))
-#         #     layers.append(nn.BatchNorm1d(layer_size))
-#         #     layers.append(nn.ReLU())
-#
-#         self.edge_conv = DynamicEdgeConv(nn.Sequential(*layers), k=k, aggr="mean")
-#
-#     def forward(self, x, batch):
-#         return self.edge_conv(x, batch)
+        return (
+            f"{self.__class__.__name__}({self.in_channels}, "
+            f"{self.out_channels}, k={self.k})"
+        )

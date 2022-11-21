@@ -25,3 +25,5 @@ nohup.out
 *.pkl.bz2
 
 slurm-*.out
+
+.vscode
