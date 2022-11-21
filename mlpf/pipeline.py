@@ -145,12 +145,10 @@ def train(
         config = customization_functions[customize](config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
+    horovod_enabled = horovod_enabled or config["setup"]["horovod_enabled"]
+
     if horovod_enabled:
-        pass
-    else:
-        horovod_enabled = config["setup"]["horovod_enabled"]
-    if horovod_enabled:
-        num_gpus = initialize_horovod()
+        num_gpus, num_batches_multiplier = initialize_horovod()
     elif habana:
         import habana_frameworks.tensorflow as htf
 
@@ -160,9 +158,9 @@ def train(
         logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
         strategy = HPUStrategy()
         num_gpus = 1
+        num_batches_multiplier = 1
     else:
-        strategy, num_gpus = get_strategy(num_cpus=num_cpus)
-    devices = num_gpus or num_cpus  # devices = num_cpus if num_gpus is 0 or None
+        strategy, num_gpus, num_batches_multiplier = get_strategy()
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
@@ -206,12 +204,15 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, num_train_steps, train_samples = get_datasets(config["train_test_datasets"], config, devices, "train")
-    ds_test, num_test_steps, test_samples = get_datasets(config["train_test_datasets"], config, devices, "test")
+    ds_train, num_train_steps, train_samples = get_datasets(
+        config["train_test_datasets"], config, num_batches_multiplier, "train"
+    )
+    ds_test, num_test_steps, test_samples = get_datasets(
+        config["train_test_datasets"], config, num_batches_multiplier, "test"
+    )
     ds_val, ds_info = get_heptfds_dataset(
         config["validation_datasets"][0],
         config,
-        devices,
         "test",
         config["setup"]["num_events_validation"],
         supervised=False,
@@ -393,7 +394,11 @@ def initialize_horovod():
     if gpus:
         tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
 
-    return hvd.size()
+    num_batches_multiplier = 1
+    if hvd.size() > 1:
+        num_batches_multiplier = hvd.size()
+
+    return hvd.size(), num_batches_multiplier
 
 
 @main.command()
@@ -415,8 +420,8 @@ def compute_validation_loss(config, train_dir, weights):
     else:
         model_dtype = tf.dtypes.float32
 
-    strategy, num_gpus = get_strategy()
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "test")
+    strategy, num_gpus, num_batches_multiplier = get_strategy()
+    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test")
 
     with strategy.scope():
         model = make_model(config, model_dtype)
@@ -471,7 +476,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
     else:
         model_dtype = tf.dtypes.float32
 
-    strategy, num_gpus = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy()
 
     # disable small graph optimization for onnx export (tf.cond is not well supported)
     if "small_graph_opt" in config["setup"]:
@@ -492,7 +497,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
     iepoch = int(weights.split("/")[-1].split("-")[1])
 
     for dsname in config["validation_datasets"]:
-        ds_test, _ = get_heptfds_dataset(dsname, config, num_gpus, "test", supervised=False)
+        ds_test, _ = get_heptfds_dataset(dsname, config, "test", supervised=False)
         if nevents:
             ds_test = ds_test.take(nevents)
         ds_test = ds_test.padded_batch(config["validation_batch_size"])
@@ -515,9 +520,9 @@ def find_lr(config, outdir, figname, logscale):
     config, _ = parse_config(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, num_gpus = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_gpus, "train")
+    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
 
     with strategy.scope():
         opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
@@ -584,16 +589,13 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     if config["hypertune"]["algorithm"] == "hyperband":
         config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, num_gpus = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, ds_info = get_heptfds_dataset(
-        config["training_dataset"], config, num_gpus, "train", config["setup"]["num_events_train"]
-    )
-    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, num_gpus, "test", config["setup"]["num_events_test"])
+    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, "train", config["setup"]["num_events_train"])
+    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, "test", config["setup"]["num_events_test"])
     ds_val, _ = get_heptfds_dataset(
         config["validation_datasets"][0],
         config,
-        num_gpus,
         "test",
         config["setup"]["num_events_validation"],
         supervised=False,
@@ -666,14 +668,15 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
         offline_directory=tune.get_trial_dir() + "/cometml",
     )
 
-    strategy, num_gpus = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, num_train_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "train")
-    ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_gpus, "test")
+    ds_train, num_train_steps = get_datasets(
+        full_config["train_test_datasets"], full_config, num_batches_multiplier, "train"
+    )
+    ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_batches_multiplier, "test")
     ds_val, ds_info = get_heptfds_dataset(
         full_config["validation_datasets"][0],
         full_config,
-        num_gpus,
         "test",
         full_config["setup"]["num_events_validation"],
         supervised=False,
