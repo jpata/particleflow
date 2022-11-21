@@ -166,7 +166,11 @@ def get_strategy(num_cpus=1):
         print("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
-    return strategy, num_gpus
+    num_batches_multiplier = 1
+    if num_gpus > 1:
+        num_batches_multiplier = num_gpus
+
+    return strategy, num_gpus, num_batches_multiplier
 
 
 def get_lr_schedule(config, steps):
