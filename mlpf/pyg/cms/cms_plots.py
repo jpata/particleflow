@@ -1,63 +1,63 @@
 import itertools
+import time
 
 import boost_histogram as bh
 import matplotlib.pyplot as plt
 import mplhep
 import numpy as np
 import sklearn.metrics
-from pyg.cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
+import torch
+
+from .cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
 
 mplhep.style.use(mplhep.styles.CMS)
 
 
+class_names = {k: v for k, v in zip(CLASS_LABELS_CMS, CLASS_NAMES_CMS)}
+
+
 def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
-    plt.figtext(x0, y, "CMS", fontweight="bold", wrap=True, horizontalalignment="left", transform=ax.transAxes)
     plt.figtext(
-        x1, y, "Simulation Preliminary", style="italic", wrap=True, horizontalalignment="left", transform=ax.transAxes
+        x0,
+        y,
+        "CMS",
+        fontweight="bold",
+        wrap=True,
+        horizontalalignment="left",
+        transform=ax.transAxes,
     )
-    plt.figtext(x2, y, "Run 3 (14 TeV)", wrap=False, horizontalalignment="right", transform=ax.transAxes)
-
-
-# def cms_label_sample_label(x0=0.12, x1=0.23, x2=0.67, y=0.90):
-#     plt.figtext(x0, y,'CMS',fontweight='bold', wrap=True, horizontalalignment='left')
-#     plt.figtext(x1, y,'Simulation Preliminary', style='italic', wrap=True, horizontalalignment='left')
-#     plt.figtext(x2, y,'Run 3 (14 TeV), $\mathrm{t}\overline{\mathrm{t}}$ events',  wrap=False, horizontalalignment='left')
+    plt.figtext(
+        x1,
+        y,
+        "Simulation Preliminary",
+        style="italic",
+        wrap=True,
+        horizontalalignment="left",
+        transform=ax.transAxes,
+    )
+    plt.figtext(
+        x2,
+        y,
+        "Run 3 (14 TeV)",
+        wrap=False,
+        horizontalalignment="right",
+        transform=ax.transAxes,
+    )
 
 
 def sample_label(sample, ax, additional_text="", x=0.01, y=0.87):
     if sample == "QCD":
-        plt.text(x, y, "QCD events" + additional_text, ha="left", transform=ax.transAxes)
+        plt.text(
+            x, y, "QCD events" + additional_text, ha="left", transform=ax.transAxes
+        )
     else:
-        plt.text(x, y, "$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text, ha="left", transform=ax.transAxes)
-
-
-def apply_thresholds_f(ypred_raw_f, thresholds):
-    msk = np.ones_like(ypred_raw_f)
-    for i in range(len(thresholds)):
-        msk[:, i + 1] = ypred_raw_f[:, i + 1] > thresholds[i]
-    ypred_id_f = np.argmax(ypred_raw_f * msk, axis=-1)
-
-    #     best_2 = np.partition(ypred_raw_f, -2, axis=-1)[..., -2:]
-    #     diff = np.abs(best_2[:, -1] - best_2[:, -2])
-    #     ypred_id_f[diff<0.05] = 0
-
-    return ypred_id_f
-
-
-def apply_thresholds(ypred_raw, thresholds):
-    msk = np.ones_like(ypred_raw)
-    for i in range(len(thresholds)):
-        msk[:, :, i + 1] = ypred_raw[:, :, i + 1] > thresholds[i]
-    ypred_id = np.argmax(ypred_raw * msk, axis=-1)
-
-    #     best_2 = np.partition(ypred_raw, -2, axis=-1)[..., -2:]
-    #     diff = np.abs(best_2[:, :, -1] - best_2[:, :, -2])
-    #     ypred_id[diff<0.05] = 0
-
-    return ypred_id
-
-
-class_names = {k: v for k, v in zip(CLASS_LABELS_CMS, CLASS_NAMES_CMS)}
+        plt.text(
+            x,
+            y,
+            "$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text,
+            ha="left",
+            transform=ax.transAxes,
+        )
 
 
 def plot_numPFelements(X, outpath, sample):
@@ -73,7 +73,9 @@ def plot_numPFelements(X, outpath, sample):
     plt.close()
 
 
-def plot_met(X, yvals, outpath, sample):
+def plot_met(yvals, outpath, sample):
+    print("plot_met...")
+
     sum_px = np.sum(yvals["gen_px"], axis=1)
     sum_py = np.sum(yvals["gen_py"], axis=1)
     gen_met = np.sqrt(sum_px**2 + sum_py**2)[:, 0]
@@ -96,32 +98,50 @@ def plot_met(X, yvals, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_a), np.std(vals_a)),
+        label="PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(
+            np.mean(vals_a), np.std(vals_a)
+        ),
     )
     plt.hist(
         vals_b,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_b), np.std(vals_b)),
+        label="MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(
+            np.mean(vals_b), np.std(vals_b)
+        ),
     )
     plt.yscale("log")
     cms_label(ax)
     sample_label(sample, ax)
     plt.ylim(10, 1e3)
     plt.legend(loc=(0.4, 0.7))
-    plt.xlabel(r"$\frac{\mathrm{MET}_{\mathrm{reco}} - \mathrm{MET}_{\mathrm{gen}}}{\mathrm{MET}_{\mathrm{gen}}}$")
+    plt.xlabel(
+        r"$\frac{\mathrm{MET}_{\mathrm{reco}} - \mathrm{MET}_{\mathrm{gen}}}{\mathrm{MET}_{\mathrm{gen}}}$"
+    )
     plt.ylabel("Number of events / bin")
     plt.savefig(f"{outpath}/met.pdf", bbox_inches="tight")
     plt.close()
 
 
-def plot_sum_energy(X, yvals, outpath, sample):
+def plot_sum_energy(yvals, outpath, sample):
+    print("plot_sum_energy...")
+
     plt.figure()
     ax = plt.axes()
 
-    plt.scatter(np.sum(yvals["gen_energy"], axis=1), np.sum(yvals["cand_energy"], axis=1), alpha=0.5, label="PF")
-    plt.scatter(np.sum(yvals["gen_energy"], axis=1), np.sum(yvals["pred_energy"], axis=1), alpha=0.5, label="MLPF")
+    plt.scatter(
+        np.sum(yvals["gen_energy"], axis=1),
+        np.sum(yvals["cand_energy"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
+    plt.scatter(
+        np.sum(yvals["gen_energy"], axis=1),
+        np.sum(yvals["pred_energy"], axis=1),
+        alpha=0.5,
+        label="MLPF",
+    )
     plt.plot([10000, 80000], [10000, 80000], color="black")
     plt.legend(loc=4)
     cms_label(ax)
@@ -132,13 +152,24 @@ def plot_sum_energy(X, yvals, outpath, sample):
     plt.close()
 
 
-def plot_sum_pt(X, yvals, outpath, sample):
+def plot_sum_pt(yvals, outpath, sample):
+    print("plot_sum_pt...")
 
     plt.figure()
     ax = plt.axes()
 
-    plt.scatter(np.sum(yvals["gen_pt"], axis=1), np.sum(yvals["cand_pt"], axis=1), alpha=0.5, label="PF")
-    plt.scatter(np.sum(yvals["gen_pt"], axis=1), np.sum(yvals["pred_pt"], axis=1), alpha=0.5, label="PF")
+    plt.scatter(
+        np.sum(yvals["gen_pt"], axis=1),
+        np.sum(yvals["cand_pt"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
+    plt.scatter(
+        np.sum(yvals["gen_pt"], axis=1),
+        np.sum(yvals["pred_pt"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
     plt.plot([1000, 6000], [1000, 6000], color="black")
     plt.legend(loc=4)
     cms_label(ax)
@@ -149,12 +180,16 @@ def plot_sum_pt(X, yvals, outpath, sample):
     plt.close()
 
 
-def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
+def plot_energy_res(yvals_f, pid, b, ylim, outpath, sample):
 
     plt.figure()
     ax = plt.axes()
 
-    msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
+    msk = (
+        (yvals_f["gen_cls_id"] == pid)
+        & (yvals_f["cand_cls_id"] == pid)
+        & (yvals_f["pred_cls_id"] == pid)
+    )
     vals_gen = yvals_f["gen_energy"][msk]
     vals_cand = yvals_f["cand_energy"][msk]
     vals_mlpf = yvals_f["pred_energy"][msk]
@@ -173,7 +208,9 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
+        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(
+            np.mean(reso_2), np.std(reso_2)
+        ),
     )
     plt.yscale("log")
     plt.xlabel(r"$\frac{E_\mathrm{reco} - E_\mathrm{gen}}{E_\mathrm{gen}}$")
@@ -186,12 +223,16 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
     plt.close()
 
 
-def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
+def plot_eta_res(yvals_f, pid, ylim, outpath, sample):
 
     plt.figure()
     ax = plt.axes()
 
-    msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
+    msk = (
+        (yvals_f["gen_cls_id"] == pid)
+        & (yvals_f["cand_cls_id"] == pid)
+        & (yvals_f["pred_cls_id"] == pid)
+    )
     vals_gen = yvals_f["gen_eta"][msk]
     vals_cand = yvals_f["cand_eta"][msk]
     vals_mlpf = yvals_f["pred_eta"][msk]
@@ -212,7 +253,9 @@ def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
+        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(
+            np.mean(reso_2), np.std(reso_2)
+        ),
     )
     plt.yscale("log")
     plt.xlabel(r"$\eta_\mathrm{reco} - \eta_\mathrm{gen}$")
@@ -225,7 +268,7 @@ def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
     plt.close()
 
 
-def plot_multiplicity(X, yvals, outpath, sample):
+def plot_multiplicity(yvals, outpath, sample):
     for icls in range(1, 8):
         # Plot the particle multiplicities
         npred = np.sum(yvals["pred_cls_id"] == icls, axis=1)
@@ -295,7 +338,10 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
     plt.figure()
     ax = plt.axes()
     v1 = mplhep.histplot(
-        [h[bh.rebin(2)] for h in hists_gen], stack=True, label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]], lw=1
+        [h[bh.rebin(2)] for h in hists_gen],
+        stack=True,
+        label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]],
+        lw=1,
     )
     mplhep.histplot(
         [h[bh.rebin(2)] for h in hists_pred],
@@ -305,7 +351,9 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
         histtype="errorbar",
     )
 
-    legend1 = plt.legend(v1, [x.legend_artist.get_label() for x in v1], loc=(0.60, 0.44), title="true")
+    legend1 = plt.legend(
+        v1, [x.legend_artist.get_label() for x in v1], loc=(0.60, 0.44), title="true"
+    )
     # legend2 = plt.legend(v2, [x.legend_artist.get_label() for x in v1], loc=(0.8, 0.44), title="pred")
     plt.gca().add_artist(legend1)
     plt.ylabel("Total number of particles / bin")
@@ -334,21 +382,47 @@ def plot_eff_and_fake_rate(
 
     values = X_f[:, ivar]
 
-    hist_gen = np.histogram(values[(yvals_f["gen_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_gen = np.histogram(
+        values[(yvals_f["gen_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+    )
     hist_gen_pred = np.histogram(
-        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[
+            (yvals_f["gen_cls_id"] == icls)
+            & (yvals_f["pred_cls_id"] == icls)
+            & (X_f[:, 0] == ielem)
+        ],
+        bins=bins,
     )
     hist_gen_cand = np.histogram(
-        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[
+            (yvals_f["gen_cls_id"] == icls)
+            & (yvals_f["cand_cls_id"] == icls)
+            & (X_f[:, 0] == ielem)
+        ],
+        bins=bins,
     )
 
-    hist_pred = np.histogram(values[(yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
-    hist_cand = np.histogram(values[(yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_pred = np.histogram(
+        values[(yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+    )
+    hist_cand = np.histogram(
+        values[(yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+    )
     hist_pred_fake = np.histogram(
-        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[
+            (yvals_f["gen_cls_id"] != icls)
+            & (yvals_f["pred_cls_id"] == icls)
+            & (X_f[:, 0] == ielem)
+        ],
+        bins=bins,
     )
     hist_cand_fake = np.histogram(
-        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[
+            (yvals_f["gen_cls_id"] != icls)
+            & (yvals_f["cand_cls_id"] == icls)
+            & (X_f[:, 0] == ielem)
+        ],
+        bins=bins,
     )
 
     eff_mlpf = hist_gen_pred[0] / hist_gen[0]
@@ -403,14 +477,6 @@ def plot_eff_and_fake_rate(
     plt.savefig(f"{outpath}/fake_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
     plt.close()
 
-    # mplhep.histplot(fake, bins=hist_gen[1], label="fake rate", color="red")
-
-
-#     plt.legend(frameon=False)
-#     plt.ylim(0,1.4)
-#     plt.xlabel(xlabel)
-#     plt.ylabel("Fraction of particles / bin")
-
 
 def plot_cm(yvals_f, msk_X_f, label, outpath):
 
@@ -423,7 +489,10 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
         Y = yvals_f["cand_cls_id"][msk_X_f]
 
     cm_norm = sklearn.metrics.confusion_matrix(
-        yvals_f["gen_cls_id"][msk_X_f], Y, labels=range(0, len(CLASS_LABELS_CMS)), normalize="true"
+        yvals_f["gen_cls_id"][msk_X_f],
+        Y,
+        labels=range(0, len(CLASS_LABELS_CMS)),
+        normalize="true",
     )
 
     plt.imshow(cm_norm, cmap="Blues", origin="lower")
@@ -456,7 +525,12 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
 def distribution_icls(yvals_f, outpath):
     for icls in range(0, 8):
         fig, axs = plt.subplots(
-            2, 2, figsize=(2 * mplhep.styles.CMS["figure.figsize"][0], 2 * mplhep.styles.CMS["figure.figsize"][1])
+            2,
+            2,
+            figsize=(
+                2 * mplhep.styles.CMS["figure.figsize"][0],
+                2 * mplhep.styles.CMS["figure.figsize"][1],
+            ),
         )
 
         for ax, ivar in zip(axs.flatten(), ["pt", "energy", "eta", "phi"]):
@@ -479,7 +553,9 @@ def distribution_icls(yvals_f, outpath):
                 b = np.linspace(np.min(vals_true), np.max(vals_true), 41)
                 log = False
 
-            plt.hist(vals_true, bins=b, histtype="step", lw=2, label="gen", color="black")
+            plt.hist(
+                vals_true, bins=b, histtype="step", lw=2, label="gen", color="black"
+            )
             plt.hist(vals_pf, bins=b, histtype="step", lw=2, label="PF")
             plt.hist(vals_pred, bins=b, histtype="step", lw=2, label="MLPF")
             plt.legend(loc=(0.75, 0.75))
@@ -499,3 +575,138 @@ def distribution_icls(yvals_f, outpath):
         plt.tight_layout()
         plt.savefig(f"{outpath}/distribution_icls{icls}.pdf", bbox_inches="tight")
         plt.close()
+
+
+def make_plots_cms(pred_path, plot_path, sample):
+
+    t0 = time.time()
+
+    print("--> Loading the processed predictions")
+    X = torch.load(f"{pred_path}/post_processed_Xs.pt")
+    X_f = torch.load(f"{pred_path}/post_processed_X_f.pt")
+    msk_X_f = torch.load(f"{pred_path}/post_processed_msk_X_f.pt")
+    yvals = torch.load(f"{pred_path}/post_processed_yvals.pt")
+    yvals_f = torch.load(f"{pred_path}/post_processed_yvals_f.pt")
+    print(
+        f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min"
+    )
+
+    print(f"--> Making plots using {len(X)} events...")
+
+    # plot distributions
+    print("plot_dist...")
+    plot_dist(yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample)
+    plot_dist(yvals_f, "energy", np.linspace(0, 2000, 61), r"$E$", plot_path, sample)
+    plot_dist(yvals_f, "eta", np.linspace(-6, 6, 61), r"$\eta$", plot_path, sample)
+
+    # plot cm
+    print("plot_cm...")
+    plot_cm(yvals_f, msk_X_f, "MLPF", plot_path)
+    plot_cm(yvals_f, msk_X_f, "PF", plot_path)
+
+    # plot eff_and_fake_rate
+    print("plot_eff_and_fake_rate...")
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=1,
+        ivar=4,
+        ielem=1,
+        bins=np.logspace(-1, 3, 41),
+        log=True,
+    )
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=1,
+        ivar=3,
+        ielem=1,
+        bins=np.linspace(-4, 4, 41),
+        log=False,
+        xlabel="PFElement $\eta$",
+    )
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=2,
+        ivar=4,
+        ielem=5,
+        bins=np.logspace(-1, 3, 41),
+        log=True,
+    )
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=2,
+        ivar=3,
+        ielem=5,
+        bins=np.linspace(-5, 5, 41),
+        log=False,
+        xlabel="PFElement $\eta$",
+    )
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=5,
+        ivar=4,
+        ielem=4,
+        bins=np.logspace(-1, 2, 41),
+        log=True,
+    )
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=5,
+        ivar=3,
+        ielem=4,
+        bins=np.linspace(-5, 5, 41),
+        log=False,
+        xlabel="PFElement $\eta$",
+    )
+
+    # distribution_icls
+    print("distribution_icls...")
+    distribution_icls(yvals_f, plot_path)
+
+    print("plot_numPFelements...")
+    plot_numPFelements(X, plot_path, sample)
+
+    plot_met(yvals, plot_path, sample)
+    plot_sum_energy(yvals, plot_path, sample)
+    plot_sum_pt(X, yvals, plot_path, sample)
+    print("plot_multiplicity...")
+    plot_multiplicity(yvals, plot_path, sample)
+
+    # for energy resolution plotting purposes, initialize pid -> (ylim, bins) dictionary
+    print("plot_energy_res...")
+    dic = {
+        1: (1e9, np.linspace(-2, 15, 100)),
+        2: (1e7, np.linspace(-2, 15, 100)),
+        3: (1e7, np.linspace(-2, 40, 100)),
+        4: (1e7, np.linspace(-2, 30, 100)),
+        5: (1e7, np.linspace(-2, 10, 100)),
+        6: (1e4, np.linspace(-1, 1, 100)),
+        7: (1e4, np.linspace(-0.1, 0.1, 100)),
+    }
+    for pid, tuple in dic.items():
+        plot_energy_res(yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
+
+    # for eta resolution plotting purposes, initialize pid -> (ylim) dictionary
+    print("plot_eta_res...")
+    dic = {1: 1e10, 2: 1e8}
+    for pid, ylim in dic.items():
+        plot_eta_res(yvals_f, pid, ylim, plot_path, sample)
+
+    print(f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min")

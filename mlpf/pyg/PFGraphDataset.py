@@ -1,11 +1,5 @@
-try:
-    from pyg.cms_utils import prepare_data_cms
-except ImportError:
-    from cms_utils import prepare_data_cms
-
 import multiprocessing
 import os.path as osp
-import pickle
 from glob import glob
 
 import torch
@@ -37,7 +31,9 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        raw_list = glob(osp.join(self.raw_dir, "*.pkl"))
+        raw_list = glob(
+            osp.join(self.raw_dir, "*")
+        )  # not necessarily pkl (because clic is .json)
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
         return sorted([raw_path.replace(self.raw_dir, ".") for raw_path in raw_list])
 
@@ -54,7 +50,12 @@ class PFGraphDataset(Dataset):
     @property
     def processed_file_names(self):
         proc_list = glob(osp.join(self.processed_dir, "*.pt"))
-        return sorted([processed_path.replace(self.processed_dir, ".") for processed_path in proc_list])
+        return sorted(
+            [
+                processed_path.replace(self.processed_dir, ".")
+                for processed_path in proc_list
+            ]
+        )
 
     def __len__(self):
         return len(self.processed_file_names)
@@ -65,50 +66,44 @@ class PFGraphDataset(Dataset):
 
     def process_single_file(self, raw_file_name):
         """
-        Loads a list of 100 events from a pkl file and generates pytorch geometric Data() objects
-        and stores them in .pt format.
-        For cms data, each element is assumed to be a dict('Xelem', 'ygen', ycand')
-        of numpy rec_arrays with the first element in ygen/ycand is the pid
-        For delphes data, each element is assumed to be a dict('X', 'ygen', ycand')
-        of numpy standard arrays with the first element in ygen/ycand is the pid
+        Loads raw datafile information and generates PyG Data() objects and stores them in .pt format.
 
         Args
-            raw_file_name: a pkl file
+            raw_file_name: raw data file name.
         Returns
             batched_data: a list of Data() objects of the form
-             cms ~ Data(x=[#elem, 41], ygen=[#elem, 6], ygen_id=[#elem, 9], ycand=[#elem, 6], ycand_id=[#elem, 9])
-             delphes ~ Data(x=[#elem, 12], ygen=[#elem, 6], ygen_id=[#elem, 6], ycand=[#elem, 6], ycand_id=[#elem, 6])
+             cms ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
+             delphes ~ Data(x=[#, 12], ygen=[#elem, 6], ygen_id=[#, 6], ycand=[#, 6], ycand_id=[#, 6])
+             clic ~ Data(x=[#, 12], ygen=[#, 5], ygen_id=[#], ycand=[#, 5], ycand_id=[#])
         """
 
         if self.data == "cms":
+            from cms.cms_utils import prepare_data_cms
+
             return prepare_data_cms(osp.join(self.raw_dir, raw_file_name))
 
         elif self.data == "delphes":
-            # load the data pkl file
-            with open(osp.join(self.raw_dir, raw_file_name), "rb") as fi:
-                data = pickle.load(fi, encoding="iso-8859-1")
+            from delphes.delphes_utils import prepare_data_delphes
 
-            batched_data = []
-            for i in range(len(data["X"])):
-                # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
-                d = Data(
-                    x=torch.tensor(data["X"][i], dtype=torch.float),
-                    ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 1:],
-                    ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 0].long(),
-                    ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 1:],
-                    ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 0].long(),
-                )
+            return prepare_data_delphes(osp.join(self.raw_dir, raw_file_name))
 
-                batched_data.append(d)
+        elif self.data == "clic":
+            from clic.clic_utils import prepare_data_clic
 
-        return batched_data
+            return prepare_data_clic(osp.join(self.raw_dir, raw_file_name))
 
     def process_multiple_files(self, filenames, idx_file):
-        datas = [self.process_single_file(fn) for fn in filenames]
+        datas = []
+        for fn in filenames:
+            x = self.process_single_file(fn)
+            if x == None:
+                continue
+            datas.append(x)
+
         datas = sum(datas, [])
         p = osp.join(self.processed_dir, "data_{}.pt".format(idx_file))
-        print(p)
         torch.save(datas, p)
+        print(f"saved file {p}")
 
     def process(self, num_files_to_batch):
         idx_file = 0
@@ -140,8 +135,12 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
-    parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
-    parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
+    parser.add_argument(
+        "--processed_dir", type=str, help="processed", required=False, default=None
+    )
+    parser.add_argument(
+        "--num-files-merge", type=int, default=10, help="number of files to merge"
+    )
     parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
     args = parser.parse_args()
     return args
@@ -158,6 +157,9 @@ if __name__ == "__main__":
     python3 PFGraphDataset.py --data delphes --dataset $sample --processed_dir $sample/processed \
         --num-files-merge 1 --num-proc 1
 
+    e.g. to run for clic
+    python3 PFGraphDataset.py --data clic --dataset $sample --processed_dir $sample/processed --num-files-merge 1
+        
     """
 
     args = parse_args()
