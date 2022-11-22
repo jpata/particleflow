@@ -434,6 +434,7 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
 
 def freeze_model(model, config, outdir):
     import tf2onnx
+
     num_features = config["dataset"]["num_input_features"]
 
     def model_output(ret):
