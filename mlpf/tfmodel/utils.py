@@ -123,20 +123,13 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
-def get_num_gpus_cuda():
-    if isinstance(os.environ.get("CUDA_VISIBLE_DEVICES"), type(None)) or len(os.environ.get("CUDA_VISIBLE_DEVICES")) == 0:
-        gpus = [-1]
-        print(
-            "WARNING: CUDA_VISIBLE_DEVICES variable is empty. \
-            If you don't have or intend to use GPUs, this message can be ignored."
-        )
-    else:
-        gpus = [int(x) for x in os.environ.get("CUDA_VISIBLE_DEVICES", "-1").split(",")]
-    if gpus[0] == -1:
+def get_num_gpus(envvar="CUDA_VISIBLE_DEVICES"):
+    env = os.environ[envvar]
+    gpus = [int(x) for x in env.split(",")]
+    if len(gpus) == 1 and gpus[0] == -1:
         num_gpus = 0
     else:
         num_gpus = len(gpus)
-    print("num_gpus:", num_gpus)
     return num_gpus, gpus
 
 
@@ -152,7 +145,16 @@ def get_strategy(num_cpus=1):
     tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
     tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
-    num_gpus, gpus = get_num_gpus_cuda()
+    if "CUDA_VISIBLE_DEVICES" in os.environ:
+        num_gpus, gpus = get_num_gpus("CUDA_VISIBLE_DEVICES")
+    elif "ROCR_VISIBLE_DEVICES" in os.environ:
+        num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
+    else:
+        print(
+            "WARNING: CUDA/ROC variable is empty. \
+            If you don't have or intend to use GPUs, this message can be ignored."
+        )
+        num_gpus = 0
 
     if num_gpus > 1:
         # multiple GPUs selected

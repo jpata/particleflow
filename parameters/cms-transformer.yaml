@@ -58,7 +58,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.0005
   num_events_validation: 500
   num_epochs: 100
   dtype: float32
@@ -88,7 +88,7 @@ batching:
     - 6000, 4
     - inf, 2
   # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 1
+  batch_multiplier: 10
 
 optimizer:
   adam:
