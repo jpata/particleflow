@@ -76,11 +76,11 @@ batching:
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
   bucket_batch_sizes:
-    - 25, 400
-    - 50, 200
-    - 100, 100
-    - 200, 50
-    - 500, 25
+    - 25, 1000
+    - 50, 500
+    - 100, 300
+    - 200, 100
+    - 500, 50
     - 1000, 10
     - 2000, 8
     - 3000, 7
@@ -89,7 +89,7 @@ batching:
     - 6000, 4
     - inf, 2
   # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 10
+  batch_multiplier: 1
 
 optimizer:
   adam:

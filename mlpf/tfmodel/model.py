@@ -1096,51 +1096,6 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
-    # Uncomment these if you want to explicitly debug the training loop
-    # def train_step(self, data):
-    #     import numpy as np
-    #     x, y, sample_weights = data
-    #     if not hasattr(self, "step"):
-    #         self.step = 0
-
-    #     with tf.GradientTape() as tape:
-    #         y_pred = self(x, training=True)  # Forward pass
-    #         import pdb;pdb.set_trace()
-    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-    #     for tv, g in zip(trainable_vars, gradients):
-    #         g = g.numpy()
-    #         num_nan = np.sum(np.isnan(g))
-    #         if num_nan>0:
-    #             print(tv.name, num_nan, g.shape)
-
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     self.compiled_metrics.update_state(y, y_pred)
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
-
-    # def test_step(self, data):
-    #     # Unpack the data
-    #     x, y, sample_weights = data
-    #     # Compute predictions
-    #     y_pred = self(x, training=False)
-
-    #     pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-    #     true_cls = tf.argmax(y["cls"], axis=-1)
-
-    #     # Updates the metrics tracking the loss
-    #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-    #     # Update the metrics.
-    #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value.
-    #     # Note that it will include the loss (tracked in self.metrics).
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
-
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -1157,6 +1112,7 @@ class KernelEncoder(tf.keras.layers.Layer):
             seed=SEED_KERNELATTENTION,
             num_random_features=128,
             name=kwargs.get("name") + "_attention",
+            is_short_seq=False,
         )
         SEED_KERNELATTENTION += 1
         self.ffn = point_wise_feed_forward_network(
@@ -1260,6 +1216,9 @@ class PFNetTransformer(tf.keras.Model):
 
     def call(self, inputs, training=False):
         X = inputs
+
+        # tf.print("\nX.shape=", tf.shape(X), "\n")
+
         batch_size = tf.shape(X)[0]
 
         # mask padded elements
@@ -1320,3 +1279,43 @@ class PFNetTransformer(tf.keras.Model):
             return tf.concat(
                 [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
             )
+
+    # def train_step(self, data):
+    #     import numpy as np
+    #     x, y, sample_weights = data
+    #     if not hasattr(self, "step"):
+    #         self.step = 0
+
+    #     with tf.GradientTape() as tape:
+    #         y_pred = self(x, training=True)  # Forward pass
+    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+
+    #         print(np.stack([
+    #             y["energy"][sample_weights["energy"]==1],
+    #             y_pred["energy"][sample_weights["energy"]==1]], axis=-1
+    #         ))
+
+    #     trainable_vars = self.trainable_variables
+    #     gradients = tape.gradient(loss, trainable_vars)
+
+    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    #     self.compiled_metrics.update_state(y, y_pred)
+
+    #     self.step += 1
+    #     return {m.name: m.result() for m in self.metrics}
+
+    # def test_step(self, data):
+    #     # Unpack the data
+    #     x, y, sample_weights = data
+    #     # Compute predictions
+    #     y_pred = self(x, training=False)
+
+    #     # Updates the metrics tracking the loss
+    #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    #     # Update the metrics.
+    #     self.compiled_metrics.update_state(y, y_pred)
+    #     # Return a dict mapping metric names to current value.
+    #     # Note that it will include the loss (tracked in self.metrics).
+
+    #     self.step += 1
+    #     return {m.name: m.result() for m in self.metrics}

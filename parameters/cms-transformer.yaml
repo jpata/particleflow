@@ -58,7 +58,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.0001
   num_events_validation: 500
   num_epochs: 100
   dtype: float32
@@ -75,20 +75,20 @@ batching:
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
   bucket_batch_sizes:
-    - 25, 400
-    - 50, 200
-    - 100, 100
-    - 200, 50
-    - 500, 25
-    - 1000, 10
-    - 2000, 8
-    - 3000, 7
-    - 4000, 6
-    - 5000, 5
-    - 6000, 4
-    - inf, 2
+    - 25, 200
+    - 50, 125
+    - 100, 75
+    - 200, 40
+    - 500, 30
+    - 1000, 8
+    - 2000, 4
+    - 3000, 3
+    - 4000, 2
+    - 5000, 2
+    - 6000, 1
+    - inf, 1
   # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 10
+  batch_multiplier: 3
 
 optimizer:
   adam:

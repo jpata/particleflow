@@ -169,7 +169,9 @@ def prepare_data_clic(fn):
         df_tr = data[iev]["tracks"]
         df_pfs = data[iev]["pfs"]
         print("Clusters={}, tracks={}, PFs={}, Gen={}".format(len(df_cl), len(df_tr), len(df_pfs), len(df_gen)))
-        if len(df_pfs) < 10:
+
+        # skip events that don't have enough activity from training
+        if len(df_pfs) < 5 or len(df_gen) < 5 or len(df_tr) < 5 or len(df_cl) < 5:
             continue
 
         # compute pt, px,py,pz

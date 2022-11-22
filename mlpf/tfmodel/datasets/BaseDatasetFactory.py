@@ -49,11 +49,12 @@ class BaseDatasetFactory:
             X = data_item["X"]
             y = data_item["y{}".format(target_particles)]
 
-            # mask to keep only nonzero elements
+            # mask to keep only nonzero (not zero-padded within the batch) elements
             msk_elems = tf.cast(X[..., 0:1] != 0, tf.float32)
 
-            # mask to keep only nonzero target particles
-            msk_signal = tf.cast(y[..., 0:1] != 0, tf.float32)
+            # mask to keep only nonzero (not zero-padded due to object condensation) target particles
+            # also mask particles where true energy is 0 (FIXME: check this in postprocessing.py!)
+            msk_signal = tf.cast(y[..., 0:1] != 0, tf.float32) * tf.cast(y[..., 6:7] > 0, tf.float32)
 
             target = unpack_target(y, num_output_classes, self.cfg)
 
