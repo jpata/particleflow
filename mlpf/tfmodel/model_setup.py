@@ -16,7 +16,6 @@ import numpy as np
 import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
-import tf2onnx
 import vector
 from tfmodel.callbacks import CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
@@ -434,6 +433,8 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
 
 
 def freeze_model(model, config, outdir):
+    import tf2onnx
+
     num_features = config["dataset"]["num_input_features"]
 
     def model_output(ret):
