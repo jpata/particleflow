@@ -145,10 +145,13 @@ def get_strategy(num_cpus=1):
     tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
     tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
+    device = "cpu"
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("CUDA_VISIBLE_DEVICES")
+        device = "cuda"
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
+        device = "roc"
     else:
         print(
             "WARNING: CUDA/ROC variable is empty. \
@@ -159,7 +162,13 @@ def get_strategy(num_cpus=1):
     if num_gpus > 1:
         # multiple GPUs selected
         print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
-        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
+
+        #For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
+        cross_device_ops = None
+        if device == "roc":
+            cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
+
+        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus], cross_device_ops=cross_device_ops)
     elif num_gpus == 1:
         # single GPU
         print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
@@ -331,7 +340,7 @@ def load_and_interleave(dataset_names, config, num_batches_multiplier, split, ba
     steps = []
     total_num_steps = 0
     for ds_name in dataset_names:
-        ds, _ = get_heptfds_dataset(ds_name, config, split)
+        ds, _ = get_heptfds_dataset(ds_name, config, split, num_events=None)
         num_steps = ds.cardinality().numpy()
         total_num_steps += num_steps
         assert num_steps > 0

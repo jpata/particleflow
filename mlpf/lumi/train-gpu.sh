@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=80G
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=2
 #SBATCH --partition=eap
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
@@ -15,7 +15,6 @@ cd ~/particleflow
 
 #TF training
 singularity exec \
-    --env ROCR_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
     --rocm \
     -B /scratch/project_465000301 \
     --env PYTHONPATH=hep_tfds \

@@ -176,19 +176,6 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
                 comet_experiment.log_metric(name, val, step=epoch - 1)
 
 
-istep = 0
-
-
-def batchOutput(batch, logs):
-    global istep
-    tf.summary.scalar("batch_loss", data=logs["loss"], step=istep)
-    tf.summary.scalar("batch_cls_loss", data=logs["cls_loss"], step=istep)
-    tf.summary.scalar("batch_energy_loss", data=logs["energy_loss"], step=istep)
-    tf.summary.scalar("batch_pt_loss", data=logs["pt_loss"], step=istep)
-    istep += 1
-    return batch
-
-
 def prepare_callbacks(
     config,
     outdir,
@@ -203,11 +190,6 @@ def prepare_callbacks(
 
     if not horovod_enabled or hvd.rank() == 0:
         callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
-
-        # Log loss at every batch
-        from keras.callbacks import LambdaCallback
-
-        callbacks.append(LambdaCallback(on_batch_end=batchOutput))
 
     return callbacks
 
