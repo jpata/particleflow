@@ -10,8 +10,8 @@
 # by J. Pata
 
 import bz2
-import sys
 import pickle
+import sys
 
 from hep.lcio.implementation.io import LCFactory
 
@@ -117,9 +117,9 @@ def trackToDict(par, genparticle_dict, sim_trackhit_to_gen):
         "chi2": par.getChi2(),
         "dedx": par.getdEdx(),
         "dedx_error": par.getdEdxError(),
-        "radius_innermost_hit": par.getRadiusOfInnermostHit(), 
+        "radius_innermost_hit": par.getRadiusOfInnermostHit(),
         "track_type": par.getType(),
-        "nstates": len(par.getTrackStates()), 
+        "nstates": len(par.getTrackStates()),
     }
 
     # for each hit in the track, find the associated genparticle
@@ -324,8 +324,8 @@ if __name__ == "__main__":
                 if not (gp in gps_d):
                     gps_d[gp] = 0.0
                 gps_d[gp] += energy
-            
-            clusters[icl]["gp_contributions"] = sorted(gps_d.items(), key=lambda x: x[1], reverse=True) 
+
+            clusters[icl]["gp_contributions"] = sorted(gps_d.items(), key=lambda x: x[1], reverse=True)
 
         event = {}
         if save_hits:

@@ -163,7 +163,7 @@ def get_strategy(num_cpus=1):
         # multiple GPUs selected
         print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
 
-        #For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
+        # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
         cross_device_ops = None
         if device == "roc":
             cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
