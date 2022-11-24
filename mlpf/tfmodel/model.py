@@ -7,6 +7,48 @@ regularizer_weight = 0.0
 SEED_KERNELATTENTION = 0
 
 
+def debugging_train_step(self, data):
+    x, y, sample_weights = data
+    if not hasattr(self, "step"):
+        self.step = 0
+
+    with tf.GradientTape() as tape:
+        print("X", x.shape)
+        y_pred = self(x, training=True)  # Forward pass
+        loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+
+        # print(np.stack([
+        #     y["energy"][sample_weights["energy"]==1],
+        #     y_pred["energy"][sample_weights["energy"]==1]], axis=-1
+        # ))
+
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    self.compiled_metrics.update_state(y, y_pred)
+
+    self.step += 1
+    return {m.name: m.result() for m in self.metrics}
+
+
+def debugging_test_step(self, data):
+    # Unpack the data
+    x, y, sample_weights = data
+    # Compute predictions
+    y_pred = self(x, training=False)
+
+    # Updates the metrics tracking the loss
+    self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    # Update the metrics.
+    self.compiled_metrics.update_state(y, y_pred)
+    # Return a dict mapping metric names to current value.
+    # Note that it will include the loss (tracked in self.metrics).
+
+    self.step += 1
+    return {m.name: m.result() for m in self.metrics}
+
+
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
@@ -767,41 +809,29 @@ class OutputDecoding(tf.keras.Model):
         # p(particle) = 1 - p(no particle)
         # multiply the logits by a coefficient 10 to make the probabilities "harder",
         # i.e. p(particle | no particle) would be close to 0
-        hard_proba_particle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+        if self.mask_reg_cls0:
+            msk_outparticle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+        else:
+            msk_outparticle = tf.ones_like(pred_pt)
 
         # Return the full particle output array
         if self.event_set_output:
-            if self.mask_reg_cls0:
-                pt_e_eta_phi = tf.concat(
-                    [
-                        pred_pt * msk_input_outtype * hard_proba_particle,
-                        pred_energy * msk_input_outtype * hard_proba_particle,
-                        pred_eta * msk_input_outtype * hard_proba_particle,
-                        pred_sin_phi * msk_input_outtype * hard_proba_particle,
-                        pred_cos_phi * msk_input_outtype * hard_proba_particle,
-                    ],
-                    axis=-1,
-                )
-            else:
-                pt_e_eta_phi = tf.concat(
-                    [
-                        pred_pt * msk_input_outtype,
-                        pred_energy * msk_input_outtype,
-                        pred_eta * msk_input_outtype,
-                        pred_sin_phi * msk_input_outtype,
-                        pred_cos_phi * msk_input_outtype,
-                    ],
-                    axis=-1,
-                )
+            pt_e_eta_phi = tf.concat(
+                [
+                    pred_pt * msk_input_outtype * msk_outparticle,
+                    pred_energy * msk_input_outtype * msk_outparticle,
+                    pred_eta * msk_input_outtype * msk_outparticle,
+                    pred_sin_phi * msk_input_outtype * msk_outparticle,
+                    pred_cos_phi * msk_input_outtype * msk_outparticle,
+                ],
+                axis=-1,
+            )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
         # Compute the MET across the predicted particles in the event
         if self.met_output:
-            px = pred_pt * pred_cos_phi * msk_input_outtype
-            py = pred_pt * pred_sin_phi * msk_input_outtype
-            if self.mask_reg_cls0:
-                px = px * hard_proba_particle
-                py = py * hard_proba_particle
+            px = pred_pt * pred_cos_phi * msk_input_outtype * msk_outparticle
+            py = pred_pt * pred_sin_phi * msk_input_outtype * msk_outparticle
             met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
             ret["met"] = met
 
@@ -1096,6 +1126,12 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
+    # def train_step(self, data):
+    #     debugging_train_step(self, data)
+
+    # def test_step(self, data):
+    #     debugging_test_step(self, data)
+
 
 class KernelEncoder(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
@@ -1281,41 +1317,7 @@ class PFNetTransformer(tf.keras.Model):
             )
 
     # def train_step(self, data):
-    #     import numpy as np
-    #     x, y, sample_weights = data
-    #     if not hasattr(self, "step"):
-    #         self.step = 0
-
-    #     with tf.GradientTape() as tape:
-    #         y_pred = self(x, training=True)  # Forward pass
-    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-
-    #         print(np.stack([
-    #             y["energy"][sample_weights["energy"]==1],
-    #             y_pred["energy"][sample_weights["energy"]==1]], axis=-1
-    #         ))
-
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     self.compiled_metrics.update_state(y, y_pred)
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
+    #     debugging_train_step(self, data)
 
     # def test_step(self, data):
-    #     # Unpack the data
-    #     x, y, sample_weights = data
-    #     # Compute predictions
-    #     y_pred = self(x, training=False)
-
-    #     # Updates the metrics tracking the loss
-    #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-    #     # Update the metrics.
-    #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value.
-    #     # Note that it will include the loss (tracked in self.metrics).
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
+    #     debugging_test_step(self, data)

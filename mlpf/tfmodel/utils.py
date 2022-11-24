@@ -613,9 +613,12 @@ def compute_jet_pt(y_true, y_pred, max_jets=201):
     jet_pt = {}
 
     jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
+
+    # mask the predicted particles in cases where there was no true particle
+    msk = tf.cast(y_true[:, :, 0] != 0, tf.float32)
     for typ in ["true", "pred"]:
-        px = y[typ][..., 0] * y[typ][..., 4]
-        py = y[typ][..., 0] * y[typ][..., 3]
+        px = y[typ][..., 0] * y[typ][..., 4] * msk
+        py = y[typ][..., 0] * y[typ][..., 3] * msk
         jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
     return jet_pt
 
