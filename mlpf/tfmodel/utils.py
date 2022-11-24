@@ -1,15 +1,25 @@
 import datetime
 import logging
 import os
+import pickle
 import platform
 import re
 from pathlib import Path
 
 import numpy as np
+
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    logging.warning("horovod not found, ignoring")
+
+
 import tensorflow as tf
 import tensorflow_addons as tfa
 import yaml
+from tensorflow.keras import mixed_precision
 from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tfmodel.model_setup import configure_model_weights, make_model
 from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
 
@@ -85,7 +95,7 @@ def create_experiment_dir(prefix=None, suffix=None):
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
-    print("Creating experiment dir {}".format(train_dir))
+    logging.info("Creating experiment dir {}".format(train_dir))
     return str(train_dir)
 
 
@@ -120,7 +130,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
             if not dry_run:
                 ckpt.unlink()
 
-        print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
+        logging.info("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
 def get_num_gpus(envvar="CUDA_VISIBLE_DEVICES"):
@@ -137,7 +147,7 @@ def get_strategy(num_cpus=1):
 
     # Always use the correct number of threads that were requested
     if num_cpus == 1:
-        print("Warning: num_cpus==1, using explicitly only one CPU thread")
+        logging.warning("num_cpus==1, using explicitly only one CPU thread")
 
     os.environ["OMP_NUM_THREADS"] = str(num_cpus)
     os.environ["TF_NUM_INTRAOP_THREADS"] = str(num_cpus)
@@ -153,15 +163,15 @@ def get_strategy(num_cpus=1):
         num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
         device = "roc"
     else:
-        print(
-            "WARNING: CUDA/ROC variable is empty. \
+        logging.warning(
+            "CUDA/ROC variable is empty. \
             If you don't have or intend to use GPUs, this message can be ignored."
         )
         num_gpus = 0
 
     if num_gpus > 1:
         # multiple GPUs selected
-        print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
+        logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
 
         # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
         cross_device_ops = None
@@ -171,10 +181,10 @@ def get_strategy(num_cpus=1):
         strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus], cross_device_ops=cross_device_ops)
     elif num_gpus == 1:
         # single GPU
-        print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
+        logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
         strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
     else:
-        print("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
+        logging.info("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     num_batches_multiplier = 1
@@ -224,7 +234,7 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
-        print("INFO: Not using LR schedule")
+        logging.info("not using LR schedule")
         lr_schedule = None
         callbacks = []
     return lr_schedule, callbacks, lr
@@ -256,7 +266,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
     import keras_tuner as kt
 
     if cfg_hypertune["algorithm"] == "random":
-        print("Keras Tuner: Using RandomSearch")
+        logging.info("Keras Tuner: Using RandomSearch")
         cfg_rand = cfg_hypertune["random"]
         return kt.RandomSearch(
             model_builder,
@@ -266,7 +276,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "bayesian":
-        print("Keras Tuner: Using BayesianOptimization")
+        logging.info("Keras Tuner: Using BayesianOptimization")
         cfg_bayes = cfg_hypertune["bayesian"]
         return kt.BayesianOptimization(
             model_builder,
@@ -277,7 +287,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "hyperband":
-        print("Keras Tuner: Using Hyperband")
+        logging.info("Keras Tuner: Using Hyperband")
         cfg_hb = cfg_hypertune["hyperband"]
         return kt.Hyperband(
             model_builder,
@@ -344,7 +354,7 @@ def load_and_interleave(dataset_names, config, num_batches_multiplier, split, ba
         num_steps = ds.cardinality().numpy()
         total_num_steps += num_steps
         assert num_steps > 0
-        print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
+        logging.info("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
 
         datasets.append(ds)
         steps.append(num_steps)
@@ -410,7 +420,7 @@ def get_datasets(datasets_to_interleave, config, num_batches_to_load, split):
             interleaved_ds, num_steps, ds_samples = load_and_interleave(
                 ds_conf["datasets"], config, num_batches_to_load, split, ds_conf["batch_per_gpu"]
             )
-            print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
+            logging.info("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
             datasets.append(interleaved_ds)
             steps.append(num_steps)
             num_samples += ds_samples
@@ -432,7 +442,7 @@ def get_datasets(datasets_to_interleave, config, num_batches_to_load, split):
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
     ds = ds.with_options(options)
 
-    print("Final dataset with {} steps".format(total_num_steps))
+    logging.info("Final dataset with {} steps".format(total_num_steps))
     return ds, total_num_steps, num_samples
 
 
@@ -683,3 +693,119 @@ def get_loss_dict(config):
         loss_dict["met"] = get_loss_from_params(config["loss"].get("met_loss", default_loss))
 
     return loss_dict, loss_weights
+
+
+# get the datasets for training, testing and validation
+def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
+    ds_train, num_train_steps, train_samples = get_datasets(
+        config["train_test_datasets"], config, num_batches_multiplier, "train"
+    )
+    ds_test, num_test_steps, test_samples = get_datasets(
+        config["train_test_datasets"], config, num_batches_multiplier, "test"
+    )
+    ds_val, ds_info = get_heptfds_dataset(
+        config["validation_datasets"][0],
+        config,
+        "test",
+        config["setup"]["num_events_validation"],
+        supervised=False,
+    )
+    ds_val = ds_val.padded_batch(config["validation_batch_size"])
+
+    if ntrain:
+        ds_train = ds_train.take(ntrain)
+        num_train_steps = ntrain
+    if ntest:
+        ds_test = ds_test.take(ntest)
+        num_test_steps = ntest
+
+    return (ds_train, num_train_steps, train_samples), (ds_test, num_test_steps, test_samples), ds_val
+
+
+def model_scope(config, total_steps, weights=None, horovod_enabled=False):
+    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
+    opt = get_optimizer(config, lr_schedule)
+
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
+
+    model = make_model(config, model_dtype)
+
+    # Build the layers after the element and feature dimensions are specified
+    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+
+    initial_epoch = 0
+    loaded_opt = None
+
+    if weights:
+        # We need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        model.load_weights(weights, by_name=True)
+        logging.info("using checkpointed model weights from: {}".format(weights))
+        opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+        if os.path.isfile(opt_weight_file):
+            loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+            logging.info("using checkpointed optimizer weights from: {}".format(opt_weight_file))
+
+        initial_epoch = int(weights.split("/")[-1].split("-")[1])
+
+    config = set_config_loss(config, config["setup"]["trainable"])
+    configure_model_weights(model, config["setup"]["trainable"])
+
+    logging.info("model weights follow")
+    tw_names = [m.name for m in model.trainable_weights]
+    for w in model.weights:
+        logging.info(
+            "layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape))
+        )
+
+    loss_dict, loss_weights = get_loss_dict(config)
+
+    model.compile(
+        loss=loss_dict,
+        optimizer=opt,
+        sample_weight_mode="temporal",
+        loss_weights=loss_weights,
+    )
+
+    model.summary()
+
+    # Set the optimizer weights
+    if loaded_opt:
+
+        def model_weight_setting():
+            grad_vars = model.trainable_weights
+            zero_grads = [tf.zeros_like(w) for w in grad_vars]
+            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
+            if (model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1") or (
+                model.optimizer.__class__.__module__ == "keras.optimizer_v1"
+            ):
+                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
+            else:
+                model.optimizer.set_weights(loaded_opt["weights"])
+
+        # FIXME: check that this still works with multiple GPUs
+        strategy = tf.distribute.get_strategy()
+        strategy.run(model_weight_setting)
+
+    return model, optim_callbacks, initial_epoch
+
+
+def initialize_horovod():
+    hvd.init()
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
+
+    num_batches_multiplier = 1
+    if hvd.size() > 1:
+        num_batches_multiplier = hvd.size()
+
+    return hvd.size(), num_batches_multiplier

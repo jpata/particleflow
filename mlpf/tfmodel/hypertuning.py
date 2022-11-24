@@ -3,7 +3,7 @@ from tfmodel.utils import get_loss_dict, get_lr_schedule, get_optimizer
 
 
 def get_model_builder(config, total_steps):
-    _, optim_callbacks = get_lr_schedule(config, steps=total_steps)
+    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
 
     def model_builder(hp):
         # config["parameters"]["combined_graph_layer"]["hidden_dim"] = hp.Choice("hidden_dim", values=[128])
@@ -33,7 +33,6 @@ def get_model_builder(config, total_steps):
         model = make_model(config, dtype="float32")
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 
-        lr_schedule, _ = get_lr_schedule(config, steps=total_steps)
         opt = get_optimizer(config, lr_schedule)
 
         loss_dict, loss_weights = get_loss_dict(config)
