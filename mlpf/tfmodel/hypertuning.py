@@ -26,10 +26,6 @@ def get_model_builder(config, total_steps):
             "normalize_degrees", values=[True, False]
         )
 
-        # config["setup"]["lr"] = hp.Choice("lr", values=[1e-4, 3e-4])
-        # config["setup"]["lr_schedule"] = hp.Choice("lr_schedule", values=["exponentialdecay"])
-        # config["setup"]["optimizer"] = hp.Choice("optimizer", values=["adam"])
-
         model = make_model(config, dtype="float32")
         model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
 

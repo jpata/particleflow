@@ -7,7 +7,6 @@ try:
 except ModuleNotFoundError:
     logging.warning("horovod not found, ignoring")
 
-import json
 import os
 import platform
 import random
@@ -20,17 +19,9 @@ import click
 import numpy as np
 import tensorflow as tf
 from customizations import customization_functions
-from tensorflow.keras import mixed_precision
 from tfmodel import hypertuning
-from tfmodel.callbacks import BenchmarkLogggerCallback
 from tfmodel.lr_finder import LRFinder
-from tfmodel.model_setup import (
-    configure_model_weights,
-    eval_model,
-    freeze_model,
-    make_model,
-    prepare_callbacks,
-)
+from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
 from tfmodel.utils import (
     create_experiment_dir,
     delete_all_but_best_checkpoint,
@@ -38,7 +29,6 @@ from tfmodel.utils import (
     get_datasets,
     get_heptfds_dataset,
     get_latest_checkpoint,
-    get_loss_dict,
     get_strategy,
     get_train_test_val_datasets,
     get_tuner,
@@ -46,7 +36,6 @@ from tfmodel.utils import (
     load_config,
     model_scope,
     parse_config,
-    set_config_loss,
 )
 from tfmodel.utils_analysis import (
     analyze_ray_experiment,
@@ -65,30 +54,29 @@ def main():
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option("--config", help="configuration file", type=click.Path())
+@click.option("--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--ntrain", default=None, help="override the number of training steps", type=int)
 @click.option("--ntest", default=None, help="override the number of testing steps", type=int)
 @click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
-@click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
-@click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
+@click.option("--recreate", help="force creation of new experiment dir", is_flag=True)
+@click.option("--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
-@click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
-@click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
-@click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option("--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
+@click.option("--horovod-enabled", help="Enable multi-node training using Horovod", is_flag=True)
+@click.option("--habana-enabled", help="Enable training on Habana Gaudi", is_flag=True)
 @click.option(
-    "-b",
     "--benchmark_dir",
-    help="dir to save becnhmark results. If -b exp_dir results will be saved in the \
+    help="dir to save benchmark results. If 'exp_dir' results will be saved in the \
     experiment folder",
     type=str,
     default=None,
 )
-@click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
-@click.option("-D", "--num_cpus", help="number of CPU cores to use, ignored if CUDA GPUs are found", type=int, default=1)
-@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
+@click.option("--batch-multiplier", help="batch size per device", type=int, default=None)
+@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+@click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
     config,
     weights,
@@ -102,9 +90,9 @@ def train(
     comet_offline,
     jobid,
     horovod_enabled,
-    habana,
+    habana_enabled,
     benchmark_dir,
-    batch_size,
+    batch_multiplier,
     num_cpus,
     seeds,
 ):
@@ -114,8 +102,6 @@ def train(
         np.random.seed(1234)
         tf.random.set_seed(1234)
 
-    # tf.debugging.enable_check_numerics()
-
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem = parse_config(config, nepochs=nepochs, weights=weights)
@@ -124,9 +110,24 @@ def train(
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
-    if batch_size:
-        for key in config["train_test_datasets"]:
-            config["train_test_datasets"][key]["batch_per_gpu"] = batch_size
+    if batch_multiplier:
+        if config["batching"]["bucket_by_sequence_length"]:
+            logging.info(
+                "Dynamic batching is enabled, changing batch size multiplier from {} to {}".format(
+                    config["batching"]["batch_multiplier"], config["batching"]["batch_multiplier"] * batch_multiplier
+                )
+            )
+            config["batching"]["batch_multiplier"] *= batch_multiplier
+        else:
+            for key in config["train_test_datasets"]:
+                logging.info(
+                    "Static batching is enabled, changing batch size for dataset {} from {} to {}".format(
+                        key,
+                        config["train_test_datasets"][key]["batch_per_gpu"],
+                        config["train_test_datasets"][key]["batch_per_gpu"] * batch_multiplier,
+                    )
+                )
+                config["train_test_datasets"][key]["batch_per_gpu"] *= batch_multiplier
 
     if customize:
         config = customization_functions[customize](config)
@@ -136,7 +137,7 @@ def train(
 
     if horovod_enabled:
         num_gpus, num_batches_multiplier = initialize_horovod()
-    elif habana:
+    elif habana_enabled:
         import habana_frameworks.tensorflow as htf
 
         htf.load_habana_module()
@@ -179,8 +180,9 @@ def train(
                 auto_histogram_activation_logging=False,
             )
     except Exception as e:
-        logging.error("Failed to initialize comet-ml dashboard: {}".format(e))
+        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
         experiment = None
+
     if experiment:
         experiment.set_name(outdir)
         experiment.log_code("mlpf/tfmodel/model.py")
@@ -210,7 +212,18 @@ def train(
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
     with strategy.scope():
-        callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
+        callbacks = prepare_callbacks(
+            config,
+            outdir,
+            ds_val,
+            comet_experiment=experiment,
+            horovod_enabled=horovod_enabled,
+            benchmark_dir=benchmark_dir,
+            num_train_steps=num_train_steps,
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            train_samples=train_samples,
+        )
 
         verbose = 1
         if horovod_enabled:
@@ -223,38 +236,6 @@ def train(
 
         callbacks.append(optim_callbacks)
 
-        if benchmark_dir:
-            if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
-                benchmark_dir = outdir
-            if config["dataset"]["schema"] == "delphes":
-                bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
-            elif config["dataset"]["schema"] == "cms":
-                assert (
-                    len(config["train_test_datasets"]) == 1
-                ), "Expected exactly 1 key, physical OR delphes, \
-                    found {}".format(
-                    config["train_test_datasets"].keys()
-                )
-                bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
-            else:
-                raise ValueError(
-                    "Benchmark callback only supports delphes or \
-                    cms dataset schema. {}".format(
-                        config["dataset"]["schema"]
-                    )
-                )
-            Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
-            callbacks.append(
-                BenchmarkLogggerCallback(
-                    outdir=benchmark_dir,
-                    steps_per_epoch=num_train_steps,
-                    batch_size_per_gpu=bmk_bs,
-                    num_gpus=num_gpus,
-                    num_cpus=num_cpus,
-                    train_set_size=train_samples,
-                )
-            )
-
         model.fit(
             ds_train.repeat(),
             validation_data=ds_test.repeat(),
@@ -266,80 +247,12 @@ def train(
             verbose=verbose,
         )
 
-    # if not horovod_enabled or hvd.rank()==0:
-    #     model_save(outdir, fit_result, model, weights)
-
-
-def model_save(outdir, fit_result, model, weights):
-    history_path = Path(outdir) / "history"
-    history_path = str(history_path)
-    with open("{}/history.json".format(history_path), "w") as fi:
-        json.dump(fit_result.history, fi)
-
-    weights = get_best_checkpoint(outdir)
-    logging.info("Loading best weights that could be found from {}".format(weights))
-    model.load_weights(weights, by_name=True)
-
-    # model.save(outdir + "/model_full", save_format="tf")
-    logging.info("Training done.")
-
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-def compute_validation_loss(config, train_dir, weights):
-    """Evaluate the trained model in train_dir"""
-    if config is None:
-        config = Path(train_dir) / "config.yaml"
-        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
-    config, _ = parse_config(config, weights=weights)
-
-    if config["setup"]["dtype"] == "float16":
-        model_dtype = tf.dtypes.float16
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_global_policy(policy)
-    else:
-        model_dtype = tf.dtypes.float32
-
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test")
-
-    with strategy.scope():
-        model = make_model(config, model_dtype)
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-        # need to load the weights in the same trainable configuration as the model was set up
-        configure_model_weights(model, config["setup"].get("weights_config", "all"))
-        if weights:
-            model.load_weights(weights, by_name=True)
-        else:
-            weights = get_best_checkpoint(train_dir)
-            logging.info("Loading best weights that could be found from {}".format(weights))
-            model.load_weights(weights, by_name=True)
-
-        loss_dict, loss_weights = get_loss_dict(config)
-        model.compile(
-            loss=loss_dict,
-            # sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-        )
-
-        losses = model.evaluate(
-            x=ds_test,
-            steps=num_test_steps,
-            return_dict=True,
-        )
-    with open("{}/losses.txt".format(train_dir), "w") as loss_file:
-        loss_file.write(json.dumps(losses) + "\n")
-
-
-@main.command()
-@click.help_option("-h", "--help")
-@click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option("--config", help="configuration file", type=click.Path())
+@click.option("--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--nevents", help="override the number of events to evaluate", type=int, default=None)
 def evaluate(config, train_dir, weights, customize, nevents):
@@ -352,39 +265,22 @@ def evaluate(config, train_dir, weights, customize, nevents):
     if customize:
         config = customization_functions[customize](config)
 
-    if config["setup"]["dtype"] == "float16":
-        model_dtype = tf.dtypes.float16
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_global_policy(policy)
-    else:
-        model_dtype = tf.dtypes.float32
-
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
-
-    # disable small graph optimization for onnx export (tf.cond is not well supported)
+    # disable small graph optimization for onnx export (tf.cond is not well supported by ONNX export)
     if "small_graph_opt" in config["setup"]:
         config["setup"]["small_graph_opt"] = False
 
-    model = make_model(config, model_dtype)
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-    # need to load the weights in the same trainable configuration as the model was set up
-    configure_model_weights(model, config["setup"].get("weights_config", "all"))
-    if weights:
-        model.load_weights(weights, by_name=True)
-    else:
+    if not weights:
         weights = get_best_checkpoint(train_dir)
         logging.info("Loading best weights that could be found from {}".format(weights))
-        model.load_weights(weights, by_name=True)
 
-    iepoch = int(weights.split("/")[-1].split("-")[1])
+    model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
     for dsname in config["validation_datasets"]:
         ds_test, _ = get_heptfds_dataset(dsname, config, "test", supervised=False)
         if nevents:
             ds_test = ds_test.take(nevents)
         ds_test = ds_test.padded_batch(config["validation_batch_size"])
-        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
+        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test, config, eval_dir)
 
@@ -405,35 +301,10 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
+    ds_train, _, _ = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
 
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
-        if config["setup"]["dtype"] == "float16":
-            model_dtype = tf.dtypes.float16
-            policy = mixed_precision.Policy("mixed_float16")
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
-
-        model = make_model(config, model_dtype)
-        config = set_config_loss(config, config["setup"]["trainable"])
-
-        # Run model once to build the layers
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-        configure_model_weights(model, config["setup"]["trainable"])
-
-        loss_dict, loss_weights = get_loss_dict(config)
-        model.compile(
-            loss=loss_dict,
-            optimizer=opt,
-            sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-        )
-        model.summary()
-
+        model, _, _ = model_scope(config, 1)
         max_steps = 200
         lr_finder = LRFinder(max_steps=max_steps)
         callbacks = [lr_finder]
@@ -516,7 +387,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 #
 
 
-def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False):
+def raytune_build_model_and_train(
+    config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False
+):
     from collections import Counter
 
     from ray import tune
@@ -700,7 +573,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     start = datetime.now()
     analysis = tune.run(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
+        partial(
+            raytune_build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds
+        ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},
         name=name,

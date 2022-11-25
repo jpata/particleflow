@@ -28,12 +28,12 @@ mkdir -p experiments
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 #Run a simple training on a few events
-python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test
+python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test
 
 ls ./experiments/cms*/weights/
 
 #Generate the pred.npz file of predictions
-python mlpf/pipeline.py evaluate --customize pipeline_test --nevents 10 -t ./experiments/cms* -w ./experiments/cms*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py evaluate --customize pipeline_test --nevents 10 --train-dir ./experiments/cms* --weights ./experiments/cms*/weights/weights-01-*.hdf5
 
 cd notebooks
 
@@ -43,4 +43,4 @@ papermill --inject-output-path --log-output -p path ../experiments/cms*/evaluati
 cd ..
 
 #Retrain from existing weights
-python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test -w ./experiments/cms*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5

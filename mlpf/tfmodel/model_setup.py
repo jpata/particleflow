@@ -17,7 +17,7 @@ import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import vector
-from tfmodel.callbacks import CustomTensorBoard
+from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 from tqdm import tqdm
 
@@ -182,6 +182,11 @@ def prepare_callbacks(
     dataset,
     comet_experiment=None,
     horovod_enabled=False,
+    benchmark_dir=None,
+    num_train_steps=None,
+    num_cpus=None,
+    num_gpus=None,
+    train_samples=None,
 ):
 
     callbacks = []
@@ -190,6 +195,38 @@ def prepare_callbacks(
 
     if not horovod_enabled or hvd.rank() == 0:
         callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
+
+    if benchmark_dir:
+        if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+            benchmark_dir = outdir
+        if config["dataset"]["schema"] == "delphes":
+            bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
+        elif config["dataset"]["schema"] == "cms":
+            assert (
+                len(config["train_test_datasets"]) == 1
+            ), "Expected exactly 1 key, physical OR delphes, \
+                found {}".format(
+                config["train_test_datasets"].keys()
+            )
+            bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
+        else:
+            raise ValueError(
+                "Benchmark callback only supports delphes or \
+                cms dataset schema. {}".format(
+                    config["dataset"]["schema"]
+                )
+            )
+        Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+        callbacks.append(
+            BenchmarkLoggerCallback(
+                outdir=benchmark_dir,
+                steps_per_epoch=num_train_steps,
+                batch_size_per_gpu=bmk_bs,
+                num_gpus=num_gpus,
+                num_cpus=num_cpus,
+                train_set_size=train_samples,
+            )
+        )
 
     return callbacks
 
