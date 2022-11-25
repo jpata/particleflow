@@ -1,8 +1,8 @@
-from comet_ml import OfflineExperiment, Experiment  # isort:skip
-
 import logging
 
-logging.basicConfig(level=logging.INFO)  # noqa: E402
+logging.basicConfig(level=logging.INFO)
+
+from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 try:
     import horovod.tensorflow.keras as hvd
@@ -56,20 +56,21 @@ def main():
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("--config", help="configuration file", type=click.Path())
-@click.option("--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--ntrain", default=None, help="override the number of training steps", type=int)
 @click.option("--ntest", default=None, help="override the number of testing steps", type=int)
 @click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
-@click.option("--recreate", help="force creation of new experiment dir", is_flag=True)
-@click.option("--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
+@click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
+@click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
 @click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
-@click.option("--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
-@click.option("--horovod-enabled", help="Enable multi-node training using Horovod", is_flag=True)
-@click.option("--habana-enabled", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
+@click.option("-m", "--horovod-enabled", help="Enable multi-node training using Horovod", is_flag=True)
+@click.option("-g", "--habana-enabled", help="Enable training on Habana Gaudi", is_flag=True)
 @click.option(
+    "-b",
     "--benchmark_dir",
     help="dir to save benchmark results. If 'exp_dir' results will be saved in the \
     experiment folder",
@@ -275,10 +276,10 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     for dsname in config["validation_datasets"]:
         ds_test = mlpf_dataset_from_config(config["validation_datasets"][0], config, "test", nevents)
-        ds_test = ds_test.padded_batch(config["validation_batch_size"])
+        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(config["validation_batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
-        eval_model(model, ds_test, config, eval_dir)
+        eval_model(model, ds_test_tfds, config, eval_dir)
 
     freeze_model(model, config, train_dir)
 
