@@ -2,6 +2,8 @@ from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 import logging
 
+logging.basicConfig(level=logging.INFO)  # noqa: E402
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
@@ -20,6 +22,7 @@ import numpy as np
 import tensorflow as tf
 from customizations import customization_functions
 from tfmodel import hypertuning
+from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
 from tfmodel.utils import (
@@ -27,7 +30,6 @@ from tfmodel.utils import (
     delete_all_but_best_checkpoint,
     get_best_checkpoint,
     get_datasets,
-    get_heptfds_dataset,
     get_latest_checkpoint,
     get_strategy,
     get_train_test_val_datasets,
@@ -193,17 +195,13 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    (
-        (ds_train, num_train_steps, train_samples),
-        (ds_test, num_test_steps, test_samples),
-        ds_val,
-    ) = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
     epochs = config["setup"]["num_epochs"]
-    total_steps = num_train_steps * epochs
-    logging.info("num_train_steps:", num_train_steps, "num_train_samples:", train_samples)
-    logging.info("epochs:", epochs, "total_train_steps:", total_steps)
-    logging.info("num_test_steps:", num_test_steps, "num_test_samples:", test_samples)
+    total_steps = ds_train.num_steps() * epochs
+    logging.info("num_train_steps: {}".format(ds_train.num_steps()))
+    logging.info("num_test_steps: {}".format(ds_test.num_steps()))
+    logging.info("epochs: {}, total_train_steps: {}".format(epochs, total_steps))
 
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
@@ -219,10 +217,10 @@ def train(
             comet_experiment=experiment,
             horovod_enabled=horovod_enabled,
             benchmark_dir=benchmark_dir,
-            num_train_steps=num_train_steps,
+            num_train_steps=ds_train.num_steps(),
             num_cpus=num_cpus,
             num_gpus=num_gpus,
-            train_samples=train_samples,
+            train_samples=ds_train.num_samples,
         )
 
         verbose = 1
@@ -231,18 +229,18 @@ def train(
             callbacks.append(hvd.callbacks.MetricAverageCallback())
             verbose = 1 if hvd.rank() == 0 else 0
 
-            num_train_steps /= hvd.size()
-            num_test_steps /= hvd.size()
+            ds_train._num_steps /= hvd.size()
+            ds_test._num_steps /= hvd.size()
 
         callbacks.append(optim_callbacks)
 
         model.fit(
-            ds_train.repeat(),
-            validation_data=ds_test.repeat(),
+            ds_train.tensorflow_dataset.repeat(),
+            validation_data=ds_test.tensorflow_dataset.repeat(),
             epochs=config["setup"]["num_epochs"],
             callbacks=callbacks,
-            steps_per_epoch=num_train_steps,
-            validation_steps=num_test_steps,
+            steps_per_epoch=ds_train.num_steps(),
+            validation_steps=ds_test.num_steps(),
             initial_epoch=initial_epoch,
             verbose=verbose,
         )
@@ -276,9 +274,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
     for dsname in config["validation_datasets"]:
-        ds_test, _ = get_heptfds_dataset(dsname, config, "test", supervised=False)
-        if nevents:
-            ds_test = ds_test.take(nevents)
+        ds_test = mlpf_dataset_from_config(config["validation_datasets"][0], config, "test", nevents)
         ds_test = ds_test.padded_batch(config["validation_batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
@@ -345,13 +341,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    (
-        (ds_train, num_train_steps, train_samples),
-        (ds_test, num_test_steps, test_samples),
-        ds_val,
-    ) = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
-    model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
+    model_builder, optim_callbacks = hypertuning.get_model_builder(config, ds_train.num_steps())
 
     callbacks = prepare_callbacks(
         config,
@@ -370,8 +362,8 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         ds_train.repeat(),
         epochs=config["setup"]["num_epochs"],
         validation_data=ds_test.repeat(),
-        steps_per_epoch=num_train_steps,
-        validation_steps=num_test_steps,
+        steps_per_epoch=ds_train.num_steps(),
+        validation_steps=ds_test.num_steps(),
         callbacks=[],
     )
     logging.info("Hyperparameter search complete.")
@@ -419,30 +411,11 @@ def raytune_build_model_and_train(
     )
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
-    ds_train, num_train_steps = get_datasets(
-        full_config["train_test_datasets"], full_config, num_batches_multiplier, "train"
-    )
-    ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_batches_multiplier, "test")
-    ds_val, ds_info = get_heptfds_dataset(
-        full_config["validation_datasets"][0],
-        full_config,
-        "test",
-        full_config["setup"]["num_events_validation"],
-        supervised=False,
-    )
-    ds_val = ds_val.padded_batch(config["validation_batch_size"])
-
-    if ntrain:
-        ds_train = ds_train.take(ntrain)
-        num_train_steps = ntrain
-    if ntest:
-        ds_test = ds_test.take(ntest)
-        num_test_steps = ntest
-
-    logging.info("num_train_steps", num_train_steps)
-    logging.info("num_test_steps", num_test_steps)
-    total_steps = num_train_steps * full_config["setup"]["num_epochs"]
+    logging.info("num_train_steps", ds_train.num_steps())
+    logging.info("num_test_steps", ds_test.num_steps())
+    total_steps = ds_train.num_steps() * full_config["setup"]["num_epochs"]
     logging.info("total_steps", total_steps)
 
     with strategy.scope():
@@ -500,8 +473,8 @@ def raytune_build_model_and_train(
             validation_data=ds_test.repeat(),
             epochs=full_config["setup"]["num_epochs"],
             callbacks=callbacks,
-            steps_per_epoch=num_train_steps,
-            validation_steps=num_test_steps,
+            steps_per_epoch=ds_train.num_steps(),
+            validation_steps=ds_test.num_steps(),
             initial_epoch=initial_epoch,
         )
     except tf.errors.ResourceExhaustedError:

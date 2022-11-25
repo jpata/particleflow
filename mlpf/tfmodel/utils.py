@@ -18,7 +18,14 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import yaml
 from tensorflow.keras import mixed_precision
-from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+
+# from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tfmodel.datasets.BaseDatasetFactory import (
+    MLPFDataset,
+    get_map_to_supervised,
+    interleave_datasets,
+    mlpf_dataset_from_config,
+)
 from tfmodel.model_setup import configure_model_weights, make_model
 from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
@@ -324,53 +331,10 @@ def targets_multi_output(num_output_classes):
     return func
 
 
-def get_heptfds_dataset(dataset_name, config, split, num_events=None, supervised=True):
-    cds = config["dataset"]
-
-    if cds["schema"] == "cms":
-        dsf = CMSDatasetFactory(config)
-    elif cds["schema"] == "delphes":
-        dsf = DelphesDatasetFactory(config)
-    else:
-        raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
-
-    ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-
-    if not (num_events is None):
-        ds = ds.take(num_events)
-
-    if supervised:
-        ds = ds.map(dsf.get_map_to_supervised())
-
-    return ds, ds_info
-
-
-def load_and_interleave(dataset_names, config, num_batches_multiplier, split, batch_size):
-    datasets = []
-    steps = []
-    total_num_steps = 0
-    for ds_name in dataset_names:
-        ds, _ = get_heptfds_dataset(ds_name, config, split, num_events=None)
-        num_steps = ds.cardinality().numpy()
-        total_num_steps += num_steps
-        assert num_steps > 0
-        logging.info("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
-
-        datasets.append(ds)
-        steps.append(num_steps)
-
-    # Now interleave elements from the datasets randomly
-    ids = 0
-    indices = []
-    for ds, num_steps in zip(datasets, steps):
-        indices += num_steps * [ids]
-        ids += 1
-    indices = np.array(indices, np.int64)
-    np.random.shuffle(indices)
-
-    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
-
-    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_multiplier, split, batch_size, max_events):
+    datasets = [mlpf_dataset_from_config(ds_name, config, split, max_events) for ds_name in dataset_names]
+    ds = interleave_datasets(joint_dataset_name, split, datasets)
+    tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config))
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
@@ -378,7 +342,7 @@ def load_and_interleave(dataset_names, config, num_batches_multiplier, split, ba
 
         assert bucket_batch_sizes[-1][0] == float("inf")
 
-        ds = ds.bucket_by_sequence_length(
+        tensorflow_dataset = tensorflow_dataset.bucket_by_sequence_length(
             # length is determined by the number of elements in the input set
             element_length_func=lambda X, y, mask: tf.shape(X)[0],
             # bucket boundaries are set by the max sequence length
@@ -396,54 +360,40 @@ def load_and_interleave(dataset_names, config, num_batches_multiplier, split, ba
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
-        ds = ds.padded_batch(bs)
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs)
 
-    # now iterate over the full dataset to get the number of steps
-    isteps = 0
-    for elem in ds:
-        isteps += 1
-    total_num_steps = isteps
-
-    return ds, total_num_steps, len(indices)  # TODO: revisit the need to return `len(indices)`
+    ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
+    logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
+    return ds
 
 
 # Load multiple datasets and mix them together
-def get_datasets(datasets_to_interleave, config, num_batches_to_load, split):
+def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, max_events=None):
     datasets = []
-    steps = []
-    num_samples = 0
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds, num_steps, ds_samples = load_and_interleave(
-                ds_conf["datasets"], config, num_batches_to_load, split, ds_conf["batch_per_gpu"]
+            ds = load_and_interleave(
+                joint_dataset_name,
+                ds_conf["datasets"],
+                config,
+                num_batches_multiplier,
+                split,
+                ds_conf["batch_per_gpu"],
+                max_events,
             )
-            logging.info("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
-            datasets.append(interleaved_ds)
-            steps.append(num_steps)
-            num_samples += ds_samples
+            datasets.append(ds)
 
-    ids = 0
-    indices = []
-    total_num_steps = 0
-    for ds, num_steps in zip(datasets, steps):
-        indices += num_steps * [ids]
-        total_num_steps += num_steps
-        ids += 1
-    indices = np.array(indices, np.int64)
-    np.random.shuffle(indices)
-
-    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
-    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+    ds = interleave_datasets("all", split, datasets)
 
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    ds = ds.with_options(options)
+    ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
 
-    logging.info("Final dataset with {} steps".format(total_num_steps))
-    return ds, total_num_steps, num_samples
+    logging.info("Final dataset with {} steps".format(ds.num_steps()))
+    return ds
 
 
 def set_config_loss(config, trainable):
@@ -697,29 +647,12 @@ def get_loss_dict(config):
 
 # get the datasets for training, testing and validation
 def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
-    ds_train, num_train_steps, train_samples = get_datasets(
-        config["train_test_datasets"], config, num_batches_multiplier, "train"
-    )
-    ds_test, num_test_steps, test_samples = get_datasets(
-        config["train_test_datasets"], config, num_batches_multiplier, "test"
-    )
-    ds_val, ds_info = get_heptfds_dataset(
-        config["validation_datasets"][0],
-        config,
-        "test",
-        config["setup"]["num_events_validation"],
-        supervised=False,
-    )
-    ds_val = ds_val.padded_batch(config["validation_batch_size"])
+    ds_train = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train", ntrain)
+    ds_test = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test", ntest)
+    ds_val = mlpf_dataset_from_config(config["validation_datasets"][0], config, "test")
+    ds_val.tensorflow_dataset = ds_val.tensorflow_dataset.padded_batch(config["validation_batch_size"])
 
-    if ntrain:
-        ds_train = ds_train.take(ntrain)
-        num_train_steps = ntrain
-    if ntest:
-        ds_test = ds_test.take(ntest)
-        num_test_steps = ntest
-
-    return (ds_train, num_train_steps, train_samples), (ds_test, num_test_steps, test_samples), ds_val
+    return ds_train, ds_test, ds_val
 
 
 def model_scope(config, total_steps, weights=None, horovod_enabled=False):

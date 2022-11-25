@@ -250,7 +250,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     history_path = str(history_path)
     cb = CustomCallback(
         history_path,
-        dataset.take(config["setup"]["num_events_validation"]),
+        dataset.tensorflow_dataset.take(config["setup"]["num_events_validation"]),
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
