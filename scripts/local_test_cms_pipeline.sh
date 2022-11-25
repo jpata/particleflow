@@ -43,4 +43,4 @@ papermill --inject-output-path --log-output -p path ../experiments/cms*/evaluati
 cd ..
 
 #Retrain from existing weights
-python mlpf/pipeline.py train -c parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5
