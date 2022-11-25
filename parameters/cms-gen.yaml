@@ -46,7 +46,7 @@ loss:
   eta_loss:
     type: Huber
     delta: 0.1
-  event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+  event_loss: gen_jet_logcosh #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
   event_loss_coef: 1.0
   met_loss: none
   met_loss_coef: 1.0
@@ -58,7 +58,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.0001
   num_events_validation: 500
   num_epochs: 100
   dtype: float32
@@ -68,7 +68,7 @@ setup:
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: yes
+  small_graph_opt: no
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -268,17 +268,17 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
-  gun:
-    batch_per_gpu: 50
-    datasets:
-      - cms_pf_single_electron
-      - cms_pf_single_gamma
-      - cms_pf_single_neutron
-      - cms_pf_single_pi0
-      # - cms_pf_single_pi
-      # - cms_pf_single_tau
-      # - cms_pf_single_mu
-      # - cms_pf_single_proton
+#  gun:
+#    batch_per_gpu: 50
+#    datasets:
+#      - cms_pf_single_electron
+#      - cms_pf_single_gamma
+#      - cms_pf_single_neutron
+#      - cms_pf_single_pi0
+#      - cms_pf_single_pi
+#      - cms_pf_single_tau
+#      - cms_pf_single_mu
+#      - cms_pf_single_proton
 
 validation_datasets:
   - cms_pf_qcd_high_pt
