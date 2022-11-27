@@ -399,6 +399,7 @@ def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, 
 def set_config_loss(config, trainable):
     if trainable == "classification":
         config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["event_loss_coef"] = 0.0
         config["dataset"]["eta_loss_coef"] = 0.0
         config["dataset"]["sin_phi_loss_coef"] = 0.0
         config["dataset"]["cos_phi_loss_coef"] = 0.0
@@ -406,10 +407,6 @@ def set_config_loss(config, trainable):
     elif trainable == "regression":
         config["dataset"]["classification_loss_coef"] = 0.0
         config["dataset"]["charge_loss_coef"] = 0.0
-        config["dataset"]["pt_loss_coef"] = 0.0
-        config["dataset"]["eta_loss_coef"] = 0.0
-        config["dataset"]["sin_phi_loss_coef"] = 0.0
-        config["dataset"]["cos_phi_loss_coef"] = 0.0
     elif trainable == "all":
         pass
     return config
@@ -624,6 +621,7 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] != "none":
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     if config["loss"]["met_loss"] != "none":
         loss_weights["met"] = config["loss"]["met_loss_coef"]
 

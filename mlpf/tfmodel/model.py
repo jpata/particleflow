@@ -840,14 +840,8 @@ class OutputDecoding(tf.keras.Model):
     def set_trainable_regression(self):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
-        self.ffn_phi.trainable = False
-        self.ffn_eta.trainable = False
-        self.ffn_pt.trainable = False
-        self.ffn_energy.trainable = True
 
     def set_trainable_classification(self):
-        self.ffn_id.trainable = True
-        self.ffn_charge.trainable = True
         self.ffn_phi.trainable = False
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
