@@ -77,38 +77,38 @@ batching:
   # - max_sequence_length, batch_size_per_gpu
 
 #on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 160
-    - 50, 80
-    - 100, 40
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
-  # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 1
+#  bucket_batch_sizes:
+#    - 25, 160
+#    - 50, 80
+#    - 100, 40
+#    - 200, 20
+#    - 500, 10
+#    - 1000, 5
+#    - 2000, 3
+#    - 3000, 2
+#    - 4000, 2
+#    - 5000, 1
+#    - 6000, 1
+#    - inf, 1
+#  # use this batch multiplier to increase all batch sizes by a constant factor
+#  batch_multiplier: 1
 
 #on LUMI, 70GB GPU
-#  bucket_batch_sizes:
-#    - 25, 1000
-#    - 50, 500
-#    - 100, 300
-#    - 200, 100
-#    - 500, 50
-#    - 1000, 10
-#    - 2000, 8
-#    - 3000, 7
-#    - 4000, 6
-#    - 5000, 5
-#    - 6000, 4
-#    - inf, 2
-#  # use this batch multiplier to increase all batch sizes by a constant factor
-#  batch_multiplier: 2
+  bucket_batch_sizes:
+    - 25, 1000
+    - 50, 500
+    - 100, 300
+    - 200, 100
+    - 500, 50
+    - 1000, 10
+    - 2000, 8
+    - 3000, 7
+    - 4000, 6
+    - 5000, 5
+    - 6000, 4
+    - inf, 2
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 10
 
 optimizer:
   adam:
@@ -137,7 +137,7 @@ parameters:
   input_encoding: cms
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 128
+  node_encoding_hidden_dim: 256
 
   combined_graph_layer:
     bin_size: 100
@@ -171,7 +171,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: yes

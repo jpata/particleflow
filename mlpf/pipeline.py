@@ -151,7 +151,7 @@ def train(
         num_gpus = 1
         num_batches_multiplier = 1
     else:
-        strategy, num_gpus, num_batches_multiplier = get_strategy()
+        strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
