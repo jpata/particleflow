@@ -130,11 +130,16 @@ class MLPFDataset:
         self._num_steps = None
 
     def num_steps(self):
-        if self._num_steps is None:
-            isteps = 0
-            logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
-            for elem in tqdm.tqdm(self.tensorflow_dataset):
-                isteps += 1
-            total_num_steps = isteps
-            self._num_steps = total_num_steps
-        return self._num_steps
+        card = self.tensorflow_dataset.cardinality().numpy()
+        if card>0:
+            logging.info("Number of steps in {}:{} is known from cardinality: {}".format(self.name, self.split, card))
+            return card
+        else:
+            if self._num_steps is None:
+                isteps = 0
+                logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
+                for elem in tqdm.tqdm(self.tensorflow_dataset):
+                    isteps += 1
+                total_num_steps = isteps
+                self._num_steps = total_num_steps
+            return self._num_steps

@@ -366,7 +366,7 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
-        tensorflow_dataset = tensorflow_dataset.padded_batch(bs)
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, drop_remainder=True)
 
     ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
@@ -438,7 +438,7 @@ def get_loss_from_params(input_dict):
 
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
-@tf.function
+#@tf.function
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
     # take everything but the jet_idx
@@ -510,13 +510,13 @@ def hist_2d_loss(y_true, y_pred):
 @tf.function
 def jet_reco(px, py, jet_idx, max_jets):
 
-    tf.debugging.assert_shapes(
-        [
-            (px, ("N")),
-            (py, ("N")),
-            (jet_idx, ("N")),
-        ]
-    )
+    #tf.debugging.assert_shapes(
+    #    [
+    #        (px, ("N")),
+    #        (py, ("N")),
+    #        (jet_idx, ("N")),
+    #    ]
+    #)
 
     jet_idx_capped = tf.where(jet_idx <= max_jets, jet_idx, 0)
 
@@ -543,13 +543,13 @@ def jet_reco(px, py, jet_idx, max_jets):
 
 @tf.function
 def batched_jet_reco(px, py, jet_idx, max_jets):
-    tf.debugging.assert_shapes(
-        [
-            (px, ("B", "N")),
-            (py, ("B", "N")),
-            (jet_idx, ("B", "N")),
-        ]
-    )
+    #tf.debugging.assert_shapes(
+    #    [
+    #        (px, ("B", "N")),
+    #        (py, ("B", "N")),
+    #        (jet_idx, ("B", "N")),
+    #    ]
+    #)
 
     return tf.map_fn(
         lambda a: jet_reco(a[0], a[1], a[2], max_jets),
