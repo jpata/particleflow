@@ -364,7 +364,7 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
     else:
         bs = batch_size
 
-        #Multiply batch size by number of GPUs for MirroredStrategy
+        # Multiply batch size by number of GPUs for MirroredStrategy
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
@@ -397,9 +397,9 @@ def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, 
 
     ds = interleave_datasets("all", split, datasets)
 
-    #options = tf.data.Options()
-    #options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    #ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
+    # options = tf.data.Options()
+    # options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    # ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
 
     logging.info("Final dataset with {} steps".format(ds.num_steps()))
     return ds
@@ -441,7 +441,7 @@ def get_loss_from_params(input_dict):
 
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
-#@tf.function
+# @tf.function
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
     # take everything but the jet_idx
@@ -513,13 +513,13 @@ def hist_2d_loss(y_true, y_pred):
 @tf.function
 def jet_reco(px, py, jet_idx, max_jets):
 
-    #tf.debugging.assert_shapes(
+    # tf.debugging.assert_shapes(
     #    [
     #        (px, ("N")),
     #        (py, ("N")),
     #        (jet_idx, ("N")),
     #    ]
-    #)
+    # )
 
     jet_idx_capped = tf.where(jet_idx <= max_jets, jet_idx, 0)
 
@@ -546,13 +546,13 @@ def jet_reco(px, py, jet_idx, max_jets):
 
 @tf.function
 def batched_jet_reco(px, py, jet_idx, max_jets):
-    #tf.debugging.assert_shapes(
+    # tf.debugging.assert_shapes(
     #    [
     #        (px, ("B", "N")),
     #        (py, ("B", "N")),
     #        (jet_idx, ("B", "N")),
     #    ]
-    #)
+    # )
 
     return tf.map_fn(
         lambda a: jet_reco(a[0], a[1], a[2], max_jets),

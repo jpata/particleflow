@@ -131,7 +131,7 @@ class MLPFDataset:
 
     def num_steps(self):
         card = self.tensorflow_dataset.cardinality().numpy()
-        if card>0:
+        if card > 0:
             logging.info("Number of steps in {}:{} is known from cardinality: {}".format(self.name, self.split, card))
             return card
         else:
