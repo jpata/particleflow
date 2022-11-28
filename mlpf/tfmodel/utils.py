@@ -181,11 +181,11 @@ def get_strategy(num_cpus=1):
         logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
 
         # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
-        cross_device_ops = None
+        cross_device_ops = tf.distribute.NcclAllReduce()
         if device == "roc":
             cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
 
-        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus], cross_device_ops=cross_device_ops)
+        strategy = tf.distribute.MirroredStrategy(cross_device_ops=cross_device_ops)
     elif num_gpus == 1:
         # single GPU
         logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
@@ -197,6 +197,7 @@ def get_strategy(num_cpus=1):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
+        logging.info("Multiple GPUs detected, num_batces_multiplier={}".format(num_batches_multiplier))
 
     return strategy, num_gpus, num_batches_multiplier
 
@@ -362,6 +363,8 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
     # use fixed-size batching
     else:
         bs = batch_size
+
+        #Multiply batch size by number of GPUs for MirroredStrategy
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
@@ -394,9 +397,9 @@ def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, 
 
     ds = interleave_datasets("all", split, datasets)
 
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
+    #options = tf.data.Options()
+    #options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    #ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
 
     logging.info("Final dataset with {} steps".format(ds.num_steps()))
     return ds

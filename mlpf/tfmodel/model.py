@@ -1020,7 +1020,7 @@ class PFNetDense(tf.keras.Model):
         X = inputs
 
         shp = tf.shape(X)
-        # tf.print("\nX.shape=", shp, "\n")
+        # tf.print("\nX", shp, X.device,"\n")
         n_points = shp[1]
 
         bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
