@@ -6,5 +6,5 @@
 
 singularity exec --nv -B /scratch-persistent --env PYTHONPATH=hep_tfds --env TFDS_DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets /home/software/singularity/tf-2.10.0.simg \
     python3 mlpf/pipeline.py evaluate \
-    -t experiments/cms-transformer_20221114_182159_902630.gpu0.local \
-    --nevents 5000
+    --train-dir experiments/cms-gen_20220923_163529_426249.gpu0.local \
+    --nevents -1

@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
+import tqdm
 
 
 # Unpacks a flat target array along the feature axis to a feature dict
@@ -54,7 +55,7 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None):
     if max_events:
         tf_dataset = tf_dataset.take(max_events)
     num_samples = tf_dataset.cardinality().numpy()
-    logging.info("Loaded {}:{} with {} steps".format(dataset_name, split, num_samples))
+    logging.info("Loaded {}:{} with {} samples".format(dataset_name, split, num_samples))
     return MLPFDataset(dataset_name, split, tf_dataset, num_samples)
 
 
@@ -113,7 +114,9 @@ def interleave_datasets(joint_dataset_name, split, datasets):
     )
 
     ds = MLPFDataset(joint_dataset_name, split, interleaved_tensorflow_dataset, sum([ds.num_samples for ds in datasets]))
-    logging.info("Interleaved joint dataset {} with {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
+    logging.info(
+        "Interleaved joint dataset {}:{} with {} steps, {} samples".format(ds.name, ds.split, ds.num_steps(), ds.num_samples)
+    )
     return ds
 
 
@@ -129,7 +132,8 @@ class MLPFDataset:
     def num_steps(self):
         if self._num_steps is None:
             isteps = 0
-            for elem in self.tensorflow_dataset:
+            logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
+            for elem in tqdm.tqdm(self.tensorflow_dataset):
                 isteps += 1
             total_num_steps = isteps
             self._num_steps = total_num_steps

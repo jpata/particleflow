@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=100G
-#SBATCH --gres=gpu:mi250:4
+#SBATCH --gres=gpu:mi250:1
 #SBATCH --partition=eap
 #SBATCH -o logs/slurm-%x-%j-%N.out
 

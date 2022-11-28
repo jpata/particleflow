@@ -72,7 +72,7 @@ setup:
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
@@ -140,7 +140,7 @@ parameters:
   node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 100
+    bin_size: 200
     max_num_bins: 200
     distance_dim: 64
     layernorm: yes
@@ -262,7 +262,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 4
+    batch_per_gpu: 1
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt

@@ -329,8 +329,8 @@ def make_gnn_dense(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
-        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
-        small_graph_opt=config["setup"]["small_graph_opt"],
+        cls_output_as_logits=config["setup"].get("cls_output_as_logits", False),
+        small_graph_opt=config["setup"].get("small_graph_opt", False),
         **kwargs
     )
 
