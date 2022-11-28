@@ -397,9 +397,11 @@ def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, 
 
     ds = interleave_datasets("all", split, datasets)
 
-    # options = tf.data.Options()
-    # options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    # ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
+    # Interleaved dataset does not support FILE based sharding
+    # explicitly switch to DATA sharding to avoid a lengthy warning
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
 
     logging.info("Final dataset with {} steps".format(ds.num_steps()))
     return ds

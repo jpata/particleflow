@@ -99,9 +99,9 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
         cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
 
-        gen_met = np.sqrt(np.sum(gen_px**2 + gen_py**2, axis=1))
-        pred_met = np.sqrt(np.sum(pred_px**2 + pred_py**2, axis=1))
-        cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
+        gen_met = np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2)
+        pred_met = np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
+        cand_met = np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
 
         met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
         met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)

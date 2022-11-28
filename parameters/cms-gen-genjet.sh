@@ -47,7 +47,7 @@ loss:
   eta_loss:
     type: Huber
     delta: 0.1
-  event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+  event_loss: gen_jet_logcosh #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
   event_loss_coef: 1.0
   met_loss: none
   met_loss_coef: 1.0

@@ -35,7 +35,7 @@ def unpack_target(y, num_output_classes, config):
     if config["loss"]["met_loss"] != "none":
         px = pt * cos_phi
         py = pt * sin_phi
-        met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
+        met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
         ret["met"] = met
 
     return ret
@@ -77,9 +77,14 @@ def get_map_to_supervised(config):
 
         target = unpack_target(y, num_output_classes, config)
 
-        pt_weights = msk_elems
+        cls_weights = msk_elems
+        reg_weights = msk_elems * msk_signal
+
         if config["dataset"]["cls_weight_by_pt"]:
-            pt_weights *= X[..., 1:2]
+            cls_weights *= X[..., 1:2]
+
+        if config["dataset"]["reg_weight_by_pt"]:
+            reg_weights *= X[..., 1:2]
 
         # inputs: X
         # targets: dict by classification (cls) and regression feature columns
@@ -88,13 +93,13 @@ def get_map_to_supervised(config):
             X,
             target,
             {
-                "cls": pt_weights,
-                "charge": msk_elems * msk_signal,
-                "pt": msk_elems * msk_signal,
-                "eta": msk_elems * msk_signal,
-                "sin_phi": msk_elems * msk_signal,
-                "cos_phi": msk_elems * msk_signal,
-                "energy": msk_elems * msk_signal,
+                "cls": cls_weights,
+                "charge": cls_weights,
+                "pt": reg_weights,
+                "eta": reg_weights,
+                "sin_phi": reg_weights,
+                "cos_phi": reg_weights,
+                "energy": reg_weights,
             },
         )
 
