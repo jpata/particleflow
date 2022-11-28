@@ -343,7 +343,9 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
         assert bucket_batch_sizes[-1][0] == float("inf")
 
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
-        bucket_batch_sizes = [int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes]
+        bucket_batch_sizes = [
+            int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes
+        ]
         logging.info("Batching {}:{} with bucket_by_sequence_length".format(ds.name, ds.split))
         logging.info("bucket_boundaries={}".format(bucket_boundaries))
         logging.info("bucket_batch_sizes={}".format(bucket_batch_sizes))
@@ -363,7 +365,7 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
-        logging.info("Batching {}:{} with padded_batch, batch_size=".format(ds.name, ds.split, bs))
+        logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
         tensorflow_dataset = tensorflow_dataset.padded_batch(bs)
 
     ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
