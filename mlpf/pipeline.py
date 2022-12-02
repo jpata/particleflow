@@ -332,7 +332,8 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
-def hypertune(config, outdir, ntrain, ntest, recreate):
+@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     config_file_path = config
     config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
@@ -340,7 +341,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     if config["hypertune"]["algorithm"] == "hyperband":
         config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
@@ -360,9 +361,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     tuner.search_space_summary()
 
     tuner.search(
-        ds_train.repeat(),
+        ds_train.tensorflow_dataset.repeat(),
         epochs=config["setup"]["num_epochs"],
-        validation_data=ds_test.repeat(),
+        validation_data=ds_test.tensorflow_dataset.repeat(),
         steps_per_epoch=ds_train.num_steps(),
         validation_steps=ds_test.num_steps(),
         callbacks=[],
