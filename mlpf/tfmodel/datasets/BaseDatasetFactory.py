@@ -2,8 +2,9 @@ import logging
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import tqdm
+
+import tensorflow_datasets as tfds
 
 
 # Unpacks a flat target array along the feature axis to a feature dict

@@ -1,8 +1,7 @@
-import bz2
 import pickle
-import awkward
 import sys
-import os
+
+import awkward
 
 infile = sys.argv[1]
 outfile = infile.replace(".pkl", ".parquet")

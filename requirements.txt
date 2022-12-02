@@ -17,11 +17,11 @@ pre-commit
 pyarrow
 ray[default]
 ray[tune]
+scikit-learn
 scikit-optimize
 scipy
 seaborn
 setGPU
-sklearn
 tensorflow==2.10.1
 tensorflow-addons
 tensorflow-datasets
