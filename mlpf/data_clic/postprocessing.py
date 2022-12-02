@@ -62,18 +62,18 @@ def cluster_as_array(df_cl, icl):
 def gen_as_array(df_gen, igen):
     if igen:
         row = df_gen[igen]
-        return np.array([abs(row["pdgid"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"], row["charge"]])
+        return np.array([abs(row["pdgid"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"]])
     else:
-        return np.zeros(7)
+        return np.zeros(6)
 
 
 # this defines the PF particle features
 def pf_as_array(df_pfs, igen):
     if igen:
         row = df_pfs[igen]
-        return np.array([abs(row["type"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"], row["charge"]])
+        return np.array([abs(row["type"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"]])
     else:
-        return np.zeros(7)
+        return np.zeros(6)
 
 
 def filter_gp(df_gen, gp):
@@ -112,8 +112,8 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
             ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
             cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
 
-        ys_gen.append(np.delete(ys, -1))
-        ys_cand.append(np.delete(cand, -1))
+        ys_gen.append(ys)
+        ys_cand.append(cand)
         Xs_tracks.append(track_as_array(df_tr, itr))
 
     # find all cluster-associated particles
@@ -136,8 +136,8 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
             ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
             cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
 
-        ys_gen.append(np.delete(ys, -1))
-        ys_cand.append(np.delete(cand, -1))
+        ys_gen.append(ys)
+        ys_cand.append(cand)
         Xs_clusters.append(cluster_as_array(df_cl, icl))
 
     Xs_clusters = np.stack(Xs_clusters, axis=-1).T  # [Nclusters, Nfeat_cluster]
@@ -168,10 +168,10 @@ def prepare_data_clic(fn):
         df_cl = data[iev]["clusters"]
         df_tr = data[iev]["tracks"]
         df_pfs = data[iev]["pfs"]
-        print("Clusters={}, tracks={}, PFs={}, Gen={}".format(len(df_cl), len(df_tr), len(df_pfs), len(df_gen)))
+        # print("Clusters={}, tracks={}, PFs={}, Gen={}".format(len(df_cl), len(df_tr), len(df_pfs), len(df_gen)))
 
         # skip events that don't have enough activity from training
-        if len(df_pfs) < 5 or len(df_gen) < 5 or len(df_tr) < 5 or len(df_cl) < 5:
+        if len(df_pfs) < 2 or len(df_gen) < 2 or len(df_tr) < 2 or len(df_cl) < 2:
             continue
 
         # compute pt, px,py,pz

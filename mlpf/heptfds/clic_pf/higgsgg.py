@@ -12,14 +12,14 @@ from clic_utils import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC dataset with ttbar
+CLIC dataset with Higgs->gg
 """
 
 _CITATION = """
 """
 
 
-class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
+class ClicHiggsGgPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
@@ -48,7 +48,7 @@ class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        return split_sample(Path("data/clic/gev380ee_pythia6_ttbar_rfull201/"))
+        return split_sample(Path("data/clic/gev380ee_pythia6_higgs_gamgam_full201/"))
 
     def _generate_examples(self, files):
         return generate_examples(files)
