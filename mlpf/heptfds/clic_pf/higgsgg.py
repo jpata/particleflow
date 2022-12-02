@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import tensorflow as tf
+import tensorflow_datasets as tfds
 from clic_utils import (
     X_FEATURES_CL,
     X_FEATURES_TRK,
@@ -8,8 +9,6 @@ from clic_utils import (
     generate_examples,
     split_sample,
 )
-
-import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
 CLIC dataset with Higgs->gg
