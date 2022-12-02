@@ -59,9 +59,9 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.0002
   num_events_validation: 500
-  num_epochs: 10
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -69,47 +69,47 @@ setup:
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: no
+  small_graph_opt: yes
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: no
+  bucket_by_sequence_length: yes
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
 #on 8GB GPU
-#  bucket_batch_sizes:
-#    - 25, 160
-#    - 50, 80
-#    - 100, 40
-#    - 200, 20
-#    - 500, 10
-#    - 1000, 5
-#    - 2000, 3
-#    - 3000, 2
-#    - 4000, 2
-#    - 5000, 1
-#    - 6000, 1
-#    - inf, 1
-#  # use this batch multiplier to increase all batch sizes by a constant factor
-#  batch_multiplier: 1
+  bucket_batch_sizes:
+    - 25, 160
+    - 50, 80
+    - 100, 40
+    - 200, 20
+    - 500, 10
+    - 1000, 5
+    - 2000, 3
+    - 3000, 2
+    - 4000, 2
+    - 5000, 1
+    - 6000, 1
+    - inf, 1
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 1
 
 #on LUMI, 70GB GPU
-  bucket_batch_sizes:
-    - 25, 1000
-    - 50, 500
-    - 100, 300
-    - 200, 100
-    - 500, 50
-    - 1000, 10
-    - 2000, 8
-    - 3000, 7
-    - 4000, 6
-    - 5000, 5
-    - 6000, 4
-    - inf, 2
-  # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 10
+#  bucket_batch_sizes:
+#    - 25, 1000
+#    - 50, 500
+#    - 100, 300
+#    - 200, 100
+#    - 500, 50
+#    - 1000, 10
+#    - 2000, 8
+#    - 3000, 7
+#    - 4000, 6
+#    - 5000, 5
+#    - 6000, 4
+#    - inf, 2
+#  # use this batch multiplier to increase all batch sizes by a constant factor
+#  batch_multiplier: 10
 
 optimizer:
   adam:
@@ -138,10 +138,10 @@ parameters:
   input_encoding: cms
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 256
+  node_encoding_hidden_dim: 1024
 
   combined_graph_layer:
-    bin_size: 200
+    bin_size: 100
     max_num_bins: 200
     distance_dim: 64
     layernorm: yes
@@ -172,7 +172,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 1024
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: yes
@@ -269,17 +269,17 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
-#  gun:
-#    batch_per_gpu: 50
-#    datasets:
-#      - cms_pf_single_electron
-#      - cms_pf_single_gamma
-#      - cms_pf_single_neutron
-#      - cms_pf_single_pi0
-#      - cms_pf_single_pi
-#      - cms_pf_single_tau
-#      - cms_pf_single_mu
-#      - cms_pf_single_proton
+  gun:
+    batch_per_gpu: 50
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
+      - cms_pf_single_pi
+      - cms_pf_single_tau
+      - cms_pf_single_mu
+      - cms_pf_single_proton
 
 validation_datasets:
   - cms_pf_qcd_high_pt
