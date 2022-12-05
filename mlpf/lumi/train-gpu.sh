@@ -8,6 +8,7 @@
 #SBATCH --mem=100G
 #SBATCH --gres=gpu:mi250:1
 #SBATCH --partition=eap
+#SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/users/patajoos/tf-rocm.simg
