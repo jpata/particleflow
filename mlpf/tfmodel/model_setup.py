@@ -411,9 +411,6 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             cls_id = awkward.argmax(awkvals[typ]["cls"], axis=-1, mask_identity=False)
             valid = cls_id != 0
 
-            if np.any(awkward.sum(valid, axis=1) == 0):
-                raise Exception("Model did not predict any particles for some events: {}".format(awkward.sum(valid, axis=1)))
-
             # mask the particles in each event in the batch that were not predicted
             pt = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["pt"], valid)])
             eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])

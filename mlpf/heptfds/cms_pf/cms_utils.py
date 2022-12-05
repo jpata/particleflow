@@ -117,12 +117,12 @@ def prepare_data_cms(fn):
         )
 
         # take care of outliers
-        Xelem_flat[np.isnan(Xelem_flat)] = 0
-        Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
-        ygen_flat[np.isnan(ygen_flat)] = 0
-        ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-        ycand_flat[np.isnan(ycand_flat)] = 0
-        ycand_flat[np.abs(ycand_flat) > 1e4] = 0
+        # Xelem_flat[np.isnan(Xelem_flat)] = 0
+        # Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+        # ygen_flat[np.isnan(ygen_flat)] = 0
+        # ygen_flat[np.abs(ygen_flat) > 1e4] = 0
+        # ycand_flat[np.isnan(ycand_flat)] = 0
+        # ycand_flat[np.abs(ycand_flat) > 1e4] = 0
 
         X = Xelem_flat
         ycand = ycand_flat

@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version("1.5.1")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -30,6 +30,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "1.3.1": "Remove PS again",
         "1.4.0": "Add gen jet index information",
         "1.5.0": "No padding",
+        "1.5.1": "Remove outlier caps",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     mkdir -p data
