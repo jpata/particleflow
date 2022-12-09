@@ -303,11 +303,11 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_single_electron:
-    version: 1.5.0
+    version: 1.5.1
     data_dir:
     manual_dir:
   cms_pf_single_gamma:
-    version: 1.5.0
+    version: 1.5.1
     data_dir:
     manual_dir:
   cms_pf_single_pi0:

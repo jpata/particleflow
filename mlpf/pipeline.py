@@ -281,7 +281,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
-        ds_test = mlpf_dataset_from_config(dsname, config, "test", nevents if nevents>=0 else val_ds["num_events"])
+        ds_test = mlpf_dataset_from_config(dsname, config, "test", nevents if nevents >= 0 else val_ds["num_events"])
         ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
