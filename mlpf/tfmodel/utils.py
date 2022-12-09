@@ -256,14 +256,14 @@ def get_optimizer(config, lr_schedule=None):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
         return opt
     elif config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
         return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+        return tf.keras.optimizers.legacy.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
     else:
         raise ValueError(
             "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
@@ -658,7 +658,7 @@ def get_loss_dict(config):
 def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
     ds_train = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train", ntrain)
     ds_test = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test", ntest)
-    ds_val = mlpf_dataset_from_config(config["validation_datasets"][0], config, "test")
+    ds_val = mlpf_dataset_from_config(config["validation_dataset"], config, "test", config["validation_num_events"])
     ds_val.tensorflow_dataset = ds_val.tensorflow_dataset.padded_batch(config["validation_batch_size"])
 
     return ds_train, ds_test, ds_val
@@ -679,7 +679,7 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     model = make_model(config, model_dtype)
 
     # Build the layers after the element and feature dimensions are specified
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+    model.build((1, None, config["dataset"]["num_input_features"]))
 
     initial_epoch = 0
     loaded_opt = None

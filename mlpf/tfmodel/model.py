@@ -17,11 +17,6 @@ def debugging_train_step(self, data):
         y_pred = self(x, training=True)  # Forward pass
         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 
-        # print(np.stack([
-        #     y["energy"][sample_weights["energy"]==1],
-        #     y_pred["energy"][sample_weights["energy"]==1]], axis=-1
-        # ))
-
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
 
@@ -169,6 +164,39 @@ class InputEncoding(tf.keras.layers.Layer):
         # X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
+
+
+class InputEncodingCLIC(tf.keras.layers.Layer):
+    def __init__(self, num_input_classes):
+        super(InputEncodingCLIC, self).__init__()
+        self.num_input_classes = num_input_classes
+
+    """
+        X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
+    """
+
+    @tf.function
+    def call(self, X):
+
+        # X[:, :, 0] - categorical index of the element type
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
+
+        # X[:, :, 1:] - all the other non-categorical features
+        Xprop = X[:, :, 1:]
+
+        px = X[:, :, 1:2]
+        py = X[:, :, 2:3]
+        pz = X[:, :, 3:4]
+        pt = tf.math.sqrt(px**2 + py**2)
+        p = tf.math.sqrt(px**2 + py**2 + pz**2)
+        cos_theta = tf.math.divide_no_nan(pz, p)
+        theta = tf.math.acos(cos_theta)
+        eta = -tf.math.log(tf.math.tan(theta / 2.0))
+
+        sin_phi = tf.math.divide_no_nan(py, pt)
+        cos_phi = tf.math.divide_no_nan(px, pt)
+
+        return tf.concat([Xid, pt, sin_phi, cos_phi, eta, Xprop], axis=-1)
 
 
 """
@@ -763,6 +791,18 @@ class OutputDecoding(tf.keras.Model):
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
+        elif self.schema == "clic":
+            px = X_input[:, :, 1:2]
+            py = X_input[:, :, 2:3]
+            pz = X_input[:, :, 3:4]
+            orig_pt = tf.math.sqrt(px**2 + py**2)
+            p = tf.math.sqrt(px**2 + py**2 + pz**2)
+            cos_theta = tf.math.divide_no_nan(pz, p)
+            theta = tf.math.acos(cos_theta)
+            orig_eta = -tf.math.log(tf.math.tan(theta / 2.0))
+            orig_sin_phi = tf.math.divide_no_nan(py, orig_pt)
+            orig_cos_phi = tf.math.divide_no_nan(px, orig_pt)
+            orig_energy = p
 
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
@@ -775,6 +815,9 @@ class OutputDecoding(tf.keras.Model):
         pred_eta = orig_eta + pred_eta_corr[:, :, 0:1]
         pred_sin_phi = orig_sin_phi + pred_phi_corr[:, :, 0:1]
         pred_cos_phi = orig_cos_phi + pred_phi_corr[:, :, 1:2]
+        # pred_eta = tf.clip_by_value(pred_eta, -7,7)
+        # pred_sin_phi = tf.clip_by_value(pred_sin_phi, -1,1)
+        # pred_cos_phi = tf.clip_by_value(pred_cos_phi, -1,1)
 
         X_encoded_energy = tf.concat([X_encoded, X_encoded_energy], axis=-1)
         if self.regression_use_classification:
@@ -997,6 +1040,8 @@ class PFNetDense(tf.keras.Model):
 
         if input_encoding == "cms":
             self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "clic":
+            self.enc = InputEncodingCLIC(num_input_classes)
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 

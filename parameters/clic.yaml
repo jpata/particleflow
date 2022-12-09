@@ -1,28 +1,16 @@
 backend: tensorflow
 
 dataset:
-  schema: cms
+  schema: clic
   target_particles: gen
-  num_input_features: 41
-  num_output_features: 7
-#       NONE = 0,
-#       TRACK = 1,
-#       PS1 = 2,
-#       PS2 = 3,
-#       ECAL = 4,
-#       HCAL = 5,
-#       GSF = 6,
-#       BREM = 7,
-#       HFEM = 8,
-#       HFHAD = 9,
-#       SC = 10,
-#       HO = 11,
-  num_input_classes: 12
-  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
-  num_output_classes: 8
-  padded_num_elem_size: 6400
-  #(pt, eta, sin phi, cos phi, E)
-  num_momentum_outputs: 5
+  num_input_features: 12
+  num_output_features: 5
+  #(none=0, track=1, cluster=2)
+  num_input_classes: 3
+  #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
+  num_output_classes: 6
+  #(px, py, pz, E)
+  num_momentum_outputs: 4
   cls_weight_by_pt: no
   reg_weight_by_pt: no
 
@@ -59,9 +47,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
-  num_events_validation: 500
-  num_epochs: 50
+  lr: 0.0001
+  num_epochs: 500
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -135,7 +122,7 @@ onecycle:
 
 parameters:
   model: gnn_dense
-  input_encoding: cms
+  input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
   node_encoding_hidden_dim: 256
@@ -265,72 +252,44 @@ train_test_datasets:
   physical:
     batch_per_gpu: 1
     datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
-  gun:
-    batch_per_gpu: 50
-    datasets:
-      - cms_pf_single_electron
-      - cms_pf_single_gamma
-      - cms_pf_single_neutron
-      - cms_pf_single_pi0
-      - cms_pf_single_pi
-      - cms_pf_single_tau
-      - cms_pf_single_mu
-      - cms_pf_single_proton
+      - clic_ttbar_pf
+      - clic_qcd_pf
+      - clic_higgs_bbbar_pf
+      - clic_higgs_gg_pf
+      - clic_higgs_zz4l_pf
+      - clic_zpoleee_pf
 
-validation_dataset: cms_pf_qcd_high_pt
-validation_batch_size: 5
+validation_dataset: clic_ttbar_pf
+validation_batch_size: 50
 validation_num_events: 500
 
+evaluation_datasets:
+  clic_ttbar_pf:
+    batch_size: 50
+    num_events: -1
+
 datasets:
-  cms_pf_ttbar:
-    version: 1.5.1
+  clic_ttbar_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:
-  cms_pf_ztt:
-    version: 1.5.1
+  clic_qcd_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:
-  cms_pf_qcd:
-    version: 1.5.1
+  clic_higgs_bbbar_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:
-  cms_pf_qcd_high_pt:
-    version: 1.5.1
+  clic_higgs_gg_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:
-  cms_pf_single_electron:
-    version: 1.5.0
+  clic_higgs_zz4l_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:
-  cms_pf_single_gamma:
-    version: 1.5.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi0:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_neutron:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_tau:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_mu:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_proton:
-    version: 1.5.1
+  clic_zpoleee_pf:
+    version: 1.0.0
     data_dir:
     manual_dir:

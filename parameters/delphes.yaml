@@ -233,13 +233,17 @@ train_test_datasets:
     datasets:
       - delphes_pf
 
-validation_datasets:
- - delphes_pf
-
+validation_dataset: delphes_pf
 validation_batch_size: 5
+validation_num_events: 100
+
+evaluation_datasets:
+  delphes_pf:
+    batch_size: 10
+    num_events: -1
 
 datasets:
   delphes_pf:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:

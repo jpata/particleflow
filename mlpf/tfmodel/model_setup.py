@@ -1,7 +1,9 @@
+import logging
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
-    print("hvd not enabled, ignoring")
+    logging.warning("horovod not found, ignoring")
 
 import glob
 import json
@@ -12,6 +14,7 @@ from pathlib import Path
 import awkward
 import fastjet
 import matplotlib.pyplot as plt
+import numba
 import numpy as np
 import scipy
 import tensorflow as tf
@@ -80,7 +83,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         yvals = []
         for fi in glob.glob(str(cp_dir / "*.parquet")):
             dd = awkward.from_parquet(fi)
-            os.remove(fi)
+            # os.remove(fi)
             yvals.append(dd)
 
         yvals_awk = awkward.concatenate(yvals, axis=0)
@@ -250,7 +253,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     history_path = str(history_path)
     cb = CustomCallback(
         history_path,
-        dataset.tensorflow_dataset.take(config["setup"]["num_events_validation"]),
+        dataset.tensorflow_dataset.take(config["validation_num_events"]),
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
@@ -361,11 +364,69 @@ def deltar(a, b):
     return a.deltaR(b)
 
 
+@numba.njit
+def match_jets(jets1, jets2, deltaR_cut):
+    iev = len(jets1)
+    jet_inds_1_ev = []
+    jet_inds_2_ev = []
+    for ev in range(iev):
+        j1 = jets1[ev]
+        j2 = jets2[ev]
+
+        jet_inds_1 = []
+        jet_inds_2 = []
+        # print(ev, j1.pt, j2.pt)
+        for ij1 in range(len(j1)):
+            drs = np.zeros(len(j2), dtype=np.float64)
+            for ij2 in range(len(j2)):
+                dr = j1[ij1].deltaR(j2[ij2])
+                drs[ij2] = dr
+            min_idx_dr = np.argmin(drs)
+            if drs[min_idx_dr] < deltaR_cut:
+                jet_inds_1.append(ij1)
+                jet_inds_2.append(min_idx_dr)
+        jet_inds_1_ev.append(jet_inds_1)
+        jet_inds_2_ev.append(jet_inds_2)
+    return jet_inds_1_ev, jet_inds_2_ev
+
+
 def squeeze_if_one(arr):
     if arr.shape[-1] == 1:
         return np.squeeze(arr, axis=-1)
     else:
         return arr
+
+
+def build_dummy_array(num):
+    form = """
+{
+  "class": "ListOffsetArray64",
+  "offsets": "i64",
+  "content": "int64",
+  "form_key": "node0"
+}
+"""
+    builder = awkward.layout.LayoutBuilder32(form)
+
+    for i in range(num):
+        builder.begin_list()
+        builder.end_list()
+
+    return builder.snapshot()
+
+
+def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
+    num_events = len(jets_coll[name1])
+    ret = match_jets(jets_coll[name1], jets_coll[name2], jet_match_dr)
+    j1_idx = awkward.from_iter(ret[0])
+    j2_idx = awkward.from_iter(ret[1])
+    if awkward.count(j1_idx) > 0:
+        c1_to_c2 = awkward.layout.RecordArray([j1_idx.layout, j2_idx.layout], [name1, name2])
+    else:
+        dummy = build_dummy_array(num_events)
+        c1_to_c2 = awkward.layout.RecordArray([dummy, dummy], [name1, name2])
+    c1_to_c2 = awkward.Array(c1_to_c2)
+    return c1_to_c2
 
 
 # Given a model, evaluates it on each batch of the validation dataset
@@ -423,35 +484,13 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
             if verbose:
-                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ]["px"], axis=1)))
-
-        matched_jets = {}
+                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)))
 
         # DeltaR match between genjets and MLPF jets
-        cart = awkward.cartesian([jets_coll["gen"], jets_coll["pred"]], nested=True)
-        jets_a, jets_b = awkward.unzip(cart)
-        drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
-        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
-        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
-        j1s = jets_coll["gen"][m0]
-        j2s = jets_coll["pred"][m1]
-        if verbose:
-            print("matched jets gen-pred", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
-        matched_jets["gen_to_pred"] = {"gen_jet": j1s, "pred_jet": j2s}
+        gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
+        gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
 
-        # DeltaR match between genjets and PF jets
-        cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
-        jets_a, jets_b = awkward.unzip(cart)
-        drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
-        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
-        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
-        j1s = jets_coll["gen"][m0]
-        j2s = jets_coll["cand"][m1]
-        if verbose:
-            print("matched jets gen-cand", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
-        matched_jets["gen_to_cand"] = {"gen_jet": j1s, "cand_jet": j2s}
+        matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
         # Save output file
         outfile = "{}/pred_batch{}.parquet".format(outdir, ibatch)
@@ -459,7 +498,7 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             print("saving to {}".format(outfile))
 
         awkward.to_parquet(
-            {"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets},
+            awkward.Array({"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets}),
             outfile,
         )
 

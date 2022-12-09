@@ -10,6 +10,7 @@ except ModuleNotFoundError:
     logging.warning("horovod not found, ignoring")
 
 import os
+import pickle
 import platform
 import random
 import shutil
@@ -17,12 +18,14 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
+import boost_histogram as bh
 import click
 import numpy as np
 import tensorflow as tf
+import tqdm
 from customizations import customization_functions
 from tfmodel import hypertuning
-from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config
+from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config, unpack_target
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
 from tfmodel.utils import (
@@ -99,6 +102,8 @@ def train(
     num_cpus,
     seeds,
 ):
+
+    # tf.debugging.enable_check_numerics()
 
     if seeds:
         random.seed(1234)
@@ -253,8 +258,7 @@ def train(
 @click.option("--config", help="configuration file", type=click.Path())
 @click.option("--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--customize", help="customization function", type=str, default=None)
-@click.option("--nevents", help="override the number of events to evaluate", type=int, default=None)
-def evaluate(config, train_dir, weights, customize, nevents):
+def evaluate(config, train_dir, weights, customize):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
@@ -274,9 +278,10 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
-    for dsname in config["validation_datasets"]:
-        ds_test = mlpf_dataset_from_config(config["validation_datasets"][0], config, "test", nevents)
-        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(config["validation_batch_size"])
+    for dsname in config["evaluation_datasets"]:
+        val_ds = config["evaluation_datasets"][dsname]
+        ds_test = mlpf_dataset_from_config(dsname, config, "test", val_ds["num_events"])
+        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test_tfds, config, eval_dir)
@@ -616,6 +621,113 @@ def raytune_analysis(exp_dir, save, skip, mode, metric):
     experiment_analysis = ExperimentAnalysis(exp_dir, default_metric=metric, default_mode=mode)
     plot_ray_analysis(experiment_analysis, save=save, skip=skip)
     analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
+
+
+@main.command()
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+def test_datasets(config):
+    from scipy.sparse import coo_matrix
+
+    config_file_path = config
+    config, config_file_stem = parse_config(config)
+    logging.info(f"loaded config file: {config_file_path}")
+
+    histograms = {}
+
+    for dataset in config["datasets"]:
+        print(dataset)
+
+        ds = mlpf_dataset_from_config(dataset, config, "train")
+        print(dataset, ds.num_steps(), ds.num_samples)
+
+        confusion_matrix_Xelem_to_ygen = np.zeros(
+            (config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]), dtype=np.int64
+        )
+
+        histograms[dataset] = {}
+        histograms[dataset]["gen_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+        histograms[dataset]["gen_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+        histograms[dataset]["cand_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+        histograms[dataset]["cand_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+
+        histograms[dataset]["gen_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
+        histograms[dataset]["cand_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
+
+        histograms[dataset]["gen_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+        histograms[dataset]["gen_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+        histograms[dataset]["cand_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+        histograms[dataset]["cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+
+        histograms[dataset]["sum_gen_cand_energy"] = bh.Histogram(
+            bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+        )
+        histograms[dataset]["sum_gen_cand_energy_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
+
+        histograms[dataset]["sum_gen_cand_pt"] = bh.Histogram(
+            bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+        )
+        histograms[dataset]["sum_gen_cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
+
+        histograms[dataset]["confusion_matrix_Xelem_to_ygen"] = confusion_matrix_Xelem_to_ygen
+
+        for elem in tqdm.tqdm(ds.tensorflow_dataset, total=ds.num_steps()):
+            X = elem["X"].numpy()
+            ygen = elem["ygen"].numpy()
+            ycand = elem["ycand"].numpy()
+            # print(X.shape, ygen.shape, ycand.shape)
+
+            # check that all elements in the event have a nonzero type
+            assert np.sum(X[:, 0] == 0) == 0
+            assert X.shape[0] == ygen.shape[0]
+            assert X.shape[0] == ycand.shape[0]
+            assert X.shape[1] == config["dataset"]["num_input_features"]
+            assert ygen.shape[1] == config["dataset"]["num_output_features"] + 1
+            assert ycand.shape[1] == config["dataset"]["num_output_features"] + 1
+
+            histograms[dataset]["confusion_matrix_Xelem_to_ygen"] += coo_matrix(
+                (np.ones(len(X), dtype=np.int64), (np.array(X[:, 0], np.int32), np.array(ygen[:, 0], np.int32))),
+                shape=(config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]),
+            ).todense()
+
+            vals_ygen = ygen[ygen[:, 0] != 0]
+            vals_ygen = unpack_target(vals_ygen, config["dataset"]["num_output_classes"], config)
+            # assert(np.all(vals_ygen["energy"]>0))
+            # assert(np.all(vals_ygen["pt"]>0))
+            assert not np.any(np.isinf(ygen))
+            assert not np.any(np.isnan(ygen))
+
+            histograms[dataset]["gen_energy"].fill(vals_ygen["energy"][:, 0])
+            histograms[dataset]["gen_energy_log"].fill(np.log10(vals_ygen["energy"][:, 0]))
+            histograms[dataset]["gen_pt"].fill(vals_ygen["pt"][:, 0])
+            histograms[dataset]["gen_pt_log"].fill(np.log10(vals_ygen["pt"][:, 0]))
+            histograms[dataset]["gen_eta_energy"].fill(vals_ygen["eta"][:, 0], weight=vals_ygen["energy"][:, 0])
+
+            vals_ycand = ycand[ycand[:, 0] != 0]
+            vals_ycand = unpack_target(vals_ycand, config["dataset"]["num_output_classes"], config)
+            # assert(np.all(vals_ycand["energy"]>0))
+            # assert(np.all(vals_ycand["pt"]>0))
+            assert not np.any(np.isinf(ycand))
+            assert not np.any(np.isnan(ycand))
+
+            histograms[dataset]["cand_energy"].fill(vals_ycand["energy"][:, 0])
+            histograms[dataset]["cand_energy_log"].fill(np.log10(vals_ycand["energy"][:, 0]))
+            histograms[dataset]["cand_pt"].fill(vals_ycand["pt"][:, 0])
+            histograms[dataset]["cand_pt_log"].fill(np.log10(vals_ycand["pt"][:, 0]))
+            histograms[dataset]["cand_eta_energy"].fill(vals_ycand["eta"][:, 0], weight=vals_ycand["energy"][:, 0])
+
+            histograms[dataset]["sum_gen_cand_energy"].fill(np.sum(vals_ygen["energy"]), np.sum(vals_ycand["energy"]))
+            histograms[dataset]["sum_gen_cand_energy_log"].fill(
+                np.log10(np.sum(vals_ygen["energy"])), np.log10(np.sum(vals_ycand["energy"]))
+            )
+            histograms[dataset]["sum_gen_cand_pt"].fill(np.sum(vals_ygen["pt"]), np.sum(vals_ycand["pt"]))
+            histograms[dataset]["sum_gen_cand_pt_log"].fill(
+                np.log10(np.sum(vals_ygen["pt"])), np.log10(np.sum(vals_ycand["pt"]))
+            )
+
+        print(confusion_matrix_Xelem_to_ygen)
+
+    with open("datasets.pkl", "wb") as fi:
+        pickle.dump(histograms, fi)
 
 
 if __name__ == "__main__":

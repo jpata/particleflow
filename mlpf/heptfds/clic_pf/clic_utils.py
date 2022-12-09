@@ -20,7 +20,7 @@ X_FEATURES_TRK = [
 # these labels are for clusters from cluster_as_array
 X_FEATURES_CL = ["type", "x", "y", "z", "nhits_ecal", "nhits_hcal", "energy"]
 
-Y_FEATURES = ["type", "charge", "px", "py", "pz"]
+Y_FEATURES = ["type", "charge", "px", "py", "pz", "energy"]
 
 
 def split_sample(path, test_frac=0.8):
@@ -39,7 +39,6 @@ def generate_examples(files):
     for fi in files:
         ret = prepare_data_clic(fi)
         for iev, (X, ycand, ygen) in enumerate(ret):
-            # print(X.shape, ycand.shape, ygen.shape)
             yield str(fi) + "_" + str(iev), {
                 "X": X.astype(np.float32),
                 "ygen": ygen.astype(np.float32),

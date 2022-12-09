@@ -4,6 +4,7 @@ import pickle
 import awkward as ak
 import fastjet
 import numpy as np
+import tqdm
 import vector
 from numpy.lib.recfunctions import append_fields
 
@@ -184,7 +185,7 @@ def split_sample(path, test_frac=0.8):
 def generate_examples(files):
     """Yields examples."""
 
-    for fi in files:
+    for fi in tqdm.tqdm(files):
         Xs, ygens, ycands = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
             x = Xs[ii]
