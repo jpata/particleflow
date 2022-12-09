@@ -281,6 +281,14 @@ train_test_datasets:
       - cms_pf_single_mu
       - cms_pf_single_proton
 
+evaluation_datasets:
+  cms_pf_qcd_high_pt:
+    batch_size: 5
+    num_events: -1
+  cms_pf_single_neutron:
+    batch_size: 100
+    num_events: -1
+
 validation_dataset: cms_pf_qcd_high_pt
 validation_batch_size: 5
 validation_num_events: 500
