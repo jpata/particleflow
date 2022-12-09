@@ -33,7 +33,7 @@ python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --cus
 ls ./experiments/cms*/weights/
 
 #Generate the pred.npz file of predictions
-python mlpf/pipeline.py evaluate --customize pipeline_test --nevents 10 --train-dir ./experiments/cms* --weights ./experiments/cms*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py evaluate --customize pipeline_test --train-dir ./experiments/cms* --weights ./experiments/cms*/weights/weights-01-*.hdf5
 
 cd notebooks
 

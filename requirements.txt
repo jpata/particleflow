@@ -9,13 +9,13 @@ matplotlib
 mplhep
 networkx
 nevergrad
-numba
 notebook
+numba
 onnxruntime
 pandas
 papermill
-pre-commit
 plotly
+pre-commit
 pyarrow
 ray[default]
 ray[tune]
