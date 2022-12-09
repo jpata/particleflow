@@ -81,23 +81,6 @@ batching:
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
 
-#on LUMI, 70GB GPU
-#  bucket_batch_sizes:
-#    - 25, 1000
-#    - 50, 500
-#    - 100, 300
-#    - 200, 100
-#    - 500, 50
-#    - 1000, 10
-#    - 2000, 8
-#    - 3000, 7
-#    - 4000, 6
-#    - 5000, 5
-#    - 6000, 4
-#    - inf, 2
-#  # use this batch multiplier to increase all batch sizes by a constant factor
-#  batch_multiplier: 10
-
 optimizer:
   adam:
     amsgrad: no
