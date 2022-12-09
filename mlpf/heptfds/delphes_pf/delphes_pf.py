@@ -8,8 +8,9 @@ from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import tqdm
+
+import tensorflow_datasets as tfds
 
 # Increase python's soft limit on number of open files to accomodate tensorflow_datasets sharding
 # https://github.com/tensorflow/datasets/issues/1441

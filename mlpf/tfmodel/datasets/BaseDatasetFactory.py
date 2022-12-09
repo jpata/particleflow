@@ -2,8 +2,9 @@ import logging
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import tqdm
+
+import tensorflow_datasets as tfds
 
 
 def unpack_target(y, num_output_classes, config):

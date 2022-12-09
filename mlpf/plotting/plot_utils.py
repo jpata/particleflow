@@ -1,8 +1,10 @@
-import os.path as osp
+import glob
 
+import awkward
 import matplotlib.pyplot as plt
-import mplhep as hep
 import numpy as np
+import scipy
+import vector
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -172,386 +174,113 @@ def particle_label(ax, pid):
     plt.text(0.03, 0.92, pid_to_text[pid], va="top", ha="left", size=10, transform=ax.transAxes)
 
 
-def plot_confusion_matrix(cm, target_names, epoch, fname, title="Confusion matrix", cmap=None, normalize=True, target=None):
-    """
-    given a sklearn confusion matrix (cm), make a nice plot
+def load_eval_data(path):
+    yvals = []
+    filenames = []
+    for fi in glob.glob(path):
+        dd = awkward.from_parquet(fi)
+        yvals.append(dd)
+        filenames.append(fi)
 
-    Arguments
-    ---------
-    cm:           confusion matrix from sklearn.metrics.confusion_matrix
+    yvals_awk = awkward.concatenate(yvals, axis=0)
+    particles = {k: yvals_awk["particles"][k] for k in yvals_awk["particles"].fields}
 
-    target_names: given classification classes such as [0, 1, 2]
-                  the class names, for example: ['high', 'medium', 'low']
-
-    title:        the text to display at the top of the matrix
-
-    cmap:         the gradient of the values displayed from matplotlib.pyplot.cm
-                  see http://matplotlib.org/examples/color/colormaps_reference.html
-                  plt.get_cmap('jet') or plt.cm.Blues
-
-    normalize:    If False, plot the raw numbers
-                  If True, plot the proportions
-
-    Usage
-    -----
-    plot_confusion_matrix(cm           = cm,                  # confusion matrix created by
-                                                              # sklearn.metrics.confusion_matrix
-                          normalize    = True,                # show proportions
-                          target_names = y_labels_vals,       # list of names of the classes
-                          title        = best_estimator_name) # title of graph
-
-    Citiation
-    ---------
-    http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
-
-    """
-    import itertools
-
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    plt.style.use("default")
-
-    # # only true if it weren't normalized:
-    # accuracy = np.trace(cm) / float(np.sum(cm))
-    # misclass = 1 - accuracy
-
-    if cmap is None:
-        cmap = plt.get_cmap("Blues")
-
-    if normalize:
-        cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
-    cm[np.isnan(cm)] = 0.0
-
-    fig = plt.figure(figsize=(5, 4))
-    ax = plt.axes()
-    plt.imshow(cm, interpolation="nearest", cmap=cmap)
-    if target == "rule-based":
-        plt.title(title + " for rule-based PF")
-    else:
-        plt.title(title + " for MLPF at epoch " + str(epoch))
-
-    plt.colorbar()
-
-    if target_names is not None:
-        tick_marks = np.arange(len(target_names))
-        plt.xticks(tick_marks, target_names, rotation=45)
-        plt.yticks(tick_marks, target_names)
-
-    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        if normalize:
-            plt.text(
-                j,
-                i,
-                "{:0.2f}".format(cm[i, j]),
-                horizontalalignment="center",
-                color="white" if cm[i, j] > thresh else "black",
-            )
-        else:
-            plt.text(
-                j, i, "{:,}".format(cm[i, j]), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black"
-            )
-
-    plt.ylabel("True label")
-    plt.xlim(-1, len(target_names))
-    plt.ylim(-1, len(target_names))
-    plt.xlabel("Predicted label")
-    # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
-    plt.tight_layout()
-    plt.savefig(fname + ".png")
-    plt.savefig(fname + ".pdf")
-    plt.close(fig)
-
-    return fig, ax
+    return yvals_awk, particles, filenames
 
 
-def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["E_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["E_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot([bins["E_val"][0], bins["E_val"][-1]], [bins["E_val"][0], bins["E_val"][-1]], color="black", ls="--", lw=0.5)
-    plt.savefig(osp.join(outpath, "energy_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
+def compute_met_and_ratio(particles):
+    msk_gen = np.argmax(particles["gen"]["cls"], axis=-1) != 0
+    gen_px = particles["gen"]["pt"][msk_gen] * particles["gen"]["cos_phi"][msk_gen]
+    gen_py = particles["gen"]["pt"][msk_gen] * particles["gen"]["sin_phi"][msk_gen]
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["E_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
-    plt.savefig(osp.join(outpath, "energy_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
+    msk_pred = np.argmax(particles["pred"]["cls"], axis=-1) != 0
+    pred_px = particles["pred"]["pt"][msk_pred] * particles["pred"]["cos_phi"][msk_pred]
+    pred_py = particles["pred"]["pt"][msk_pred] * particles["pred"]["sin_phi"][msk_pred]
 
-    ax.set_ylim(ax.get_ylim()[0], 1.2 * ax.get_ylim()[1])
+    msk_cand = np.argmax(particles["cand"]["cls"], axis=-1) != 0
+    cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
+    cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
 
-    res = (v0[msk_both, 1] - v0[msk_both, 0]) / v0[msk_both, 0]
-    res[np.isnan(res)] = -1
+    gen_met = np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2)
+    pred_met = np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
+    cand_met = np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta E / E$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
+    met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
+    met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)
+
+    return {
+        "gen_met": gen_met,
+        "pred_met": pred_met,
+        "cand_met": cand_met,
+        "ratio_pred": met_ratio_pred,
+        "ratio_cand": met_ratio_cand,
+    }
+
+
+def compute_jet_ratio(yvals_awk):
+    # flatten across event dimension
+    gen_to_pred_genpt = awkward.flatten(
+        vector.arr(yvals_awk["jets"]["gen"][yvals_awk["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1
     )
-    plt.hist(res, bins=bins["E_res"], density=1.0)
-    plt.xlabel("$\Delta E / E$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "energy_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_e".format(target)] = np.searchsorted(bins["E_val"], big_df["{}_e".format(target)])
-    big_df["bins_pred_e"] = np.searchsorted(bins["E_val"], big_df["pred_e"])
-
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)].groupby("bins_{}_e".format(target))["pred_pid"].apply(get_eff, pid)
+    gen_to_pred_predpt = awkward.flatten(
+        vector.arr(yvals_awk["jets"]["pred"][yvals_awk["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1
     )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_e")["{}_pid".format(target)].apply(get_fake, pid)
-
-    out_eff = np.zeros((len(bins["E_val"]), 2))
-    out_fake = np.zeros((len(bins["E_val"]), 2))
-    for ib in range(len(bins["E_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
-
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-
-    plt.errorbar(
-        bins["E_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
+    gen_to_cand_genpt = awkward.flatten(
+        vector.arr(yvals_awk["jets"]["gen"][yvals_awk["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1
     )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["E_xlabel"])
-
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["E_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
+    gen_to_cand_candpt = awkward.flatten(
+        vector.arr(yvals_awk["jets"]["cand"][yvals_awk["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1
     )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["E_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "energy_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+
+    jet_ratio_pred = (gen_to_pred_predpt - gen_to_pred_genpt) / gen_to_pred_genpt
+    jet_ratio_cand = (gen_to_cand_candpt - gen_to_cand_genpt) / gen_to_cand_genpt
+
+    return {
+        "gen_to_pred_genpt": gen_to_pred_genpt,
+        "gen_to_pred_predpt": gen_to_pred_predpt,
+        "gen_to_cand_genpt": gen_to_cand_genpt,
+        "gen_to_cand_candpt": gen_to_cand_candpt,
+        "ratio_pred": jet_ratio_pred,
+        "ratio_cand": jet_ratio_cand,
+    }
 
 
-def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["eta_val"], bins["eta_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["eta_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["eta_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot(
-        [bins["eta_val"][0], bins["eta_val"][-1]], [bins["eta_val"][0], bins["eta_val"][-1]], color="black", ls="--", lw=0.5
-    )
-    plt.savefig(osp.join(outpath, "eta_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["eta_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
-    plt.savefig(osp.join(outpath, "eta_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    ax.set_ylim(ax.get_ylim()[0], 1.2 * ax.get_ylim()[1])
-
-    res = v0[msk_both, 1] - v0[msk_both, 0]
-    res[np.isnan(res)] = -1
-
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta \eta$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-    )
-    plt.hist(res, bins=bins["eta_res"], density=1.0)
-    plt.xlabel("$\Delta \eta$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "eta_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_eta".format(target)] = np.searchsorted(bins["eta_val"], big_df["{}_eta".format(target)])
-    big_df["bins_pred_eta"] = np.searchsorted(bins["eta_val"], big_df["pred_eta"])
-
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)]
-        .groupby("bins_{}_eta".format(target))["pred_pid"]
-        .apply(get_eff, pid)
-    )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_eta")["{}_pid".format(target)].apply(get_fake, pid)
-
-    out_eff = np.zeros((len(bins["eta_val"]), 2))
-    out_fake = np.zeros((len(bins["eta_val"]), 2))
-    for ib in range(len(bins["eta_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
-
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-
-    plt.errorbar(
-        bins["eta_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
-    )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["eta_xlabel"])
-
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["eta_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
-    )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["eta_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "eta_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+def plot_jet_ratio(jet_ratio, epoch, cp_dir=None, comet_experiment=None):
+    plt.figure()
+    b = np.linspace(-2, 5, 100)
+    plt.hist(jet_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF")
+    plt.hist(jet_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF")
+    plt.xlabel("jet pT (reco-gen)/gen")
+    plt.ylabel("number of matched jets")
+    plt.legend(loc="best")
+    if cp_dir:
+        image_path = str(cp_dir / "jet_res.png")
+        plt.savefig(image_path, bbox_inches="tight", dpi=100)
+        plt.clf()
+    if comet_experiment:
+        comet_experiment.log_image(image_path, step=epoch - 1)
 
 
-def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["phi_val"], bins["phi_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["phi_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["phi_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot(
-        [bins["phi_val"][0], bins["phi_val"][-1]], [bins["phi_val"][0], bins["phi_val"][-1]], color="black", ls="--", lw=0.5
-    )
-    plt.savefig(osp.join(outpath, "phi_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
+def plot_met_ratio(met_ratio, epoch, cp_dir=None, comet_experiment=None):
+    plt.figure()
+    b = np.linspace(-1, 20, 100)
+    plt.hist(met_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF")
+    plt.hist(met_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF")
+    plt.xlabel("MET (reco-gen)/gen")
+    plt.ylabel("number of events")
+    plt.legend(loc="best")
+    if cp_dir:
+        image_path = str(cp_dir / "met_res.png")
+        plt.savefig(image_path, bbox_inches="tight", dpi=100)
+        plt.clf()
+    if comet_experiment:
+        comet_experiment.log_image(image_path, step=epoch - 1)
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["phi_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "phi_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
 
-    res = v0[msk_both, 1] - v0[msk_both, 0]
-    res[np.isnan(res)] = -1
-
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta \phi$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-    )
-    plt.hist(res, bins=bins["phi_res"], density=1.0)
-    plt.xlabel("$\Delta \phi$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "phi_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_phi".format(target)] = np.searchsorted(bins["phi_val"], big_df["{}_phi".format(target)])
-    big_df["bins_pred_phi"] = np.searchsorted(bins["phi_val"], big_df["pred_phi"])
-
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)]
-        .groupby("bins_{}_phi".format(target))["pred_pid"]
-        .apply(get_eff, pid)
-    )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_phi")["{}_pid".format(target)].apply(get_fake, pid)
-
-    out_eff = np.zeros((len(bins["phi_val"]), 2))
-    out_fake = np.zeros((len(bins["phi_val"]), 2))
-    for ib in range(len(bins["phi_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
-
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-
-    plt.errorbar(
-        bins["phi_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
-    )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["phi_xlabel"])
-
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["phi_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
-    )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["phi_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "phi_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+def compute_distances(distribution_1, distribution_2, ratio):
+    wd = scipy.stats.wasserstein_distance(distribution_1, distribution_2)
+    p25 = np.percentile(ratio, 25)
+    p50 = np.percentile(ratio, 50)
+    p75 = np.percentile(ratio, 75)
+    iqr = p75 - p25
+    return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}

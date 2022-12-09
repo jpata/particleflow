@@ -5,7 +5,6 @@ try:
 except ModuleNotFoundError:
     logging.warning("horovod not found, ignoring")
 
-import glob
 import json
 import os
 import pickle
@@ -13,13 +12,19 @@ from pathlib import Path
 
 import awkward
 import fastjet
-import matplotlib.pyplot as plt
 import numba
 import numpy as np
-import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import vector
+from plotting.plot_utils import (
+    compute_distances,
+    compute_jet_ratio,
+    compute_met_and_ratio,
+    load_eval_data,
+    plot_jet_ratio,
+    plot_met_ratio,
+)
 from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 from tqdm import tqdm
@@ -79,99 +84,27 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         # run the model inference on the validation dataset
         eval_model(self.model, self.dataset, self.config, cp_dir)
 
-        # load the evaluation data
-        yvals = []
-        for fi in glob.glob(str(cp_dir / "*.parquet")):
-            dd = awkward.from_parquet(fi)
-            # os.remove(fi)
-            yvals.append(dd)
+        yvals_awk, particles, filenames = load_eval_data(str(cp_dir / "*.parquet"))
+        for fi in filenames:
+            os.remove(fi)
+        met_data = compute_met_and_ratio(particles)
+        jet_data = compute_jet_ratio(yvals_awk)
 
-        yvals_awk = awkward.concatenate(yvals, axis=0)
+        plot_jet_ratio(jet_data, epoch, cp_dir, comet_experiment)
+        plot_met_ratio(met_data, epoch, cp_dir, comet_experiment)
 
-        particles = {k: awkward.flatten(yvals_awk["particles"][k], axis=1) for k in yvals_awk["particles"].fields}
-
-        msk_gen = np.argmax(particles["gen"]["cls"], axis=-1) != 0
-        gen_px = particles["gen"]["pt"][msk_gen] * particles["gen"]["cos_phi"][msk_gen]
-        gen_py = particles["gen"]["pt"][msk_gen] * particles["gen"]["sin_phi"][msk_gen]
-
-        msk_pred = np.argmax(particles["pred"]["cls"], axis=-1) != 0
-        pred_px = particles["pred"]["pt"][msk_pred] * particles["pred"]["cos_phi"][msk_pred]
-        pred_py = particles["pred"]["pt"][msk_pred] * particles["pred"]["sin_phi"][msk_pred]
-
-        msk_cand = np.argmax(particles["cand"]["cls"], axis=-1) != 0
-        cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
-        cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
-
-        gen_met = np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2)
-        pred_met = np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
-        cand_met = np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
-
-        met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
-        met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)
-
-        # flatten across file and event dimension
-        gen_to_pred_genpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["gen_jet"]).pt, axis=1)
+        jet_distances = compute_distances(
+            jet_data["gen_to_pred_genpt"], jet_data["gen_to_pred_predpt"], jet_data["ratio_pred"]
         )
-        gen_to_pred_predpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["pred_jet"]).pt, axis=1)
-        )
-
-        gen_to_cand_genpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["gen_jet"]).pt, axis=1)
-        )
-        gen_to_cand_candpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["cand_jet"]).pt, axis=1)
-        )
-
-        jet_ratio_pred = (gen_to_pred_predpt - gen_to_pred_genpt) / gen_to_pred_genpt
-        jet_ratio_cand = (gen_to_cand_candpt - gen_to_cand_genpt) / gen_to_cand_genpt
-
-        plt.figure()
-        b = np.linspace(-2, 5, 100)
-        plt.hist(jet_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
-        plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-        plt.xlabel("jet pT (reco-gen)/gen")
-        plt.ylabel("number of matched jets")
-        plt.legend(loc="best")
-        image_path = str(cp_dir / "jet_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-        if comet_experiment:
-            comet_experiment.log_image(image_path, step=epoch - 1)
-
-        plt.figure()
-        b = np.linspace(-1, 1, 100)
-        plt.hist(met_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
-        plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-        plt.xlabel("MET (reco-gen)/gen")
-        plt.ylabel("number of events")
-        plt.legend(loc="best")
-        image_path = str(cp_dir / "met_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-        if comet_experiment:
-            comet_experiment.log_image(image_path, step=epoch - 1)
-
-        jet_pred_wd = scipy.stats.wasserstein_distance(gen_to_pred_genpt, gen_to_pred_predpt)
-        jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
-        jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
-        jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
-        jet_pred_iqr = jet_pred_p75 - jet_pred_p25
-
-        met_pred_wd = scipy.stats.wasserstein_distance(gen_met, pred_met)
-        met_pred_p25 = np.percentile(met_ratio_pred, 25)
-        met_pred_p50 = np.percentile(met_ratio_pred, 50)
-        met_pred_p75 = np.percentile(met_ratio_pred, 75)
-        met_pred_iqr = met_pred_p75 - met_pred_p25
+        met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
 
         for name, val in [
-            ("jet_wd", jet_pred_wd),
-            ("jet_iqr", jet_pred_iqr),
-            ("jet_med", jet_pred_p50),
-            ("met_wd", met_pred_wd),
-            ("met_iqr", met_pred_iqr),
-            ("met_med", met_pred_p50),
+            ("jet_wd", jet_distances["wd"]),
+            ("jet_iqr", jet_distances["iqr"]),
+            ("jet_med", jet_distances["p50"]),
+            ("met_wd", met_distances["wd"]),
+            ("met_iqr", met_distances["iqr"]),
+            ("met_med", met_distances["p50"]),
         ]:
             logs["val_" + name] = val
 
@@ -381,10 +314,11 @@ def match_jets(jets1, jets2, deltaR_cut):
             for ij2 in range(len(j2)):
                 dr = j1[ij1].deltaR(j2[ij2])
                 drs[ij2] = dr
-            min_idx_dr = np.argmin(drs)
-            if drs[min_idx_dr] < deltaR_cut:
-                jet_inds_1.append(ij1)
-                jet_inds_2.append(min_idx_dr)
+            if len(drs) > 0:
+                min_idx_dr = np.argmin(drs)
+                if drs[min_idx_dr] < deltaR_cut:
+                    jet_inds_1.append(ij1)
+                    jet_inds_2.append(min_idx_dr)
         jet_inds_1_ev.append(jet_inds_1)
         jet_inds_2_ev.append(jet_inds_2)
     return jet_inds_1_ev, jet_inds_2_ev
