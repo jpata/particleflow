@@ -692,8 +692,8 @@ def test_datasets(config):
 
             vals_ygen = ygen[ygen[:, 0] != 0]
             vals_ygen = unpack_target(vals_ygen, config["dataset"]["num_output_classes"], config)
-            # assert(np.all(vals_ygen["energy"]>0))
-            # assert(np.all(vals_ygen["pt"]>0))
+            assert np.all(vals_ygen["energy"]>0)
+            assert np.all(vals_ygen["pt"]>0)
             assert not np.any(np.isinf(ygen))
             assert not np.any(np.isnan(ygen))
 
