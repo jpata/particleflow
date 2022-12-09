@@ -258,7 +258,8 @@ def train(
 @click.option("--config", help="configuration file", type=click.Path())
 @click.option("--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--customize", help="customization function", type=str, default=None)
-def evaluate(config, train_dir, weights, customize):
+@click.option("--nevents", help="maximum number of events", type=int, default=-1)
+def evaluate(config, train_dir, weights, customize, nevents):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
@@ -280,7 +281,7 @@ def evaluate(config, train_dir, weights, customize):
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
-        ds_test = mlpf_dataset_from_config(dsname, config, "test", val_ds["num_events"])
+        ds_test = mlpf_dataset_from_config(dsname, config, "test", nevents if nevents>=0 else val_ds["num_events"])
         ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
