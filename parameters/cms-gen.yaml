@@ -177,12 +177,12 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 1024
+    id_hidden_dim: 512
     charge_hidden_dim: 256
-    pt_hidden_dim: 1024
+    pt_hidden_dim: 512
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 1024
+    energy_hidden_dim: 512
 
     id_num_layers: 3
     charge_num_layers: 2

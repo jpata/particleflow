@@ -1,8 +1,8 @@
-awkward
+awkward==1.10.2
 boost_histogram
 click
 comet-ml
-fastjet
+fastjet==v3.4.0.1
 fsspec
 keras
 keras-tuner
