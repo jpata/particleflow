@@ -35,9 +35,9 @@ loss:
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
   energy_loss:
-    type: Huber
+    type: MeanSquaredLogarithmicError
   pt_loss:
-    type: Huber
+    type: MeanSquaredLogarithmicError
   sin_phi_loss:
     type: Huber
     delta: 0.1
@@ -121,7 +121,7 @@ parameters:
   input_encoding: cms
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 256
+  node_encoding_hidden_dim: 1024
 
   combined_graph_layer:
     bin_size: 640
@@ -155,7 +155,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 1024
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
@@ -177,12 +177,12 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 1024
     charge_hidden_dim: 256
-    pt_hidden_dim: 256
+    pt_hidden_dim: 1024
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    energy_hidden_dim: 1024
 
     id_num_layers: 3
     charge_num_layers: 2
