@@ -91,7 +91,9 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         plot_jet_ratio(yvals, epoch, cp_dir, comet_experiment)
         plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
-        jet_distances = compute_distances(yvals["jet_gen_to_pred_genpt"], yvals["jet_gen_to_pred_predpt"], yvals["jet_ratio_pred"])
+        jet_distances = compute_distances(
+            yvals["jet_gen_to_pred_genpt"], yvals["jet_gen_to_pred_predpt"], yvals["jet_ratio_pred"]
+        )
         met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
 
         for name, val in [
