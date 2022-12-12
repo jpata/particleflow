@@ -26,9 +26,6 @@ def unpack_target_cms(y, num_output_classes, config):
     sin_phi = y[..., 4:5] * msk_pid
     cos_phi = y[..., 5:6] * msk_pid
 
-    assert tf.reduce_all(sin_phi <= 1.0) & tf.reduce_all(sin_phi >= -1.0)
-    assert tf.reduce_all(cos_phi <= 1.0) & tf.reduce_all(cos_phi >= -1.0)
-
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
         "charge": y[..., 1:2],
@@ -70,9 +67,6 @@ def unpack_target_clic(y, num_output_classes, config):
 
     sin_phi = tf.math.divide_no_nan(py, pt) * msk_pid
     cos_phi = tf.math.divide_no_nan(px, pt) * msk_pid
-
-    assert tf.reduce_all(sin_phi <= 1.0) & tf.reduce_all(sin_phi >= -1.0)
-    assert tf.reduce_all(cos_phi <= 1.0) & tf.reduce_all(cos_phi >= -1.0)
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
