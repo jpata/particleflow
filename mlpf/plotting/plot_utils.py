@@ -1,9 +1,11 @@
 import glob
+import math
 
 import awkward
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+import tqdm
 import vector
 
 SAMPLE_LABEL_CMS = {
@@ -39,112 +41,21 @@ ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", 
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
 CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "$\gamma$", "$e^\pm$", "$\mu^\pm$"]
 
-bins = {
-    211: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 61),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    -211: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    130: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    22: {
-        "E_val": np.linspace(0, 2, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-2, 2, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    11: {
-        "E_val": np.linspace(0, 10, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    13: {
-        "E_val": np.linspace(0, 10, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    1: {
-        "E_val": np.linspace(0, 100, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-6, 6, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    2: {
-        "E_val": np.linspace(0, 50, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-6, 6, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
+EVALUATION_DATASET_NAMES = {
+    "clic_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "delphes_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
 }
+
+
+def format_dataset_name(dataset):
+    return EVALUATION_DATASET_NAMES[dataset]
+
+
+def med_iqr(arr):
+    p25 = np.percentile(arr, 25)
+    p50 = np.percentile(arr, 50)
+    p75 = np.percentile(arr, 75)
+    return p50, p75 - p25
 
 
 def get_eff(df, pid):
@@ -174,39 +85,92 @@ def particle_label(ax, pid):
     plt.text(0.03, 0.92, pid_to_text[pid], va="top", ha="left", size=10, transform=ax.transAxes)
 
 
-def load_eval_data(path):
+def load_eval_data(path, max_files=None):
     yvals = []
     filenames = []
-    for fi in glob.glob(path):
+    filelist = list(glob.glob(path))
+    if max_files is not None:
+        filelist = filelist[:max_files]
+
+    for fi in tqdm.tqdm(filelist):
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
 
-    yvals_awk = awkward.concatenate(yvals, axis=0)
-    particles = {k: yvals_awk["particles"][k] for k in yvals_awk["particles"].fields}
+    data = awkward.concatenate(yvals, axis=0)
+    X = data["inputs"]
 
-    return yvals_awk, particles, filenames
+    yvals = {}
+    for typ in ["gen", "cand", "pred"]:
+        for k in data["particles"][typ].fields:
+            yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
+
+    # Get the classification output as a class ID
+    yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
+    yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
+    yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
+
+    for typ in ["gen", "cand", "pred"]:
+
+        # Compute phi, px, py
+        yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
+        yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
+        yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
+
+        # Get the jet vectors
+        jetvec = vector.arr(data["jets"][typ])
+        for k in ["pt", "eta", "phi", "energy"]:
+            yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
+
+    for typ in ["gen", "cand", "pred"]:
+        for val in ["pt", "eta", "sin_phi", "cos_phi", "charge", "energy"]:
+            yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
+
+    yvals.update(compute_jet_ratio(data, yvals))
+
+    return yvals, X, filenames
 
 
-def compute_met_and_ratio(particles):
-    msk_gen = np.argmax(particles["gen"]["cls"], axis=-1) != 0
-    gen_px = particles["gen"]["pt"][msk_gen] * particles["gen"]["cos_phi"][msk_gen]
-    gen_py = particles["gen"]["pt"][msk_gen] * particles["gen"]["sin_phi"][msk_gen]
+def compute_jet_ratio(data, yvals):
+    ret = {}
+    # flatten across event dimension
+    ret["jet_gen_to_pred_genpt"] = awkward.flatten(
+        vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1
+    )
+    ret["jet_gen_to_pred_predpt"] = awkward.flatten(
+        vector.arr(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1
+    )
+    ret["jet_gen_to_cand_genpt"] = awkward.flatten(
+        vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1
+    )
+    ret["jet_gen_to_cand_candpt"] = awkward.flatten(
+        vector.arr(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1
+    )
 
-    msk_pred = np.argmax(particles["pred"]["cls"], axis=-1) != 0
-    pred_px = particles["pred"]["pt"][msk_pred] * particles["pred"]["cos_phi"][msk_pred]
-    pred_py = particles["pred"]["pt"][msk_pred] * particles["pred"]["sin_phi"][msk_pred]
+    ret["jet_ratio_pred"] = ret["jet_gen_to_pred_predpt"] / ret["jet_gen_to_pred_genpt"]
+    ret["jet_ratio_cand"] = ret["jet_gen_to_cand_candpt"] / ret["jet_gen_to_cand_genpt"]
+    return ret
 
-    msk_cand = np.argmax(particles["cand"]["cls"], axis=-1) != 0
-    cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
-    cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
+
+def compute_met_and_ratio(yvals):
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_px = yvals["gen_px"][msk_gen]
+    gen_py = yvals["gen_py"][msk_gen]
+
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_px = yvals["pred_px"][msk_pred]
+    pred_py = yvals["pred_py"][msk_pred]
+
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_px = yvals["cand_px"][msk_cand]
+    cand_py = yvals["cand_py"][msk_cand]
 
     gen_met = np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2)
     pred_met = np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
     cand_met = np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
 
-    met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
-    met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)
+    met_ratio_pred = awkward.to_numpy(pred_met / gen_met)
+    met_ratio_cand = awkward.to_numpy(cand_met / gen_met)
 
     return {
         "gen_met": gen_met,
@@ -217,64 +181,73 @@ def compute_met_and_ratio(particles):
     }
 
 
-def compute_jet_ratio(yvals_awk):
-    # flatten across event dimension
-    gen_to_pred_genpt = awkward.flatten(
-        vector.arr(yvals_awk["jets"]["gen"][yvals_awk["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1
-    )
-    gen_to_pred_predpt = awkward.flatten(
-        vector.arr(yvals_awk["jets"]["pred"][yvals_awk["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1
-    )
-    gen_to_cand_genpt = awkward.flatten(
-        vector.arr(yvals_awk["jets"]["gen"][yvals_awk["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1
-    )
-    gen_to_cand_candpt = awkward.flatten(
-        vector.arr(yvals_awk["jets"]["cand"][yvals_awk["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1
-    )
-
-    jet_ratio_pred = (gen_to_pred_predpt - gen_to_pred_genpt) / gen_to_pred_genpt
-    jet_ratio_cand = (gen_to_cand_candpt - gen_to_cand_genpt) / gen_to_cand_genpt
-
-    return {
-        "gen_to_pred_genpt": gen_to_pred_genpt,
-        "gen_to_pred_predpt": gen_to_pred_predpt,
-        "gen_to_cand_genpt": gen_to_cand_genpt,
-        "gen_to_cand_candpt": gen_to_cand_candpt,
-        "ratio_pred": jet_ratio_pred,
-        "ratio_cand": jet_ratio_cand,
-    }
+def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
+    if cp_dir:
+        image_path = str(cp_dir / outfile)
+        plt.savefig(image_path, bbox_inches="tight", dpi=100)
+        plt.clf()
+        if comet_experiment:
+            comet_experiment.log_image(image_path, step=epoch - 1)
 
 
-def plot_jet_ratio(jet_ratio, epoch, cp_dir=None, comet_experiment=None):
+def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     plt.figure()
-    b = np.linspace(-2, 5, 100)
-    plt.hist(jet_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF")
-    plt.hist(jet_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF")
-    plt.xlabel("jet pT (reco-gen)/gen")
+    b = np.linspace(0, 5, 100)
+
+    p = med_iqr(yvals["jet_ratio_cand"])
+    plt.hist(yvals["jet_ratio_cand"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(yvals["jet_ratio_pred"])
+    plt.hist(
+        yvals["jet_ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1])
+    )
+    plt.xlabel("jet $p_T$ reco/gen")
     plt.ylabel("number of matched jets")
     plt.legend(loc="best")
-    if cp_dir:
-        image_path = str(cp_dir / "jet_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-    if comet_experiment:
-        comet_experiment.log_image(image_path, step=epoch - 1)
+    if title:
+        plt.title(title)
+    save_img("jet_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
 
-def plot_met_ratio(met_ratio, epoch, cp_dir=None, comet_experiment=None):
+def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    # MET
     plt.figure()
-    b = np.linspace(-1, 20, 100)
-    plt.hist(met_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF")
-    plt.hist(met_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF")
-    plt.xlabel("MET (reco-gen)/gen")
+    maxval = max([np.max(met_ratio["gen_met"]), np.max(met_ratio["cand_met"]), np.max(met_ratio["pred_met"])])
+    minval = min([np.min(met_ratio["gen_met"]), np.min(met_ratio["cand_met"]), np.min(met_ratio["pred_met"])])
+    maxval = math.ceil(np.log10(maxval))
+    minval = math.floor(np.log10(max(minval, 1e-2)))
+
+    b = np.logspace(minval, maxval, 100)
+    p = med_iqr(met_ratio["cand_met"])
+    plt.hist(met_ratio["cand_met"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["pred_met"])
+    plt.hist(met_ratio["pred_met"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["gen_met"])
+    plt.hist(met_ratio["gen_met"], bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xlabel("MET [GeV]")
+    plt.ylabel("Number of events / bin")
+    plt.legend(loc="best")
+    plt.xscale("log")
+    if title:
+        plt.title(title)
+    save_img("met.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    # Ratio
+    plt.figure()
+    b = np.linspace(0, 20, 100)
+
+    p = med_iqr(met_ratio["ratio_cand"])
+    plt.hist(met_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["ratio_pred"])
+    plt.hist(
+        met_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1])
+    )
+    plt.xlabel("MET reco/gen")
     plt.ylabel("number of events")
     plt.legend(loc="best")
-    if cp_dir:
-        image_path = str(cp_dir / "met_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-    if comet_experiment:
-        comet_experiment.log_image(image_path, step=epoch - 1)
+    if title:
+        plt.title(title)
+    save_img("met_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
 
 def compute_distances(distribution_1, distribution_2, ratio):
@@ -284,3 +257,79 @@ def compute_distances(distribution_1, distribution_2, ratio):
     p75 = np.percentile(ratio, 75)
     iqr = p75 - p25
     return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}
+
+
+def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    # compute the number of unpadded elements per event
+    num_Xelems = awkward.sum(X[:, :, 0] != 0, axis=-1)
+    maxval = np.max(num_Xelems)
+
+    plt.figure()
+    plt.hist(num_Xelems, bins=np.linspace(0, int(1.2 * maxval), 100))
+    plt.xlabel("Number of PFElements / event")
+    plt.ylabel("Number of events / bin")
+    if title:
+        plt.title(title)
+    save_img("num_elements.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
+def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    sum_gen_energy = awkward.sum(yvals["gen_energy"], axis=1)
+    sum_cand_energy = awkward.sum(yvals["cand_energy"], axis=1)
+    sum_pred_energy = awkward.sum(yvals["pred_energy"], axis=1)
+
+    max_e = max([np.max(sum_gen_energy), np.max(sum_cand_energy), np.max(sum_pred_energy)])
+    min_e = min([np.min(sum_gen_energy), np.min(sum_cand_energy), np.min(sum_pred_energy)])
+
+    max_e = int(1.2 * max_e)
+    min_e = int(0.8 * min_e)
+
+    b = np.linspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total PF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_cand_energy.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total MLPF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_pred_energy.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    max_e = max([np.max(sum_gen_energy), np.max(sum_cand_energy), np.max(sum_pred_energy)])
+    min_e = min([np.min(sum_gen_energy), np.min(sum_cand_energy), np.min(sum_pred_energy)])
+    max_e = math.ceil(np.log10(max_e))
+    min_e = math.floor(np.log10(max(min_e, 1e-2)))
+
+    b = np.logspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total PF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_cand_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    b = np.logspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total PF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_pred_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)

@@ -19,11 +19,10 @@ import tensorflow_addons as tfa
 import vector
 from plotting.plot_utils import (
     compute_distances,
-    compute_jet_ratio,
     compute_met_and_ratio,
     load_eval_data,
     plot_jet_ratio,
-    plot_met_ratio,
+    plot_met_and_ratio,
 )
 from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
@@ -84,18 +83,15 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         # run the model inference on the validation dataset
         eval_model(self.model, self.dataset, self.config, cp_dir)
 
-        yvals_awk, particles, filenames = load_eval_data(str(cp_dir / "*.parquet"))
+        yvals, X, filenames = load_eval_data(str(cp_dir / "*.parquet"))
         for fi in filenames:
             os.remove(fi)
-        met_data = compute_met_and_ratio(particles)
-        jet_data = compute_jet_ratio(yvals_awk)
+        met_data = compute_met_and_ratio(yvals)
 
-        plot_jet_ratio(jet_data, epoch, cp_dir, comet_experiment)
-        plot_met_ratio(met_data, epoch, cp_dir, comet_experiment)
+        plot_jet_ratio(yvals, epoch, cp_dir, comet_experiment)
+        plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
-        jet_distances = compute_distances(
-            jet_data["gen_to_pred_genpt"], jet_data["gen_to_pred_predpt"], jet_data["ratio_pred"]
-        )
+        jet_distances = compute_distances(yvals["gen_to_pred_genpt"], yvals["gen_to_pred_predpt"], yvals["ratio_pred"])
         met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
 
         for name, val in [

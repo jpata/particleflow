@@ -2,8 +2,9 @@ import logging
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import tqdm
+
+import tensorflow_datasets as tfds
 
 
 def unpack_target(y, num_output_classes, config):
@@ -16,7 +17,7 @@ def unpack_target(y, num_output_classes, config):
 
 
 # Unpacks a flat target array along the feature axis to a feature dict
-# the feature order is defined in the data prep stage (postprocessing2.py)
+# the feature order is defined in the data prep stage
 def unpack_target_cms(y, num_output_classes, config):
     msk_pid = tf.cast(y[..., 0:1] != 0, tf.float32)
 
@@ -25,7 +26,9 @@ def unpack_target_cms(y, num_output_classes, config):
     eta = y[..., 3:4] * msk_pid
     sin_phi = y[..., 4:5] * msk_pid
     cos_phi = y[..., 5:6] * msk_pid
-    jet_idx = y[..., 7:8] * msk_pid
+
+    assert tf.reduce_all(sin_phi <= 1.0) & tf.reduce_all(sin_phi >= -1.0)
+    assert tf.reduce_all(cos_phi <= 1.0) & tf.reduce_all(cos_phi >= -1.0)
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
@@ -38,6 +41,7 @@ def unpack_target_cms(y, num_output_classes, config):
     }
 
     if config["loss"]["event_loss"] != "none":
+        jet_idx = y[..., 7:8] * msk_pid
         pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
         ret["pt_e_eta_phi"] = pt_e_eta_phi
 
@@ -67,6 +71,9 @@ def unpack_target_clic(y, num_output_classes, config):
 
     sin_phi = tf.math.divide_no_nan(py, pt) * msk_pid
     cos_phi = tf.math.divide_no_nan(px, pt) * msk_pid
+
+    assert tf.reduce_all(sin_phi <= 1.0) & tf.reduce_all(sin_phi >= -1.0)
+    assert tf.reduce_all(cos_phi <= 1.0) & tf.reduce_all(cos_phi >= -1.0)
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),

@@ -731,5 +731,45 @@ def test_datasets(config):
         pickle.dump(histograms, fi)
 
 
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option("--max-files", required=False, help="maximum number of files per dataset to load", type=int, default=None)
+def plots(train_dir, max_files):
+    import mplhep
+    from plotting.plot_utils import (
+        compute_met_and_ratio,
+        format_dataset_name,
+        load_eval_data,
+        plot_jet_ratio,
+        plot_met_and_ratio,
+        plot_num_elements,
+        plot_sum_energy,
+    )
+
+    mplhep.set_style(mplhep.styles.CMS)
+
+    eval_dir = Path(train_dir) / "evaluation"
+    last_epoch = sorted(os.listdir(str(eval_dir)))[-1]
+
+    eval_dir = eval_dir / last_epoch
+
+    for dataset in sorted(os.listdir(str(eval_dir))):
+        _title = format_dataset_name(dataset)
+        dataset_dir = eval_dir / dataset
+        cp_dir = dataset_dir / "plots"
+        if not os.path.isdir(str(cp_dir)):
+            os.makedirs(str(cp_dir))
+        yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
+
+        plot_num_elements(X, cp_dir=cp_dir, title=_title)
+        plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
+
+        plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title)
+
+        met_data = compute_met_and_ratio(yvals)
+        plot_met_and_ratio(met_data, cp_dir=cp_dir, title=_title)
+
+
 if __name__ == "__main__":
     main()
