@@ -6,7 +6,7 @@ conda env create -f environment.yml
 conda activate mlpf
 ```
 
-# Training
+# Supervised training
 
 ### DELPHES training
 The dataset is available from zenodo: https://doi.org/10.5281/zenodo.4452283.
@@ -52,7 +52,7 @@ cd ../
 python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
 
-### CLIC training
+# Semi-supervised training on CLIC
 
 To download and process the full CLIC dataset:
 ```bash
@@ -61,19 +61,8 @@ cd clic/
 ```
 This script will download and process the data under a directory called `data/clic` under `particleflow`.
 
-To perform a quick training on the dataset:
-```bash
-cd ../
-python -u pyg_pipeline.py --data clic --dataset=../data/gev380ee_pythia6_ttbar_rfull201/ --dataset_test=../data/gev380ee_pythia6_qcd_all_rfull201/
-```
 
-To load a pretrained model which is stored in a directory under `particleflow/experiments` for evaluation:
-```bash
-cd ../
-python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
-```
-
-### XAI and LRP studies on MLPF
+# XAI studies on MLPF
 
 You must have a pre-trained model under `particleflow/experiments`:
 ```bash
