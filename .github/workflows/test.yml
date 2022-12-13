@@ -46,6 +46,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
+      - name: Check venv
+        run: find ./.venv -name activate
       - name: Run clic model
         run: . ./.venv/bin/activate && ./scripts/local_test_clic_pipeline.sh
 
@@ -86,5 +88,5 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
-      - name: Run delphes model
+      - name: Run CMS model
         run: . ./.venv/bin/activate && ./scripts/local_test_cms_pipeline.sh
