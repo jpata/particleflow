@@ -12,86 +12,41 @@ jobs:
   deps:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/cache@v2
-        id: cache-venv
-        with:
-          path: ./.venv/
-          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
-      - name: Install python deps
-        run: |
-          python -m venv ./.venv && . ./.venv/bin/activate && pip install -r requirements.txt
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-      - name: Check venv
-        run: find / -name activate
-      - name: Check venv 2
-        run: find /home/runner/work/particleflow/particleflow/.venv -name activate
+          cache: 'pip'
+      - run: pip install -r requirements.txt
 
   clic-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:
-      - uses: actions/cache@v2
-        id: cache-venv
-        with:
-          path: ./.venv/
-          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
-      - name: Check venv
-        run: find ./.venv -name activate
-      - name: Run clic model
-        run: . ./.venv/bin/activate && ./scripts/local_test_clic_pipeline.sh
+          cache: 'pip'
+      - run: ./scripts/local_test_clic_pipeline.sh
 
   delphes-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:
-      - uses: actions/cache@v2
-        id: cache-venv
-        with:
-          path: ./.venv/
-          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
-      - name: Run delphes model
-        run: . ./.venv/bin/activate && ./scripts/local_test_delphes_pipeline.sh
+          cache: 'pip'
+      - run: ./scripts/local_test_delphes_pipeline.sh
 
   cms-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:
-      - uses: actions/cache@v2
-        id: cache-venv
-        with:
-          path: ./.venv/
-          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8.10'
-      - name: Run CMS model
-        run: . ./.venv/bin/activate && ./scripts/local_test_cms_pipeline.sh
+          cache: 'pip'
+      - run: ./scripts/local_test_cms_pipeline.sh
