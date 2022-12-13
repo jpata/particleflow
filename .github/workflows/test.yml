@@ -30,9 +30,9 @@ jobs:
           python -m venv ./.venv && . ./.venv/bin/activate && pip install -r requirements.txt
         if: steps.cache-venv.outputs.cache-hit != 'true'
       - name: Check venv
-        run: pwd && find /
-      - name: Check venv
-        run: find ../../.venv
+        run: find / -name activate
+      - name: Check venv 2
+        run: find /home/runner/work/particleflow/particleflow/.venv -name activate
 
   clic-pipeline:
     runs-on: ubuntu-20.04
