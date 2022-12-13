@@ -202,4 +202,5 @@ class MLPFDataset:
                     .reduce(tf.constant(0), lambda x, _: x + 1)
                     .numpy()
                 )
+                assert self._num_steps > 0
             return self._num_steps

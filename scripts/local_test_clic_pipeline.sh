@@ -12,6 +12,7 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0002_pandora.parquet
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0003_pandora.parquet
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0004_pandora.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0005_pandora.parquet
 
 cd ../../..
 
