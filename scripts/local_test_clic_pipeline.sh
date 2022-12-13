@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
+export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
 
 rm -Rf data/clic/gev380ee_pythia6_ttbar_rfull201
 mkdir -p data/clic/gev380ee_pythia6_ttbar_rfull201
