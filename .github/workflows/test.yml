@@ -30,7 +30,9 @@ jobs:
           python -m venv ./.venv && . ./.venv/bin/activate && pip install -r requirements.txt
         if: steps.cache-venv.outputs.cache-hit != 'true'
       - name: Check venv
-        run: find ./.venv -name activate
+        run: find .
+      - name: Check venv
+        run: find .venv
 
   clic-pipeline:
     runs-on: ubuntu-20.04
