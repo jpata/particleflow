@@ -10,14 +10,14 @@ on:
 
 jobs:
   clic-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.8.10'
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -25,14 +25,14 @@ jobs:
         run: ./scripts/local_test_clic_pipeline.sh
 
   delphes-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.8.10'
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -41,14 +41,14 @@ jobs:
         run: ./scripts/local_test_delphes_pipeline.sh
 
   cms-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.8.10'
       - name: Install python deps
         run: |
           pip install -r requirements.txt
