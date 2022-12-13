@@ -44,6 +44,9 @@ CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "$\gamma$", "$e^\
 EVALUATION_DATASET_NAMES = {
     "clic_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "delphes_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
+    "cms_pf_qcd_high_pt": r"CMS high-$p_T$ QCD+PU events",
+    "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "cms_pf_single_neutron": r"CMS single neutron particle gun events",
 }
 
 
@@ -333,3 +336,55 @@ def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title
     if title:
         plt.title(title)
     save_img("sum_gen_pred_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
+def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_pt = awkward.flatten(yvals["cand_pt"][msk_cand], axis=1)
+
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_pt = awkward.flatten(yvals["pred_pt"][msk_pred], axis=1)
+
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_pt = awkward.flatten(yvals["gen_pt"][msk_gen], axis=1)
+
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    p = med_iqr(cand_pt)
+    plt.hist(cand_pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(pred_pt)
+    plt.hist(pred_pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(gen_pt)
+    plt.hist(gen_pt, bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xscale("log")
+    # plt.yscale("log")
+    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.ylabel("Number of particles / bin")
+    if title:
+        plt.title(title)
+    plt.legend(loc="best")
+    save_img("particle_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_pt = awkward.flatten(yvals["cand_eta"][msk_cand], axis=1)
+
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_pt = awkward.flatten(yvals["pred_eta"][msk_pred], axis=1)
+
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_pt = awkward.flatten(yvals["gen_eta"][msk_gen], axis=1)
+
+    b = np.linspace(-8, 8, 100)
+    plt.figure()
+    p = med_iqr(cand_pt)
+    plt.hist(cand_pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(pred_pt)
+    plt.hist(pred_pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(gen_pt)
+    plt.hist(gen_pt, bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xlabel(r"Particle $\eta$")
+    plt.ylabel("Number of particles / bin")
+    if title:
+        plt.title(title)
+    plt.legend(loc="best")
+    save_img("particle_eta.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)

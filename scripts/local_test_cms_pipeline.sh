@@ -35,5 +35,8 @@ ls ./experiments/cms*/weights/
 #Generate the pred.npz file of predictions
 python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-dir ./experiments/cms* --weights ./experiments/cms*/weights/weights-01-*.hdf5
 
+#Make some plots
+python mlpf/pipeline.py plots --train-dir ./experimenhts/cms*
+
 #Retrain from existing weights
 python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5

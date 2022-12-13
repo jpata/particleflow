@@ -744,31 +744,33 @@ def plots(train_dir, max_files):
         plot_jet_ratio,
         plot_met_and_ratio,
         plot_num_elements,
+        plot_particles,
         plot_sum_energy,
     )
 
     mplhep.set_style(mplhep.styles.CMS)
 
     eval_dir = Path(train_dir) / "evaluation"
-    last_epoch = sorted(os.listdir(str(eval_dir)))[-1]
 
-    eval_dir = eval_dir / last_epoch
+    for epoch_dir in sorted(os.listdir(str(eval_dir))):
+        eval_epoch_dir = eval_dir / epoch_dir
+        for dataset in sorted(os.listdir(str(eval_epoch_dir))):
+            _title = format_dataset_name(dataset)
+            dataset_dir = eval_epoch_dir / dataset
+            cp_dir = dataset_dir / "plots"
+            if not os.path.isdir(str(cp_dir)):
+                os.makedirs(str(cp_dir))
+            yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
 
-    for dataset in sorted(os.listdir(str(eval_dir))):
-        _title = format_dataset_name(dataset)
-        dataset_dir = eval_dir / dataset
-        cp_dir = dataset_dir / "plots"
-        if not os.path.isdir(str(cp_dir)):
-            os.makedirs(str(cp_dir))
-        yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
+            plot_num_elements(X, cp_dir=cp_dir, title=_title)
+            plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
 
-        plot_num_elements(X, cp_dir=cp_dir, title=_title)
-        plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
+            plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title)
 
-        plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title)
+            met_data = compute_met_and_ratio(yvals)
+            plot_met_and_ratio(met_data, cp_dir=cp_dir, title=_title)
 
-        met_data = compute_met_and_ratio(yvals)
-        plot_met_and_ratio(met_data, cp_dir=cp_dir, title=_title)
+            plot_particles(yvals, cp_dir=cp_dir, title=_title)
 
 
 if __name__ == "__main__":
