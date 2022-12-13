@@ -19,16 +19,12 @@ repos:
   - id: mixed-line-ending
     args: ['--fix=no']
 
+#This is giving different results on github CI vs. locally and I can't understand why
 #- repo: https://github.com/PyCQA/isort
 #  rev: 5.11.1
 #  hooks:
 #  - id: isort
 #    args: ['--profile', 'black', '--filter-files']
-
-- repo: https://github.com/asottile/reorder_python_imports
-  rev: v3.9.0
-  hooks:
-  - id: reorder-python-imports
 
 - repo: https://github.com/psf/black
   rev: 22.12.0

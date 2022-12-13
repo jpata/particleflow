@@ -357,7 +357,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     p = med_iqr(gen_pt)
     plt.hist(gen_pt, bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
     plt.xscale("log")
-    # plt.yscale("log")
     plt.xlabel("Particle $p_T$ [GeV]")
     plt.ylabel("Number of particles / bin")
     if title:
@@ -388,3 +387,35 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         plt.title(title)
     plt.legend(loc="best")
     save_img("particle_eta.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    msk_cand = yvals["cand_cls_id"] != 0
+    msk_pred = yvals["pred_cls_id"] != 0
+    msk_gen = yvals["gen_cls_id"] != 0
+
+    cand_pt = awkward.flatten(yvals["cand_pt"][msk_cand & msk_gen], axis=1)
+    gen_pt = awkward.flatten(yvals["gen_pt"][msk_cand & msk_gen], axis=1)
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    plt.hist2d(gen_pt, cand_pt, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("True particle $p_T$ [GeV]")
+    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.plot([10**-1, 10**4], [10**-1, 10**4], color="black", ls="--")
+    if title:
+        plt.title(title + ", PF")
+    save_img("particle_pt_gen_vs_pf.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    pred_pt = awkward.flatten(yvals["pred_pt"][msk_pred & msk_gen], axis=1)
+    gen_pt = awkward.flatten(yvals["gen_pt"][msk_pred & msk_gen], axis=1)
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    plt.hist2d(gen_pt, pred_pt, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("True particle $p_T$ [GeV]")
+    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.plot([10**-1, 10**4], [10**-1, 10**4], color="black", ls="--")
+    if title:
+        plt.title(title + ", MLPF")
+    save_img("particle_pt_gen_vs_mlpf.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
