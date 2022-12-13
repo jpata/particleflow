@@ -2,8 +2,8 @@ import logging
 
 import numpy as np
 import tensorflow as tf
+
 import tensorflow_datasets as tfds
-import tqdm
 
 
 def unpack_target(y, num_output_classes, config):
@@ -158,8 +158,11 @@ def get_map_to_supervised(config):
 
 def interleave_datasets(joint_dataset_name, split, datasets):
     indices = []
+    num_steps_total = 0
     for ids, ds in enumerate(datasets):
-        indices += ds.num_steps() * [ids]
+        steps = ds.num_steps()
+        num_steps_total += steps
+        indices += steps * [ids]
     indices = np.array(indices, np.int64)
     np.random.shuffle(indices)
 
@@ -169,6 +172,7 @@ def interleave_datasets(joint_dataset_name, split, datasets):
     )
 
     ds = MLPFDataset(joint_dataset_name, split, interleaved_tensorflow_dataset, sum([ds.num_samples for ds in datasets]))
+    ds._num_steps = num_steps_total
     logging.info(
         "Interleaved joint dataset {}:{} with {} steps, {} samples".format(ds.name, ds.split, ds.num_steps(), ds.num_samples)
     )
@@ -181,7 +185,6 @@ class MLPFDataset:
         self.split = split
         self.tensorflow_dataset = tensorflow_dataset
         self.num_samples = num_samples
-
         self._num_steps = None
 
     def num_steps(self):
@@ -191,10 +194,12 @@ class MLPFDataset:
             return card
         else:
             if self._num_steps is None:
-                isteps = 0
                 logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
-                for elem in tqdm.tqdm(self.tensorflow_dataset):
-                    isteps += 1
-                total_num_steps = isteps
-                self._num_steps = total_num_steps
+                # In case dynamic batching was applied, we don't know the number of steps for the dataset
+                # compute it using https://stackoverflow.com/a/61019377
+                self._num_steps = (
+                    self.tensorflow_dataset.map(lambda *args: 1, num_parallel_calls=tf.data.AUTOTUNE)
+                    .reduce(tf.constant(0), lambda x, _: x + 1)
+                    .numpy()
+                )
             return self._num_steps
