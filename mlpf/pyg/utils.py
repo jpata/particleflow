@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 import torch
 from torch_geometric.data import Batch
 from torch_geometric.data.data import BaseData
-from torch_geometric.loader import DataListLoader, DataLoader
+from torch_geometric.loader import DataListLoader
+from torch_geometric.loader import DataLoader
 
 matplotlib.use("Agg")
 

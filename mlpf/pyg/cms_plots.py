@@ -4,9 +4,10 @@ import boost_histogram as bh
 import matplotlib.pyplot as plt
 import mplhep
 import numpy as np
-import sklearn
 import sklearn.metrics
-from pyg.cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
+from pyg.cms_utils import CLASS_LABELS_CMS
+from pyg.cms_utils import CLASS_NAMES_CMS
+from pyg.cms_utils import CLASS_NAMES_CMS_LATEX
 
 mplhep.style.use(mplhep.styles.CMS)
 

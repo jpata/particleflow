@@ -5,7 +5,6 @@ import time
 
 import matplotlib
 import numpy as np
-import sklearn
 import sklearn.metrics
 import torch
 import torch_geometric

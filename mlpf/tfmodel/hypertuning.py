@@ -1,5 +1,7 @@
 from tfmodel.model_setup import make_model
-from tfmodel.utils import get_loss_dict, get_lr_schedule, get_optimizer
+from tfmodel.utils import get_loss_dict
+from tfmodel.utils import get_lr_schedule
+from tfmodel.utils import get_optimizer
 
 
 def get_model_builder(config, total_steps):

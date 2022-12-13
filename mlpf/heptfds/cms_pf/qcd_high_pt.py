@@ -1,5 +1,4 @@
 """CMS PF QCD High Pt dataset."""
-
 import cms_utils
 import tensorflow as tf
 

@@ -1,7 +1,8 @@
 import pickle
 import sys
 
-from DataFormats.FWLite import Events, Handle
+from DataFormats.FWLite import Events
+from DataFormats.FWLite import Handle
 
 
 class Expression:

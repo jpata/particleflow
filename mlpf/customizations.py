@@ -1,7 +1,6 @@
 #
 # Functions to customize the config based on commandline flags
 #
-
 # Used to make the github pipeline fast
 def customize_pipeline_test(config):
 

@@ -1,7 +1,8 @@
 import numpy as np
 import tensorflow as tf
 import yaml
-from tfmodel.model_setup import CustomCallback, make_model
+from tfmodel.model_setup import CustomCallback
+from tfmodel.model_setup import make_model
 from tfmodel.utils import get_heptfds_dataset
 from tqdm import tqdm
 

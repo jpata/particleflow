@@ -1,7 +1,5 @@
 #!/use/bin/env python3
-
 # on manivald: singularity exec /home/software/singularity/base.simg:latest python3 test/evaluate_timing.py
-
 from graph_data import PFGraphDataset
 
 dataset_path = "/home/joosep/particleflow/data/TTbar_14TeV_TuneCUETP8M1_cfi"

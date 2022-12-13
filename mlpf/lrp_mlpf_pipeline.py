@@ -2,8 +2,12 @@ import argparse
 import pickle as pkl
 
 import torch
-from lrp import LRP_MLPF, MLPF, make_Rmaps
-from pyg import PFGraphDataset, dataloader_qcd, load_model
+from lrp import LRP_MLPF
+from lrp import make_Rmaps
+from lrp import MLPF
+from pyg import dataloader_qcd
+from pyg import load_model
+from pyg import PFGraphDataset
 
 # this script runs lrp on a trained MLPF model
 

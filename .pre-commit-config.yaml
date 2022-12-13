@@ -1,6 +1,6 @@
 default_language_version:
     python: python3.8
-exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)
+exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -19,11 +19,16 @@ repos:
   - id: mixed-line-ending
     args: ['--fix=no']
 
-- repo: https://github.com/PyCQA/isort
-  rev: 5.11.1
+#- repo: https://github.com/PyCQA/isort
+#  rev: 5.11.1
+#  hooks:
+#  - id: isort
+#    args: ['--profile', 'black', '--filter-files']
+
+- repo: https://github.com/asottile/reorder_python_imports
+  rev: v3.9.0
   hooks:
-  - id: isort
-    args: ['--profile', 'black', '--filter-files']
+  - id: reorder-python-imports
 
 - repo: https://github.com/psf/black
   rev: 22.12.0

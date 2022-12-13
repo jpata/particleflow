@@ -5,20 +5,19 @@ import matplotlib
 import numpy as np
 import torch
 import torch_geometric
-from pyg.cms_plots import (
-    distribution_icls,
-    plot_cm,
-    plot_dist,
-    plot_eff_and_fake_rate,
-    plot_energy_res,
-    plot_eta_res,
-    plot_met,
-    plot_multiplicity,
-    plot_numPFelements,
-    plot_sum_energy,
-    plot_sum_pt,
-)
-from pyg.utils import one_hot_embedding, target_p4
+from pyg.cms_plots import distribution_icls
+from pyg.cms_plots import plot_cm
+from pyg.cms_plots import plot_dist
+from pyg.cms_plots import plot_eff_and_fake_rate
+from pyg.cms_plots import plot_energy_res
+from pyg.cms_plots import plot_eta_res
+from pyg.cms_plots import plot_met
+from pyg.cms_plots import plot_multiplicity
+from pyg.cms_plots import plot_numPFelements
+from pyg.cms_plots import plot_sum_energy
+from pyg.cms_plots import plot_sum_pt
+from pyg.utils import one_hot_embedding
+from pyg.utils import target_p4
 
 matplotlib.use("Agg")
 
