@@ -52,16 +52,6 @@ cd ../
 python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
 
-# Semi-supervised training on CLIC
-
-To download and process the full CLIC dataset:
-```bash
-cd clic/
-./get_data_clic.sh
-```
-This script will download and process the data under a directory called `data/clic` under `particleflow`.
-
-
 # XAI studies on MLPF
 
 You must have a pre-trained model under `particleflow/experiments`:
