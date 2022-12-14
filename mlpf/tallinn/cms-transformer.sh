@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p gpu
 #SBATCH --gpus 4
-#SBATCH --mem-per-gpu=8G
+#SBATCH --mem-per-gpu=12G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/tf-2.10.0.simg
