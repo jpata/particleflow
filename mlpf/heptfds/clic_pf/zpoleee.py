@@ -33,8 +33,8 @@ class ClicZpoleeePf(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(shape=(None, max(len(X_FEATURES_TRK), len(X_FEATURES_CL))), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, 6), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, 6), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,

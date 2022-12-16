@@ -27,7 +27,7 @@ TTbar and QCD events with PU~200.
 _CITATION = """
 """
 
-DELPHES_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
+DELPHES_CLASS_NAMES = ["none", "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 
 # based on delphes/ntuplizer.py
 X_FEATURES = [
