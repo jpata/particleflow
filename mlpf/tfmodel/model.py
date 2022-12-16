@@ -1253,7 +1253,7 @@ class PFNetTransformer(tf.keras.Model):
         num_layers_encoder=2,
         num_layers_decoder_reg=2,
         num_layers_decoder_cls=2,
-        hiddem_dim=128,
+        hiddem_dim=256,
     ):
         super(PFNetTransformer, self).__init__()
 
