@@ -1,14 +1,11 @@
-from typing import Optional
-from typing import Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn import Linear
 from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.typing import OptTensor
-from torch_geometric.typing import PairOptTensor
-from torch_geometric.typing import PairTensor
+from torch_geometric.typing import OptTensor, PairOptTensor, PairTensor
 from torch_geometric.utils import to_dense_adj
 from torch_scatter import scatter
 

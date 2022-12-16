@@ -1,7 +1,7 @@
-import numpy as np
-import vector
 import awkward as ak
 import fastjet
+import numpy as np
+import vector
 from data_clic.postprocessing import prepare_data_clic
 
 # these labels are for tracks from track_as_array

@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import tensorflow as tf
-from clic_utils import generate_examples
-from clic_utils import split_sample
-from clic_utils import X_FEATURES_CL
-from clic_utils import X_FEATURES_TRK
-from clic_utils import Y_FEATURES
+from clic_utils import (
+    X_FEATURES_CL,
+    X_FEATURES_TRK,
+    Y_FEATURES,
+    generate_examples,
+    split_sample,
+)
 
 import tensorflow_datasets as tfds
 
