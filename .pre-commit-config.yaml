@@ -21,7 +21,7 @@ repos:
 
 #This is giving different results on github CI vs. locally and I can't understand why
 #- repo: https://github.com/PyCQA/isort
-#  rev: 5.11.1
+#  rev: 5.11.2
 #  hooks:
 #  - id: isort
 #    args: ['--profile', 'black', '--filter-files']

@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import tensorflow as tf
-from clic_utils import generate_examples
-from clic_utils import split_sample
-from clic_utils import X_FEATURES_CL
-from clic_utils import X_FEATURES_TRK
-from clic_utils import Y_FEATURES
+from clic_utils import (
+    X_FEATURES_CL,
+    X_FEATURES_TRK,
+    Y_FEATURES,
+    generate_examples,
+    split_sample,
+)
 
 import tensorflow_datasets as tfds
 
@@ -33,8 +35,8 @@ class ClicHiggsZz4lPf(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(shape=(None, max(len(X_FEATURES_TRK), len(X_FEATURES_CL))), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, 6), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, 6), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,

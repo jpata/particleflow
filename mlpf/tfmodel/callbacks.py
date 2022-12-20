@@ -6,8 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 
 
 class CustomTensorBoard(TensorBoard):

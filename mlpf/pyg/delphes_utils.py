@@ -5,12 +5,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sklearn
 import torch
-from pyg.delphes_plots import draw_efficiency_fakerate
-from pyg.delphes_plots import plot_confusion_matrix
-from pyg.delphes_plots import plot_distributions_all
-from pyg.delphes_plots import plot_distributions_pid
-from pyg.delphes_plots import plot_particle_multiplicity
-from pyg.delphes_plots import plot_reso
+from pyg.delphes_plots import (
+    draw_efficiency_fakerate,
+    plot_confusion_matrix,
+    plot_distributions_all,
+    plot_distributions_pid,
+    plot_particle_multiplicity,
+    plot_reso,
+)
 from pyg.utils import one_hot_embedding
 
 matplotlib.use("Agg")

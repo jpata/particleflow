@@ -36,7 +36,7 @@ loss:
     type: Huber
     delta: 0.1
   event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
-  event_loss_coef: 1.0
+  event_loss_coef: 0.0
   met_loss: none
   met_loss_coef: 1.0
 
@@ -48,7 +48,7 @@ setup:
   weights:
   weights_config:
   lr: 0.0001
-  num_epochs: 500
+  num_epochs: 1000
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy

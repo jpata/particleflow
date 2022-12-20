@@ -7,19 +7,21 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from pyg import features_cms
-from pyg import features_delphes
-from pyg import load_model
-from pyg import make_file_loaders
-from pyg import make_plots_cms
-from pyg import make_predictions
-from pyg import MLPF
-from pyg import parse_args
-from pyg import PFGraphDataset
-from pyg import postprocess_predictions
-from pyg import save_model
-from pyg import target_p4
-from pyg import training_loop
+from pyg import (
+    MLPF,
+    PFGraphDataset,
+    features_cms,
+    features_delphes,
+    load_model,
+    make_file_loaders,
+    make_plots_cms,
+    make_predictions,
+    parse_args,
+    postprocess_predictions,
+    save_model,
+    target_p4,
+    training_loop,
+)
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")

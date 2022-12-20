@@ -13,7 +13,6 @@ def debugging_train_step(self, data):
         self.step = 0
 
     with tf.GradientTape() as tape:
-        print("X", x.shape)
         y_pred = self(x, training=True)  # Forward pass
         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
 

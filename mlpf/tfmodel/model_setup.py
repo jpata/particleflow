@@ -330,21 +330,7 @@ def squeeze_if_one(arr):
 
 
 def build_dummy_array(num):
-    form = """
-{
-  "class": "ListOffsetArray64",
-  "offsets": "i64",
-  "content": "int64",
-  "form_key": "node0"
-}
-"""
-    builder = awkward.layout.LayoutBuilder32(form)
-
-    for i in range(num):
-        builder.begin_list()
-        builder.end_list()
-
-    return builder.snapshot()
+    return awkward.from_numpy(np.array([[] for i in range(num)], dtype=np.int64)).layout
 
 
 def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
@@ -382,6 +368,26 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
 
         ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
         ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
+
+        # in the delphes dataset, the pt is only defined for charged PFCandidates
+        # and energy only for the neutral PFCandidates.
+        # therefore, we compute the pt and energy again under a massless approximation for those cases
+        if config["dataset"]["schema"] == "delphes":
+            # p ~ E
+            # cos(theta)=pz/p
+            # eta = -ln(tan(theta/2))
+            # => pz = p*cos(2atan(exp(-eta)))
+            pz = ycand["energy"] * np.cos(2 * np.arctan(np.exp(-ycand["eta"])))
+            pt = np.sqrt(ycand["energy"] ** 2 - pz**2)
+
+            # eta=atanh(pz/p) => E=pt/sqrt(1-tanh(eta))
+            e = ycand["pt"] / np.sqrt(1.0 - np.tanh(ycand["eta"]))
+
+            # use these computed values where they are missing
+            msk_neutral = np.abs(ycand["charge"]) == 0
+            msk_charged = ~msk_neutral
+            ycand["pt"] = msk_charged * ycand["pt"] + msk_neutral * pt
+            ycand["energy"] = msk_neutral * ycand["energy"] + msk_charged * e
 
         X = awkward.Array(elem["X"].numpy())
         ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})

@@ -137,17 +137,17 @@ def load_eval_data(path, max_files=None):
 def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
-    ret["jet_gen_to_pred_genpt"] = awkward.flatten(
-        vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1
+    ret["jet_gen_to_pred_genpt"] = awkward.to_numpy(
+        awkward.flatten(vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1)
     )
-    ret["jet_gen_to_pred_predpt"] = awkward.flatten(
-        vector.arr(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1
+    ret["jet_gen_to_pred_predpt"] = awkward.to_numpy(
+        awkward.flatten(vector.arr(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1)
     )
-    ret["jet_gen_to_cand_genpt"] = awkward.flatten(
-        vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1
+    ret["jet_gen_to_cand_genpt"] = awkward.to_numpy(
+        awkward.flatten(vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1)
     )
-    ret["jet_gen_to_cand_candpt"] = awkward.flatten(
-        vector.arr(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1
+    ret["jet_gen_to_cand_candpt"] = awkward.to_numpy(
+        awkward.flatten(vector.arr(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1)
     )
 
     ret["jet_ratio_pred"] = ret["jet_gen_to_pred_predpt"] / ret["jet_gen_to_pred_genpt"]
@@ -168,9 +168,9 @@ def compute_met_and_ratio(yvals):
     cand_px = yvals["cand_px"][msk_cand]
     cand_py = yvals["cand_py"][msk_cand]
 
-    gen_met = np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2)
-    pred_met = np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
-    cand_met = np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
+    gen_met = awkward.to_numpy(np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2))
+    pred_met = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2))
+    cand_met = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2))
 
     met_ratio_pred = awkward.to_numpy(pred_met / gen_met)
     met_ratio_cand = awkward.to_numpy(cand_met / gen_met)
@@ -279,9 +279,9 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
 
 def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
-    sum_gen_energy = awkward.sum(yvals["gen_energy"], axis=1)
-    sum_cand_energy = awkward.sum(yvals["cand_energy"], axis=1)
-    sum_pred_energy = awkward.sum(yvals["pred_energy"], axis=1)
+    sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"], axis=1))
+    sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"], axis=1))
+    sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"], axis=1))
 
     max_e = max([np.max(sum_gen_energy), np.max(sum_cand_energy), np.max(sum_pred_energy)])
     min_e = min([np.min(sum_gen_energy), np.min(sum_cand_energy), np.min(sum_pred_energy)])
@@ -320,9 +320,9 @@ def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title
     plt.yscale("log")
     plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
     plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total PF energy / event [GeV]")
+    plt.ylabel("total reconstructed energy / event [GeV]")
     if title:
-        plt.title(title)
+        plt.title(title + ", PF")
     save_img("sum_gen_cand_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
     b = np.logspace(min_e, max_e, 100)
@@ -332,21 +332,21 @@ def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title
     plt.yscale("log")
     plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
     plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total PF energy / event [GeV]")
+    plt.ylabel("total reconstructed energy / event [GeV]")
     if title:
-        plt.title(title)
+        plt.title(title + ", MLPF")
     save_img("sum_gen_pred_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
 
 def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     msk_cand = yvals["cand_cls_id"] != 0
-    cand_pt = awkward.flatten(yvals["cand_pt"][msk_cand], axis=1)
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_cand], axis=1))
 
     msk_pred = yvals["pred_cls_id"] != 0
-    pred_pt = awkward.flatten(yvals["pred_pt"][msk_pred], axis=1)
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred], axis=1))
 
     msk_gen = yvals["gen_cls_id"] != 0
-    gen_pt = awkward.flatten(yvals["gen_pt"][msk_gen], axis=1)
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_gen], axis=1))
 
     b = np.logspace(-1, 4, 100)
     plt.figure()
@@ -365,13 +365,13 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     save_img("particle_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
     msk_cand = yvals["cand_cls_id"] != 0
-    cand_pt = awkward.flatten(yvals["cand_eta"][msk_cand], axis=1)
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_eta"][msk_cand], axis=1))
 
     msk_pred = yvals["pred_cls_id"] != 0
-    pred_pt = awkward.flatten(yvals["pred_eta"][msk_pred], axis=1)
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_eta"][msk_pred], axis=1))
 
     msk_gen = yvals["gen_cls_id"] != 0
-    gen_pt = awkward.flatten(yvals["gen_eta"][msk_gen], axis=1)
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_eta"][msk_gen], axis=1))
 
     b = np.linspace(-8, 8, 100)
     plt.figure()
@@ -392,8 +392,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     msk_pred = yvals["pred_cls_id"] != 0
     msk_gen = yvals["gen_cls_id"] != 0
 
-    cand_pt = awkward.flatten(yvals["cand_pt"][msk_cand & msk_gen], axis=1)
-    gen_pt = awkward.flatten(yvals["gen_pt"][msk_cand & msk_gen], axis=1)
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_cand & msk_gen], axis=1))
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_cand & msk_gen], axis=1))
     b = np.logspace(-1, 4, 100)
     plt.figure()
     plt.hist2d(gen_pt, cand_pt, bins=(b, b), cmap="hot_r")
@@ -406,8 +406,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         plt.title(title + ", PF")
     save_img("particle_pt_gen_vs_pf.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    pred_pt = awkward.flatten(yvals["pred_pt"][msk_pred & msk_gen], axis=1)
-    gen_pt = awkward.flatten(yvals["gen_pt"][msk_pred & msk_gen], axis=1)
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred & msk_gen], axis=1))
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_pred & msk_gen], axis=1))
     b = np.logspace(-1, 4, 100)
     plt.figure()
     plt.hist2d(gen_pt, pred_pt, bins=(b, b), cmap="hot_r")
