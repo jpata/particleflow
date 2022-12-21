@@ -1,8 +1,8 @@
-awkward==1.10.2
+awkward
 boost_histogram
 click
 comet-ml
-fastjet==v3.4.0.1
+fastjet
 fsspec
 keras
 keras-tuner
@@ -25,7 +25,7 @@ scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow==2.11.0
+tensorflow
 tensorflow-addons
 tensorflow-datasets
 tensorflow-estimator
