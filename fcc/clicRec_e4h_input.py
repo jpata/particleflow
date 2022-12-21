@@ -2509,8 +2509,14 @@ out.outputCommands = [
     "keep PandoraClusters*",
     "keep RecoMCTruthLink*",
     "keep MergedRecoParticles*",
-    "keep CalorimeterHit*",
-    "keep TrackerHit*",
+    "keep *MUON*",
+    "keep *ECALBarrel*",
+    "keep *ECALEndcap*",
+    "keep *ECALOther*",
+    "keep *HCALBarrel*",
+    "keep *HCALEndcap*",
+    "keep *HCALOther*",
+    "keep *TrackerHit*",
 ]
 
 
