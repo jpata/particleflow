@@ -291,8 +291,16 @@ def make_transformer(config, dtype):
     return model
 
 
-def deltar(a, b):
-    return a.deltaR(b)
+@numba.njit
+def deltaphi(phi1, phi2):
+    return np.fmod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
+
+
+@numba.njit
+def deltar(eta1, phi1, eta2, phi2):
+    deta = np.abs(eta1 - eta2)
+    dphi = deltaphi(phi1, phi2)
+    return np.sqrt(deta**2 + dphi**2)
 
 
 @numba.njit
@@ -306,11 +314,17 @@ def match_jets(jets1, jets2, deltaR_cut):
 
         jet_inds_1 = []
         jet_inds_2 = []
-        # print(ev, j1.pt, j2.pt)
         for ij1 in range(len(j1)):
             drs = np.zeros(len(j2), dtype=np.float64)
             for ij2 in range(len(j2)):
-                dr = j1[ij1].deltaR(j2[ij2])
+                eta1 = j1.eta[ij1]
+                eta2 = j2.eta[ij2]
+                phi1 = j1.phi[ij1]
+                phi2 = j2.phi[ij2]
+
+                # Workaround for https://github.com/scikit-hep/vector/issues/303
+                # dr = j1[ij1].deltaR(j2[ij2])
+                dr = deltar(eta1, phi1, eta2, phi2)
                 drs[ij2] = dr
             if len(drs) > 0:
                 min_idx_dr = np.argmin(drs)
@@ -335,15 +349,36 @@ def build_dummy_array(num):
 
 def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
     num_events = len(jets_coll[name1])
-    ret = match_jets(jets_coll[name1], jets_coll[name2], jet_match_dr)
+    vec1 = vector.arr(
+        awkward.zip(
+            {
+                "pt": jets_coll[name1].pt,
+                "eta": jets_coll[name1].eta,
+                "phi": jets_coll[name1].phi,
+                "energy": jets_coll[name1].energy,
+            }
+        )
+    )
+    vec2 = vector.arr(
+        awkward.zip(
+            {
+                "pt": jets_coll[name2].pt,
+                "eta": jets_coll[name2].eta,
+                "phi": jets_coll[name2].phi,
+                "energy": jets_coll[name2].energy,
+            }
+        )
+    )
+    ret = match_jets(vec1, vec2, jet_match_dr)
     j1_idx = awkward.from_iter(ret[0])
     j2_idx = awkward.from_iter(ret[1])
+
     if awkward.count(j1_idx) > 0:
-        c1_to_c2 = awkward.layout.RecordArray([j1_idx.layout, j2_idx.layout], [name1, name2])
+        c1_to_c2 = awkward.Array({name1: j1_idx, name2: j2_idx})
     else:
         dummy = build_dummy_array(num_events)
-        c1_to_c2 = awkward.layout.RecordArray([dummy, dummy], [name1, name2])
-    c1_to_c2 = awkward.Array(c1_to_c2)
+        c1_to_c2 = awkward.Array({name1: dummy, name2: dummy})
+
     return c1_to_c2
 
 
