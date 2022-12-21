@@ -447,8 +447,9 @@ def get_loss_from_params(input_dict):
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
     # take everything but the jet_idx
-    y_true = y_true[..., :5]
-    y_pred = y_pred[..., :5]
+    msk = tf.cast(y_true[:, :, 0:1] != 0, tf.float32)
+    y_true = y_true[..., :5] * msk
+    y_pred = y_pred[..., :5] * msk
 
     # create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))

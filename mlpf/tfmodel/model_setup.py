@@ -373,7 +373,10 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
     j1_idx = awkward.from_iter(ret[0])
     j2_idx = awkward.from_iter(ret[1])
 
-    if awkward.count(j1_idx) > 0:
+    num_jets = len(awkward.flatten(j1_idx))
+
+    # In case there are no jets matched, create dummy array to ensure correct types
+    if num_jets > 0:
         c1_to_c2 = awkward.Array({name1: j1_idx, name2: j2_idx})
     else:
         dummy = build_dummy_array(num_events)

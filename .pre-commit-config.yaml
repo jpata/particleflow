@@ -1,6 +1,6 @@
 default_language_version:
     python: python3.8
-exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)
+exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)|^(fcc/.*)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
