@@ -344,7 +344,12 @@ def squeeze_if_one(arr):
 
 
 def build_dummy_array(num):
-    return awkward.from_numpy(np.array([[] for i in range(num)], dtype=np.int64))
+    return awkward.Array(
+        awkward.contents.ListOffsetArray(
+            awkward.index.Index64(np.zeros(num + 1, dtype=np.int64)),
+            awkward.from_numpy(np.array([], dtype=np.int64), highlevel=False),
+        )
+    )
 
 
 def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):

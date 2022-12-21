@@ -55,9 +55,14 @@ def format_dataset_name(dataset):
 
 
 def med_iqr(arr):
-    p25 = np.percentile(arr, 25)
-    p50 = np.percentile(arr, 50)
-    p75 = np.percentile(arr, 75)
+    if len(arr) > 0:
+        p25 = np.percentile(arr, 25)
+        p50 = np.percentile(arr, 50)
+        p75 = np.percentile(arr, 75)
+    else:
+        p25 = 0.0
+        p50 = 0.0
+        p75 = 0.0
     return p50, p75 - p25
 
 
@@ -254,10 +259,16 @@ def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None
 
 
 def compute_distances(distribution_1, distribution_2, ratio):
-    wd = scipy.stats.wasserstein_distance(distribution_1, distribution_2)
-    p25 = np.percentile(ratio, 25)
-    p50 = np.percentile(ratio, 50)
-    p75 = np.percentile(ratio, 75)
+    if len(distribution_1) > 0 and len(distribution_2) > 0:
+        wd = scipy.stats.wasserstein_distance(distribution_1, distribution_2)
+        p25 = np.percentile(ratio, 25)
+        p50 = np.percentile(ratio, 50)
+        p75 = np.percentile(ratio, 75)
+    else:
+        wd = 0.0
+        p25 = 0.0
+        p50 = 0.0
+        p75 = 0.0
     iqr = p75 - p25
     return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}
 
