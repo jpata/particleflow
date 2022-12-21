@@ -443,7 +443,7 @@ def get_loss_from_params(input_dict):
 
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
-# @tf.function
+@tf.function
 def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 
     # take everything but the jet_idx
@@ -469,11 +469,21 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 @tf.function
 def hist_2d_loss(y_true, y_pred):
 
+    mask = tf.cast(y_true[:, :, 0] != 0, tf.float32)
+
     eta_true = y_true[..., 2]
     eta_pred = y_pred[..., 2]
 
     sin_phi_true = y_true[..., 3]
     sin_phi_pred = y_pred[..., 3]
+
+    cos_phi_true = y_true[..., 4]
+    cos_phi_pred = y_pred[..., 4]
+
+    # note that calculating phi=atan2(sin_phi, cos_phi)
+    # introduces a numerical instability which can lead to NaN.
+    phi_true = tf.math.atan2(sin_phi_true, cos_phi_true) * mask
+    phi_pred = tf.math.atan2(sin_phi_pred, cos_phi_pred) * mask
 
     pt_true = y_true[..., 0]
     pt_pred = y_pred[..., 0]
@@ -483,29 +493,25 @@ def hist_2d_loss(y_true, y_pred):
     px_pred = pt_pred * y_pred[..., 4]
     py_pred = pt_pred * y_pred[..., 3]
 
-    mask = eta_true != 0.0
-
-    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi, cos_phi)
-    # introduces a numerical instability which can lead to NaN.
     pt_hist_true = batched_histogram_2d(
         mask,
         eta_true,
-        sin_phi_true,
+        phi_true,
         px_true,
         py_true,
         tf.cast([-6.0, 6.0], tf.float32),
-        tf.cast([-1.0, 1.0], tf.float32),
+        tf.cast([-4.0, 4.0], tf.float32),
         20,
     )
 
     pt_hist_pred = batched_histogram_2d(
         mask,
         eta_pred,
-        sin_phi_pred,
+        phi_pred,
         px_pred,
         py_pred,
         tf.cast([-6.0, 6.0], tf.float32),
-        tf.cast([-1.0, 1.0], tf.float32),
+        tf.cast([-4.0, 4.0], tf.float32),
         20,
     )
 
