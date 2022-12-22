@@ -14,12 +14,14 @@ SAMPLE=$1
 SEED=$2
 OUTDIR=/local/joosep/mlpf/gen/clic/
 PFDIR=/home/joosep/particleflow
-NEV=20000
-NUM=1
+NEV=100
+NUM=$1
 
 #SAMPLE=p8_ee_Z_Ztautau_ecm125
 SAMPLE=p8_ee_tt_ecm365
 #SAMPLE=p8_ee_ZZ_fullhad_ecm365
+
+mkdir -p $OUTDIR/$SAMPLE
 
 mkdir -p $WORKDIR
 cd $WORKDIR
@@ -36,18 +38,18 @@ cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
 
 echo "Random:seed=${NUM}" >> card.cmd
 
-k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd
+k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd &> log1
 ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --outputFile out_sim_edm4hep.root \
       --steeringFile clic_steer.py \
       --inputFiles out.hepmc \
-      --numberOfEvents $NEV
-k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root
-cp out_reco_edm4hep.root reco_${SAMPLE}.root
+      --numberOfEvents $NEV &> log2
+k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root &> log3
+cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 
 #ddsim --steeringFile clic_steer.py --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml --enableGun --gun.distribution uniform --gun.particle pi- --gun.energy 10*GeV --outputFile piminus_10GeV_edm4hep.root --numberOfEvents $NEV &> log_step1_piminus.txt
 #k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input piminus_10GeV_edm4hep.root --PodioOutput.filename piminus_reco.root &> log_step2_piminus.txt
 
-cp reco_${SAMPLE}.root $OUTDIR/$SAMPLE/
+cp reco_${SAMPLE}_${NUM}.root $OUTDIR/$SAMPLE/
 
 rm -Rf $WORKDIR
