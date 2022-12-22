@@ -48,7 +48,7 @@ setup:
   weights:
   weights_config:
   lr: 0.0001
-  num_epochs: 1000
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy

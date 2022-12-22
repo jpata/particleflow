@@ -23,6 +23,7 @@ from plotting.plot_utils import (
     load_eval_data,
     plot_jet_ratio,
     plot_met_and_ratio,
+    plot_jets,
 )
 from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
@@ -88,6 +89,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
             os.remove(fi)
         met_data = compute_met_and_ratio(yvals)
 
+        plot_jets(yvals, epoch, cp_dir, comet_experiment)
         plot_jet_ratio(yvals, epoch, cp_dir, comet_experiment)
         plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
@@ -96,7 +98,10 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         )
         met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
 
+        N_jets = len(awkward.flatten(yvals["jets_gen_pt"]))
+        N_jets_matched_pred = len(yvals["jet_gen_to_pred_genpt"])
         for name, val in [
+            ("jet_matched_frac", N_jets_matched_pred / N_jets),
             ("jet_wd", jet_distances["wd"]),
             ("jet_iqr", jet_distances["iqr"]),
             ("jet_med", jet_distances["p50"]),
@@ -343,11 +348,11 @@ def squeeze_if_one(arr):
         return arr
 
 
-def build_dummy_array(num):
+def build_dummy_array(num, dtype=np.int64):
     return awkward.Array(
         awkward.contents.ListOffsetArray(
             awkward.index.Index64(np.zeros(num + 1, dtype=np.int64)),
-            awkward.from_numpy(np.array([], dtype=np.int64), highlevel=False),
+            awkward.from_numpy(np.array([], dtype=dtype), highlevel=False),
         )
     )
 
@@ -458,6 +463,13 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])
             energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
             phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
+
+            # If there were no particles, build dummy arrays with the correct datatype
+            if len(awkward.flatten(pt)) == 0:
+                pt = build_dummy_array(len(pt), np.float64)
+                eta = build_dummy_array(len(pt), np.float64)
+                phi = build_dummy_array(len(pt), np.float64)
+                energy = build_dummy_array(len(pt), np.float64)
 
             vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)

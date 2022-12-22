@@ -209,6 +209,11 @@ def train(
     logging.info("num_test_steps: {}".format(ds_test.num_steps()))
     logging.info("epochs: {}, total_train_steps: {}".format(epochs, total_steps))
 
+    if experiment:
+        experiment.log_parameter("num_train_steps", ds_train.num_steps())
+        experiment.log_parameter("num_test_steps", ds_test.num_steps())
+        experiment.log_parameter("num_val_steps", ds_val.num_steps())
+
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
     else:

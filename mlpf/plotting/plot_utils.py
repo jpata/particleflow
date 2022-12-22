@@ -198,15 +198,55 @@ def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
             comet_experiment.log_image(image_path, step=epoch - 1)
 
 
+def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    plt.figure()
+    b = np.logspace(0, 3, 100)
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    plt.xscale("log")
+    plt.xlabel("jet $p_T$")
+    plt.ylabel("number of jets / bin")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    save_img("jet_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
 def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     plt.figure()
     b = np.linspace(0, 5, 100)
 
     p = med_iqr(yvals["jet_ratio_cand"])
-    plt.hist(yvals["jet_ratio_cand"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
-    p = med_iqr(yvals["jet_ratio_pred"])
+    n_matched = len(yvals["jet_ratio_cand"])
     plt.hist(
-        yvals["jet_ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1])
+        yvals["jet_ratio_cand"],
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
+    )
+    p = med_iqr(yvals["jet_ratio_pred"])
+    n_matched = len(yvals["jet_ratio_pred"])
+    plt.hist(
+        yvals["jet_ratio_pred"],
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
     )
     plt.xlabel("jet $p_T$ reco/gen")
     plt.ylabel("number of matched jets")
