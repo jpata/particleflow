@@ -126,7 +126,7 @@ def load_eval_data(path, max_files=None):
         yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
 
         # Get the jet vectors
-        jetvec = vector.arr(data["jets"][typ])
+        jetvec = vector.awk(data["jets"][typ])
         for k in ["pt", "eta", "phi", "energy"]:
             yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
 
@@ -143,16 +143,16 @@ def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
     ret["jet_gen_to_pred_genpt"] = awkward.to_numpy(
-        awkward.flatten(vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1)
+        awkward.flatten(vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1)
     )
     ret["jet_gen_to_pred_predpt"] = awkward.to_numpy(
-        awkward.flatten(vector.arr(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1)
+        awkward.flatten(vector.awk(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1)
     )
     ret["jet_gen_to_cand_genpt"] = awkward.to_numpy(
-        awkward.flatten(vector.arr(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1)
+        awkward.flatten(vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1)
     )
     ret["jet_gen_to_cand_candpt"] = awkward.to_numpy(
-        awkward.flatten(vector.arr(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1)
+        awkward.flatten(vector.awk(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1)
     )
 
     ret["jet_ratio_pred"] = ret["jet_gen_to_pred_predpt"] / ret["jet_gen_to_pred_genpt"]
