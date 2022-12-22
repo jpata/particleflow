@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=mlpf-train-cms-gen
 #SBATCH --account=project_465000301
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=100G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=120G
 #SBATCH --gres=gpu:mi250:2
 #SBATCH --partition=eap
 #SBATCH --no-requeue
