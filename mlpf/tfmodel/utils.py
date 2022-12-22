@@ -444,12 +444,14 @@ def get_loss_from_params(input_dict):
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 @tf.function
-def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
+def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=1000):
 
-    # take everything but the jet_idx
-    msk = tf.cast(y_true[:, :, 0:1] != 0, tf.float32)
-    y_true = y_true[..., :5] * msk
-    y_pred = y_pred[..., :5] * msk
+    # mask of true genparticles
+    msk_pid = y_true_pt_e_eta_phi[..., 6:7]
+
+    # take (pt, energy, eta, sin_phi, cos_phi) as defined in BaseDatasetFactory.py
+    y_true = y_true_pt_e_eta_phi[..., :5] * msk_pid
+    y_pred = y_pred_pt_e_eta_phi[..., :5] * msk_pid
 
     # create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))
@@ -469,7 +471,7 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 @tf.function
 def hist_2d_loss(y_true, y_pred):
 
-    mask = tf.cast(y_true[:, :, 0] != 0, tf.float32)
+    mask = tf.cast(y_true[:, :, 6] != 0, tf.float32)
 
     eta_true = y_true[..., 2]
     eta_pred = y_pred[..., 2]
@@ -590,7 +592,7 @@ def compute_jet_pt(y_true, y_pred, max_jets=201):
     jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
 
     # mask the predicted particles in cases where there was no true particle
-    msk = tf.cast(y_true[:, :, 0] != 0, tf.float32)
+    msk = tf.cast(y_true[:, :, 6] != 0, tf.float32)
     for typ in ["true", "pred"]:
         px = y[typ][..., 0] * y[typ][..., 4] * msk
         py = y[typ][..., 0] * y[typ][..., 3] * msk

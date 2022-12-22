@@ -38,7 +38,7 @@ def unpack_target_cms(y, num_output_classes, config):
 
     if config["loss"]["event_loss"] != "none":
         jet_idx = y[..., 7:8] * msk_pid
-        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
+        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx, msk_pid], axis=-1)
         ret["pt_e_eta_phi"] = pt_e_eta_phi
 
     if config["loss"]["met_loss"] != "none":
@@ -80,8 +80,8 @@ def unpack_target_clic(y, num_output_classes, config):
 
     if config["loss"]["event_loss"] != "none":
         jet_idx = y[..., 6:7] * msk_pid
-        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx], axis=-1)
-        ret["pt_e_eta_phi"] = pt_e_eta_phi
+        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx, msk_pid], axis=-1)
+        ret["pt_e_eta_phi"] = pt_e_eta_phi * msk_pid
 
     if config["loss"]["met_loss"] != "none":
         px = pt * cos_phi
