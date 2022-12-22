@@ -120,9 +120,9 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: default
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 128
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 512
   combined_graph_layer:
     bin_size: 640
     max_num_bins: 100
@@ -140,7 +140,7 @@ parameters:
       dist_norm: l2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 512
       activation: elu
       normalize_degrees: yes
     activation: elu
