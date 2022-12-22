@@ -354,7 +354,7 @@ def build_dummy_array(num):
 
 def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
     num_events = len(jets_coll[name1])
-    vec1 = vector.arr(
+    vec1 = vector.awk(
         awkward.zip(
             {
                 "pt": jets_coll[name1].pt,
@@ -364,7 +364,7 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
             }
         )
     )
-    vec2 = vector.arr(
+    vec2 = vector.awk(
         awkward.zip(
             {
                 "pt": jets_coll[name2].pt,
@@ -459,7 +459,7 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
             phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
 
-            vec = vector.arr(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)

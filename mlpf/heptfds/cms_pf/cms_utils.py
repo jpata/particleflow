@@ -142,11 +142,11 @@ def prepare_data_cms(fn):
         eta = ygen[valid, Y_FEATURES.index("eta")]
         phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
         e = ygen[valid, Y_FEATURES.index("e")]
-        vec = vector.arr(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+        vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
         # cluster jets, sort jet indices in descending order by pt
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets = vector.arr(cluster.inclusive_jets(min_pt=min_jet_pt))
+        jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
         sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
         # retrieve corresponding indices of constituents
         constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
