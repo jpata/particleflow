@@ -444,14 +444,14 @@ def get_loss_from_params(input_dict):
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 @tf.function
-def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=1000):
+def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=200):
 
     # mask of true genparticles
-    msk_pid = y_true_pt_e_eta_phi[..., 6:7]
+    # msk_pid = y_true_pt_e_eta_phi[..., 6:7]
 
     # take (pt, energy, eta, sin_phi, cos_phi) as defined in BaseDatasetFactory.py
-    y_true = y_true_pt_e_eta_phi[..., :5] * msk_pid
-    y_pred = y_pred_pt_e_eta_phi[..., :5] * msk_pid
+    y_true = y_true_pt_e_eta_phi[..., :5]
+    y_pred = y_pred_pt_e_eta_phi[..., :5]
 
     # create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))
