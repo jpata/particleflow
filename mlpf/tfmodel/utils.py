@@ -444,14 +444,14 @@ def get_loss_from_params(input_dict):
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 @tf.function
-def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=1000):
+def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=200):
 
     # mask of true genparticles
-    msk_pid = y_true_pt_e_eta_phi[..., 6:7]
+    # msk_pid = y_true_pt_e_eta_phi[..., 6:7]
 
     # take (pt, energy, eta, sin_phi, cos_phi) as defined in BaseDatasetFactory.py
-    y_true = y_true_pt_e_eta_phi[..., :5] * msk_pid
-    y_pred = y_pred_pt_e_eta_phi[..., :5] * msk_pid
+    y_true = y_true_pt_e_eta_phi[..., :5]
+    y_pred = y_pred_pt_e_eta_phi[..., :5]
 
     # create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))
@@ -697,11 +697,23 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
         # We need to load the weights in the same trainable configuration as the model was set up
         configure_model_weights(model, config["setup"].get("weights_config", "all"))
         model.load_weights(weights, by_name=True)
+
         logging.info("using checkpointed model weights from: {}".format(weights))
         opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
         if os.path.isfile(opt_weight_file):
             loaded_opt = pickle.load(open(opt_weight_file, "rb"))
             logging.info("using checkpointed optimizer weights from: {}".format(opt_weight_file))
+
+            def model_weight_setting():
+                grad_vars = model.trainable_weights
+                zero_grads = [tf.zeros_like(w) for w in grad_vars]
+                opt.apply_gradients(zip(zero_grads, grad_vars))
+                if loaded_opt:
+                    opt.set_weights(loaded_opt["weights"])
+
+            # FIXME: check that this still works with multiple GPUs
+            strategy = tf.distribute.get_strategy()
+            strategy.run(model_weight_setting)
 
         initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
@@ -725,24 +737,6 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     )
 
     model.summary()
-
-    # Set the optimizer weights
-    if loaded_opt:
-
-        def model_weight_setting():
-            grad_vars = model.trainable_weights
-            zero_grads = [tf.zeros_like(w) for w in grad_vars]
-            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if (model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1") or (
-                model.optimizer.__class__.__module__ == "keras.optimizer_v1"
-            ):
-                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
-            else:
-                model.optimizer.set_weights(loaded_opt["weights"])
-
-        # FIXME: check that this still works with multiple GPUs
-        strategy = tf.distribute.get_strategy()
-        strategy.run(model_weight_setting)
 
     return model, optim_callbacks, initial_epoch
 
