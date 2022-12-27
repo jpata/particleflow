@@ -20,4 +20,6 @@ singularity exec \
     -B /scratch/project_465000301 \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets \
-    $IMG ./mlpf/lumi/train-gpu-worker.sh $1
+    $IMG python3 mlpf/pipeline.py train \
+    --config parameters/cms-gen.yaml --plot-freq 1 --num-cpus 16 \
+    --batch-multiplier 10
