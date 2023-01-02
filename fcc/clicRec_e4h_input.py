@@ -2506,6 +2506,7 @@ out.outputCommands = [
     "keep PandoraPFOs*",
     "keep PandoraClusters*",
     "keep SiTracks*",
+    "keep *MCTruthLink*",
     "keep PandoraClusters*",
     "keep RecoMCTruthLink*",
     "keep MergedRecoParticles*",

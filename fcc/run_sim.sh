@@ -10,11 +10,9 @@ env
 df -h
 
 WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
-SAMPLE=$1
-SEED=$2
 OUTDIR=`pwd`
 PFDIR=/home/joosep/particleflow
-NEV=100
+NEV=10
 NUM=$1
 
 #SAMPLE=p8_ee_Z_Ztautau_ecm125
@@ -53,4 +51,4 @@ cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 
 cp reco_${SAMPLE}_${NUM}.root $OUTDIR/$SAMPLE/
 
-rm -Rf $WORKDIR
+#rm -Rf $WORKDIR
