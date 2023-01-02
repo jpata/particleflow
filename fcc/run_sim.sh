@@ -26,14 +26,13 @@ cd $WORKDIR
 
 ls -al /cvmfs
 ls -al /cvmfs/sw.hsf.org
-#source /cvmfs/sw.hsf.org/key4hep/setup.sh
-source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-14/x86_64-centos7-gcc11.2.0-opt/zkjui/setup.sh
+source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
 
 cp $PFDIR/fcc/${SAMPLE}.cmd card.cmd
 cp $PFDIR/fcc/pythia.py ./
 cp $PFDIR/fcc/clic_steer.py ./
 cp -R $PFDIR/fcc/PandoraSettings ./
-cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
+cp -R $PFDIR/fcc/clicRec_e4h_input_new.py ./
 
 echo "Random:seed=${NUM}" >> card.cmd
 
@@ -43,7 +42,7 @@ ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --steeringFile clic_steer.py \
       --inputFiles out.hepmc \
       --numberOfEvents $NEV &> log2
-k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root &> log3
+k4run clicRec_e4h_input_new.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root &> log3
 cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 
 #ddsim --steeringFile clic_steer.py --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml --enableGun --gun.distribution uniform --gun.particle pi- --gun.energy 10*GeV --outputFile piminus_10GeV_edm4hep.root --numberOfEvents $NEV &> log_step1_piminus.txt
