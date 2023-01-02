@@ -14,12 +14,12 @@ SAMPLE=$1
 SEED=$2
 OUTDIR=`pwd`
 PFDIR=/home/joosep/particleflow
-NEV=500
+NEV=100
 NUM=$1
 
-SAMPLE=p8_ee_Z_Ztautau_ecm125
+#SAMPLE=p8_ee_Z_Ztautau_ecm125
 #SAMPLE=p8_ee_tt_ecm365
-#SAMPLE=p8_ee_ZZ_fullhad_ecm365
+SAMPLE=p8_ee_ZZ_fullhad_ecm365
 
 mkdir -p $OUTDIR/$SAMPLE
 
