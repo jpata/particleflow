@@ -1,7 +1,7 @@
 """CMS PF SinglePi dataset."""
-
 import cms_utils
 import tensorflow as tf
+
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -23,12 +23,13 @@ PADDED_NUM_ELEM_SIZE = 256
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
 
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version("1.5.1")
     RELEASE_NOTES = {
         "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
         "1.4.0": "Add genjet information",
         "1.5.0": "Without padding",
+        "1.5.1": "Remove outlier caps",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt1To1000_cfi data/

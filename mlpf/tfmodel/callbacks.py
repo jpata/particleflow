@@ -98,7 +98,7 @@ class CustomModelCheckpoint(ModelCheckpoint):
                     pickle.dump(self.optimizer_to_save, f)
 
 
-class BenchmarkLogggerCallback(tf.keras.callbacks.Callback):
+class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
     def __init__(self, *args, **kwargs):
         # Added arguments
         self.outdir = kwargs.pop("outdir")

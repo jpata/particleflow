@@ -21,6 +21,10 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 cd $CMSSWDIR
 eval `scramv1 runtime -sh`
+which python
+which python3
+
+env
 
 cd $WORKDIR
 

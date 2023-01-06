@@ -1,8 +1,12 @@
-import os.path as osp
+import glob
+import math
 
+import awkward
 import matplotlib.pyplot as plt
-import mplhep as hep
 import numpy as np
+import scipy
+import tqdm
+import vector
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -37,112 +41,29 @@ ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", 
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
 CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "$\gamma$", "$e^\pm$", "$\mu^\pm$"]
 
-bins = {
-    211: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 61),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    -211: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    130: {
-        "E_val": np.linspace(0, 5, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    22: {
-        "E_val": np.linspace(0, 2, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-2, 2, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    11: {
-        "E_val": np.linspace(0, 10, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    13: {
-        "E_val": np.linspace(0, 10, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-4, 4, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    1: {
-        "E_val": np.linspace(0, 100, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-6, 6, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
-    2: {
-        "E_val": np.linspace(0, 50, 61),
-        "E_res": np.linspace(-1, 1, 61),
-        "eta_val": np.linspace(-6, 6, 61),
-        "eta_res": np.linspace(-0.5, 0.5, 41),
-        "E_xlabel": "Energy [GeV]",
-        "eta_xlabel": "$\eta$",
-        "phi_val": np.linspace(-4, 4, 61),
-        "phi_res": np.linspace(-0.5, 0.5, 41),
-        "phi_xlabel": "$\phi$",
-        "true_val": "reco PF",
-        "pred_val": "ML-PF",
-    },
+EVALUATION_DATASET_NAMES = {
+    "clic_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "delphes_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
+    "cms_pf_qcd_high_pt": r"CMS high-$p_T$ QCD+PU events",
+    "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "cms_pf_single_neutron": r"CMS single neutron particle gun events",
 }
+
+
+def format_dataset_name(dataset):
+    return EVALUATION_DATASET_NAMES[dataset]
+
+
+def med_iqr(arr):
+    if len(arr) > 0:
+        p25 = np.percentile(arr, 25)
+        p50 = np.percentile(arr, 50)
+        p75 = np.percentile(arr, 75)
+    else:
+        p25 = 0.0
+        p50 = 0.0
+        p75 = 0.0
+    return p50, p75 - p25
 
 
 def get_eff(df, pid):
@@ -172,386 +93,380 @@ def particle_label(ax, pid):
     plt.text(0.03, 0.92, pid_to_text[pid], va="top", ha="left", size=10, transform=ax.transAxes)
 
 
-def plot_confusion_matrix(cm, target_names, epoch, fname, title="Confusion matrix", cmap=None, normalize=True, target=None):
-    """
-    given a sklearn confusion matrix (cm), make a nice plot
+def load_eval_data(path, max_files=None):
+    yvals = []
+    filenames = []
+    filelist = list(glob.glob(path))
+    if max_files is not None:
+        filelist = filelist[:max_files]
 
-    Arguments
-    ---------
-    cm:           confusion matrix from sklearn.metrics.confusion_matrix
+    for fi in tqdm.tqdm(filelist):
+        dd = awkward.from_parquet(fi)
+        yvals.append(dd)
+        filenames.append(fi)
 
-    target_names: given classification classes such as [0, 1, 2]
-                  the class names, for example: ['high', 'medium', 'low']
+    data = awkward.concatenate(yvals, axis=0)
+    X = data["inputs"]
 
-    title:        the text to display at the top of the matrix
+    yvals = {}
+    for typ in ["gen", "cand", "pred"]:
+        for k in data["particles"][typ].fields:
+            yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
 
-    cmap:         the gradient of the values displayed from matplotlib.pyplot.cm
-                  see http://matplotlib.org/examples/color/colormaps_reference.html
-                  plt.get_cmap('jet') or plt.cm.Blues
+    # Get the classification output as a class ID
+    yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
+    yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
+    yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
 
-    normalize:    If False, plot the raw numbers
-                  If True, plot the proportions
+    for typ in ["gen", "cand", "pred"]:
 
-    Usage
-    -----
-    plot_confusion_matrix(cm           = cm,                  # confusion matrix created by
-                                                              # sklearn.metrics.confusion_matrix
-                          normalize    = True,                # show proportions
-                          target_names = y_labels_vals,       # list of names of the classes
-                          title        = best_estimator_name) # title of graph
+        # Compute phi, px, py
+        yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
+        yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
+        yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
 
-    Citiation
-    ---------
-    http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
+        # Get the jet vectors
+        jetvec = vector.awk(data["jets"][typ])
+        for k in ["pt", "eta", "phi", "energy"]:
+            yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
 
-    """
-    import itertools
+    for typ in ["gen", "cand", "pred"]:
+        for val in ["pt", "eta", "sin_phi", "cos_phi", "charge", "energy"]:
+            yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
 
-    import matplotlib.pyplot as plt
-    import numpy as np
+    yvals.update(compute_jet_ratio(data, yvals))
 
-    plt.style.use("default")
+    return yvals, X, filenames
 
-    # # only true if it weren't normalized:
-    # accuracy = np.trace(cm) / float(np.sum(cm))
-    # misclass = 1 - accuracy
 
-    if cmap is None:
-        cmap = plt.get_cmap("Blues")
+def compute_jet_ratio(data, yvals):
+    ret = {}
+    # flatten across event dimension
+    ret["jet_gen_to_pred_genpt"] = awkward.to_numpy(
+        awkward.flatten(vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).pt, axis=1)
+    )
+    ret["jet_gen_to_pred_predpt"] = awkward.to_numpy(
+        awkward.flatten(vector.awk(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt, axis=1)
+    )
+    ret["jet_gen_to_cand_genpt"] = awkward.to_numpy(
+        awkward.flatten(vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt, axis=1)
+    )
+    ret["jet_gen_to_cand_candpt"] = awkward.to_numpy(
+        awkward.flatten(vector.awk(data["jets"]["cand"][data["matched_jets"]["gen_to_cand"]["cand"]]).pt, axis=1)
+    )
 
-    if normalize:
-        cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
-    cm[np.isnan(cm)] = 0.0
+    ret["jet_ratio_pred"] = ret["jet_gen_to_pred_predpt"] / ret["jet_gen_to_pred_genpt"]
+    ret["jet_ratio_cand"] = ret["jet_gen_to_cand_candpt"] / ret["jet_gen_to_cand_genpt"]
+    return ret
 
-    fig = plt.figure(figsize=(5, 4))
-    ax = plt.axes()
-    plt.imshow(cm, interpolation="nearest", cmap=cmap)
-    if target == "rule-based":
-        plt.title(title + " for rule-based PF")
+
+def compute_met_and_ratio(yvals):
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_px = yvals["gen_px"][msk_gen]
+    gen_py = yvals["gen_py"][msk_gen]
+
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_px = yvals["pred_px"][msk_pred]
+    pred_py = yvals["pred_py"][msk_pred]
+
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_px = yvals["cand_px"][msk_cand]
+    cand_py = yvals["cand_py"][msk_cand]
+
+    gen_met = awkward.to_numpy(np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2))
+    pred_met = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2))
+    cand_met = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2))
+
+    met_ratio_pred = awkward.to_numpy(pred_met / gen_met)
+    met_ratio_cand = awkward.to_numpy(cand_met / gen_met)
+
+    return {
+        "gen_met": gen_met,
+        "pred_met": pred_met,
+        "cand_met": cand_met,
+        "ratio_pred": met_ratio_pred,
+        "ratio_cand": met_ratio_cand,
+    }
+
+
+def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
+    if cp_dir:
+        image_path = str(cp_dir / outfile)
+        plt.savefig(image_path, bbox_inches="tight", dpi=100)
+        plt.clf()
+        if comet_experiment:
+            comet_experiment.log_image(image_path, step=epoch - 1)
+
+
+def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    plt.figure()
+    b = np.logspace(0, 3, 100)
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
+    p = med_iqr(pt)
+    n = len(pt)
+    plt.hist(pt, bins=b, histtype="step", lw=2, label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n))
+
+    plt.xscale("log")
+    plt.xlabel("jet $p_T$")
+    plt.ylabel("number of jets / bin")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    save_img("jet_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
+def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    plt.figure()
+    b = np.linspace(0, 5, 100)
+
+    p = med_iqr(yvals["jet_ratio_cand"])
+    n_matched = len(yvals["jet_ratio_cand"])
+    plt.hist(
+        yvals["jet_ratio_cand"],
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
+    )
+    p = med_iqr(yvals["jet_ratio_pred"])
+    n_matched = len(yvals["jet_ratio_pred"])
+    plt.hist(
+        yvals["jet_ratio_pred"],
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
+    )
+    plt.xlabel("jet $p_T$ reco/gen")
+    plt.ylabel("number of matched jets")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    save_img("jet_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
+def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    # MET
+    plt.figure()
+    maxval = max([np.max(met_ratio["gen_met"]), np.max(met_ratio["cand_met"]), np.max(met_ratio["pred_met"])])
+    minval = min([np.min(met_ratio["gen_met"]), np.min(met_ratio["cand_met"]), np.min(met_ratio["pred_met"])])
+    maxval = math.ceil(np.log10(maxval))
+    minval = math.floor(np.log10(max(minval, 1e-2)))
+
+    b = np.logspace(minval, maxval, 100)
+    p = med_iqr(met_ratio["cand_met"])
+    plt.hist(met_ratio["cand_met"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["pred_met"])
+    plt.hist(met_ratio["pred_met"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["gen_met"])
+    plt.hist(met_ratio["gen_met"], bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xlabel("MET [GeV]")
+    plt.ylabel("Number of events / bin")
+    plt.legend(loc="best")
+    plt.xscale("log")
+    if title:
+        plt.title(title)
+    save_img("met.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    # Ratio
+    plt.figure()
+    b = np.linspace(0, 20, 100)
+
+    p = med_iqr(met_ratio["ratio_cand"])
+    plt.hist(met_ratio["ratio_cand"], bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(met_ratio["ratio_pred"])
+    plt.hist(
+        met_ratio["ratio_pred"], bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1])
+    )
+    plt.xlabel("MET reco/gen")
+    plt.ylabel("number of events")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    save_img("met_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+
+def compute_distances(distribution_1, distribution_2, ratio):
+    if len(distribution_1) > 0 and len(distribution_2) > 0:
+        wd = scipy.stats.wasserstein_distance(distribution_1, distribution_2)
+        p25 = np.percentile(ratio, 25)
+        p50 = np.percentile(ratio, 50)
+        p75 = np.percentile(ratio, 75)
     else:
-        plt.title(title + " for MLPF at epoch " + str(epoch))
-
-    plt.colorbar()
-
-    if target_names is not None:
-        tick_marks = np.arange(len(target_names))
-        plt.xticks(tick_marks, target_names, rotation=45)
-        plt.yticks(tick_marks, target_names)
-
-    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        if normalize:
-            plt.text(
-                j,
-                i,
-                "{:0.2f}".format(cm[i, j]),
-                horizontalalignment="center",
-                color="white" if cm[i, j] > thresh else "black",
-            )
-        else:
-            plt.text(
-                j, i, "{:,}".format(cm[i, j]), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black"
-            )
-
-    plt.ylabel("True label")
-    plt.xlim(-1, len(target_names))
-    plt.ylim(-1, len(target_names))
-    plt.xlabel("Predicted label")
-    # plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
-    plt.tight_layout()
-    plt.savefig(fname + ".png")
-    plt.savefig(fname + ".pdf")
-    plt.close(fig)
-
-    return fig, ax
+        wd = 0.0
+        p25 = 0.0
+        p50 = 0.0
+        p75 = 0.0
+    iqr = p75 - p25
+    return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}
 
 
-def plot_E_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["E_val"], bins["E_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["E_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["E_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot([bins["E_val"][0], bins["E_val"][-1]], [bins["E_val"][0], bins["E_val"][-1]], color="black", ls="--", lw=0.5)
-    plt.savefig(osp.join(outpath, "energy_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
+def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["E_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["E_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
-    plt.savefig(osp.join(outpath, "energy_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
+    # compute the number of unpadded elements per event
+    num_Xelems = awkward.sum(X[:, :, 0] != 0, axis=-1)
+    maxval = np.max(num_Xelems)
 
-    ax.set_ylim(ax.get_ylim()[0], 1.2 * ax.get_ylim()[1])
-
-    res = (v0[msk_both, 1] - v0[msk_both, 0]) / v0[msk_both, 0]
-    res[np.isnan(res)] = -1
-
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta E / E$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-    )
-    plt.hist(res, bins=bins["E_res"], density=1.0)
-    plt.xlabel("$\Delta E / E$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "energy_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
-
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_e".format(target)] = np.searchsorted(bins["E_val"], big_df["{}_e".format(target)])
-    big_df["bins_pred_e"] = np.searchsorted(bins["E_val"], big_df["pred_e"])
-
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)].groupby("bins_{}_e".format(target))["pred_pid"].apply(get_eff, pid)
-    )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_e")["{}_pid".format(target)].apply(get_fake, pid)
-
-    out_eff = np.zeros((len(bins["E_val"]), 2))
-    out_fake = np.zeros((len(bins["E_val"]), 2))
-    for ib in range(len(bins["E_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
-
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-
-    plt.errorbar(
-        bins["E_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
-    )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["E_xlabel"])
-
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["E_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
-    )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["E_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "energy_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+    plt.figure()
+    plt.hist(num_Xelems, bins=np.linspace(0, int(1.2 * maxval), 100))
+    plt.xlabel("Number of PFElements / event")
+    plt.ylabel("Number of events / bin")
+    if title:
+        plt.title(title)
+    save_img("num_elements.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
 
-def plot_eta_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["eta_val"], bins["eta_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["eta_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["eta_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot(
-        [bins["eta_val"][0], bins["eta_val"][-1]], [bins["eta_val"][0], bins["eta_val"][-1]], color="black", ls="--", lw=0.5
-    )
-    plt.savefig(osp.join(outpath, "eta_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
+def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["eta_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["eta_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
-    plt.savefig(osp.join(outpath, "eta_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
+    sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"], axis=1))
+    sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"], axis=1))
+    sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"], axis=1))
 
-    ax.set_ylim(ax.get_ylim()[0], 1.2 * ax.get_ylim()[1])
+    max_e = max([np.max(sum_gen_energy), np.max(sum_cand_energy), np.max(sum_pred_energy)])
+    min_e = min([np.min(sum_gen_energy), np.min(sum_cand_energy), np.min(sum_pred_energy)])
 
-    res = v0[msk_both, 1] - v0[msk_both, 0]
-    res[np.isnan(res)] = -1
+    max_e = int(1.2 * max_e)
+    min_e = int(0.8 * min_e)
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta \eta$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-    )
-    plt.hist(res, bins=bins["eta_res"], density=1.0)
-    plt.xlabel("$\Delta \eta$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "eta_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
+    b = np.linspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total PF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_cand_energy.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_eta".format(target)] = np.searchsorted(bins["eta_val"], big_df["{}_eta".format(target)])
-    big_df["bins_pred_eta"] = np.searchsorted(bins["eta_val"], big_df["pred_eta"])
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total MLPF energy / event [GeV]")
+    if title:
+        plt.title(title)
+    save_img("sum_gen_pred_energy.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)]
-        .groupby("bins_{}_eta".format(target))["pred_pid"]
-        .apply(get_eff, pid)
-    )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_eta")["{}_pid".format(target)].apply(get_fake, pid)
+    max_e = max([np.max(sum_gen_energy), np.max(sum_cand_energy), np.max(sum_pred_energy)])
+    min_e = min([np.min(sum_gen_energy), np.min(sum_cand_energy), np.min(sum_pred_energy)])
+    max_e = math.ceil(np.log10(max_e))
+    min_e = math.floor(np.log10(max(min_e, 1e-2)))
 
-    out_eff = np.zeros((len(bins["eta_val"]), 2))
-    out_fake = np.zeros((len(bins["eta_val"]), 2))
-    for ib in range(len(bins["eta_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
+    b = np.logspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total reconstructed energy / event [GeV]")
+    if title:
+        plt.title(title + ", PF")
+    save_img("sum_gen_cand_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-
-    plt.errorbar(
-        bins["eta_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
-    )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["eta_xlabel"])
-
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["eta_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
-    )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["eta_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "eta_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+    b = np.logspace(min_e, max_e, 100)
+    plt.figure()
+    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.plot([10**min_e, 10**max_e], [10**min_e, 10**max_e], color="black", ls="--")
+    plt.xlabel("total true energy / event [GeV]")
+    plt.ylabel("total reconstructed energy / event [GeV]")
+    if title:
+        plt.title(title + ", MLPF")
+    save_img("sum_gen_pred_energy_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
 
-def plot_phi_reso(big_df, pid, v0, msk_true, msk_pred, msk_both, bins, target="target", outpath="./"):
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    hist = np.histogram2d(v0[msk_both, 0], v0[msk_both, 1], bins=(bins["phi_val"], bins["phi_val"]))
-    hep.hist2dplot(hist[0], hist[1], hist[2], cmap="Blues", cbar=False)
-    plt.xlabel(bins["true_val"] + " " + bins["phi_xlabel"])
-    plt.ylabel(bins["pred_val"] + " " + bins["phi_xlabel"])
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.plot(
-        [bins["phi_val"][0], bins["phi_val"][-1]], [bins["phi_val"][0], bins["phi_val"][-1]], color="black", ls="--", lw=0.5
-    )
-    plt.savefig(osp.join(outpath, "phi_2d_pid{}.pdf".format(pid)), bbox_inches="tight")
+def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_cand], axis=1))
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    plt.hist(v0[msk_true, 0], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["true_val"])
-    plt.hist(v0[msk_pred, 1], bins=bins["phi_val"], density=1.0, histtype="step", lw=2, label=bins["pred_val"])
-    plt.xlabel(bins["phi_xlabel"])
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    plt.legend(frameon=False)
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "phi_hist_pid{}.pdf".format(pid)), bbox_inches="tight")
-    ax.set_ylim(ax.get_ylim()[0], 1.5 * ax.get_ylim()[1])
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred], axis=1))
 
-    res = v0[msk_both, 1] - v0[msk_both, 0]
-    res[np.isnan(res)] = -1
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_gen], axis=1))
 
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    ax.text(
-        0.98,
-        0.98,
-        "avg. $\Delta \phi$\n$%.2f \pm %.2f$" % (np.mean(res), np.std(res)),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-    )
-    plt.hist(res, bins=bins["phi_res"], density=1.0)
-    plt.xlabel("$\Delta \phi$")
-    plt.ylabel("number of particles\n(normalized, a.u.)")
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
-    plt.savefig(osp.join(outpath, "phi_ratio_pid{}.pdf".format(pid)), bbox_inches="tight")
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    p = med_iqr(cand_pt)
+    plt.hist(cand_pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(pred_pt)
+    plt.hist(pred_pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(gen_pt)
+    plt.hist(gen_pt, bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xscale("log")
+    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.ylabel("Number of particles / bin")
+    if title:
+        plt.title(title)
+    plt.legend(loc="best")
+    save_img("particle_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    # efficiency vs fake rate
-    plt.figure(figsize=(4, 4))
-    ax = plt.axes()
-    big_df["bins_{}_phi".format(target)] = np.searchsorted(bins["phi_val"], big_df["{}_phi".format(target)])
-    big_df["bins_pred_phi"] = np.searchsorted(bins["phi_val"], big_df["pred_phi"])
+    msk_cand = yvals["cand_cls_id"] != 0
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_eta"][msk_cand], axis=1))
 
-    vals_eff = (
-        big_df[(big_df["{}_pid".format(target)] == pid)]
-        .groupby("bins_{}_phi".format(target))["pred_pid"]
-        .apply(get_eff, pid)
-    )
-    vals_fake = big_df[(big_df["pred_pid"] == pid)].groupby("bins_pred_phi")["{}_pid".format(target)].apply(get_fake, pid)
+    msk_pred = yvals["pred_cls_id"] != 0
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_eta"][msk_pred], axis=1))
 
-    out_eff = np.zeros((len(bins["phi_val"]), 2))
-    out_fake = np.zeros((len(bins["phi_val"]), 2))
-    for ib in range(len(bins["phi_val"])):
-        if ib in vals_eff.keys():
-            out_eff[ib, 0] = vals_eff[ib][0]
-            out_eff[ib, 1] = vals_eff[ib][1]
-        if ib in vals_fake.keys():
-            out_fake[ib, 0] = vals_fake[ib][0]
-            out_fake[ib, 1] = vals_fake[ib][1]
+    msk_gen = yvals["gen_cls_id"] != 0
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_eta"][msk_gen], axis=1))
 
-    cms_label()
-    sample_label(ax)
-    particle_label(ax, pid)
+    b = np.linspace(-8, 8, 100)
+    plt.figure()
+    p = med_iqr(cand_pt)
+    plt.hist(cand_pt, bins=b, histtype="step", lw=2, label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(pred_pt)
+    plt.hist(pred_pt, bins=b, histtype="step", lw=2, label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    p = med_iqr(gen_pt)
+    plt.hist(gen_pt, bins=b, histtype="step", lw=2, label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]))
+    plt.xlabel(r"Particle $\eta$")
+    plt.ylabel("Number of particles / bin")
+    if title:
+        plt.title(title)
+    plt.legend(loc="best")
+    save_img("particle_eta.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    plt.errorbar(
-        bins["phi_val"], out_eff[:, 0], out_eff[:, 1], marker=".", lw=0, elinewidth=1.0, color="green", label="efficiency"
-    )
-    plt.ylabel("efficiency\nN(pred|true) / N(true)")
-    ax.set_ylim(0, 1.5)
-    plt.xlabel(bins["phi_xlabel"])
+    msk_cand = yvals["cand_cls_id"] != 0
+    msk_pred = yvals["pred_cls_id"] != 0
+    msk_gen = yvals["gen_cls_id"] != 0
 
-    ax2 = ax.twinx()
-    col = "red"
-    plt.errorbar(
-        bins["phi_val"], out_fake[:, 0], out_fake[:, 1], marker=".", lw=0, elinewidth=1.0, color=col, label="fake rate"
-    )
-    plt.ylabel("fake rate\nN(true|pred) / N(pred)")
-    plt.xlabel(bins["phi_xlabel"])
-    ax2.set_ylim(0, 1.5)
-    lines, labels = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc=0, frameon=False)
-    plt.savefig(osp.join(outpath, "phi_eff_fake_pid{}.pdf".format(pid)), bbox_inches="tight")
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_cand & msk_gen], axis=1))
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_cand & msk_gen], axis=1))
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    plt.hist2d(gen_pt, cand_pt, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("True particle $p_T$ [GeV]")
+    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.plot([10**-1, 10**4], [10**-1, 10**4], color="black", ls="--")
+    if title:
+        plt.title(title + ", PF")
+    save_img("particle_pt_gen_vs_pf.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred & msk_gen], axis=1))
+    gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_pred & msk_gen], axis=1))
+    b = np.logspace(-1, 4, 100)
+    plt.figure()
+    plt.hist2d(gen_pt, pred_pt, bins=(b, b), cmap="hot_r")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("True particle $p_T$ [GeV]")
+    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.plot([10**-1, 10**4], [10**-1, 10**4], color="black", ls="--")
+    if title:
+        plt.title(title + ", MLPF")
+    save_img("particle_pt_gen_vs_mlpf.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)

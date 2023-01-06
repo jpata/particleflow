@@ -3,12 +3,12 @@ from __future__ import print_function
 
 import os
 
-outdir = "/hdfs/local/joosep/mlpf/gen/v2_gun/"
+outdir = "/local/joosep/mlpf/gen/v3/"
 
 samples = [
     "SingleElectronFlatPt1To1000_pythia8_cfi",
     "SingleGammaFlatPt1To1000_pythia8_cfi",
-    "SingleMuFlatLogPt_100MeVto2TeV_cfi",
+    "SingleMuFlatPt1To1000_pythia8_cfi",
     "SingleNeutronFlatPt0p7To1000_cfi",
     "SinglePi0Pt1To1000_pythia8_cfi",
     "SinglePiMinusFlatPt0p7To1000_cfi",
@@ -22,9 +22,11 @@ samples_pu = [
     "QCDForPF_14TeV_TuneCUETP8M1_cfi",
     "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",
     "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi",
+    "ZpTT_1500_14TeV_TuneCP5_cfi",
 ]
 
-NUM_SAMPLES = 1000
+NUM_SAMPLES = 1050
+SEED = 1
 
 if __name__ == "__main__":
 
@@ -34,9 +36,10 @@ if __name__ == "__main__":
         os.makedirs(outdir + "/" + s + "/raw", exist_ok=True)
         os.makedirs(outdir + "/" + s + "/root", exist_ok=True)
 
-        for nsamples in range(1, NUM_SAMPLES + 1):
-            if not os.path.isfile(outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(nsamples)):
+        for nsamp in range(NUM_SAMPLES):
+            if not os.path.isfile(outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(SEED)):
                 if is_pu:
-                    print("sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(s, nsamples))
+                    print("sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(s, SEED))
                 else:
-                    print("sbatch mlpf/tallinn/genjob.sh {} {}".format(s, nsamples))
+                    print("sbatch mlpf/tallinn/genjob.sh {} {}".format(s, SEED))
+            SEED += 1

@@ -1,15 +1,32 @@
 import datetime
 import logging
 import os
+import pickle
 import platform
 import re
 from pathlib import Path
 
 import numpy as np
+
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    logging.warning("horovod not found, ignoring")
+
+
 import tensorflow as tf
 import tensorflow_addons as tfa
 import yaml
-from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tensorflow.keras import mixed_precision
+
+# from tfmodel.datasets import CMSDatasetFactory, DelphesDatasetFactory
+from tfmodel.datasets.BaseDatasetFactory import (
+    MLPFDataset,
+    get_map_to_supervised,
+    interleave_datasets,
+    mlpf_dataset_from_config,
+)
+from tfmodel.model_setup import configure_model_weights, make_model
 from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
 
 
@@ -85,7 +102,7 @@ def create_experiment_dir(prefix=None, suffix=None):
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
-    print("Creating experiment dir {}".format(train_dir))
+    logging.info("Creating experiment dir {}".format(train_dir))
     return str(train_dir)
 
 
@@ -120,7 +137,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
             if not dry_run:
                 ckpt.unlink()
 
-        print("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
+        logging.info("Removed all checkpoints in {} except {}".format(train_dir, best_ckpt))
 
 
 def get_num_gpus(envvar="CUDA_VISIBLE_DEVICES"):
@@ -137,7 +154,7 @@ def get_strategy(num_cpus=1):
 
     # Always use the correct number of threads that were requested
     if num_cpus == 1:
-        print("Warning: num_cpus==1, using explicitly only one CPU thread")
+        logging.warning("num_cpus==1, using explicitly only one CPU thread")
 
     os.environ["OMP_NUM_THREADS"] = str(num_cpus)
     os.environ["TF_NUM_INTRAOP_THREADS"] = str(num_cpus)
@@ -145,32 +162,42 @@ def get_strategy(num_cpus=1):
     tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
     tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
+    device = "cpu"
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("CUDA_VISIBLE_DEVICES")
+        device = "cuda"
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
+        device = "roc"
     else:
-        print(
-            "WARNING: CUDA/ROC variable is empty. \
+        logging.warning(
+            "CUDA/ROC variable is empty. \
             If you don't have or intend to use GPUs, this message can be ignored."
         )
         num_gpus = 0
 
     if num_gpus > 1:
         # multiple GPUs selected
-        print("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
-        strategy = tf.distribute.MirroredStrategy(["gpu:{}".format(g) for g in gpus])
+        logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
+
+        # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
+        cross_device_ops = tf.distribute.NcclAllReduce()
+        if device == "roc":
+            cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
+
+        strategy = tf.distribute.MirroredStrategy(cross_device_ops=cross_device_ops)
     elif num_gpus == 1:
         # single GPU
-        print("Using a single GPU with tf.distribute.OneDeviceStrategy()")
+        logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
         strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
     else:
-        print("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
+        logging.info("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
+        logging.info("Multiple GPUs detected, num_batces_multiplier={}".format(num_batches_multiplier))
 
     return strategy, num_gpus, num_batches_multiplier
 
@@ -215,7 +242,7 @@ def get_lr_schedule(config, steps):
             decay_steps=steps,
         )
     else:
-        print("INFO: Not using LR schedule")
+        logging.info("not using LR schedule")
         lr_schedule = None
         callbacks = []
     return lr_schedule, callbacks, lr
@@ -229,14 +256,14 @@ def get_optimizer(config, lr_schedule=None):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
         return opt
     elif config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
         return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        return tf.keras.optimizers.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+        return tf.keras.optimizers.legacy.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
     else:
         raise ValueError(
             "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
@@ -247,7 +274,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
     import keras_tuner as kt
 
     if cfg_hypertune["algorithm"] == "random":
-        print("Keras Tuner: Using RandomSearch")
+        logging.info("Keras Tuner: Using RandomSearch")
         cfg_rand = cfg_hypertune["random"]
         return kt.RandomSearch(
             model_builder,
@@ -257,7 +284,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "bayesian":
-        print("Keras Tuner: Using BayesianOptimization")
+        logging.info("Keras Tuner: Using BayesianOptimization")
         cfg_bayes = cfg_hypertune["bayesian"]
         return kt.BayesianOptimization(
             model_builder,
@@ -268,7 +295,7 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
             overwrite=recreate,
         )
     elif cfg_hypertune["algorithm"] == "hyperband":
-        print("Keras Tuner: Using Hyperband")
+        logging.info("Keras Tuner: Using Hyperband")
         cfg_hb = cfg_hypertune["hyperband"]
         return kt.Hyperband(
             model_builder,
@@ -305,53 +332,10 @@ def targets_multi_output(num_output_classes):
     return func
 
 
-def get_heptfds_dataset(dataset_name, config, split, num_events=None, supervised=True):
-    cds = config["dataset"]
-
-    if cds["schema"] == "cms":
-        dsf = CMSDatasetFactory(config)
-    elif cds["schema"] == "delphes":
-        dsf = DelphesDatasetFactory(config)
-    else:
-        raise ValueError("Only supported datasets are 'cms' and 'delphes'.")
-
-    ds, ds_info = dsf.get_dataset(dataset_name, config["datasets"][dataset_name], split)
-
-    if not (num_events is None):
-        ds = ds.take(num_events)
-
-    if supervised:
-        ds = ds.map(dsf.get_map_to_supervised())
-
-    return ds, ds_info
-
-
-def load_and_interleave(dataset_names, config, num_batches_multiplier, split, batch_size):
-    datasets = []
-    steps = []
-    total_num_steps = 0
-    for ds_name in dataset_names:
-        ds, _ = get_heptfds_dataset(ds_name, config, split)
-        num_steps = ds.cardinality().numpy()
-        total_num_steps += num_steps
-        assert num_steps > 0
-        print("Loaded {}:{} with {} steps".format(ds_name, split, num_steps))
-
-        datasets.append(ds)
-        steps.append(num_steps)
-
-    # Now interleave elements from the datasets randomly
-    ids = 0
-    indices = []
-    for ds, num_steps in zip(datasets, steps):
-        indices += num_steps * [ids]
-        ids += 1
-    indices = np.array(indices, np.int64)
-    np.random.shuffle(indices)
-
-    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
-
-    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
+def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_multiplier, split, batch_size, max_events):
+    datasets = [mlpf_dataset_from_config(ds_name, config, split, max_events) for ds_name in dataset_names]
+    ds = interleave_datasets(joint_dataset_name, split, datasets)
+    tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config))
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
@@ -359,77 +343,74 @@ def load_and_interleave(dataset_names, config, num_batches_multiplier, split, ba
 
         assert bucket_batch_sizes[-1][0] == float("inf")
 
-        ds = ds.bucket_by_sequence_length(
+        bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
+        bucket_batch_sizes = [
+            int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes
+        ]
+        logging.info("Batching {}:{} with bucket_by_sequence_length".format(ds.name, ds.split))
+        logging.info("bucket_boundaries={}".format(bucket_boundaries))
+        logging.info("bucket_batch_sizes={}".format(bucket_batch_sizes))
+        tensorflow_dataset = tensorflow_dataset.bucket_by_sequence_length(
             # length is determined by the number of elements in the input set
             element_length_func=lambda X, y, mask: tf.shape(X)[0],
             # bucket boundaries are set by the max sequence length
             # the last bucket size is implicitly 'inf'
-            bucket_boundaries=[int(x[0]) for x in bucket_batch_sizes[:-1]],
+            bucket_boundaries=bucket_boundaries,
             # for multi-GPU, we need to multiply the batch size by the number of GPUs
-            bucket_batch_sizes=[
-                int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes
-            ],
+            bucket_batch_sizes=bucket_batch_sizes,
             drop_remainder=True,
         )
     # use fixed-size batching
     else:
         bs = batch_size
+
+        # Multiply batch size by number of GPUs for MirroredStrategy
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
-        ds = ds.padded_batch(bs)
+        logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, drop_remainder=True)
 
-    # now iterate over the full dataset to get the number of steps
-    isteps = 0
-    for elem in ds:
-        isteps += 1
-    total_num_steps = isteps
-
-    return ds, total_num_steps, len(indices)  # TODO: revisit the need to return `len(indices)`
+    ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
+    logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
+    return ds
 
 
 # Load multiple datasets and mix them together
-def get_datasets(datasets_to_interleave, config, num_batches_to_load, split):
+def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, max_events=None):
     datasets = []
-    steps = []
-    num_samples = 0
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
         if ds_conf["datasets"] is None:
             logging.warning("No datasets in {} list.".format(joint_dataset_name))
         else:
-            interleaved_ds, num_steps, ds_samples = load_and_interleave(
-                ds_conf["datasets"], config, num_batches_to_load, split, ds_conf["batch_per_gpu"]
+            ds = load_and_interleave(
+                joint_dataset_name,
+                ds_conf["datasets"],
+                config,
+                num_batches_multiplier,
+                split,
+                ds_conf["batch_per_gpu"],
+                max_events,
             )
-            print("Interleaved joint dataset {} with {} steps".format(joint_dataset_name, num_steps))
-            datasets.append(interleaved_ds)
-            steps.append(num_steps)
-            num_samples += ds_samples
+            datasets.append(ds)
 
-    ids = 0
-    indices = []
-    total_num_steps = 0
-    for ds, num_steps in zip(datasets, steps):
-        indices += num_steps * [ids]
-        total_num_steps += num_steps
-        ids += 1
-    indices = np.array(indices, np.int64)
-    np.random.shuffle(indices)
+    ds = interleave_datasets("all", split, datasets)
 
-    choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
-    ds = tf.data.experimental.choose_from_datasets(datasets, choice_dataset)
-
+    # Interleaved dataset does not support FILE based sharding
+    # explicitly switch to DATA sharding to avoid a lengthy warning
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-    ds = ds.with_options(options)
+    ds.tensorflow_dataset = ds.tensorflow_dataset.with_options(options)
 
-    print("Final dataset with {} steps".format(total_num_steps))
-    return ds, total_num_steps, num_samples
+    logging.info("Final dataset with {} steps".format(ds.num_steps()))
+    return ds
 
 
 def set_config_loss(config, trainable):
     if trainable == "classification":
         config["dataset"]["pt_loss_coef"] = 0.0
+        config["dataset"]["event_loss_coef"] = 0.0
         config["dataset"]["eta_loss_coef"] = 0.0
         config["dataset"]["sin_phi_loss_coef"] = 0.0
         config["dataset"]["cos_phi_loss_coef"] = 0.0
@@ -437,10 +418,6 @@ def set_config_loss(config, trainable):
     elif trainable == "regression":
         config["dataset"]["classification_loss_coef"] = 0.0
         config["dataset"]["charge_loss_coef"] = 0.0
-        config["dataset"]["pt_loss_coef"] = 0.0
-        config["dataset"]["eta_loss_coef"] = 0.0
-        config["dataset"]["sin_phi_loss_coef"] = 0.0
-        config["dataset"]["cos_phi_loss_coef"] = 0.0
     elif trainable == "all":
         pass
     return config
@@ -467,11 +444,14 @@ def get_loss_from_params(input_dict):
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 @tf.function
-def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
+def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=200):
 
-    # take everything but the jet_idx
-    y_true = y_true[..., :5]
-    y_pred = y_pred[..., :5]
+    # mask of true genparticles
+    # msk_pid = y_true_pt_e_eta_phi[..., 6:7]
+
+    # take (pt, energy, eta, sin_phi, cos_phi) as defined in BaseDatasetFactory.py
+    y_true = y_true_pt_e_eta_phi[..., :5]
+    y_pred = y_pred_pt_e_eta_phi[..., :5]
 
     # create normalized random basis vectors
     theta = tf.random.normal((num_projections, y_true.shape[-1]))
@@ -491,11 +471,21 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=1000):
 @tf.function
 def hist_2d_loss(y_true, y_pred):
 
+    mask = tf.cast(y_true[:, :, 6] != 0, tf.float32)
+
     eta_true = y_true[..., 2]
     eta_pred = y_pred[..., 2]
 
     sin_phi_true = y_true[..., 3]
     sin_phi_pred = y_pred[..., 3]
+
+    cos_phi_true = y_true[..., 4]
+    cos_phi_pred = y_pred[..., 4]
+
+    # note that calculating phi=atan2(sin_phi, cos_phi)
+    # introduces a numerical instability which can lead to NaN.
+    phi_true = tf.math.atan2(sin_phi_true, cos_phi_true) * mask
+    phi_pred = tf.math.atan2(sin_phi_pred, cos_phi_pred) * mask
 
     pt_true = y_true[..., 0]
     pt_pred = y_pred[..., 0]
@@ -505,29 +495,25 @@ def hist_2d_loss(y_true, y_pred):
     px_pred = pt_pred * y_pred[..., 4]
     py_pred = pt_pred * y_pred[..., 3]
 
-    mask = eta_true != 0.0
-
-    # bin in (eta, sin_phi), as calculating phi=atan2(sin_phi, cos_phi)
-    # introduces a numerical instability which can lead to NaN.
     pt_hist_true = batched_histogram_2d(
         mask,
         eta_true,
-        sin_phi_true,
+        phi_true,
         px_true,
         py_true,
         tf.cast([-6.0, 6.0], tf.float32),
-        tf.cast([-1.0, 1.0], tf.float32),
+        tf.cast([-4.0, 4.0], tf.float32),
         20,
     )
 
     pt_hist_pred = batched_histogram_2d(
         mask,
         eta_pred,
-        sin_phi_pred,
+        phi_pred,
         px_pred,
         py_pred,
         tf.cast([-6.0, 6.0], tf.float32),
-        tf.cast([-1.0, 1.0], tf.float32),
+        tf.cast([-4.0, 4.0], tf.float32),
         20,
     )
 
@@ -538,13 +524,13 @@ def hist_2d_loss(y_true, y_pred):
 @tf.function
 def jet_reco(px, py, jet_idx, max_jets):
 
-    tf.debugging.assert_shapes(
-        [
-            (px, ("N")),
-            (py, ("N")),
-            (jet_idx, ("N")),
-        ]
-    )
+    # tf.debugging.assert_shapes(
+    #    [
+    #        (px, ("N")),
+    #        (py, ("N")),
+    #        (jet_idx, ("N")),
+    #    ]
+    # )
 
     jet_idx_capped = tf.where(jet_idx <= max_jets, jet_idx, 0)
 
@@ -571,13 +557,13 @@ def jet_reco(px, py, jet_idx, max_jets):
 
 @tf.function
 def batched_jet_reco(px, py, jet_idx, max_jets):
-    tf.debugging.assert_shapes(
-        [
-            (px, ("B", "N")),
-            (py, ("B", "N")),
-            (jet_idx, ("B", "N")),
-        ]
-    )
+    # tf.debugging.assert_shapes(
+    #    [
+    #        (px, ("B", "N")),
+    #        (py, ("B", "N")),
+    #        (jet_idx, ("B", "N")),
+    #    ]
+    # )
 
     return tf.map_fn(
         lambda a: jet_reco(a[0], a[1], a[2], max_jets),
@@ -604,9 +590,12 @@ def compute_jet_pt(y_true, y_pred, max_jets=201):
     jet_pt = {}
 
     jet_idx = tf.cast(y["true"][..., 5], dtype=tf.int32)
+
+    # mask the predicted particles in cases where there was no true particle
+    msk = tf.cast(y_true[:, :, 6] != 0, tf.float32)
     for typ in ["true", "pred"]:
-        px = y[typ][..., 0] * y[typ][..., 4]
-        py = y[typ][..., 0] * y[typ][..., 3]
+        px = y[typ][..., 0] * y[typ][..., 4] * msk
+        py = y[typ][..., 0] * y[typ][..., 3] * msk
         jet_pt[typ] = batched_jet_reco(px, py, jet_idx, max_jets)
     return jet_pt
 
@@ -652,6 +641,7 @@ def get_loss_dict(config):
 
     if config["loss"]["event_loss"] != "none":
         loss_weights["pt_e_eta_phi"] = config["loss"]["event_loss_coef"]
+
     if config["loss"]["met_loss"] != "none":
         loss_weights["met"] = config["loss"]["met_loss_coef"]
 
@@ -671,3 +661,96 @@ def get_loss_dict(config):
         loss_dict["met"] = get_loss_from_params(config["loss"].get("met_loss", default_loss))
 
     return loss_dict, loss_weights
+
+
+# get the datasets for training, testing and validation
+def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
+    ds_train = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train", ntrain)
+    ds_test = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test", ntest)
+    ds_val = mlpf_dataset_from_config(config["validation_dataset"], config, "test", config["validation_num_events"])
+    ds_val.tensorflow_dataset = ds_val.tensorflow_dataset.padded_batch(config["validation_batch_size"])
+
+    return ds_train, ds_test, ds_val
+
+
+def model_scope(config, total_steps, weights=None, horovod_enabled=False):
+    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
+    opt = get_optimizer(config, lr_schedule)
+
+    if config["setup"]["dtype"] == "float16":
+        model_dtype = tf.dtypes.float16
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    else:
+        model_dtype = tf.dtypes.float32
+
+    model = make_model(config, model_dtype)
+
+    # Build the layers after the element and feature dimensions are specified
+    model.build((1, None, config["dataset"]["num_input_features"]))
+
+    initial_epoch = 0
+    loaded_opt = None
+
+    if weights:
+        # We need to load the weights in the same trainable configuration as the model was set up
+        configure_model_weights(model, config["setup"].get("weights_config", "all"))
+        model.load_weights(weights, by_name=True)
+
+        logging.info("using checkpointed model weights from: {}".format(weights))
+        opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
+        if os.path.isfile(opt_weight_file):
+            loaded_opt = pickle.load(open(opt_weight_file, "rb"))
+            logging.info("using checkpointed optimizer weights from: {}".format(opt_weight_file))
+
+            def model_weight_setting():
+                grad_vars = model.trainable_weights
+                zero_grads = [tf.zeros_like(w) for w in grad_vars]
+                opt.apply_gradients(zip(zero_grads, grad_vars))
+                if loaded_opt:
+                    opt.set_weights(loaded_opt["weights"])
+
+            # FIXME: check that this still works with multiple GPUs
+            strategy = tf.distribute.get_strategy()
+            strategy.run(model_weight_setting)
+
+        initial_epoch = int(weights.split("/")[-1].split("-")[1])
+
+    config = set_config_loss(config, config["setup"]["trainable"])
+    configure_model_weights(model, config["setup"]["trainable"])
+
+    logging.info("model weights follow")
+    tw_names = [m.name for m in model.trainable_weights]
+    for w in model.weights:
+        logging.info(
+            "layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape))
+        )
+
+    loss_dict, loss_weights = get_loss_dict(config)
+
+    model.compile(
+        loss=loss_dict,
+        optimizer=opt,
+        sample_weight_mode="temporal",
+        loss_weights=loss_weights,
+    )
+
+    model.summary()
+
+    return model, optim_callbacks, initial_epoch
+
+
+def initialize_horovod():
+    hvd.init()
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
+
+    num_batches_multiplier = 1
+    if hvd.size() > 1:
+        num_batches_multiplier = hvd.size()
+
+    return hvd.size(), num_batches_multiplier

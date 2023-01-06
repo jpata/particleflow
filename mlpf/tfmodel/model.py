@@ -7,6 +7,42 @@ regularizer_weight = 0.0
 SEED_KERNELATTENTION = 0
 
 
+def debugging_train_step(self, data):
+    x, y, sample_weights = data
+    if not hasattr(self, "step"):
+        self.step = 0
+
+    with tf.GradientTape() as tape:
+        y_pred = self(x, training=True)  # Forward pass
+        loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+
+    trainable_vars = self.trainable_variables
+    gradients = tape.gradient(loss, trainable_vars)
+
+    self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+    self.compiled_metrics.update_state(y, y_pred)
+
+    self.step += 1
+    return {m.name: m.result() for m in self.metrics}
+
+
+def debugging_test_step(self, data):
+    # Unpack the data
+    x, y, sample_weights = data
+    # Compute predictions
+    y_pred = self(x, training=False)
+
+    # Updates the metrics tracking the loss
+    self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    # Update the metrics.
+    self.compiled_metrics.update_state(y, y_pred)
+    # Return a dict mapping metric names to current value.
+    # Note that it will include the loss (tracked in self.metrics).
+
+    self.step += 1
+    return {m.name: m.result() for m in self.metrics}
+
+
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
@@ -127,6 +163,39 @@ class InputEncoding(tf.keras.layers.Layer):
         # X[:, :, 1:] - all the other non-categorical features
         Xprop = X[:, :, 1:]
         return tf.concat([Xid, Xprop], axis=-1)
+
+
+class InputEncodingCLIC(tf.keras.layers.Layer):
+    def __init__(self, num_input_classes):
+        super(InputEncodingCLIC, self).__init__()
+        self.num_input_classes = num_input_classes
+
+    """
+        X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
+    """
+
+    @tf.function
+    def call(self, X):
+
+        # X[:, :, 0] - categorical index of the element type
+        Xid = tf.cast(tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes), dtype=X.dtype)
+
+        # X[:, :, 1:] - all the other non-categorical features
+        Xprop = X[:, :, 1:]
+
+        px = X[:, :, 1:2]
+        py = X[:, :, 2:3]
+        pz = X[:, :, 3:4]
+        pt = tf.math.sqrt(px**2 + py**2)
+        p = tf.math.sqrt(px**2 + py**2 + pz**2)
+        cos_theta = tf.math.divide_no_nan(pz, p)
+        theta = tf.math.acos(cos_theta)
+        eta = -tf.math.log(tf.math.tan(theta / 2.0))
+
+        sin_phi = tf.math.divide_no_nan(py, pt)
+        cos_phi = tf.math.divide_no_nan(px, pt)
+
+        return tf.concat([Xid, pt, sin_phi, cos_phi, eta, Xprop], axis=-1)
 
 
 """
@@ -721,6 +790,18 @@ class OutputDecoding(tf.keras.Model):
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
+        elif self.schema == "clic":
+            px = X_input[:, :, 1:2]
+            py = X_input[:, :, 2:3]
+            pz = X_input[:, :, 3:4]
+            orig_pt = tf.math.sqrt(px**2 + py**2)
+            p = tf.math.sqrt(px**2 + py**2 + pz**2)
+            cos_theta = tf.math.divide_no_nan(pz, p)
+            theta = tf.math.acos(cos_theta)
+            orig_eta = -tf.math.log(tf.math.tan(theta / 2.0))
+            orig_sin_phi = tf.math.divide_no_nan(py, orig_pt)
+            orig_cos_phi = tf.math.divide_no_nan(px, orig_pt)
+            orig_energy = p
 
         if self.regression_use_classification:
             X_encoded = tf.concat([X_encoded, tf.cast(tf.stop_gradient(out_id_logits), in_dtype)], axis=-1)
@@ -733,6 +814,9 @@ class OutputDecoding(tf.keras.Model):
         pred_eta = orig_eta + pred_eta_corr[:, :, 0:1]
         pred_sin_phi = orig_sin_phi + pred_phi_corr[:, :, 0:1]
         pred_cos_phi = orig_cos_phi + pred_phi_corr[:, :, 1:2]
+        # pred_eta = tf.clip_by_value(pred_eta, -7,7)
+        # pred_sin_phi = tf.clip_by_value(pred_sin_phi, -1,1)
+        # pred_cos_phi = tf.clip_by_value(pred_cos_phi, -1,1)
 
         X_encoded_energy = tf.concat([X_encoded, X_encoded_energy], axis=-1)
         if self.regression_use_classification:
@@ -767,42 +851,30 @@ class OutputDecoding(tf.keras.Model):
         # p(particle) = 1 - p(no particle)
         # multiply the logits by a coefficient 10 to make the probabilities "harder",
         # i.e. p(particle | no particle) would be close to 0
-        hard_proba_particle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+        if self.mask_reg_cls0:
+            msk_outparticle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+        else:
+            msk_outparticle = tf.ones_like(pred_pt)
 
         # Return the full particle output array
         if self.event_set_output:
-            if self.mask_reg_cls0:
-                pt_e_eta_phi = tf.concat(
-                    [
-                        pred_pt * msk_input_outtype * hard_proba_particle,
-                        pred_energy * msk_input_outtype * hard_proba_particle,
-                        pred_eta * msk_input_outtype * hard_proba_particle,
-                        pred_sin_phi * msk_input_outtype * hard_proba_particle,
-                        pred_cos_phi * msk_input_outtype * hard_proba_particle,
-                    ],
-                    axis=-1,
-                )
-            else:
-                pt_e_eta_phi = tf.concat(
-                    [
-                        pred_pt * msk_input_outtype,
-                        pred_energy * msk_input_outtype,
-                        pred_eta * msk_input_outtype,
-                        pred_sin_phi * msk_input_outtype,
-                        pred_cos_phi * msk_input_outtype,
-                    ],
-                    axis=-1,
-                )
+            pt_e_eta_phi = tf.concat(
+                [
+                    pred_pt * msk_input_outtype * msk_outparticle,
+                    pred_energy * msk_input_outtype * msk_outparticle,
+                    pred_eta * msk_input_outtype * msk_outparticle,
+                    pred_sin_phi * msk_input_outtype * msk_outparticle,
+                    pred_cos_phi * msk_input_outtype * msk_outparticle,
+                ],
+                axis=-1,
+            )
             ret["pt_e_eta_phi"] = pt_e_eta_phi
 
         # Compute the MET across the predicted particles in the event
         if self.met_output:
-            px = pred_pt * pred_cos_phi * msk_input_outtype
-            py = pred_pt * pred_sin_phi * msk_input_outtype
-            if self.mask_reg_cls0:
-                px = px * hard_proba_particle
-                py = py * hard_proba_particle
-            met = tf.sqrt(tf.reduce_sum(px**2 + py**2, axis=-2))
+            px = pred_pt * pred_cos_phi * msk_input_outtype * msk_outparticle
+            py = pred_pt * pred_sin_phi * msk_input_outtype * msk_outparticle
+            met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
             ret["met"] = met
 
         return ret
@@ -810,14 +882,8 @@ class OutputDecoding(tf.keras.Model):
     def set_trainable_regression(self):
         self.ffn_id.trainable = False
         self.ffn_charge.trainable = False
-        self.ffn_phi.trainable = False
-        self.ffn_eta.trainable = False
-        self.ffn_pt.trainable = False
-        self.ffn_energy.trainable = True
 
     def set_trainable_classification(self):
-        self.ffn_id.trainable = True
-        self.ffn_charge.trainable = True
         self.ffn_phi.trainable = False
         self.ffn_eta.trainable = False
         self.ffn_pt.trainable = False
@@ -973,6 +1039,8 @@ class PFNetDense(tf.keras.Model):
 
         if input_encoding == "cms":
             self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "clic":
+            self.enc = InputEncodingCLIC(num_input_classes)
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
@@ -996,7 +1064,7 @@ class PFNetDense(tf.keras.Model):
         X = inputs
 
         shp = tf.shape(X)
-        # tf.print("\nX.shape=", shp, "\n")
+        # tf.print("\nX", shp, X.device,"\n")
         n_points = shp[1]
 
         bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
@@ -1096,50 +1164,11 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
-    # Uncomment these if you want to explicitly debug the training loop
     # def train_step(self, data):
-    #     import numpy as np
-    #     x, y, sample_weights = data
-    #     if not hasattr(self, "step"):
-    #         self.step = 0
-
-    #     with tf.GradientTape() as tape:
-    #         y_pred = self(x, training=True)  # Forward pass
-    #         import pdb;pdb.set_trace()
-    #         loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-
-    #     trainable_vars = self.trainable_variables
-    #     gradients = tape.gradient(loss, trainable_vars)
-    #     for tv, g in zip(trainable_vars, gradients):
-    #         g = g.numpy()
-    #         num_nan = np.sum(np.isnan(g))
-    #         if num_nan>0:
-    #             print(tv.name, num_nan, g.shape)
-
-    #     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-    #     self.compiled_metrics.update_state(y, y_pred)
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
+    #     debugging_train_step(self, data)
 
     # def test_step(self, data):
-    #     # Unpack the data
-    #     x, y, sample_weights = data
-    #     # Compute predictions
-    #     y_pred = self(x, training=False)
-
-    #     pred_cls = tf.argmax(y_pred["cls"], axis=-1)
-    #     true_cls = tf.argmax(y["cls"], axis=-1)
-
-    #     # Updates the metrics tracking the loss
-    #     self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
-    #     # Update the metrics.
-    #     self.compiled_metrics.update_state(y, y_pred)
-    #     # Return a dict mapping metric names to current value.
-    #     # Note that it will include the loss (tracked in self.metrics).
-
-    #     self.step += 1
-    #     return {m.name: m.result() for m in self.metrics}
+    #     debugging_test_step(self, data)
 
 
 class KernelEncoder(tf.keras.layers.Layer):
@@ -1157,6 +1186,7 @@ class KernelEncoder(tf.keras.layers.Layer):
             seed=SEED_KERNELATTENTION,
             num_random_features=128,
             name=kwargs.get("name") + "_attention",
+            is_short_seq=False,
         )
         SEED_KERNELATTENTION += 1
         self.ffn = point_wise_feed_forward_network(
@@ -1222,7 +1252,7 @@ class PFNetTransformer(tf.keras.Model):
         num_layers_encoder=2,
         num_layers_decoder_reg=2,
         num_layers_decoder_cls=2,
-        hiddem_dim=128,
+        hiddem_dim=256,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1260,6 +1290,9 @@ class PFNetTransformer(tf.keras.Model):
 
     def call(self, inputs, training=False):
         X = inputs
+
+        # tf.print("\nX.shape=", tf.shape(X), "\n")
+
         batch_size = tf.shape(X)[0]
 
         # mask padded elements
@@ -1320,3 +1353,9 @@ class PFNetTransformer(tf.keras.Model):
             return tf.concat(
                 [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
             )
+
+    # def train_step(self, data):
+    #     debugging_train_step(self, data)
+
+    # def test_step(self, data):
+    #     debugging_test_step(self, data)

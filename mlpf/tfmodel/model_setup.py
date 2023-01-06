@@ -1,9 +1,10 @@
+import logging
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
-    print("hvd not enabled, ignoring")
+    logging.warning("horovod not found, ignoring")
 
-import glob
 import json
 import os
 import pickle
@@ -11,13 +12,20 @@ from pathlib import Path
 
 import awkward
 import fastjet
-import matplotlib.pyplot as plt
+import numba
 import numpy as np
-import scipy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import vector
-from tfmodel.callbacks import CustomTensorBoard
+from plotting.plot_utils import (
+    compute_distances,
+    compute_met_and_ratio,
+    load_eval_data,
+    plot_jet_ratio,
+    plot_met_and_ratio,
+    plot_jets,
+)
+from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
 from tfmodel.datasets.BaseDatasetFactory import unpack_target
 from tqdm import tqdm
 
@@ -76,99 +84,30 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         # run the model inference on the validation dataset
         eval_model(self.model, self.dataset, self.config, cp_dir)
 
-        # load the evaluation data
-        yvals = []
-        for fi in glob.glob(str(cp_dir / "*.parquet")):
-            dd = awkward.from_parquet(fi)
+        yvals, X, filenames = load_eval_data(str(cp_dir / "*.parquet"))
+        for fi in filenames:
             os.remove(fi)
-            yvals.append(dd)
+        met_data = compute_met_and_ratio(yvals)
 
-        yvals_awk = awkward.concatenate(yvals, axis=0)
+        plot_jets(yvals, epoch, cp_dir, comet_experiment)
+        plot_jet_ratio(yvals, epoch, cp_dir, comet_experiment)
+        plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
-        particles = {k: awkward.flatten(yvals_awk["particles"][k], axis=1) for k in yvals_awk["particles"].fields}
-
-        msk_gen = np.argmax(particles["gen"]["cls"], axis=-1) != 0
-        gen_px = particles["gen"]["pt"][msk_gen] * particles["gen"]["cos_phi"][msk_gen]
-        gen_py = particles["gen"]["pt"][msk_gen] * particles["gen"]["sin_phi"][msk_gen]
-
-        msk_pred = np.argmax(particles["pred"]["cls"], axis=-1) != 0
-        pred_px = particles["pred"]["pt"][msk_pred] * particles["pred"]["cos_phi"][msk_pred]
-        pred_py = particles["pred"]["pt"][msk_pred] * particles["pred"]["sin_phi"][msk_pred]
-
-        msk_cand = np.argmax(particles["cand"]["cls"], axis=-1) != 0
-        cand_px = particles["cand"]["pt"][msk_cand] * particles["cand"]["cos_phi"][msk_cand]
-        cand_py = particles["cand"]["pt"][msk_cand] * particles["cand"]["sin_phi"][msk_cand]
-
-        gen_met = np.sqrt(np.sum(gen_px**2 + gen_py**2, axis=1))
-        pred_met = np.sqrt(np.sum(pred_px**2 + pred_py**2, axis=1))
-        cand_met = np.sqrt(np.sum(cand_px**2 + cand_py**2, axis=1))
-
-        met_ratio_pred = awkward.to_numpy((pred_met - gen_met) / gen_met)
-        met_ratio_cand = awkward.to_numpy((cand_met - gen_met) / gen_met)
-
-        # flatten across file and event dimension
-        gen_to_pred_genpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["gen_jet"]).pt, axis=1)
+        jet_distances = compute_distances(
+            yvals["jet_gen_to_pred_genpt"], yvals["jet_gen_to_pred_predpt"], yvals["jet_ratio_pred"]
         )
-        gen_to_pred_predpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_pred"]["pred_jet"]).pt, axis=1)
-        )
+        met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
 
-        gen_to_cand_genpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["gen_jet"]).pt, axis=1)
-        )
-        gen_to_cand_candpt = awkward.flatten(
-            awkward.flatten(vector.arr(yvals_awk["matched_jets"]["gen_to_cand"]["cand_jet"]).pt, axis=1)
-        )
-
-        jet_ratio_pred = (gen_to_pred_predpt - gen_to_pred_genpt) / gen_to_pred_genpt
-        jet_ratio_cand = (gen_to_cand_candpt - gen_to_cand_genpt) / gen_to_cand_genpt
-
-        plt.figure()
-        b = np.linspace(-2, 5, 100)
-        plt.hist(jet_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
-        plt.hist(jet_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-        plt.xlabel("jet pT (reco-gen)/gen")
-        plt.ylabel("number of matched jets")
-        plt.legend(loc="best")
-        image_path = str(cp_dir / "jet_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-        if comet_experiment:
-            comet_experiment.log_image(image_path, step=epoch - 1)
-
-        plt.figure()
-        b = np.linspace(-1, 1, 100)
-        plt.hist(met_ratio_cand, bins=b, histtype="step", lw=2, label="PF")
-        plt.hist(met_ratio_pred, bins=b, histtype="step", lw=2, label="MLPF")
-        plt.xlabel("MET (reco-gen)/gen")
-        plt.ylabel("number of events")
-        plt.legend(loc="best")
-        image_path = str(cp_dir / "met_res.png")
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
-        plt.clf()
-        if comet_experiment:
-            comet_experiment.log_image(image_path, step=epoch - 1)
-
-        jet_pred_wd = scipy.stats.wasserstein_distance(gen_to_pred_genpt, gen_to_pred_predpt)
-        jet_pred_p25 = np.percentile(jet_ratio_pred, 25)
-        jet_pred_p50 = np.percentile(jet_ratio_pred, 50)
-        jet_pred_p75 = np.percentile(jet_ratio_pred, 75)
-        jet_pred_iqr = jet_pred_p75 - jet_pred_p25
-
-        met_pred_wd = scipy.stats.wasserstein_distance(gen_met, pred_met)
-        met_pred_p25 = np.percentile(met_ratio_pred, 25)
-        met_pred_p50 = np.percentile(met_ratio_pred, 50)
-        met_pred_p75 = np.percentile(met_ratio_pred, 75)
-        met_pred_iqr = met_pred_p75 - met_pred_p25
-
+        N_jets = len(awkward.flatten(yvals["jets_gen_pt"]))
+        N_jets_matched_pred = len(yvals["jet_gen_to_pred_genpt"])
         for name, val in [
-            ("jet_wd", jet_pred_wd),
-            ("jet_iqr", jet_pred_iqr),
-            ("jet_med", jet_pred_p50),
-            ("met_wd", met_pred_wd),
-            ("met_iqr", met_pred_iqr),
-            ("met_med", met_pred_p50),
+            ("jet_matched_frac", N_jets_matched_pred / N_jets),
+            ("jet_wd", jet_distances["wd"]),
+            ("jet_iqr", jet_distances["iqr"]),
+            ("jet_med", jet_distances["p50"]),
+            ("met_wd", met_distances["wd"]),
+            ("met_iqr", met_distances["iqr"]),
+            ("met_med", met_distances["p50"]),
         ]:
             logs["val_" + name] = val
 
@@ -182,6 +121,11 @@ def prepare_callbacks(
     dataset,
     comet_experiment=None,
     horovod_enabled=False,
+    benchmark_dir=None,
+    num_train_steps=None,
+    num_cpus=None,
+    num_gpus=None,
+    train_samples=None,
 ):
 
     callbacks = []
@@ -190,6 +134,38 @@ def prepare_callbacks(
 
     if not horovod_enabled or hvd.rank() == 0:
         callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
+
+    if benchmark_dir:
+        if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+            benchmark_dir = outdir
+        if config["dataset"]["schema"] == "delphes":
+            bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
+        elif config["dataset"]["schema"] == "cms":
+            assert (
+                len(config["train_test_datasets"]) == 1
+            ), "Expected exactly 1 key, physical OR delphes, \
+                found {}".format(
+                config["train_test_datasets"].keys()
+            )
+            bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
+        else:
+            raise ValueError(
+                "Benchmark callback only supports delphes or \
+                cms dataset schema. {}".format(
+                    config["dataset"]["schema"]
+                )
+            )
+        Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+        callbacks.append(
+            BenchmarkLoggerCallback(
+                outdir=benchmark_dir,
+                steps_per_epoch=num_train_steps,
+                batch_size_per_gpu=bmk_bs,
+                num_gpus=num_gpus,
+                num_cpus=num_cpus,
+                train_set_size=train_samples,
+            )
+        )
 
     return callbacks
 
@@ -213,7 +189,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     history_path = str(history_path)
     cb = CustomCallback(
         history_path,
-        dataset.take(config["setup"]["num_events_validation"]),
+        dataset.tensorflow_dataset.take(config["validation_num_events"]),
         config,
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
@@ -224,9 +200,9 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs",
         histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
-        write_graph=True,
+        write_graph=False,
         write_images=False,
-        update_freq="epoch",
+        update_freq="batch",
         # profile_batch=(10,90),
         profile_batch=0,
         dump_history=config["callbacks"]["tensorboard"]["dump_history"],
@@ -292,8 +268,8 @@ def make_gnn_dense(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
-        cls_output_as_logits=config["setup"]["cls_output_as_logits"],
-        small_graph_opt=config["setup"]["small_graph_opt"],
+        cls_output_as_logits=config["setup"].get("cls_output_as_logits", False),
+        small_graph_opt=config["setup"].get("small_graph_opt", False),
         **kwargs
     )
 
@@ -320,8 +296,49 @@ def make_transformer(config, dtype):
     return model
 
 
-def deltar(a, b):
-    return a.deltaR(b)
+@numba.njit
+def deltaphi(phi1, phi2):
+    return np.fmod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
+
+
+@numba.njit
+def deltar(eta1, phi1, eta2, phi2):
+    deta = np.abs(eta1 - eta2)
+    dphi = deltaphi(phi1, phi2)
+    return np.sqrt(deta**2 + dphi**2)
+
+
+@numba.njit
+def match_jets(jets1, jets2, deltaR_cut):
+    iev = len(jets1)
+    jet_inds_1_ev = []
+    jet_inds_2_ev = []
+    for ev in range(iev):
+        j1 = jets1[ev]
+        j2 = jets2[ev]
+
+        jet_inds_1 = []
+        jet_inds_2 = []
+        for ij1 in range(len(j1)):
+            drs = np.zeros(len(j2), dtype=np.float64)
+            for ij2 in range(len(j2)):
+                eta1 = j1.eta[ij1]
+                eta2 = j2.eta[ij2]
+                phi1 = j1.phi[ij1]
+                phi2 = j2.phi[ij2]
+
+                # Workaround for https://github.com/scikit-hep/vector/issues/303
+                # dr = j1[ij1].deltaR(j2[ij2])
+                dr = deltar(eta1, phi1, eta2, phi2)
+                drs[ij2] = dr
+            if len(drs) > 0:
+                min_idx_dr = np.argmin(drs)
+                if drs[min_idx_dr] < deltaR_cut:
+                    jet_inds_1.append(ij1)
+                    jet_inds_2.append(min_idx_dr)
+        jet_inds_1_ev.append(jet_inds_1)
+        jet_inds_2_ev.append(jet_inds_2)
+    return jet_inds_1_ev, jet_inds_2_ev
 
 
 def squeeze_if_one(arr):
@@ -329,6 +346,53 @@ def squeeze_if_one(arr):
         return np.squeeze(arr, axis=-1)
     else:
         return arr
+
+
+def build_dummy_array(num, dtype=np.int64):
+    return awkward.Array(
+        awkward.contents.ListOffsetArray(
+            awkward.index.Index64(np.zeros(num + 1, dtype=np.int64)),
+            awkward.from_numpy(np.array([], dtype=dtype), highlevel=False),
+        )
+    )
+
+
+def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
+    num_events = len(jets_coll[name1])
+    vec1 = vector.awk(
+        awkward.zip(
+            {
+                "pt": jets_coll[name1].pt,
+                "eta": jets_coll[name1].eta,
+                "phi": jets_coll[name1].phi,
+                "energy": jets_coll[name1].energy,
+            }
+        )
+    )
+    vec2 = vector.awk(
+        awkward.zip(
+            {
+                "pt": jets_coll[name2].pt,
+                "eta": jets_coll[name2].eta,
+                "phi": jets_coll[name2].phi,
+                "energy": jets_coll[name2].energy,
+            }
+        )
+    )
+    ret = match_jets(vec1, vec2, jet_match_dr)
+    j1_idx = awkward.from_iter(ret[0])
+    j2_idx = awkward.from_iter(ret[1])
+
+    num_jets = len(awkward.flatten(j1_idx))
+
+    # In case there are no jets matched, create dummy array to ensure correct types
+    if num_jets > 0:
+        c1_to_c2 = awkward.Array({name1: j1_idx, name2: j2_idx})
+    else:
+        dummy = build_dummy_array(num_events)
+        c1_to_c2 = awkward.Array({name1: dummy, name2: dummy})
+
+    return c1_to_c2
 
 
 # Given a model, evaluates it on each batch of the validation dataset
@@ -353,6 +417,26 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
         ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
         ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
 
+        # in the delphes dataset, the pt is only defined for charged PFCandidates
+        # and energy only for the neutral PFCandidates.
+        # therefore, we compute the pt and energy again under a massless approximation for those cases
+        if config["dataset"]["schema"] == "delphes":
+            # p ~ E
+            # cos(theta)=pz/p
+            # eta = -ln(tan(theta/2))
+            # => pz = p*cos(2atan(exp(-eta)))
+            pz = ycand["energy"] * np.cos(2 * np.arctan(np.exp(-ycand["eta"])))
+            pt = np.sqrt(ycand["energy"] ** 2 - pz**2)
+
+            # eta=atanh(pz/p) => E=pt/sqrt(1-tanh(eta))
+            e = ycand["pt"] / np.sqrt(1.0 - np.tanh(ycand["eta"]))
+
+            # use these computed values where they are missing
+            msk_neutral = np.abs(ycand["charge"]) == 0
+            msk_charged = ~msk_neutral
+            ycand["pt"] = msk_charged * ycand["pt"] + msk_neutral * pt
+            ycand["energy"] = msk_neutral * ycand["energy"] + msk_charged * e
+
         X = awkward.Array(elem["X"].numpy())
         ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})
         ycand = awkward.Array({k: squeeze_if_one(ycand[k].numpy()) for k in keys_particle})
@@ -374,50 +458,32 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             cls_id = awkward.argmax(awkvals[typ]["cls"], axis=-1, mask_identity=False)
             valid = cls_id != 0
 
-            if np.any(awkward.sum(valid, axis=1) == 0):
-                raise Exception("Model did not predict any particles for some events: {}".format(awkward.sum(valid, axis=1)))
-
             # mask the particles in each event in the batch that were not predicted
             pt = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["pt"], valid)])
             eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])
             energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
             phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
 
-            vec = vector.arr(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            # If there were no particles, build dummy arrays with the correct datatype
+            if len(awkward.flatten(pt)) == 0:
+                pt = build_dummy_array(len(pt), np.float64)
+                eta = build_dummy_array(len(pt), np.float64)
+                phi = build_dummy_array(len(pt), np.float64)
+                energy = build_dummy_array(len(pt), np.float64)
+
+            vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
             if verbose:
-                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ]["px"], axis=1)))
-
-        matched_jets = {}
+                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)))
 
         # DeltaR match between genjets and MLPF jets
-        cart = awkward.cartesian([jets_coll["gen"], jets_coll["pred"]], nested=True)
-        jets_a, jets_b = awkward.unzip(cart)
-        drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
-        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
-        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
-        j1s = jets_coll["gen"][m0]
-        j2s = jets_coll["pred"][m1]
-        if verbose:
-            print("matched jets gen-pred", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
-        matched_jets["gen_to_pred"] = {"gen_jet": j1s, "pred_jet": j2s}
+        gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
+        gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
 
-        # DeltaR match between genjets and PF jets
-        cart = awkward.cartesian([jets_coll["gen"], jets_coll["cand"]], nested=True)
-        jets_a, jets_b = awkward.unzip(cart)
-        drs = deltar(jets_a, jets_b)
-        match_gen_to_pred = [awkward.where(d < jet_match_dr) for d in drs]
-        m0 = awkward.from_iter([m[0] for m in match_gen_to_pred])
-        m1 = awkward.from_iter([m[1] for m in match_gen_to_pred])
-        j1s = jets_coll["gen"][m0]
-        j2s = jets_coll["cand"][m1]
-        if verbose:
-            print("matched jets gen-cand", awkward.to_numpy(awkward.count(j1s["px"], axis=1)))
-        matched_jets["gen_to_cand"] = {"gen_jet": j1s, "cand_jet": j2s}
+        matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
         # Save output file
         outfile = "{}/pred_batch{}.parquet".format(outdir, ibatch)
@@ -425,7 +491,7 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             print("saving to {}".format(outfile))
 
         awkward.to_parquet(
-            {"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets},
+            awkward.Array({"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets}),
             outfile,
         )
 

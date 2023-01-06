@@ -2,7 +2,6 @@ import os.path as osp
 
 import matplotlib.pyplot as plt
 import numpy as np
-import sklearn
 import sklearn.metrics
 from plot_utils import plot_confusion_matrix, plot_E_reso, plot_eta_reso, plot_phi_reso
 
