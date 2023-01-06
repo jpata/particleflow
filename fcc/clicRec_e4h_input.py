@@ -2301,6 +2301,7 @@ out.outputCommands = [
     "keep *HCALEndcap*",
     "keep *HCALOther*",
     "keep *TrackerHit*",
+    "drop LumiCal*",
 ]
 
 
