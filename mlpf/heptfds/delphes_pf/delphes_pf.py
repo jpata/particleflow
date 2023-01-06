@@ -1,13 +1,17 @@
 """delphes_pf dataset."""
-
 import bz2
 import os
 import pickle
 import resource
 from pathlib import Path
 
+import awkward as ak
+import fastjet
 import numpy as np
 import tensorflow as tf
+import tqdm
+import vector
+
 import tensorflow_datasets as tfds
 
 # Increase python's soft limit on number of open files to accomodate tensorflow_datasets sharding
@@ -19,15 +23,14 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (high, high))
 _DESCRIPTION = """
 Dataset generated with Delphes.
 
-TTbar events with PU~200.
+TTbar and QCD events with PU~200.
 """
 
 # TODO(delphes_pf): BibTeX citation
 _CITATION = """
 """
 
-DELPHES_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
-PADDED_NUM_ELEM_SIZE = 6400
+DELPHES_CLASS_NAMES = ["none", "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
 
 # based on delphes/ntuplizer.py
 X_FEATURES = [
@@ -45,13 +48,16 @@ X_FEATURES = [
     "is_gen_electron",
 ]
 
+Y_FEATURES = ["type", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+
 
 class DelphesPf(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for delphes_pf dataset."""
 
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "1.1.0": "Do not pad events to the same size",
     }
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -62,9 +68,9 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(6400, 12), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(6400, 7), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             # If there's a common (input, target) tuple from the
@@ -103,16 +109,19 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
 
     def _generate_examples(self, path):
         """Yields examples."""
-        for fi in path.glob("*.pkl.bz2"):
-            X, ygen, ycand = self.prepare_data_delphes(str(fi))
-            for ibatch in range(X.shape[0]):
-                yield str(fi) + "_" + str(ibatch), {
-                    "X": X[ibatch],
-                    "ygen": ygen[ibatch],
-                    "ycand": ycand[ibatch],
+        for fi in tqdm.tqdm(list(path.glob("*.pkl.bz2"))):
+            Xs, ygens, ycands = self.prepare_data_delphes(str(fi))
+            for iev in range(len(Xs)):
+                yield str(fi) + "_" + str(iev), {
+                    "X": Xs[iev],
+                    "ygen": ygens[iev],
+                    "ycand": ycands[iev],
                 }
 
     def prepare_data_delphes(self, fname):
+
+        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+        min_jet_pt = 5.0  # GeV
 
         if fname.endswith(".pkl"):
             data = pickle.load(open(fname, "rb"))
@@ -126,29 +135,53 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         ygens = []
         ycands = []
         for i in range(len(data["X"])):
-            X = np.array(data["X"][i][:PADDED_NUM_ELEM_SIZE], np.float32)
-            X = np.pad(X, [(0, PADDED_NUM_ELEM_SIZE - X.shape[0]), (0, 0)])
+            X = data["X"][i].astype(np.float32)
+            ygen = data["ygen"][i].astype(np.float32)
+            ycand = data["ycand"][i].astype(np.float32)
 
-            ygen = np.array(data["ygen"][i][:PADDED_NUM_ELEM_SIZE], np.float32)
-            ygen = np.pad(ygen, [(0, PADDED_NUM_ELEM_SIZE - ygen.shape[0]), (0, 0)])
+            # add jet_idx column
+            ygen = np.concatenate([ygen.astype(np.float32), np.zeros((len(ygen), 1), dtype=np.float32)], axis=-1)
+            ycand = np.concatenate([ycand.astype(np.float32), np.zeros((len(ycand), 1), dtype=np.float32)], axis=-1)
 
-            ycand = np.array(data["ycand"][i][:PADDED_NUM_ELEM_SIZE], np.float32)
-            ycand = np.pad(ycand, [(0, PADDED_NUM_ELEM_SIZE - ycand.shape[0]), (0, 0)])
+            # prepare gen candidates for clustering
+            cls_id = ygen[..., 0]
+            valid = cls_id != 0
+            # save mapping of index after masking -> index before masking as numpy array
+            # inspired from:
+            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+            cumsum = np.cumsum(valid) - 1
+            _, index_mapping = np.unique(cumsum, return_index=True)
 
-            X = np.expand_dims(X, 0)
-            ygen = np.expand_dims(ygen, 0)
-            ycand = np.expand_dims(ycand, 0)
+            pt = ygen[valid, Y_FEATURES.index("pt")]
+            eta = ygen[valid, Y_FEATURES.index("eta")]
+            phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
+            e = ygen[valid, Y_FEATURES.index("energy")]
+            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+
+            # cluster jets, sort jet indices in descending order by pt
+            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
+            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+            # retrieve corresponding indices of constituents
+            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+
+            # add index information to ygen and ycand
+            # index jets in descending order by pt starting from 1:
+            # 0 is null (unclustered),
+            # 1 is 1st highest-pt jet,
+            # 2 is 2nd highest-pt jet, ...
+            for jet_idx in sorted_jet_idx:
+                jet_constituents = [
+                    index_mapping[idx] for idx in constituent_idx[jet_idx]
+                ]  # map back to constituent index *before* masking
+                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
             Xs.append(X)
             ygens.append(ygen)
             ycands.append(ycand)
 
-        X = np.concatenate(Xs)
-        ygen = np.concatenate(ygens)
-        ycand = np.concatenate(ycands)
-
-        del data
-        return X, ygen, ycand
+        return Xs, ygens, ycands
 
 
 def get_delphes_from_zenodo(download_dir="."):

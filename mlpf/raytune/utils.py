@@ -1,4 +1,3 @@
-import nevergrad as ng
 from ray.tune.schedulers import (
     AsyncHyperBandScheduler,
     HyperBandForBOHB,
@@ -59,6 +58,8 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
         )
     if raytune_cfg["search_alg"] == "nevergrad":
         print("INFO: Using bayesian optimization from nevergrad")
+        import nevergrad as ng
+
         return NevergradSearch(
             optimizer=ng.optimizers.BayesOptim(pca=False, init_budget=raytune_cfg["nevergrad"]["n_random_steps"]),
             metric=raytune_cfg["default_metric"],

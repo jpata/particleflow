@@ -10,15 +10,14 @@
 # by J. Pata
 
 import bz2
-import json
+import pickle
 import sys
 
 from hep.lcio.implementation.io import LCFactory
 
-perfile = 10
+save_hits = False
 
-
-def genParticleToDict(par):
+def genParticleToDict(par, genparticle_dict):
     mom = par.getMomentum()
     parent_pdgid0 = 0
     parent_idx0 = -1
@@ -62,7 +61,7 @@ def pfParticleToDict(par):
     return vec
 
 
-def clusterToDict(par):
+def clusterToDict(par, set_hcal_hits, set_ecal_hits):
     pos = par.getPosition()
 
     vec = {
@@ -83,7 +82,7 @@ def clusterToDict(par):
     return vec
 
 
-def trackHitToDict(par):
+def trackHitToDict(par, genparticle_dict, sim_trackhit_to_gen):
     pos = par.getPosition()
     vec = {
         "x": pos[0],
@@ -105,7 +104,7 @@ def trackHitToDict(par):
     return vec
 
 
-def trackToDict(par):
+def trackToDict(par, genparticle_dict, sim_trackhit_to_gen):
     ts = par.getTrackStates()[0]
     vec = {
         "d0": ts.getD0(),
@@ -114,6 +113,13 @@ def trackToDict(par):
         "phi": ts.getPhi(),
         "tan_lambda": ts.getTanLambda(),
         "nhits": len(par.getTrackerHits()),
+        "ndf": par.getNdf(),
+        "chi2": par.getChi2(),
+        "dedx": par.getdEdx(),
+        "dedx_error": par.getdEdxError(),
+        "radius_innermost_hit": par.getRadiusOfInnermostHit(),
+        "track_type": par.getType(),
+        "nstates": len(par.getTrackStates()),
     }
 
     # for each hit in the track, find the associated genparticle
@@ -128,7 +134,7 @@ def trackToDict(par):
 
     # assign the track to the genparticle which was associated to the most hits
     gp_contributions = sorted(gps.items(), key=lambda x: x[1], reverse=True)
-    vec["gp_contributions"] = {c[0]: c[1] for c in gp_contributions}
+    vec["gp_contributions"] = gp_contributions
 
     return vec
 
@@ -177,8 +183,8 @@ if __name__ == "__main__":
         simTrackHitToReco = evt.getCollection("HelicalTrackHitRelations")
         simTrackHitToGen = evt.getCollection("HelicalTrackMCRelations")
 
+        #map of reco hits to sim hits
         reco_trackhit_to_sim = {}
-        sim_trackhit_to_gen = {}
         for shr in simTrackHitToReco:
             sh = getattr(shr, "from")
             rh = shr.to
@@ -186,6 +192,8 @@ if __name__ == "__main__":
                 reco_trackhit_to_sim[rh] = []
             reco_trackhit_to_sim[rh].append(sh)
 
+        #map of sim hits to gen particles
+        sim_trackhit_to_gen = {}
         for shg in simTrackHitToGen:
             sh = getattr(shg, "from")
             gp = shg.to
@@ -232,9 +240,10 @@ if __name__ == "__main__":
 
         for i in range(nMc):
             par = col.getElementAt(i)
-            vec = genParticleToDict(par)
+            vec = genParticleToDict(par, genparticle_dict)
             genparticles.append(vec)
 
+        #process clusters
         clusters = []
         cluster_dict = {}
         calohit_to_cluster = {}
@@ -242,21 +251,23 @@ if __name__ == "__main__":
             parCl = colCl.getElementAt(i)
             pos = parCl.getPosition()
             cluster_dict[parCl] = i
-            vec = clusterToDict(parCl)
+            vec = clusterToDict(parCl, set_hcal_hits, set_ecal_hits)
             clusters.append(vec)
             for hit in parCl.getCalorimeterHits():
                 calohit_to_cluster[hit] = i
 
+        #process tracks
         tracks = []
         track_dict = {}
         for i in range(nTr):
             parTr = colTr.getElementAt(i)
             track_dict[parTr] = i
-            vec = trackToDict(parTr)
+            vec = trackToDict(parTr, genparticle_dict, sim_trackhit_to_gen)
             tracks.append(vec)
 
+        #process PF particles
         pfs = []
-        for i in range(nPF):  # loop over all particles
+        for i in range(nPF):
             parPF = colPF.getElementAt(i)
             vec = pfParticleToDict(parPF)
 
@@ -279,7 +290,7 @@ if __name__ == "__main__":
         track_hits = []
         for i in range(len(simTrackHits)):
             par = simTrackHits.getElementAt(i)
-            track_hits.append(trackHitToDict(par))
+            track_hits.append(trackHitToDict(par, genparticle_dict, sim_trackhit_to_gen))
 
         hcal_hits = []
         for i in range(nHCB):
@@ -297,6 +308,7 @@ if __name__ == "__main__":
             par = colECE.getElementAt(i)
             ecal_hits.append(caloHitToDict(par, calohit_to_cluster, genparticle_dict, calohit_recotosim))
 
+        #add the genparticle contributions from the cluster hits to the clusters
         for hit in hcal_hits + ecal_hits:
             clidx = hit["cluster_idx"]
             gps = hit.pop("gp_contributions")
@@ -312,32 +324,39 @@ if __name__ == "__main__":
                 if not (gp in gps_d):
                     gps_d[gp] = 0.0
                 gps_d[gp] += energy
-            clusters[icl]["gp_contributions"] = gps_d
 
-        event = {
-            "track_hits": track_hits,
-            "genparticles": genparticles,
-            "clusters": clusters,
-            "tracks": tracks,
-            "pfs": pfs,
-            "hcal_hits": hcal_hits,
-            "ecal_hits": ecal_hits,
-        }
+            clusters[icl]["gp_contributions"] = sorted(gps_d.items(), key=lambda x: x[1], reverse=True)
+
+        event = {}
+        if save_hits:
+            event = {
+                "track_hits": track_hits,
+                "hcal_hits": hcal_hits,
+                "ecal_hits": ecal_hits,
+            }
+
+        event["genparticles"] = genparticles
+        event["clusters"] = clusters
+        event["tracks"] = tracks
+        event["pfs"] = pfs
 
         event_data.append(event)
 
-        # save the current events
-        if len(event_data) >= perfile:
-            ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2" % ioutfile), "w")
-            json.dump(event_data, ofi, indent=2, sort_keys=True)
-            ofi.close()
-            event_data = []
-            ioutfile += 1
+        # # save the current events when perfile is exceeded
+        # if len(event_data) >= perfile:
+        #     ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.pkl.bz2" % ioutfile), "wb")
+        #     pickle.dump(event_data, ofi)
+        #     ofi.close()
+        #     event_data = []
+        #     ioutfile += 1
         nEvent += 1
 
-    # save the events data to a file
-    ofi = bz2.BZ2File(infile.replace(".slcio", "_%d.json.bz2" % ioutfile), "w")
-    json.dump(event_data, ofi, indent=2, sort_keys=True)
+    # save events to a file
+    print "saving events", len(event_data)
+    outfile = infile.replace(".slcio", ".pkl")
+    ofi = open(outfile, "wb")
+    pickle.dump(event_data, ofi)
     ofi.close()
+    print "done saving events to", outfile
 
     reader.close()  # close the file

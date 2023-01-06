@@ -4,6 +4,7 @@ import pickle
 import awkward as ak
 import fastjet
 import numpy as np
+import tqdm
 import vector
 from numpy.lib.recfunctions import append_fields
 
@@ -117,12 +118,12 @@ def prepare_data_cms(fn):
         )
 
         # take care of outliers
-        Xelem_flat[np.isnan(Xelem_flat)] = 0
-        Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
-        ygen_flat[np.isnan(ygen_flat)] = 0
-        ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-        ycand_flat[np.isnan(ycand_flat)] = 0
-        ycand_flat[np.abs(ycand_flat) > 1e4] = 0
+        # Xelem_flat[np.isnan(Xelem_flat)] = 0
+        # Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+        # ygen_flat[np.isnan(ygen_flat)] = 0
+        # ygen_flat[np.abs(ygen_flat) > 1e4] = 0
+        # ycand_flat[np.isnan(ycand_flat)] = 0
+        # ycand_flat[np.abs(ycand_flat) > 1e4] = 0
 
         X = Xelem_flat
         ycand = ycand_flat
@@ -141,11 +142,11 @@ def prepare_data_cms(fn):
         eta = ygen[valid, Y_FEATURES.index("eta")]
         phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
         e = ygen[valid, Y_FEATURES.index("e")]
-        vec = vector.arr(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+        vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
         # cluster jets, sort jet indices in descending order by pt
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets = vector.arr(cluster.inclusive_jets(min_pt=min_jet_pt))
+        jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
         sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
         # retrieve corresponding indices of constituents
         constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
@@ -184,7 +185,7 @@ def split_sample(path, test_frac=0.8):
 def generate_examples(files):
     """Yields examples."""
 
-    for fi in files:
+    for fi in tqdm.tqdm(files):
         Xs, ygens, ycands = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
             x = Xs[ii]

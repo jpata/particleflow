@@ -2,10 +2,10 @@ import sys
 import time
 
 import numpy as np
-
-# pip install only onnxruntime_gpu, not onnxruntime!
 import onnxruntime
 import pynvml
+
+# pip install only onnxruntime_gpu, not onnxruntime!
 
 if __name__ == "__main__":
     pynvml.nvmlInit()
