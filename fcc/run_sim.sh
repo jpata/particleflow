@@ -10,16 +10,14 @@ env
 df -h
 
 WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
-SAMPLE=$1
-SEED=$2
 OUTDIR=`pwd`
 PFDIR=/home/joosep/particleflow
-NEV=500
+NEV=100
 NUM=$1
 
-SAMPLE=p8_ee_Z_Ztautau_ecm125
+#SAMPLE=p8_ee_Z_Ztautau_ecm125
 #SAMPLE=p8_ee_tt_ecm365
-#SAMPLE=p8_ee_ZZ_fullhad_ecm365
+SAMPLE=p8_ee_ZZ_fullhad_ecm365
 
 mkdir -p $OUTDIR/$SAMPLE
 
@@ -28,8 +26,7 @@ cd $WORKDIR
 
 ls -al /cvmfs
 ls -al /cvmfs/sw.hsf.org
-#source /cvmfs/sw.hsf.org/key4hep/setup.sh
-source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-14/x86_64-centos7-gcc11.2.0-opt/zkjui/setup.sh
+source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
 
 cp $PFDIR/fcc/${SAMPLE}.cmd card.cmd
 cp $PFDIR/fcc/pythia.py ./
