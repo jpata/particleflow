@@ -5,22 +5,25 @@
 git clone https://github.com/jpata/particleflow.git
 cd particleflow
 
-git submodule init
-git submodule update
-
-#Download the training datasets, about 60GB
-rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms data/
-
-#Convert the training dataset to TFDS, this will require about 370GB free space in ~/tensorflow_datasets
-tfds build hep_tfds/heptfds/cms_pf/ttbar --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
-tfds build hep_tfds/heptfds/cms_pf/qcd --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
-tfds build hep_tfds/heptfds/cms_pf/ztt --data_dir ~/tensorflow_datasets --manual_dir ./data/cms --overwrite
+#Download the training datasets, about 400GB
+rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/tensorflow_datasets ~/
 
 #Run the training, multi-GPU support on the same machine is available, specify explicitly the GPUs you want to use
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pipeline.py train -c parameters/cms-gen.yaml
 ```
 
+## CMS Public Results
+
+- CERN-CMS-DP-2022-061, Progress towards an improved particle flow
+algorithm at CMS with machine learning, http://cds.cern.ch/record/2842375/files/DP2022_061.pdf
+- CERN-CMS-DP-2021-030, Machine Learning for Particle Flow Reconstruction at CMS, http://cds.cern.ch/record/2792320/files/DP2021_030.pdf?version=1
+- Machine learning for particle flow at CMS, ML4Jets 2022, https://indico.cern.ch/event/1159913/contributions/5101642/attachments/2541214/4374683/ml4jets_2022_mlpf_dsr.pdf
+- Progress towards an improved particle-flow algorithm at CMS with machine learning, ACAT 2022, https://indico.cern.ch/event/1106990/contributions/4998026/attachments/2533513/4359689/mlpf_acat_v2.pdf
+- Machine Learning for Particle Flow reconstruction at CMS, ACAT 2021, https://indico.cern.ch/event/855454/contributions/4597457/attachments/2356505/4021524/cms_mlpf_acat2021_presentation.pdf
+
 ## Older presentations in CMS
+
+**TO BE UPDATED**
 
 - CMS ML Forum, 2020-09-30: https://indico.cern.ch/event/952419/contributions/4041555/attachments/2113070/3554608/2020_09_30.pdf
 - CMS ML Town Hall, 2020-07-03: https://indico.cern.ch/event/922319/contributions/3928284/attachments/2068518/3472668/2020_07_02.pdf

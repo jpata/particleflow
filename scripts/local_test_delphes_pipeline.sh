@@ -14,9 +14,12 @@ mv tev14_pythia8_qcd_10_0.pkl.bz2 data/delphes_pf/pythia8_qcd/val/
 tfds build mlpf/heptfds/delphes_pf --download_dir data/
 
 #Run a simple training on a few events
-python mlpf/pipeline.py train -c parameters/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
+python mlpf/pipeline.py train --config parameters/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
 
 ls ./experiments/delphes_*/weights/
 
-#Generate the pred.npz file of predictions
-python mlpf/pipeline.py evaluate --nevents 10 -t ./experiments/delphes_*
+#Generate the prediction files
+python mlpf/pipeline.py evaluate --nevents 5 --train-dir ./experiments/delphes_*
+
+#Run plots
+python mlpf/pipeline.py plots --train-dir ./experiments/delphes_*

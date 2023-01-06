@@ -1,7 +1,7 @@
 """CMS PF ZTT dataset."""
-
 import cms_utils
 import tensorflow as tf
+
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -21,12 +21,13 @@ _CITATION = """
 class CmsPfZtt(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ztt dataset."""
 
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version("1.5.1")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
         "1.4.0": "Add gen jet index information",
         "1.5.0": "No padding",
+        "1.5.1": "Remove outlier caps",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     mkdir -p data

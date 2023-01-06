@@ -1,12 +1,14 @@
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
-    print("hvd not enabled, ignoring")
+    logging.warning("horovod not found, ignoring")
 
-import json
-import logging
 import os
 import pickle
 import platform
@@ -16,35 +18,29 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
+import boost_histogram as bh
 import click
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import mixed_precision
+import tqdm
+from customizations import customization_functions
 from tfmodel import hypertuning
-from tfmodel.callbacks import BenchmarkLogggerCallback
+from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config, unpack_target
 from tfmodel.lr_finder import LRFinder
-from tfmodel.model_setup import (
-    configure_model_weights,
-    eval_model,
-    freeze_model,
-    make_model,
-    prepare_callbacks,
-)
+from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
 from tfmodel.utils import (
     create_experiment_dir,
     delete_all_but_best_checkpoint,
     get_best_checkpoint,
     get_datasets,
-    get_heptfds_dataset,
     get_latest_checkpoint,
-    get_loss_dict,
-    get_lr_schedule,
-    get_optimizer,
     get_strategy,
+    get_train_test_val_datasets,
     get_tuner,
+    initialize_horovod,
     load_config,
+    model_scope,
     parse_config,
-    set_config_loss,
 )
 from tfmodel.utils_analysis import (
     analyze_ray_experiment,
@@ -53,21 +49,6 @@ from tfmodel.utils_analysis import (
     summarize_top_k,
     topk_summary_plot_v2,
 )
-
-
-def customize_pipeline_test(config):
-    # for cms.yaml, keep only ttbar
-    config["batching"]["bucket_by_sequence_length"] = False
-    if "physical" in config["train_test_datasets"]:
-        config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]
-        config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
-        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 2
-        config["validation_datasets"] = ["cms_pf_ttbar"]
-
-    return config
-
-
-customization_functions = {"pipeline_test": customize_pipeline_test}
 
 
 @click.group()
@@ -89,19 +70,19 @@ def main():
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
 @click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
-@click.option("-m", "--horovod_enabled", help="Enable multi-node training using Horovod", is_flag=True)
-@click.option("-g", "--habana", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option("-m", "--horovod-enabled", help="Enable multi-node training using Horovod", is_flag=True)
+@click.option("-g", "--habana-enabled", help="Enable training on Habana Gaudi", is_flag=True)
 @click.option(
     "-b",
     "--benchmark_dir",
-    help="dir to save becnhmark results. If -b exp_dir results will be saved in the \
+    help="dir to save benchmark results. If 'exp_dir' results will be saved in the \
     experiment folder",
     type=str,
     default=None,
 )
-@click.option("-B", "--batch_size", help="batch size per device", type=int, default=None)
-@click.option("-D", "--num_cpus", help="number of CPU cores to use, ignored if CUDA GPUs are found", type=int, default=1)
-@click.option("-s", "--seeds", help="set the random seeds", is_flag=True, default=True)
+@click.option("--batch-multiplier", help="batch size per device", type=int, default=None)
+@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+@click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
     config,
     weights,
@@ -115,31 +96,46 @@ def train(
     comet_offline,
     jobid,
     horovod_enabled,
-    habana,
+    habana_enabled,
     benchmark_dir,
-    batch_size,
+    batch_multiplier,
     num_cpus,
     seeds,
 ):
+
+    # tf.debugging.enable_check_numerics()
 
     if seeds:
         random.seed(1234)
         np.random.seed(1234)
         tf.random.set_seed(1234)
 
-    # tf.debugging.enable_check_numerics()
-
     """Train a model defined by config"""
     config_file_path = config
     config, config_file_stem = parse_config(config, nepochs=nepochs, weights=weights)
-    print(f"loaded config file: {config_file_path}")
+    logging.info(f"loaded config file: {config_file_path}")
 
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
-    if batch_size:
-        for key in config["train_test_datasets"]:
-            config["train_test_datasets"][key]["batch_per_gpu"] = batch_size
+    if batch_multiplier:
+        if config["batching"]["bucket_by_sequence_length"]:
+            logging.info(
+                "Dynamic batching is enabled, changing batch size multiplier from {} to {}".format(
+                    config["batching"]["batch_multiplier"], config["batching"]["batch_multiplier"] * batch_multiplier
+                )
+            )
+            config["batching"]["batch_multiplier"] *= batch_multiplier
+        else:
+            for key in config["train_test_datasets"]:
+                logging.info(
+                    "Static batching is enabled, changing batch size for dataset {} from {} to {}".format(
+                        key,
+                        config["train_test_datasets"][key]["batch_per_gpu"],
+                        config["train_test_datasets"][key]["batch_per_gpu"] * batch_multiplier,
+                    )
+                )
+                config["train_test_datasets"][key]["batch_per_gpu"] *= batch_multiplier
 
     if customize:
         config = customization_functions[customize](config)
@@ -149,7 +145,7 @@ def train(
 
     if horovod_enabled:
         num_gpus, num_batches_multiplier = initialize_horovod()
-    elif habana:
+    elif habana_enabled:
         import habana_frameworks.tensorflow as htf
 
         htf.load_habana_module()
@@ -160,7 +156,7 @@ def train(
         num_gpus = 1
         num_batches_multiplier = 1
     else:
-        strategy, num_gpus, num_batches_multiplier = get_strategy()
+        strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
@@ -169,7 +165,7 @@ def train(
 
     try:
         if comet_offline:
-            print("Using comet-ml OfflineExperiment, saving logs locally.")
+            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
 
             experiment = OfflineExperiment(
                 project_name="particleflow-tf",
@@ -181,7 +177,7 @@ def train(
                 offline_directory=outdir + "/cometml",
             )
         else:
-            print("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
 
             experiment = Experiment(
                 project_name="particleflow-tf",
@@ -192,8 +188,9 @@ def train(
                 auto_histogram_activation_logging=False,
             )
     except Exception as e:
-        print("Failed to initialize comet-ml dashboard: {}".format(e))
+        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
         experiment = None
+
     if experiment:
         experiment.set_name(outdir)
         experiment.log_code("mlpf/tfmodel/model.py")
@@ -204,34 +201,18 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, num_train_steps, train_samples = get_datasets(
-        config["train_test_datasets"], config, num_batches_multiplier, "train"
-    )
-    ds_test, num_test_steps, test_samples = get_datasets(
-        config["train_test_datasets"], config, num_batches_multiplier, "test"
-    )
-    ds_val, ds_info = get_heptfds_dataset(
-        config["validation_datasets"][0],
-        config,
-        "test",
-        config["setup"]["num_events_validation"],
-        supervised=False,
-    )
-    ds_val = ds_val.padded_batch(config["validation_batch_size"])
-
-    if ntrain:
-        ds_train = ds_train.take(ntrain)
-        num_train_steps = ntrain
-    if ntest:
-        ds_test = ds_test.take(ntest)
-        num_test_steps = ntest
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
     epochs = config["setup"]["num_epochs"]
-    total_steps = num_train_steps * epochs
-    print("num_train_steps:", num_train_steps, "num_train_samples:", train_samples)
-    print("epochs:", epochs, "total_train_steps:", total_steps)
+    total_steps = ds_train.num_steps() * epochs
+    logging.info("num_train_steps: {}".format(ds_train.num_steps()))
+    logging.info("num_test_steps: {}".format(ds_test.num_steps()))
+    logging.info("epochs: {}, total_train_steps: {}".format(epochs, total_steps))
 
-    print("num_test_steps:", num_test_steps, "num_test_samples:", test_samples)
+    if experiment:
+        experiment.log_parameter("num_train_steps", ds_train.num_steps())
+        experiment.log_parameter("num_test_steps", ds_test.num_steps())
+        experiment.log_parameter("num_val_steps", ds_val.num_steps())
 
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
@@ -240,7 +221,18 @@ def train(
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
     with strategy.scope():
-        callbacks = prepare_callbacks(config, outdir, ds_val, comet_experiment=experiment, horovod_enabled=horovod_enabled)
+        callbacks = prepare_callbacks(
+            config,
+            outdir,
+            ds_val,
+            comet_experiment=experiment,
+            horovod_enabled=horovod_enabled,
+            benchmark_dir=benchmark_dir,
+            num_train_steps=ds_train.num_steps(),
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            train_samples=ds_train.num_samples,
+        )
 
         verbose = 1
         if horovod_enabled:
@@ -248,217 +240,30 @@ def train(
             callbacks.append(hvd.callbacks.MetricAverageCallback())
             verbose = 1 if hvd.rank() == 0 else 0
 
-            num_train_steps /= hvd.size()
-            num_test_steps /= hvd.size()
+            ds_train._num_steps /= hvd.size()
+            ds_test._num_steps /= hvd.size()
 
         callbacks.append(optim_callbacks)
 
-        if benchmark_dir:
-            if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
-                benchmark_dir = outdir
-            if config["dataset"]["schema"] == "delphes":
-                bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
-            elif config["dataset"]["schema"] == "cms":
-                assert (
-                    len(config["train_test_datasets"]) == 1
-                ), "Expected exactly 1 key, physical OR delphes, \
-                    found {}".format(
-                    config["train_test_datasets"].keys()
-                )
-                bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
-            else:
-                raise ValueError(
-                    "Benchmark callback only supports delphes or \
-                    cms dataset schema. {}".format(
-                        config["dataset"]["schema"]
-                    )
-                )
-            Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
-            callbacks.append(
-                BenchmarkLogggerCallback(
-                    outdir=benchmark_dir,
-                    steps_per_epoch=num_train_steps,
-                    batch_size_per_gpu=bmk_bs,
-                    num_gpus=num_gpus,
-                    num_cpus=num_cpus,
-                    train_set_size=train_samples,
-                )
-            )
-
         model.fit(
-            ds_train.repeat(),
-            validation_data=ds_test.repeat(),
+            ds_train.tensorflow_dataset.repeat(),
+            validation_data=ds_test.tensorflow_dataset.repeat(),
             epochs=config["setup"]["num_epochs"],
             callbacks=callbacks,
-            steps_per_epoch=num_train_steps,
-            validation_steps=num_test_steps,
+            steps_per_epoch=ds_train.num_steps(),
+            validation_steps=ds_test.num_steps(),
             initial_epoch=initial_epoch,
             verbose=verbose,
         )
 
-    # if not horovod_enabled or hvd.rank()==0:
-    #     model_save(outdir, fit_result, model, weights)
-
-
-def model_save(outdir, fit_result, model, weights):
-    history_path = Path(outdir) / "history"
-    history_path = str(history_path)
-    with open("{}/history.json".format(history_path), "w") as fi:
-        json.dump(fit_result.history, fi)
-
-    weights = get_best_checkpoint(outdir)
-    print("Loading best weights that could be found from {}".format(weights))
-    model.load_weights(weights, by_name=True)
-
-    # model.save(outdir + "/model_full", save_format="tf")
-    print("Training done.")
-
-
-def model_scope(config, total_steps, weights=None, horovod_enabled=False):
-    lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
-    opt = get_optimizer(config, lr_schedule)
-
-    if config["setup"]["dtype"] == "float16":
-        model_dtype = tf.dtypes.float16
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_global_policy(policy)
-        opt = mixed_precision.LossScaleOptimizer(opt)
-    else:
-        model_dtype = tf.dtypes.float32
-
-    model = make_model(config, model_dtype)
-
-    # Build the layers after the element and feature dimensions are specified
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-    initial_epoch = 0
-    loaded_opt = None
-
-    if weights:
-        # We need to load the weights in the same trainable configuration as the model was set up
-        configure_model_weights(model, config["setup"].get("weights_config", "all"))
-        model.load_weights(weights, by_name=True)
-        print("INFO: using checkpointed model weights from: {}".format(weights))
-        opt_weight_file = weights.replace("hdf5", "pkl").replace("/weights-", "/opt-")
-        if os.path.isfile(opt_weight_file):
-            loaded_opt = pickle.load(open(opt_weight_file, "rb"))
-            print("INFO: using checkpointed optimizer weights from: {}".format(opt_weight_file))
-
-        initial_epoch = int(weights.split("/")[-1].split("-")[1])
-
-    config = set_config_loss(config, config["setup"]["trainable"])
-    configure_model_weights(model, config["setup"]["trainable"])
-
-    print("model weights")
-    tw_names = [m.name for m in model.trainable_weights]
-    for w in model.weights:
-        print("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
-
-    loss_dict, loss_weights = get_loss_dict(config)
-
-    model.compile(
-        loss=loss_dict,
-        optimizer=opt,
-        sample_weight_mode="temporal",
-        loss_weights=loss_weights,
-    )
-
-    model.summary()
-
-    # Set the optimizer weights
-    if loaded_opt:
-
-        def model_weight_setting():
-            grad_vars = model.trainable_weights
-            zero_grads = [tf.zeros_like(w) for w in grad_vars]
-            model.optimizer.apply_gradients(zip(zero_grads, grad_vars))
-            if (model.optimizer.__class__.__module__ == "keras.optimizers.optimizer_v1") or (
-                model.optimizer.__class__.__module__ == "keras.optimizer_v1"
-            ):
-                model.optimizer.optimizer.optimizer.set_weights(loaded_opt["weights"])
-            else:
-                model.optimizer.set_weights(loaded_opt["weights"])
-
-        # FIXME: check that this still works with multiple GPUs
-        strategy = tf.distribute.get_strategy()
-        strategy.run(model_weight_setting)
-
-    return model, optim_callbacks, initial_epoch
-
-
-def initialize_horovod():
-    hvd.init()
-    gpus = tf.config.experimental.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    if gpus:
-        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
-
-    num_batches_multiplier = 1
-    if hvd.size() > 1:
-        num_batches_multiplier = hvd.size()
-
-    return hvd.size(), num_batches_multiplier
-
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-def compute_validation_loss(config, train_dir, weights):
-    """Evaluate the trained model in train_dir"""
-    if config is None:
-        config = Path(train_dir) / "config.yaml"
-        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
-    config, _ = parse_config(config, weights=weights)
-
-    if config["setup"]["dtype"] == "float16":
-        model_dtype = tf.dtypes.float16
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_global_policy(policy)
-    else:
-        model_dtype = tf.dtypes.float32
-
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
-    ds_test, num_test_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test")
-
-    with strategy.scope():
-        model = make_model(config, model_dtype)
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-        # need to load the weights in the same trainable configuration as the model was set up
-        configure_model_weights(model, config["setup"].get("weights_config", "all"))
-        if weights:
-            model.load_weights(weights, by_name=True)
-        else:
-            weights = get_best_checkpoint(train_dir)
-            print("Loading best weights that could be found from {}".format(weights))
-            model.load_weights(weights, by_name=True)
-
-        loss_dict, loss_weights = get_loss_dict(config)
-        model.compile(
-            loss=loss_dict,
-            # sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-        )
-
-        losses = model.evaluate(
-            x=ds_test,
-            steps=num_test_steps,
-            return_dict=True,
-        )
-    with open("{}/losses.txt".format(train_dir), "w") as loss_file:
-        loss_file.write(json.dumps(losses) + "\n")
-
-
-@main.command()
-@click.help_option("-h", "--help")
-@click.option("-t", "--train_dir", required=True, help="directory containing a completed training", type=click.Path())
-@click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option("--config", help="configuration file", type=click.Path())
+@click.option("--weights", default=None, help="trained weights to load", type=click.Path())
 @click.option("--customize", help="customization function", type=str, default=None)
-@click.option("--nevents", help="override the number of events to evaluate", type=int, default=None)
+@click.option("--nevents", help="maximum number of events", type=int, default=-1)
 def evaluate(config, train_dir, weights, customize, nevents):
     """Evaluate the trained model in train_dir"""
     if config is None:
@@ -469,41 +274,23 @@ def evaluate(config, train_dir, weights, customize, nevents):
     if customize:
         config = customization_functions[customize](config)
 
-    if config["setup"]["dtype"] == "float16":
-        model_dtype = tf.dtypes.float16
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_global_policy(policy)
-    else:
-        model_dtype = tf.dtypes.float32
-
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
-
-    # disable small graph optimization for onnx export (tf.cond is not well supported)
+    # disable small graph optimization for onnx export (tf.cond is not well supported by ONNX export)
     if "small_graph_opt" in config["setup"]:
         config["setup"]["small_graph_opt"] = False
 
-    model = make_model(config, model_dtype)
-    model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-    # need to load the weights in the same trainable configuration as the model was set up
-    configure_model_weights(model, config["setup"].get("weights_config", "all"))
-    if weights:
-        model.load_weights(weights, by_name=True)
-    else:
+    if not weights:
         weights = get_best_checkpoint(train_dir)
-        print("Loading best weights that could be found from {}".format(weights))
-        model.load_weights(weights, by_name=True)
+        logging.info("Loading best weights that could be found from {}".format(weights))
 
-    iepoch = int(weights.split("/")[-1].split("-")[1])
+    model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
-    for dsname in config["validation_datasets"]:
-        ds_test, _ = get_heptfds_dataset(dsname, config, "test", supervised=False)
-        if nevents:
-            ds_test = ds_test.take(nevents)
-        ds_test = ds_test.padded_batch(config["validation_batch_size"])
-        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(iepoch) / dsname)
+    for dsname in config["evaluation_datasets"]:
+        val_ds = config["evaluation_datasets"][dsname]
+        ds_test = mlpf_dataset_from_config(dsname, config, "test", nevents if nevents >= 0 else val_ds["num_events"])
+        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
+        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
-        eval_model(model, ds_test, config, eval_dir)
+        eval_model(model, ds_test_tfds, config, eval_dir)
 
     freeze_model(model, config, train_dir)
 
@@ -522,35 +309,10 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, num_train_steps = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
+    ds_train, _, _ = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
 
     with strategy.scope():
-        opt = tf.keras.optimizers.Adam(learning_rate=1e-7)  # This learning rate will be changed by the lr_finder
-        if config["setup"]["dtype"] == "float16":
-            model_dtype = tf.dtypes.float16
-            policy = mixed_precision.Policy("mixed_float16")
-            mixed_precision.set_global_policy(policy)
-            opt = mixed_precision.LossScaleOptimizer(opt)
-        else:
-            model_dtype = tf.dtypes.float32
-
-        model = make_model(config, model_dtype)
-        config = set_config_loss(config, config["setup"]["trainable"])
-
-        # Run model once to build the layers
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
-
-        configure_model_weights(model, config["setup"]["trainable"])
-
-        loss_dict, loss_weights = get_loss_dict(config)
-        model.compile(
-            loss=loss_dict,
-            optimizer=opt,
-            sample_weight_mode="temporal",
-            loss_weights=loss_weights,
-        )
-        model.summary()
-
+        model, _, _ = model_scope(config, 1)
         max_steps = 200
         lr_finder = LRFinder(max_steps=max_steps)
         callbacks = [lr_finder]
@@ -581,7 +343,8 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 @click.option("--ntrain", default=None, help="override the number of training events", type=int)
 @click.option("--ntest", default=None, help="override the number of testing events", type=int)
 @click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
-def hypertune(config, outdir, ntrain, ntest, recreate):
+@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     config_file_path = config
     config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
@@ -589,27 +352,11 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
     if config["hypertune"]["algorithm"] == "hyperband":
         config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
 
-    ds_train, ds_info = get_heptfds_dataset(config["training_dataset"], config, "train", config["setup"]["num_events_train"])
-    ds_test, _ = get_heptfds_dataset(config["testing_dataset"], config, "test", config["setup"]["num_events_test"])
-    ds_val, _ = get_heptfds_dataset(
-        config["validation_datasets"][0],
-        config,
-        "test",
-        config["setup"]["num_events_validation"],
-        supervised=False,
-    )
-    ds_val = ds_val.padded_batch(config["validation_batch_size"])
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
-    num_train_steps = 0
-    for _ in ds_train:
-        num_train_steps += 1
-    num_test_steps = 0
-    for _ in ds_test:
-        num_test_steps += 1
-
-    model_builder, optim_callbacks = hypertuning.get_model_builder(config, num_train_steps)
+    model_builder, optim_callbacks = hypertuning.get_model_builder(config, ds_train.num_steps())
 
     callbacks = prepare_callbacks(
         config,
@@ -617,29 +364,37 @@ def hypertune(config, outdir, ntrain, ntest, recreate):
         ds_val,
     )
 
-    callbacks.append(optim_callbacks)
+    for cb in optim_callbacks:
+        callbacks.append(cb)
     callbacks.append(tf.keras.callbacks.EarlyStopping(patience=20, monitor="val_loss"))
 
     tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
     tuner.search_space_summary()
 
     tuner.search(
-        ds_train.repeat(),
+        ds_train.tensorflow_dataset.repeat(),
         epochs=config["setup"]["num_epochs"],
-        validation_data=ds_test.repeat(),
-        steps_per_epoch=num_train_steps,
-        validation_steps=num_test_steps,
-        callbacks=callbacks,
+        validation_data=ds_test.tensorflow_dataset.repeat(),
+        steps_per_epoch=ds_train.num_steps(),
+        validation_steps=ds_test.num_steps(),
+        callbacks=[],
     )
-    print("Hyperparameter search complete.")
+    logging.info("Hyperparameter search complete.")
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     tuner.results_summary()
     for trial in tuner.oracle.get_best_trials(num_trials=10):
-        print(trial.hyperparameters.values, trial.score)
+        logging.info(trial.hyperparameters.values, trial.score)
 
 
-def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False):
+#
+# Raytune part
+#
+
+
+def raytune_build_model_and_train(
+    config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False
+):
     from collections import Counter
 
     from ray import tune
@@ -657,7 +412,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
     if config is not None:
         full_config = set_raytune_search_parameters(search_space=config, config=full_config)
 
-    print("Using comet-ml OfflineExperiment, saving logs locally.")
+    logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
     experiment = OfflineExperiment(
         project_name="particleflow-tf-gen",
         auto_metric_logging=True,
@@ -669,31 +424,12 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
     )
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
-    ds_train, num_train_steps = get_datasets(
-        full_config["train_test_datasets"], full_config, num_batches_multiplier, "train"
-    )
-    ds_test, num_test_steps = get_datasets(full_config["train_test_datasets"], full_config, num_batches_multiplier, "test")
-    ds_val, ds_info = get_heptfds_dataset(
-        full_config["validation_datasets"][0],
-        full_config,
-        "test",
-        full_config["setup"]["num_events_validation"],
-        supervised=False,
-    )
-    ds_val = ds_val.padded_batch(config["validation_batch_size"])
-
-    if ntrain:
-        ds_train = ds_train.take(ntrain)
-        num_train_steps = ntrain
-    if ntest:
-        ds_test = ds_test.take(ntest)
-        num_test_steps = ntest
-
-    print("num_train_steps", num_train_steps)
-    print("num_test_steps", num_test_steps)
-    total_steps = num_train_steps * full_config["setup"]["num_epochs"]
-    print("total_steps", total_steps)
+    logging.info("num_train_steps", ds_train.num_steps())
+    logging.info("num_test_steps", ds_test.num_steps())
+    total_steps = ds_train.num_steps() * full_config["setup"]["num_epochs"]
+    logging.info("total_steps", total_steps)
 
     with strategy.scope():
         weights = get_latest_checkpoint(Path(checkpoint_dir).parent) if (checkpoint_dir is not None) else None
@@ -738,7 +474,7 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
     # To make TuneReportCheckpointCallback continue the numbering of checkpoints correctly
     if weights is not None:
         latest_saved_checkpoint_number = int(Path(weights).name.split("-")[1])
-        print("INFO: setting TuneReportCheckpointCallback epoch number to {}".format(latest_saved_checkpoint_number))
+        logging.info("setting TuneReportCheckpointCallback epoch number to {}".format(latest_saved_checkpoint_number))
         tune_report_checkpoint_callback._checkpoint._counter = Counter()
         tune_report_checkpoint_callback._checkpoint._counter["epoch_end"] = latest_saved_checkpoint_number
         tune_report_checkpoint_callback._checkpoint._cp_count = latest_saved_checkpoint_number
@@ -750,8 +486,8 @@ def build_model_and_train(config, checkpoint_dir=None, full_config=None, ntrain=
             validation_data=ds_test.repeat(),
             epochs=full_config["setup"]["num_epochs"],
             callbacks=callbacks,
-            steps_per_epoch=num_train_steps,
-            validation_steps=num_test_steps,
+            steps_per_epoch=ds_train.num_steps(),
+            validation_steps=ds_test.num_steps(),
             initial_epoch=initial_epoch,
         )
     except tf.errors.ResourceExhaustedError:
@@ -823,7 +559,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     start = datetime.now()
     analysis = tune.run(
-        partial(build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds),
+        partial(
+            raytune_build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds
+        ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},
         name=name,
@@ -839,9 +577,9 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
     )
     end = datetime.now()
-    print("Total time of tune.run(...): {}".format(end - start))
+    logging.info("Total time of tune.run(...): {}".format(end - start))
 
-    print(
+    logging.info(
         "Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
         analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]),
     )
@@ -865,7 +603,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
         timefile.write(str(end - start) + "\n")
 
     num_skipped = count_skipped_configurations(analysis.get_best_logdir())
-    print("Number of skipped configurations: {}".format(num_skipped))
+    logging.info("Number of skipped configurations: {}".format(num_skipped))
 
 
 @main.command()
@@ -873,7 +611,7 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 @click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
 def count_skipped(exp_dir):
     num_skipped = count_skipped_configurations(exp_dir)
-    print("Number of skipped configurations: {}".format(num_skipped))
+    logging.info("Number of skipped configurations: {}".format(num_skipped))
 
 
 @main.command()
@@ -889,6 +627,165 @@ def raytune_analysis(exp_dir, save, skip, mode, metric):
     experiment_analysis = ExperimentAnalysis(exp_dir, default_metric=metric, default_mode=mode)
     plot_ray_analysis(experiment_analysis, save=save, skip=skip)
     analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
+
+
+@main.command()
+@click.option("-c", "--config", help="configuration file", type=click.Path())
+def test_datasets(config):
+    from scipy.sparse import coo_matrix
+
+    config_file_path = config
+    config, config_file_stem = parse_config(config)
+    logging.info(f"loaded config file: {config_file_path}")
+
+    histograms = {}
+
+    dataset_sizes = {"train": {}, "test": {}}
+    for dataset_name in config["datasets"]:
+        print(dataset_name)
+
+        for split in ["train", "test"]:
+            ds = mlpf_dataset_from_config(dataset_name, config, split)
+            dataset = dataset_name + "_" + split
+            print(dataset, ds.num_steps(), ds.num_samples)
+            dataset_sizes[split][dataset_name] = ds.num_samples
+
+            continue
+            confusion_matrix_Xelem_to_ygen = np.zeros(
+                (config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]), dtype=np.int64
+            )
+
+            histograms[dataset] = {}
+            histograms[dataset]["gen_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+            histograms[dataset]["gen_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+            histograms[dataset]["cand_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+            histograms[dataset]["cand_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+
+            histograms[dataset]["gen_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
+            histograms[dataset]["cand_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
+
+            histograms[dataset]["gen_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+            histograms[dataset]["gen_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+            histograms[dataset]["cand_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
+            histograms[dataset]["cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+
+            histograms[dataset]["sum_gen_cand_energy"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+            )
+            histograms[dataset]["sum_gen_cand_energy_log"] = bh.Histogram(
+                bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6)
+            )
+
+            histograms[dataset]["sum_gen_cand_pt"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+            )
+            histograms[dataset]["sum_gen_cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
+
+            histograms[dataset]["confusion_matrix_Xelem_to_ygen"] = confusion_matrix_Xelem_to_ygen
+
+            for elem in tqdm.tqdm(ds.tensorflow_dataset, total=ds.num_steps()):
+                X = elem["X"].numpy()
+                ygen = elem["ygen"].numpy()
+                ycand = elem["ycand"].numpy()
+                # print(X.shape, ygen.shape, ycand.shape)
+
+                # check that all elements in the event have a nonzero type
+                assert np.sum(X[:, 0] == 0) == 0
+                assert X.shape[0] == ygen.shape[0]
+                assert X.shape[0] == ycand.shape[0]
+                # assert X.shape[1] == config["dataset"]["num_input_features"]
+                # assert ygen.shape[1] == config["dataset"]["num_output_features"] + 1
+                # assert ycand.shape[1] == config["dataset"]["num_output_features"] + 1
+
+                histograms[dataset]["confusion_matrix_Xelem_to_ygen"] += coo_matrix(
+                    (np.ones(len(X), dtype=np.int64), (np.array(X[:, 0], np.int32), np.array(ygen[:, 0], np.int32))),
+                    shape=(config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]),
+                ).todense()
+
+                vals_ygen = ygen[ygen[:, 0] != 0]
+                vals_ygen = unpack_target(vals_ygen, config["dataset"]["num_output_classes"], config)
+                # assert np.all(vals_ygen["energy"] > 0)
+                # assert np.all(vals_ygen["pt"] > 0)
+                # assert not np.any(np.isinf(ygen))
+                # assert not np.any(np.isnan(ygen))
+
+                histograms[dataset]["gen_energy"].fill(vals_ygen["energy"][:, 0])
+                histograms[dataset]["gen_energy_log"].fill(np.log10(vals_ygen["energy"][:, 0]))
+                histograms[dataset]["gen_pt"].fill(vals_ygen["pt"][:, 0])
+                histograms[dataset]["gen_pt_log"].fill(np.log10(vals_ygen["pt"][:, 0]))
+                histograms[dataset]["gen_eta_energy"].fill(vals_ygen["eta"][:, 0], weight=vals_ygen["energy"][:, 0])
+
+                vals_ycand = ycand[ycand[:, 0] != 0]
+                vals_ycand = unpack_target(vals_ycand, config["dataset"]["num_output_classes"], config)
+                # assert(np.all(vals_ycand["energy"]>0))
+                # assert(np.all(vals_ycand["pt"]>0))
+                # assert not np.any(np.isinf(ycand))
+                # assert not np.any(np.isnan(ycand))
+
+                histograms[dataset]["cand_energy"].fill(vals_ycand["energy"][:, 0])
+                histograms[dataset]["cand_energy_log"].fill(np.log10(vals_ycand["energy"][:, 0]))
+                histograms[dataset]["cand_pt"].fill(vals_ycand["pt"][:, 0])
+                histograms[dataset]["cand_pt_log"].fill(np.log10(vals_ycand["pt"][:, 0]))
+                histograms[dataset]["cand_eta_energy"].fill(vals_ycand["eta"][:, 0], weight=vals_ycand["energy"][:, 0])
+
+                histograms[dataset]["sum_gen_cand_energy"].fill(np.sum(vals_ygen["energy"]), np.sum(vals_ycand["energy"]))
+                histograms[dataset]["sum_gen_cand_energy_log"].fill(
+                    np.log10(np.sum(vals_ygen["energy"])), np.log10(np.sum(vals_ycand["energy"]))
+                )
+                histograms[dataset]["sum_gen_cand_pt"].fill(np.sum(vals_ygen["pt"]), np.sum(vals_ycand["pt"]))
+                histograms[dataset]["sum_gen_cand_pt_log"].fill(
+                    np.log10(np.sum(vals_ygen["pt"])), np.log10(np.sum(vals_ycand["pt"]))
+                )
+
+            print(confusion_matrix_Xelem_to_ygen)
+
+    for dsname, dsval in sorted(dataset_sizes["train"].items(), reverse=True, key=lambda x: x[1]):
+        print("{}: {:.1E} {:.1E}".format(dsname, dsval, dataset_sizes["test"][dsname]))
+
+    with open("datasets.pkl", "wb") as fi:
+        pickle.dump(histograms, fi)
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option("--max-files", required=False, help="maximum number of files per dataset to load", type=int, default=None)
+def plots(train_dir, max_files):
+    import mplhep
+    from plotting.plot_utils import (
+        compute_met_and_ratio,
+        format_dataset_name,
+        load_eval_data,
+        plot_jet_ratio,
+        plot_met_and_ratio,
+        plot_num_elements,
+        plot_particles,
+        plot_sum_energy,
+    )
+
+    mplhep.set_style(mplhep.styles.CMS)
+
+    eval_dir = Path(train_dir) / "evaluation"
+
+    for epoch_dir in sorted(os.listdir(str(eval_dir))):
+        eval_epoch_dir = eval_dir / epoch_dir
+        for dataset in sorted(os.listdir(str(eval_epoch_dir))):
+            _title = format_dataset_name(dataset)
+            dataset_dir = eval_epoch_dir / dataset
+            cp_dir = dataset_dir / "plots"
+            if not os.path.isdir(str(cp_dir)):
+                os.makedirs(str(cp_dir))
+            yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
+
+            plot_num_elements(X, cp_dir=cp_dir, title=_title)
+            plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
+
+            plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title)
+
+            met_data = compute_met_and_ratio(yvals)
+            plot_met_and_ratio(met_data, cp_dir=cp_dir, title=_title)
+
+            plot_particles(yvals, cp_dir=cp_dir, title=_title)
 
 
 if __name__ == "__main__":

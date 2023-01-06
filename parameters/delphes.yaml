@@ -12,6 +12,7 @@ dataset:
   num_momentum_outputs: 5
   padded_num_elem_size: 6400
   cls_weight_by_pt: no
+  reg_weight_by_pt: no
 
 loss:
   classification_loss_coef: 1.0
@@ -52,7 +53,7 @@ setup:
   num_events_train: 45000
   num_events_test: 5000
   num_events_validation: 10
-  num_epochs: 10
+  num_epochs: 50
   num_val_files: 5
   dtype: float32
   trainable:
@@ -69,18 +70,18 @@ batching:
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
   bucket_batch_sizes:
-    - 25, 400
-    - 50, 200
-    - 100, 100
-    - 200, 50
-    - 500, 25
-    - 1000, 10
-    - 2000, 8
-    - 3000, 7
-    - 4000, 6
-    - 5000, 5
-    - 6000, 4
-    - inf, 2
+    - 25, 160
+    - 50, 80
+    - 100, 40
+    - 200, 20
+    - 500, 10
+    - 1000, 5
+    - 2000, 3
+    - 3000, 2
+    - 4000, 2
+    - 5000, 1
+    - 6000, 1
+    - inf, 1
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
 
@@ -119,9 +120,9 @@ sample_weights:
 parameters:
   model: gnn_dense
   input_encoding: default
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 128
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 512
   combined_graph_layer:
     bin_size: 640
     max_num_bins: 100
@@ -139,7 +140,7 @@ parameters:
       dist_norm: l2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 512
       activation: elu
       normalize_degrees: yes
     activation: elu
@@ -232,13 +233,17 @@ train_test_datasets:
     datasets:
       - delphes_pf
 
-validation_datasets:
- - delphes_pf
-
+validation_dataset: delphes_pf
 validation_batch_size: 5
+validation_num_events: 100
+
+evaluation_datasets:
+  delphes_pf:
+    batch_size: 10
+    num_events: -1
 
 datasets:
   delphes_pf:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:
