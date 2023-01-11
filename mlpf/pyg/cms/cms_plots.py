@@ -58,7 +58,7 @@ def sample_label(sample, ax, additional_text="", x=0.01, y=0.87):
         plt.text(
             x,
             y,
-            "$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text,
+            r"$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text,
             ha="left",
             transform=ax.transAxes,
         )
@@ -102,27 +102,21 @@ def plot_met(yvals, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(
-            np.mean(vals_a), np.std(vals_a)
-        ),
+        label=r"PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_a), np.std(vals_a)),
     )
     plt.hist(
         vals_b,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(
-            np.mean(vals_b), np.std(vals_b)
-        ),
+        label=r"MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_b), np.std(vals_b)),
     )
     plt.yscale("log")
     cms_label(ax)
     sample_label(sample, ax)
     plt.ylim(10, 1e3)
     plt.legend(loc=(0.4, 0.7))
-    plt.xlabel(
-        r"$\frac{\mathrm{MET}_{\mathrm{reco}} - \mathrm{MET}_{\mathrm{gen}}}{\mathrm{MET}_{\mathrm{gen}}}$"
-    )
+    plt.xlabel(r"$\frac{\mathrm{MET}_{\mathrm{reco}} - \mathrm{MET}_{\mathrm{gen}}}{\mathrm{MET}_{\mathrm{gen}}}$")
     plt.ylabel("Number of events / bin")
     plt.savefig(f"{outpath}/met.pdf", bbox_inches="tight")
     plt.close()
@@ -189,11 +183,7 @@ def plot_energy_res(yvals_f, pid, b, ylim, outpath, sample):
     plt.figure()
     ax = plt.axes()
 
-    msk = (
-        (yvals_f["gen_cls_id"] == pid)
-        & (yvals_f["cand_cls_id"] == pid)
-        & (yvals_f["pred_cls_id"] == pid)
-    )
+    msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
     vals_gen = yvals_f["gen_energy"][msk]
     vals_cand = yvals_f["cand_energy"][msk]
     vals_mlpf = yvals_f["pred_energy"][msk]
@@ -205,18 +195,14 @@ def plot_energy_res(yvals_f, pid, b, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}, \sigma={:.2f}$".format(
-            np.mean(reso_1), np.std(reso_1)
-        ),
+        label=r"PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
     )
     plt.hist(
         reso_2,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(
-            np.mean(reso_2), np.std(reso_2)
-        ),
+        label=r"MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
     )
     plt.yscale("log")
     plt.xlabel(r"$\frac{E_\mathrm{reco} - E_\mathrm{gen}}{E_\mathrm{gen}}$")
@@ -225,9 +211,7 @@ def plot_energy_res(yvals_f, pid, b, ylim, outpath, sample):
     sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[pid]}")
     plt.legend(loc=(0.4, 0.7))
     plt.ylim(1, ylim)
-    plt.savefig(
-        f"{outpath}/energy_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight"
-    )
+    plt.savefig(f"{outpath}/energy_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
     plt.close()
 
 
@@ -236,11 +220,7 @@ def plot_eta_res(yvals_f, pid, ylim, outpath, sample):
     plt.figure()
     ax = plt.axes()
 
-    msk = (
-        (yvals_f["gen_cls_id"] == pid)
-        & (yvals_f["cand_cls_id"] == pid)
-        & (yvals_f["pred_cls_id"] == pid)
-    )
+    msk = (yvals_f["gen_cls_id"] == pid) & (yvals_f["cand_cls_id"] == pid) & (yvals_f["pred_cls_id"] == pid)
     vals_gen = yvals_f["gen_eta"][msk]
     vals_cand = yvals_f["cand_eta"][msk]
     vals_mlpf = yvals_f["pred_eta"][msk]
@@ -254,18 +234,14 @@ def plot_eta_res(yvals_f, pid, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}, \sigma={:.2f}$".format(
-            np.mean(reso_1), np.std(reso_1)
-        ),
+        label=r"PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
     )
     plt.hist(
         reso_2,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(
-            np.mean(reso_2), np.std(reso_2)
-        ),
+        label=r"MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
     )
     plt.yscale("log")
     plt.xlabel(r"$\eta_\mathrm{reco} - \eta_\mathrm{gen}$")
@@ -274,9 +250,7 @@ def plot_eta_res(yvals_f, pid, ylim, outpath, sample):
     sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[pid]}")
     plt.legend(loc=(0.0, 0.7))
     plt.ylim(1, ylim)
-    plt.savefig(
-        f"{outpath}/eta_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight"
-    )
+    plt.savefig(f"{outpath}/eta_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
     plt.close()
 
 
@@ -305,17 +279,11 @@ def plot_multiplicity(yvals, outpath, sample):
 
         # Plot the sum of particle energies
         msk = yvals["gen_cls_id"][:, :, 0] == icls
-        vals_gen = np.sum(
-            np.ma.MaskedArray(yvals["gen_energy"], ~msk), axis=1
-        )[:, 0]
+        vals_gen = np.sum(np.ma.MaskedArray(yvals["gen_energy"], ~msk), axis=1)[:, 0]
         msk = yvals["pred_cls_id"][:, :, 0] == icls
-        vals_pred = np.sum(
-            np.ma.MaskedArray(yvals["pred_energy"], ~msk), axis=1
-        )[:, 0]
+        vals_pred = np.sum(np.ma.MaskedArray(yvals["pred_energy"], ~msk), axis=1)[:, 0]
         msk = yvals["cand_cls_id"][:, :, 0] == icls
-        vals_cand = np.sum(
-            np.ma.MaskedArray(yvals["cand_energy"], ~msk), axis=1
-        )[:, 0]
+        vals_cand = np.sum(np.ma.MaskedArray(yvals["cand_energy"], ~msk), axis=1)[:, 0]
         plt.figure()
         ax = plt.axes()
         plt.scatter(vals_gen, vals_cand, alpha=0.2, label="PF")
@@ -408,19 +376,11 @@ def plot_eff_and_fake_rate(
         bins=bins,
     )
     hist_gen_pred = np.histogram(
-        values[
-            (yvals_f["gen_cls_id"] == icls)
-            & (yvals_f["pred_cls_id"] == icls)
-            & (X_f[:, 0] == ielem)
-        ],
+        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)],
         bins=bins,
     )
     hist_gen_cand = np.histogram(
-        values[
-            (yvals_f["gen_cls_id"] == icls)
-            & (yvals_f["cand_cls_id"] == icls)
-            & (X_f[:, 0] == ielem)
-        ],
+        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)],
         bins=bins,
     )
 
@@ -433,19 +393,11 @@ def plot_eff_and_fake_rate(
         bins=bins,
     )
     hist_pred_fake = np.histogram(
-        values[
-            (yvals_f["gen_cls_id"] != icls)
-            & (yvals_f["pred_cls_id"] == icls)
-            & (X_f[:, 0] == ielem)
-        ],
+        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)],
         bins=bins,
     )
     hist_cand_fake = np.histogram(
-        values[
-            (yvals_f["gen_cls_id"] != icls)
-            & (yvals_f["cand_cls_id"] == icls)
-            & (X_f[:, 0] == ielem)
-        ],
+        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)],
         bins=bins,
     )
 
@@ -468,9 +420,7 @@ def plot_eff_and_fake_rate(
     plt.legend(loc=(0.75, 0.65))
     if log:
         plt.xscale("log")
-    plt.savefig(
-        f"{outpath}/distr_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight"
-    )
+    plt.savefig(f"{outpath}/distr_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
     plt.close()
 
     plt.figure()
@@ -485,9 +435,7 @@ def plot_eff_and_fake_rate(
     plt.legend(loc=(0.75, 0.75))
     if log:
         plt.xscale("log")
-    plt.savefig(
-        f"{outpath}/eff_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight"
-    )
+    plt.savefig(f"{outpath}/eff_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
     plt.close()
 
     plt.figure()
@@ -502,9 +450,7 @@ def plot_eff_and_fake_rate(
     plt.legend(loc=(0.75, 0.75))
     if log:
         plt.xscale("log")
-    plt.savefig(
-        f"{outpath}/fake_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight"
-    )
+    plt.savefig(f"{outpath}/fake_icls{icls}_ivar{ivar}.pdf", bbox_inches="tight")
     plt.close()
 
 
@@ -529,9 +475,7 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
     plt.colorbar()
 
     thresh = cm_norm.max() / 1.5
-    for i, j in itertools.product(
-        range(cm_norm.shape[0]), range(cm_norm.shape[1])
-    ):
+    for i, j in itertools.product(range(cm_norm.shape[0]), range(cm_norm.shape[1])):
         plt.text(
             j,
             i,
@@ -543,9 +487,7 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
 
     cms_label(ax, y=1.01)
     # cms_label_sample_label(x1=0.18, x2=0.52, y=0.82)
-    plt.xticks(
-        range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX, rotation=45
-    )
+    plt.xticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX, rotation=45)
     plt.yticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX)
 
     plt.xlabel(f"{label} candidate ID")
@@ -574,19 +516,11 @@ def distribution_icls(yvals_f, outpath):
             if icls == 0:
                 vals_true = yvals_f["gen_" + ivar][yvals_f["gen_cls_id"] != 0]
                 vals_pf = yvals_f["cand_" + ivar][yvals_f["cand_cls_id"] != 0]
-                vals_pred = yvals_f["pred_" + ivar][
-                    yvals_f["pred_cls_id"] != 0
-                ]
+                vals_pred = yvals_f["pred_" + ivar][yvals_f["pred_cls_id"] != 0]
             else:
-                vals_true = yvals_f["gen_" + ivar][
-                    yvals_f["gen_cls_id"] == icls
-                ]
-                vals_pf = yvals_f["cand_" + ivar][
-                    yvals_f["cand_cls_id"] == icls
-                ]
-                vals_pred = yvals_f["pred_" + ivar][
-                    yvals_f["pred_cls_id"] == icls
-                ]
+                vals_true = yvals_f["gen_" + ivar][yvals_f["gen_cls_id"] == icls]
+                vals_pf = yvals_f["cand_" + ivar][yvals_f["cand_cls_id"] == icls]
+                vals_pred = yvals_f["pred_" + ivar][yvals_f["pred_cls_id"] == icls]
 
             if ivar == "pt" or ivar == "energy":
                 b = np.logspace(-3, 4, 61)
@@ -620,9 +554,7 @@ def distribution_icls(yvals_f, outpath):
             cms_label(ax)
 
         plt.tight_layout()
-        plt.savefig(
-            f"{outpath}/distribution_icls{icls}.pdf", bbox_inches="tight"
-        )
+        plt.savefig(f"{outpath}/distribution_icls{icls}.pdf", bbox_inches="tight")
         plt.close()
 
 
@@ -636,23 +568,15 @@ def make_plots_cms(pred_path, plot_path, sample):
     msk_X_f = torch.load(f"{pred_path}/post_processed_msk_X_f.pt")
     yvals = torch.load(f"{pred_path}/post_processed_yvals.pt")
     yvals_f = torch.load(f"{pred_path}/post_processed_yvals_f.pt")
-    print(
-        f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     print(f"--> Making plots using {len(X)} events...")
 
     # plot distributions
     print("plot_dist...")
-    plot_dist(
-        yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample
-    )
-    plot_dist(
-        yvals_f, "energy", np.linspace(0, 2000, 61), r"$E$", plot_path, sample
-    )
-    plot_dist(
-        yvals_f, "eta", np.linspace(-6, 6, 61), r"$\eta$", plot_path, sample
-    )
+    plot_dist(yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample)
+    plot_dist(yvals_f, "energy", np.linspace(0, 2000, 61), r"$E$", plot_path, sample)
+    plot_dist(yvals_f, "eta", np.linspace(-6, 6, 61), r"$\eta$", plot_path, sample)
 
     # plot cm
     print("plot_cm...")
@@ -682,7 +606,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=1,
         bins=np.linspace(-4, 4, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
     plot_eff_and_fake_rate(
         X_f,
@@ -705,7 +629,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=5,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
     plot_eff_and_fake_rate(
         X_f,
@@ -728,7 +652,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=4,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
 
     # distribution_icls
@@ -764,6 +688,4 @@ def make_plots_cms(pred_path, plot_path, sample):
     for pid, ylim in dic.items():
         plot_eta_res(yvals_f, pid, ylim, plot_path, sample)
 
-    print(
-        f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min")

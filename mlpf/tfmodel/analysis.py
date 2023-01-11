@@ -22,9 +22,7 @@ def main():
 @click.option("-y", "--ylabel", default=None, help="Y-axis label", type=str)
 @click.option("-x", "--xlabel", default="Step", help="X-axis label", type=str)
 @click.option("-t", "--title", default=None, help="X-axis label", type=str)
-@click.option(
-    "-s", "--save_dir", default=None, help="X-axis label", type=click.Path()
-)
+@click.option("-s", "--save_dir", default=None, help="X-axis label", type=click.Path())
 def plot_cometml_json(path, ylabel, xlabel, title=None, save_dir=None):
     path = Path(path)
 

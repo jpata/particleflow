@@ -8,10 +8,7 @@ def submit(config):
     crabCommand("submit", config=config)
     # save crab config for the future
     with open(
-        config.General.workArea
-        + "/crab_"
-        + config.General.requestName
-        + "/crab_config.py",
+        config.General.workArea + "/crab_" + config.General.requestName + "/crab_config.py",
         "w",
     ) as fi:
         fi.write(config.pythonise_())

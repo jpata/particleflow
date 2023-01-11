@@ -1,14 +1,7 @@
-from typing import Optional, Union
-
-import torch
 import torch.nn as nn
-from torch import Tensor
-from torch.nn import Linear
-from torch_geometric.nn.conv import GravNetConv, MessagePassing
-from torch_geometric.typing import OptTensor, PairOptTensor, PairTensor
-from torch_scatter import scatter
+from torch_geometric.nn.conv import GravNetConv
 
-from .utils import CLUSTERS_X, COMMON_X, TRACKS_X
+from .utils import CLUSTERS_X, TRACKS_X
 
 
 # define the Encoder that learns latent representations of tracks and clusters
@@ -27,7 +20,7 @@ class ENCODER(nn.Module):
 
         self.act = nn.ELU
 
-        ### 1. different embedding of tracks/clusters
+        # 1. different embedding of tracks/clusters
         self.nn1 = nn.Sequential(
             nn.Linear(TRACKS_X, width),
             self.act(),
@@ -43,7 +36,7 @@ class ENCODER(nn.Module):
             nn.Linear(width, embedding_dim),
         )
 
-        ### 2. same GNN for tracks/clusters
+        # 2. same GNN for tracks/clusters
         self.conv = nn.ModuleList()
         for i in range(num_convs):
             self.conv.append(
@@ -81,7 +74,7 @@ class DECODER(nn.Module):
 
         self.act = nn.ELU
 
-        ############################ DECODER
+        # DECODER
         self.expander = nn.Sequential(
             nn.Linear(input_dim, width),
             self.act(),

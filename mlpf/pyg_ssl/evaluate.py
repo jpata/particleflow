@@ -6,12 +6,7 @@ import sklearn.metrics
 import torch
 from torch_geometric.nn import global_mean_pool
 
-from .utils import (
-    CLASS_NAMES_CLIC_LATEX,
-    NUM_CLASSES,
-    combine_PFelements,
-    distinguish_PFelements,
-)
+from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 
@@ -31,14 +26,12 @@ def evaluate(device, encoder, decoder, mlpf, test_loader):
             # make transformation
             tracks, clusters = distinguish_PFelements(batch.to(device))
 
-            ### ENCODE
+            # ENCODE
             embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-            ### POOLING
+            # POOLING
             pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-            pooled_clusters = global_mean_pool(
-                embedding_clusters, clusters.batch
-            )
-            ### DECODE
+            pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
+            # DECODE
             out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
             # use the learnt representation as your input as well as the global feature vector
@@ -67,9 +60,8 @@ def plot_conf_matrix(cm, title, outpath):
     cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     cm[np.isnan(cm)] = 0.0
 
-    fig = plt.figure(figsize=(8, 6))
-
-    ax = plt.axes()
+    plt.figure(figsize=(8, 6))
+    plt.axes()
     plt.imshow(cm, interpolation="nearest", cmap=cmap)
     plt.colorbar()
 
@@ -93,9 +85,7 @@ def plot_conf_matrix(cm, title, outpath):
         rotation=45,
         fontsize=15,
     )
-    plt.yticks(
-        range(len(CLASS_NAMES_CLIC_LATEX)), CLASS_NAMES_CLIC_LATEX, fontsize=15
-    )
+    plt.yticks(range(len(CLASS_NAMES_CLIC_LATEX)), CLASS_NAMES_CLIC_LATEX, fontsize=15)
 
     plt.tight_layout()
 

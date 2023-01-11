@@ -1,5 +1,4 @@
 import glob
-import json
 import os
 import os.path as osp
 import pickle as pkl
@@ -9,22 +8,14 @@ import sys
 import matplotlib
 import numpy as np
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 import torch_geometric
-from pyg_ssl import (
-    DECODER,
-    ENCODER,
-    MLPF,
-    evaluate,
-    load_VICReg,
-    parse_args,
-    plot_conf_matrix,
-    save_MLPF,
-    save_VICReg,
-    training_loop_mlpf,
-    training_loop_VICReg,
-)
+from pyg_ssl.args import parse_args
+from pyg_ssl.evaluate import evaluate, plot_conf_matrix
+from pyg_ssl.mlpf import MLPF
+from pyg_ssl.training_mlpf import training_loop_mlpf
+from pyg_ssl.training_VICReg import training_loop_VICReg
+from pyg_ssl.utils import load_VICReg, save_MLPF, save_VICReg
+from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
 
@@ -81,9 +72,7 @@ if __name__ == "__main__":
         for file in files:
             data_per_sample += torch.load(f"{file}")
 
-        print(
-            f"Number of events for sample {sample} is: {len(data_per_sample)}"
-        )
+        print(f"Number of events for sample {sample} is: {len(data_per_sample)}")
         data += data_per_sample
 
     # shuffle datafiles belonging to different samples
@@ -152,12 +141,8 @@ if __name__ == "__main__":
         data_train = data_VICReg[: int(0.8 * len(data))]
         data_valid = data_VICReg[int(0.8 * len(data)) :]
 
-        train_loader = torch_geometric.loader.DataLoader(
-            data_train, args.batch_size
-        )
-        valid_loader = torch_geometric.loader.DataLoader(
-            data_valid, args.batch_size
-        )
+        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
 
         decoder = decoder.to(device)
         encoder = encoder.to(device)
@@ -187,17 +172,11 @@ if __name__ == "__main__":
     if args.train_mlpf:
 
         data_train = data_mlpf[: round(0.5 * len(data_mlpf))]
-        data_valid = data_mlpf[
-            round(0.5 * len(data_mlpf)) : round(0.75 * len(data_mlpf))
-        ]
+        data_valid = data_mlpf[round(0.5 * len(data_mlpf)) : round(0.75 * len(data_mlpf))]
         data_test = data_mlpf[round(0.75 * len(data_mlpf)) :]
 
-        train_loader = torch_geometric.loader.DataLoader(
-            data_train, args.batch_size
-        )
-        valid_loader = torch_geometric.loader.DataLoader(
-            data_valid, args.batch_size
-        )
+        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
 
         mlpf_model_kwargs = {
             "input_dim": encoder.conv[1].out_channels,
@@ -215,7 +194,7 @@ if __name__ == "__main__":
 
         optimizer = torch.optim.SGD(mlpf.parameters(), lr=args.lr)
 
-        print(f"Training MLPF")
+        print("Training MLPF")
 
         training_loop_mlpf(
             device,
@@ -230,9 +209,7 @@ if __name__ == "__main__":
         )
 
         # test
-        test_loader = torch_geometric.loader.DataLoader(
-            data_test, args.batch_size
-        )
+        test_loader = torch_geometric.loader.DataLoader(data_test, args.batch_size)
 
         conf_matrix = evaluate(device, encoder, decoder, mlpf, test_loader)
 

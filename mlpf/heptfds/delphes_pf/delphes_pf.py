@@ -85,15 +85,9 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(
-                        shape=(None, len(X_FEATURES)), dtype=tf.float32
-                    ),
-                    "ygen": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
-                    "ycand": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             # If there's a common (input, target) tuple from the
@@ -109,15 +103,9 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         delphes_dir = dl_manager.download_dir / "delphes_pf"
         if delphes_dir.exists():
-            print(
-                "INFO: Data already exists. Please delete {} if you want to download data again.".format(
-                    delphes_dir
-                )
-            )
+            print("INFO: Data already exists. Please delete {} if you want to download data again.".format(delphes_dir))
         else:
-            get_delphes_from_zenodo(
-                download_dir=dl_manager.download_dir / "delphes_pf"
-            )
+            get_delphes_from_zenodo(download_dir=dl_manager.download_dir / "delphes_pf")
 
         ttbar_dir = delphes_dir / "pythia8_ttbar/raw"
         qcd_dir = delphes_dir / "pythia8_qcd/val"
@@ -132,9 +120,7 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
                 qcd_file.rename(qcd_dir / qcd_file.name)
 
         return {
-            "train": self._generate_examples(
-                delphes_dir / "pythia8_ttbar/raw"
-            ),
+            "train": self._generate_examples(delphes_dir / "pythia8_ttbar/raw"),
             "test": self._generate_examples(delphes_dir / "pythia8_qcd/val"),
         }
 
@@ -202,20 +188,14 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
                 ygen[valid, Y_FEATURES.index("cos_phi")],
             )
             e = ygen[valid, Y_FEATURES.index("energy")]
-            vec = vector.awk(
-                ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e})
-            )
+            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
             # cluster jets, sort jet indices in descending order by pt
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
             jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(
-                jets.pt, axis=-1, ascending=False
-            ).to_list()
+            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
             # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(
-                min_pt=min_jet_pt
-            ).to_list()
+            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
 
             # add index information to ygen and ycand
             # index jets in descending order by pt starting from 1:
@@ -226,12 +206,8 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
                 jet_constituents = [
                     index_mapping[idx] for idx in constituent_idx[jet_idx]
                 ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = (
-                    jet_idx + 1
-                )  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = (
-                    jet_idx + 1
-                )
+                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
             Xs.append(X)
             ygens.append(ygen)

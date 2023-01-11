@@ -1,13 +1,11 @@
 import json
 import math
-import os
 import pickle as pkl
 import time
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import sklearn.metrics
 import torch
 
 from .utils import combine_PFelements, distinguish_PFelements
@@ -68,11 +66,11 @@ def train(
     is_train = not (optimizer is None)
 
     if is_train:
-        print(f"---->Initiating a training run")
+        print("---->Initiating a training run")
         mlpf.train()
         loader = train_loader
     else:
-        print(f"---->Initiating a validation run")
+        print("---->Initiating a validation run")
         mlpf.eval()
         loader = valid_loader
 
@@ -84,7 +82,7 @@ def train(
         # make transformation
         tracks, clusters = distinguish_PFelements(batch.to(device))
 
-        ### ENCODE
+        # ENCODE
         embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
         tracks.x = embedding_tracks
@@ -96,12 +94,8 @@ def train(
         pred_ids_one_hot = mlpf(event.to(device))
         target_ids = event.to(device).ygen_id
 
-        weights = compute_weights(
-            device, target_ids, num_classes=6
-        )  # to accomodate class imbalance
-        loss = torch.nn.functional.cross_entropy(
-            pred_ids_one_hot, target_ids, weight=weights
-        )  # for classifying PID
+        weights = compute_weights(device, target_ids, num_classes=6)  # to accomodate class imbalance
+        loss = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
 
         # update parameters
         if is_train:
@@ -191,13 +185,9 @@ def training_loop_mlpf(
             except AttributeError:
                 mlpf_state_dict = mlpf.state_dict()
 
-            torch.save(
-                mlpf_state_dict, f"{outpath}/mlpf_best_epoch_weights.pth"
-            )
+            torch.save(mlpf_state_dict, f"{outpath}/mlpf_best_epoch_weights.pth")
 
-            with open(
-                f"{outpath}/mlpf_best_epoch.json", "w"
-            ) as fp:  # dump best epoch
+            with open(f"{outpath}/mlpf_best_epoch.json", "w") as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1
@@ -222,9 +212,7 @@ def training_loop_mlpf(
         ax.plot(range(len(losses_valid)), losses_valid, label="validation")
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
-        ax.legend(
-            title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15
-        )
+        ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
         plt.savefig(f"{outpath}/mlpf_loss.pdf")
 
         with open(f"{outpath}/mlpf_loss_train.pkl", "wb") as f:
@@ -233,6 +221,4 @@ def training_loop_mlpf(
             pkl.dump(losses_valid, f)
 
         print("----------------------------------------------------------")
-    print(
-        f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min"
-    )
+    print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

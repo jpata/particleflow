@@ -1,5 +1,4 @@
 import json
-import os
 import pickle as pkl
 import time
 
@@ -32,14 +31,7 @@ def criterion(x, y, device="cuda", lmbd=25, u=25, v=1, epsilon=1e-3):
     xNorm = (x - x.mean(0)) / x.std(0)
     yNorm = (y - y.mean(0)) / y.std(0)
     crossCorMat = (xNorm.T @ yNorm) / bs
-    cross_loss = (
-        (
-            crossCorMat * lmbd
-            - torch.eye(emb, device=torch.device(device)) * lmbd
-        )
-        .pow(2)
-        .sum()
-    )
+    cross_loss = (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd).pow(2).sum()
 
     loss = u * var_loss + v * invar_loss + cross_loss
 
@@ -224,16 +216,10 @@ def training_loop_VICReg(
             except AttributeError:
                 decoder_state_dict = decoder.state_dict()
 
-            torch.save(
-                encoder_state_dict, f"{outpath}/encoder_best_epoch_weights.pth"
-            )
-            torch.save(
-                decoder_state_dict, f"{outpath}/decoder_best_epoch_weights.pth"
-            )
+            torch.save(encoder_state_dict, f"{outpath}/encoder_best_epoch_weights.pth")
+            torch.save(decoder_state_dict, f"{outpath}/decoder_best_epoch_weights.pth")
 
-            with open(
-                f"{outpath}/VICReg_best_epoch.json", "w"
-            ) as fp:  # dump best epoch
+            with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1
@@ -267,6 +253,4 @@ def training_loop_VICReg(
             pkl.dump(losses_valid, f)
 
         print("----------------------------------------------------------")
-    print(
-        f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min"
-    )
+    print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

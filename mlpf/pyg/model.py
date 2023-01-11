@@ -48,11 +48,7 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(
-                GravNetConv_MLPF(
-                    embedding_dim, embedding_dim, space_dim, propagate_dim, k
-                )
-            )
+            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
@@ -180,9 +176,7 @@ class GravNetConv_MLPF(MessagePassing):
         # edge_index = knn_graph(s_l, self.k, b[0])     # cmspepr
 
         edge_weight = (s_l[edge_index[0]] - s_r[edge_index[1]]).pow(2).sum(-1)
-        edge_weight = torch.exp(
-            -10.0 * edge_weight
-        )  # 10 gives a better spread
+        edge_weight = torch.exp(-10.0 * edge_weight)  # 10 gives a better spread
 
         # message passing
         out = self.propagate(
@@ -197,16 +191,9 @@ class GravNetConv_MLPF(MessagePassing):
     def message(self, x_j: Tensor, edge_weight: Tensor) -> Tensor:
         return x_j * edge_weight.unsqueeze(1)
 
-    def aggregate(
-        self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None
-    ) -> Tensor:
-        out_mean = scatter(
-            inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum"
-        )
+    def aggregate(self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None) -> Tensor:
+        out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum")
         return out_mean
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}({self.in_channels}, "
-            f"{self.out_channels}, k={self.k})"
-        )
+        return f"{self.__class__.__name__}({self.in_channels}, " f"{self.out_channels}, k={self.k})"

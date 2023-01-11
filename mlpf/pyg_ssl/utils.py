@@ -20,10 +20,11 @@ CLASS_NAMES_CLIC_LATEX = [
     "none",
     "chhad",
     "nhad",
-    "$\gamma$",
-    "$e^\pm$",
-    "$\mu^\pm$",
+    r"$\gamma$",
+    r"$e^\pm$",
+    r"$\mu^\pm$",
 ]
+
 
 # function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
 def distinguish_PFelements(batch):
@@ -32,9 +33,7 @@ def distinguish_PFelements(batch):
     cluster_id = 2
 
     tracks = Batch(
-        x=batch.x[batch.x[:, 0] == track_id][
-            :, 1:
-        ].float(),  # remove the first input feature which is not needed anymore
+        x=batch.x[batch.x[:, 0] == track_id][:, 1:].float(),  # remove the first input feature which is not needed anymore
         ygen=batch.ygen[batch.x[:, 0] == track_id],
         ygen_id=batch.ygen_id[batch.x[:, 0] == track_id],
         ycand=batch.ycand[batch.x[:, 0] == track_id],
@@ -75,12 +74,8 @@ def combine_PFelements(tracks, clusters):
 
 def load_VICReg(device, outpath):
 
-    encoder_state_dict = torch.load(
-        f"{outpath}/encoder_best_epoch_weights.pth", map_location=device
-    )
-    decoder_state_dict = torch.load(
-        f"{outpath}/decoder_best_epoch_weights.pth", map_location=device
-    )
+    encoder_state_dict = torch.load(f"{outpath}/encoder_best_epoch_weights.pth", map_location=device)
+    decoder_state_dict = torch.load(f"{outpath}/decoder_best_epoch_weights.pth", map_location=device)
 
     print("Loading a previously trained model..")
     with open(f"{outpath}/encoder_model_kwargs.pkl", "rb") as f:
@@ -108,40 +103,29 @@ def save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs):
 
         print("model already exists, deleting it")
 
-        filelist = [
-            f for f in os.listdir(outpath) if not f.endswith(".txt")
-        ]  # don't remove the newly created logs.txt
+        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
         for f in filelist:
-            try:
-                shutil.rmtree(os.path.join(outpath, f))
-            except:
-                os.remove(os.path.join(outpath, f))
+            shutil.rmtree(os.path.join(outpath, f))
 
-    with open(
-        f"{outpath}/encoder_model_kwargs.pkl", "wb"
-    ) as f:  # dump model architecture
+    with open(f"{outpath}/encoder_model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(encoder_model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
-    with open(
-        f"{outpath}/decoder_model_kwargs.pkl", "wb"
-    ) as f:  # dump model architecture
+    with open(f"{outpath}/decoder_model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(decoder_model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    with open(
-        f"{outpath}/hyperparameters.json", "w"
-    ) as fp:  # dump hyperparameters
+    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump(
             {
                 "n_epochs": args.n_epochs,
                 "lr": args.lr,
                 "batch_size": args.batch_size,
-                "width": args.width_encoder,
+                "width_encoder": args.width_encoder,
                 "embedding_dim": args.embedding_dim,
                 "num_convs": args.num_convs,
                 "space_dim": args.space_dim,
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
                 "input_dim": args.embedding_dim,
-                "width": args.width_decoder,
+                "width_decoder": args.width_decoder,
                 "output_dim": args.expand_dim,
                 "lmbd": args.lmbd,
                 "u": args.u,
@@ -157,23 +141,14 @@ def save_MLPF(args, outpath, mlpf_model_kwargs):
         os.makedirs(outpath)
 
     else:  # if directory already exists
-        filelist = [
-            f for f in os.listdir(outpath) if not f.endswith(".txt")
-        ]  # don't remove the newly created logs.txt
+        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
         for f in filelist:
-            try:
-                shutil.rmtree(os.path.join(outpath, f))
-            except:
-                os.remove(os.path.join(outpath, f))
+            shutil.rmtree(os.path.join(outpath, f))
 
-    with open(
-        f"{outpath}/mlpf_model_kwargs.pkl", "wb"
-    ) as f:  # dump model architecture
+    with open(f"{outpath}/mlpf_model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(mlpf_model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    with open(
-        f"{outpath}/hyperparameters.json", "w"
-    ) as fp:  # dump hyperparameters
+    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump(
             {
                 "n_epochs": args.n_epochs,

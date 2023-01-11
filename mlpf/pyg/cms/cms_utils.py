@@ -33,9 +33,9 @@ CLASS_NAMES_CMS_LATEX = [
     "nhad",
     "HFEM",
     "HFHAD",
-    "$\gamma$",
-    "$e^\pm$",
-    "$\mu^\pm$",
+    r"$\gamma$",
+    r"$e^\pm$",
+    r"$\mu^\pm$",
     r"$\tau$",
 ]
 CLASS_NAMES_CMS = [
@@ -146,9 +146,7 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
 
         # remove PS and BREM from inputs
-        msk_ps = (
-            (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
-        )
+        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]

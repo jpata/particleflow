@@ -1,21 +1,8 @@
 import pickle
-import time
 
 import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-import sklearn
 import torch
 from torch_geometric.data import Data
-
-from .delphes_plots import (
-    draw_efficiency_fakerate,
-    plot_confusion_matrix,
-    plot_distributions_all,
-    plot_distributions_pid,
-    plot_particle_multiplicity,
-    plot_reso,
-)
 
 matplotlib.use("Agg")
 
@@ -57,13 +44,9 @@ def prepare_data_delphes(fn):
         d = Data(
             x=torch.tensor(data["X"][i], dtype=torch.float),
             ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 1:],
-            ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[
-                :, 0
-            ].long(),
+            ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 0].long(),
             ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 1:],
-            ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[
-                :, 0
-            ].long(),
+            ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 0].long(),
         )
 
         batched_data.append(d)

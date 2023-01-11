@@ -32,42 +32,20 @@ class CustomTensorBoard(TensorBoard):
         if hasattr(opt, "lr"):
 
             lr_schedule = getattr(opt, "lr", None)
-            if isinstance(
-                lr_schedule, tf.keras.optimizers.schedules.LearningRateSchedule
-            ):
-                logs["learning_rate"] = np.float64(
-                    tf.keras.backend.get_value(lr_schedule(opt.iterations))
-                )
+            if isinstance(lr_schedule, tf.keras.optimizers.schedules.LearningRateSchedule):
+                logs["learning_rate"] = np.float64(tf.keras.backend.get_value(lr_schedule(opt.iterations)))
             else:
-                logs.update(
-                    {
-                        "learning_rate": np.float64(
-                            tf.keras.backend.eval(opt.lr)
-                        )
-                    }
-                )
+                logs.update({"learning_rate": np.float64(tf.keras.backend.eval(opt.lr))})
 
             # Log momentum if the optimizer has it
             try:
-                logs.update(
-                    {
-                        "momentum": np.float64(
-                            tf.keras.backend.eval(opt.momentum)
-                        )
-                    }
-                )
+                logs.update({"momentum": np.float64(tf.keras.backend.eval(opt.momentum))})
             except AttributeError:
                 pass
 
             # In Adam, the momentum parameter is called beta_1
             if isinstance(opt, tf.keras.optimizers.Adam):
-                logs.update(
-                    {
-                        "adam_beta_1": np.float64(
-                            tf.keras.backend.eval(opt.beta_1)
-                        )
-                    }
-                )
+                logs.update({"adam_beta_1": np.float64(tf.keras.backend.eval(opt.beta_1))})
 
         if hasattr(opt, "loss_scale"):
             logs.update({"loss_scale": np.float64(opt.loss_scale.numpy())})
@@ -81,9 +59,7 @@ class CustomTensorBoard(TensorBoard):
             history_path = Path(self.log_dir) / "history"
             history_path.mkdir(parents=True, exist_ok=True)
             history_path = str(history_path)
-            with open(
-                "{}/history_{}.json".format(history_path, epoch), "w"
-            ) as fi:
+            with open("{}/history_{}.json".format(history_path, epoch), "w") as fi:
                 converted_logs = {k: float(v) for k, v in logs.items()}
                 json.dump(converted_logs, fi)
         super().on_epoch_end(epoch, logs)
@@ -167,11 +143,7 @@ class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
             show the difference in seconds compared to the previous epoch."
         plt.title(txt)
 
-        filename = (
-            "time_per_epoch_"
-            + datetime.now().strftime("%Y%m%d%H%M%S")
-            + ".png"
-        )
+        filename = "time_per_epoch_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".png"
         save_path = Path(self.outdir) / filename
         print("Saving plot in {}".format(save_path))
         plt.savefig(save_path)
@@ -193,9 +165,7 @@ class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
         # mean epoch time
         #   - ignore first epoch (lazy graph construction)
         mean_epoch_time = round(np.mean(self.times[1:]), 2)
-        batch_size_total = self.batch_size_per_gpu * (
-            self.num_gpus or self.num_cpus
-        )
+        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_cpus)
 
         data = {
             "wl-scores": {
