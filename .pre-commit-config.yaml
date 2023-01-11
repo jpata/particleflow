@@ -1,6 +1,7 @@
-default_language_version:
-    python: python3.8
 exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)|^(fcc/.*)
+
+default_language_version:
+    python: python3
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -14,32 +15,23 @@ repos:
   - id: check-xml
   - id: check-yaml
   - id: debug-statements
-  - id: end-of-file-fixer
   - id: requirements-txt-fixer
   - id: mixed-line-ending
     args: ['--fix=no']
 
-#This is giving different results on github CI vs. locally and I can't understand why
-#- repo: https://github.com/PyCQA/isort
-#  rev: 5.11.2
-#  hooks:
-#  - id: isort
-#    args: ['--profile', 'black', '--filter-files']
+# - repo: https://github.com/PyCQA/isort
+#   rev: 5.11.1
+#   hooks:
+#   - id: isort
+#     args: ["--profile", "black"]
 
 - repo: https://github.com/psf/black
   rev: 22.12.0
   hooks:
-  - id: black-jupyter
-    language_version: python3
-    args: [--line-length=125]
-
-- repo: https://github.com/PyCQA/flake8
-  rev: 6.0.0
-  hooks:
-  - id: flake8
-    # black-compatible flake-8 config
-
-    # E203 is not PEP8 compliant
-    # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=125',  # github viewer width
-           '--extend-ignore=E203,W605,E402']
+    - id: black
+      # It is recommended to specify the latest version of Python
+      # supported by your project here, or alternatively use
+      # pre-commit's default_language_version, see
+      # https://pre-commit.com/#top_level-default_language_version
+      language_version: python3
+      args: [--line-length=79]

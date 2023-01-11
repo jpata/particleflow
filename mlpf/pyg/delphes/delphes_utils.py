@@ -57,9 +57,13 @@ def prepare_data_delphes(fn):
         d = Data(
             x=torch.tensor(data["X"][i], dtype=torch.float),
             ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 1:],
-            ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 0].long(),
+            ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[
+                :, 0
+            ].long(),
             ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 1:],
-            ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 0].long(),
+            ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[
+                :, 0
+            ].long(),
         )
 
         batched_data.append(d)

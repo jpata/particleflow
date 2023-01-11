@@ -21,7 +21,7 @@ cd ../
 python ssl_pipeline.py --model_prefix_VICReg VICReg_test
 ```
 
-To train mlpf using ssl approach with the pre-trained VICReg model:
+To train mlpf via an ssl approach using the pre-trained VICReg model:
 ```bash
 cd ../
 python ssl_pipeline.py --model_prefix_VICReg VICReg_test --load_VICReg --model_prefix_mlpf MLPF_test --train_mlpf

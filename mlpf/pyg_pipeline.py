@@ -7,8 +7,6 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-
 from pyg import (
     MLPF,
     X_FEATURES_CMS,
@@ -24,12 +22,13 @@ from pyg import (
     save_model,
     training_loop,
 )
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
 
 
 """
-Developing a PyTorch Geometric MLPF pipeline using DistributedDataParallel.
+Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
 
 Author: Farouk Mokhtar
 """
@@ -61,7 +60,7 @@ def setup(rank, world_size):
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
     dist.init_process_group(
         "nccl", rank=rank, world_size=world_size
-    )  # should be faster for DistributedDataParallel on gpus
+    )  # nccl should be faster than gloo for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -105,14 +104,17 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
 
     setup(rank, world_size)
 
-    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
+    print(
+        f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}"
+    )
 
     # give each gpu a subset of the data
     hyper_train = int(args.n_train / world_size)
     hyper_valid = int(args.n_valid / world_size)
 
     train_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train)
+        dataset,
+        np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train),
     )
     valid_dataset = torch.utils.data.Subset(
         dataset,
@@ -174,13 +176,16 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
 
     setup(rank, world_size)
 
-    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
+    print(
+        f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}"
+    )
 
     # give each gpu a subset of the data
     hyper_test = int(args.n_test / world_size)
 
     test_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test)
+        dataset,
+        np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test),
     )
 
     # construct data loaders
@@ -220,7 +225,8 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
         dataset, np.arange(start=0, stop=args.n_train)
     )
     valid_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid)
+        dataset,
+        np.arange(start=args.n_train, stop=args.n_train + args.n_valid),
     )
 
     # construct file loaders
@@ -349,9 +355,19 @@ if __name__ == "__main__":
         dataset = PFGraphDataset(args.dataset, args.data)
 
         if world_size >= 2:
-            run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
+            run_demo(
+                train_ddp,
+                world_size,
+                args,
+                dataset,
+                model,
+                num_classes,
+                outpath,
+            )
         else:
-            train(device, world_size, args, dataset, model, num_classes, outpath)
+            train(
+                device, world_size, args, dataset, model, num_classes, outpath
+            )
 
         # load the best epoch state
         state_dict = torch.load(
@@ -363,7 +379,9 @@ if __name__ == "__main__":
     if args.load and args.load_epoch != -1:
         epoch_to_load = args.load_epoch
     else:
-        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
+        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))[
+            "best_epoch"
+        ]
 
     PATH = f"{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/"
     pred_path = f"{PATH}/predictions/"
@@ -382,10 +400,24 @@ if __name__ == "__main__":
 
         if world_size >= 2:
             run_demo(
-                inference_ddp, world_size, args, dataset_test, model, num_classes, PATH
+                inference_ddp,
+                world_size,
+                args,
+                dataset_test,
+                model,
+                num_classes,
+                PATH,
             )
         else:
-            inference(device, world_size, args, dataset_test, model, num_classes, PATH)
+            inference(
+                device,
+                world_size,
+                args,
+                dataset_test,
+                model,
+                num_classes,
+                PATH,
+            )
 
         postprocess_predictions(pred_path)
 

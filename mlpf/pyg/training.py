@@ -101,7 +101,9 @@ def train(
         )
         tf = tf + (time.time() - t0)
 
-        file = [x for t in file for x in t]  # unpack the list of tuples to a list
+        file = [
+            x for t in file for x in t
+        ]  # unpack the list of tuples to a list
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
@@ -286,7 +288,9 @@ def training_loop(
                 state_dict = model.state_dict()
             torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
 
-            with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
+            with open(
+                f"{outpath}/best_epoch.json", "w"
+            ) as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1

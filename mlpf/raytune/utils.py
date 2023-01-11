@@ -18,18 +18,30 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
     if (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "pb2"):
         if raytune_cfg["search_alg"] is not None:
             print(
-                "INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(raytune_cfg["sched"])
+                "INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(
+                    raytune_cfg["sched"]
+                )
             )
-            print("INFO: Uing the Ray Tune {} scheduler without search algorithm".format(raytune_cfg["sched"]))
+            print(
+                "INFO: Uing the Ray Tune {} scheduler without search algorithm".format(
+                    raytune_cfg["sched"]
+                )
+            )
         return None
 
     if (raytune_cfg["sched"] == "bohb") or (raytune_cfg["sched"] == "BOHB"):
-        print("INFO: Using TuneBOHB search algorithm since it is required for BOHB shedule")
+        print(
+            "INFO: Using TuneBOHB search algorithm since it is required for BOHB shedule"
+        )
         if seeds:
             seed = 1234
         else:
             seed = None
-        return TuneBOHB(metric=raytune_cfg["default_metric"], mode=raytune_cfg["default_mode"], seed=seed)
+        return TuneBOHB(
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
+            seed=seed,
+        )
 
     # requires pip install bayesian-optimization
     if raytune_cfg["search_alg"] == "bayes":
@@ -61,7 +73,10 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
         import nevergrad as ng
 
         return NevergradSearch(
-            optimizer=ng.optimizers.BayesOptim(pca=False, init_budget=raytune_cfg["nevergrad"]["n_random_steps"]),
+            optimizer=ng.optimizers.BayesOptim(
+                pca=False,
+                init_budget=raytune_cfg["nevergrad"]["n_random_steps"],
+            ),
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
         )

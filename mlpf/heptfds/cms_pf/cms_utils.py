@@ -10,12 +10,42 @@ from numpy.lib.recfunctions import append_fields
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
+ELEM_NAMES_CMS = [
+    "NONE",
+    "TRACK",
+    "PS1",
+    "PS2",
+    "ECAL",
+    "HCAL",
+    "GSF",
+    "BREM",
+    "HFEM",
+    "HFHAD",
+    "SC",
+    "HO",
+]
 
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
-CLASS_NAMES_CMS = ["none", "ch.had", "n.had", "HFHAD", "HFEM", "gamma", "ele", "mu"]
-CLASS_NAMES_LONG_CMS = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
+CLASS_NAMES_CMS = [
+    "none",
+    "ch.had",
+    "n.had",
+    "HFHAD",
+    "HFEM",
+    "gamma",
+    "ele",
+    "mu",
+]
+CLASS_NAMES_LONG_CMS = [
+    "none" "charged hadron",
+    "neutral hadron",
+    "hfem",
+    "hfhad",
+    "photon",
+    "electron",
+    "muon",
+]
 
 X_FEATURES = [
     "typ_idx",
@@ -61,7 +91,16 @@ X_FEATURES = [
     "thetaerror",
 ]
 
-Y_FEATURES = ["typ_idx", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+Y_FEATURES = [
+    "typ_idx",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "e",
+    "jet_idx",
+]
 
 
 def prepare_data_cms(fn):
@@ -84,25 +123,44 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
 
         # remove PS and BREM from inputs
-        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        msk_ps = (
+            (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        )
 
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]
         ycand = ycand[~msk_ps]
 
         Xelem = append_fields(
-            Xelem, "typ_idx", np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
+            Xelem,
+            "typ_idx",
+            np.array(
+                [ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]],
+                dtype=np.float32,
+            ),
         )
         ygen = append_fields(
-            ygen, "typ_idx", np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32)
+            ygen,
+            "typ_idx",
+            np.array(
+                [CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]],
+                dtype=np.float32,
+            ),
         )
-        ygen = append_fields(ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32))
+        ygen = append_fields(
+            ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32)
+        )
         ycand = append_fields(
             ycand,
             "typ_idx",
-            np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32),
+            np.array(
+                [CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]],
+                dtype=np.float32,
+            ),
         )
-        ycand = append_fields(ycand, "jet_idx", np.zeros(ycand["typ"].shape, dtype=np.float32))
+        ycand = append_fields(
+            ycand, "jet_idx", np.zeros(ycand["typ"].shape, dtype=np.float32)
+        )
 
         Xelem_flat = np.stack(
             [Xelem[k].view(np.float32).data for k in X_FEATURES],
@@ -140,16 +198,23 @@ def prepare_data_cms(fn):
 
         pt = ygen[valid, Y_FEATURES.index("pt")]
         eta = ygen[valid, Y_FEATURES.index("eta")]
-        phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
+        phi = np.arctan2(
+            ygen[valid, Y_FEATURES.index("sin_phi")],
+            ygen[valid, Y_FEATURES.index("cos_phi")],
+        )
         e = ygen[valid, Y_FEATURES.index("e")]
         vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
         # cluster jets, sort jet indices in descending order by pt
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
         jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-        sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+        sorted_jet_idx = ak.argsort(
+            jets.pt, axis=-1, ascending=False
+        ).to_list()
         # retrieve corresponding indices of constituents
-        constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+        constituent_idx = cluster.constituent_index(
+            min_pt=min_jet_pt
+        ).to_list()
 
         # add index information to ygen and ycand
         # index jets in descending order by pt starting from 1:
@@ -160,7 +225,9 @@ def prepare_data_cms(fn):
             jet_constituents = [
                 index_mapping[idx] for idx in constituent_idx[jet_idx]
             ]  # map back to constituent index *before* masking
-            ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+            ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = (
+                jet_idx + 1
+            )  # jet index starts from 1
             ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
         Xs.append(X)
@@ -179,7 +246,10 @@ def split_sample(path, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
-    return {"train": generate_examples(files_train), "test": generate_examples(files_test)}
+    return {
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
+    }
 
 
 def generate_examples(files):

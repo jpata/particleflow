@@ -49,7 +49,9 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
         )
         tf = tf + (time.time() - t0)
 
-        file = [x for t in file for x in t]  # unpack the list of tuples to a list
+        file = [
+            x for t in file for x in t
+        ]  # unpack the list of tuples to a list
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
@@ -73,7 +75,9 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
             pred_ids_one_hot_list = []
             pred_p4_list = []
             for z in range(batch_size):
-                pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
+                pred_ids_one_hot_list.append(
+                    pred_ids_one_hot[batch.batch == z]
+                )
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
             X = []
@@ -92,7 +96,9 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
                     "cand_ids_one_hot": one_hot_embedding(
                         event.ycand_id.detach().to("cpu"), num_classes
                     ),
-                    "pred_ids_one_hot": pred_ids_one_hot_list[j].detach().to("cpu"),
+                    "pred_ids_one_hot": pred_ids_one_hot_list[j]
+                    .detach()
+                    .to("cpu"),
                 }
 
                 vars_padded = {}
@@ -213,7 +219,9 @@ def postprocess_predictions(pred_path):
         yvals[f"{val}_phi"] = np.arctan2(
             yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"]
         )
-        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(
+        yvals[f"{val}_cls_id"] = np.argmax(
+            yvals[f"{val}_cls"], axis=-1
+        ).reshape(
             yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1
         )  # cz for some reason keepdims doesn't work
 
@@ -235,9 +243,15 @@ def postprocess_predictions(pred_path):
     t0 = time.time()
     torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
     torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
-    torch.save(msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4)
-    torch.save(yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4)
-    torch.save(yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4)
+    torch.save(
+        msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4
+    )
+    torch.save(
+        yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4
+    )
+    torch.save(
+        yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4
+    )
     print(
         f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min"
     )

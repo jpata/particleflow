@@ -146,7 +146,9 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
 
         # remove PS and BREM from inputs
-        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        msk_ps = (
+            (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        )
 
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]
@@ -156,7 +158,8 @@ def prepare_data_cms(fn):
             Xelem,
             "typ_idx",
             np.array(
-                [ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32
+                [ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]],
+                dtype=np.float32,
             ),
         )
         ygen = append_fields(

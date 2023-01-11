@@ -1,7 +1,9 @@
+import glob
 import json
 import os
 import os.path as osp
 import pickle as pkl
+import random
 import sys
 
 import matplotlib
@@ -28,7 +30,8 @@ matplotlib.use("Agg")
 
 
 """
-Developing a PyTorch Geometric semi-supervised pipeline (based on VICReg) for CLIC datasets.
+Developing a PyTorch Geometric semi-supervised (VICReg-based https://arxiv.org/abs/2105.04906) pipeline
+for particleflow reconstruction on CLIC datasets.
 
 Author: Farouk Mokhtar
 """
@@ -54,21 +57,51 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.benchmark = True
 
-    # setup the directory path to hold all models and plots
-    outpath = osp.join(args.outpath, args.model_prefix_VICReg)
-
     # load the clic dataset
-    import glob
+    if args.samples == -1:  # use all samples
+        samples = [
+            "gev380ee_pythia6_higgs_bbar_full201",
+            "gev380ee_pythia6_higgs_zz_4l_full201",
+            "gev380ee_pythia6_qcd_all_rfull201",
+            "gev380ee_pythia6_higgs_gamgam_full201",
+            "gev380ee_pythia6_ttbar_rfull201",
+            "gev380ee_pythia6_zpole_ee_rfull201",
+        ]
+    else:
+        samples = args.samples.split(",")
 
-    all_files = glob.glob(f"{args.dataset}/mix/data_*")
     data = []
-    for f in all_files:
-        data += torch.load(f"{f}")
+    for sample in samples:
+        if sample not in os.listdir(args.dataset):
+            print(f"no processed files found for sample {sample}")
+            continue
+
+        files = glob.glob(f"{args.dataset}/{sample}/processed/*")
+        data_per_sample = []
+        for file in files:
+            data_per_sample += torch.load(f"{file}")
+
+        print(
+            f"Number of events for sample {sample} is: {len(data_per_sample)}"
+        )
+        data += data_per_sample
+
+    # shuffle datafiles belonging to different samples
+    random.shuffle(data)
+
     if len(data) == 0:
         print("failed to load dataset, check --dataset path")
         sys.exit(0)
     else:
-        print(f"Will use {len(data)} to pretrain VICReg")
+        print(f"---> Total number of events at hand: {len(data)}")
+
+    data_VICReg = data[: round(0.9 * len(data))]
+    data_mlpf = data[round(0.9 * len(data)) :]
+    print(f"Will use {len(data_VICReg)} events for VICReg with an 80/20 split")
+    print(f"Will use {len(data_mlpf)} for mlpf with a 50/25/25 split")
+
+    # setup the directory path to hold all models and plots
+    outpath = osp.join(args.outpath, args.model_prefix_VICReg)
 
     # load a pre-trained VICReg model
     if args.load_VICReg:
@@ -116,11 +149,15 @@ if __name__ == "__main__":
 
         print("Training over {} epochs".format(args.n_epochs))
 
-        data_train = data[: int(0.8 * len(data))]
-        data_valid = data[int(0.8 * len(data)) :]
+        data_train = data_VICReg[: int(0.8 * len(data))]
+        data_valid = data_VICReg[int(0.8 * len(data)) :]
 
-        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
+        train_loader = torch_geometric.loader.DataLoader(
+            data_train, args.batch_size
+        )
+        valid_loader = torch_geometric.loader.DataLoader(
+            data_valid, args.batch_size
+        )
 
         decoder = decoder.to(device)
         encoder = encoder.to(device)
@@ -142,16 +179,25 @@ if __name__ == "__main__":
             args.patience,
             optimizer,
             outpath,
+            args.lmbd,
+            args.u,
+            args.v,
         )
 
     if args.train_mlpf:
 
-        data_train = data[:4000]
-        data_valid = data[4000:8000]
-        data_test = data[8000:]
+        data_train = data_mlpf[: round(0.5 * len(data_mlpf))]
+        data_valid = data_mlpf[
+            round(0.5 * len(data_mlpf)) : round(0.75 * len(data_mlpf))
+        ]
+        data_test = data_mlpf[round(0.75 * len(data_mlpf)) :]
 
-        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
+        train_loader = torch_geometric.loader.DataLoader(
+            data_train, args.batch_size
+        )
+        valid_loader = torch_geometric.loader.DataLoader(
+            data_valid, args.batch_size
+        )
 
         mlpf_model_kwargs = {
             "input_dim": encoder.conv[1].out_channels,
@@ -184,7 +230,9 @@ if __name__ == "__main__":
         )
 
         # test
-        test_loader = torch_geometric.loader.DataLoader(data_test, args.batch_size)
+        test_loader = torch_geometric.loader.DataLoader(
+            data_test, args.batch_size
+        )
 
         conf_matrix = evaluate(device, encoder, decoder, mlpf, test_loader)
 

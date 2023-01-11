@@ -4,14 +4,10 @@ import os.path as osp
 import pickle as pkl
 import shutil
 import sys
-from collections.abc import Sequence
 
 import matplotlib
-import matplotlib.pyplot as plt
 import torch
 from torch_geometric.data import Batch
-from torch_geometric.data.data import BaseData
-from torch_geometric.loader import DataListLoader, DataLoader
 
 matplotlib.use("Agg")
 
@@ -20,7 +16,14 @@ CLUSTERS_X = 6
 TRACKS_X = 11
 COMMON_X = 11
 NUM_CLASSES = 6
-CLASS_NAMES_CLIC_LATEX = ["none", "chhad", "nhad", "$\gamma$", "$e^\pm$", "$\mu^\pm$"]
+CLASS_NAMES_CLIC_LATEX = [
+    "none",
+    "chhad",
+    "nhad",
+    "$\gamma$",
+    "$e^\pm$",
+    "$\mu^\pm$",
+]
 
 # function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
 def distinguish_PFelements(batch):
@@ -123,7 +126,9 @@ def save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs):
     ) as f:  # dump model architecture
         pkl.dump(decoder_model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
+    with open(
+        f"{outpath}/hyperparameters.json", "w"
+    ) as fp:  # dump hyperparameters
         json.dump(
             {
                 "n_epochs": args.n_epochs,
@@ -138,6 +143,9 @@ def save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs):
                 "input_dim": args.embedding_dim,
                 "width": args.width_decoder,
                 "output_dim": args.expand_dim,
+                "lmbd": args.lmbd,
+                "u": args.u,
+                "v": args.v,
             },
             fp,
         )
@@ -158,10 +166,14 @@ def save_MLPF(args, outpath, mlpf_model_kwargs):
             except:
                 os.remove(os.path.join(outpath, f))
 
-    with open(f"{outpath}/mlpf_model_kwargs.pkl", "wb") as f:  # dump model architecture
+    with open(
+        f"{outpath}/mlpf_model_kwargs.pkl", "wb"
+    ) as f:  # dump model architecture
         pkl.dump(mlpf_model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
+    with open(
+        f"{outpath}/hyperparameters.json", "w"
+    ) as fp:  # dump hyperparameters
         json.dump(
             {
                 "n_epochs": args.n_epochs,

@@ -13,11 +13,18 @@ def main():
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-p", "--path", help="path to json file or dir containing json files", type=click.Path())
+@click.option(
+    "-p",
+    "--path",
+    help="path to json file or dir containing json files",
+    type=click.Path(),
+)
 @click.option("-y", "--ylabel", default=None, help="Y-axis label", type=str)
 @click.option("-x", "--xlabel", default="Step", help="X-axis label", type=str)
 @click.option("-t", "--title", default=None, help="X-axis label", type=str)
-@click.option("-s", "--save_dir", default=None, help="X-axis label", type=click.Path())
+@click.option(
+    "-s", "--save_dir", default=None, help="X-axis label", type=click.Path()
+)
 def plot_cometml_json(path, ylabel, xlabel, title=None, save_dir=None):
     path = Path(path)
 
@@ -50,9 +57,20 @@ def plot_cometml_json(path, ylabel, xlabel, title=None, save_dir=None):
                             )
                         )
 
-                pp = plt.plot(metric["x"], metric["y"], label=metric["name"], linestyle="-")
+                pp = plt.plot(
+                    metric["x"],
+                    metric["y"],
+                    label=metric["name"],
+                    linestyle="-",
+                )
                 color = pp[0].get_color()
-                plt.plot(val_metric["x"], val_metric["y"], label=val_metric["name"], linestyle="--", color=color)
+                plt.plot(
+                    val_metric["x"],
+                    val_metric["y"],
+                    label=val_metric["name"],
+                    linestyle="--",
+                    color=color,
+                )
 
         plt.legend()
         plt.xlabel(xlabel)
