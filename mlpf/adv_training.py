@@ -9,7 +9,10 @@ from tqdm import tqdm
 # A deep sets conditional discriminator
 def make_disc_model(config, reco_features):
     input_elems = tf.keras.layers.Input(
-        shape=(config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"])
+        shape=(
+            config["dataset"]["padded_num_elem_size"],
+            config["dataset"]["num_input_features"],
+        )
     )
     input_reco = tf.keras.layers.Input(shape=(config["dataset"]["padded_num_elem_size"], reco_features))
 
@@ -79,14 +82,21 @@ def main(config):
     tb.set_model(model_pf)
 
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath="logs/weights-{epoch:02d}.hdf5", save_weights_only=True, verbose=0
+        filepath="logs/weights-{epoch:02d}.hdf5",
+        save_weights_only=True,
+        verbose=0,
     )
     cp_callback.set_model(model_pf)
 
-    x = np.random.randn(1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"])
+    x = np.random.randn(
+        1,
+        config["dataset"]["padded_num_elem_size"],
+        config["dataset"]["num_input_features"],
+    )
     ypred = concat_pf([model_pf(x), x])
     model_pf.load_weights(
-        "experiments/cms_20210909_132136_111774.gpu0.local/weights/weights-100-1.280379.hdf5", by_name=True
+        "experiments/cms_20210909_132136_111774.gpu0.local/weights/weights-100-1.280379.hdf5",
+        by_name=True,
     )
     # model_pf.load_weights("./logs/weights-02.hdf5", by_name=True)
 
@@ -105,18 +115,26 @@ def main(config):
     cb.set_model(model_pf)
 
     input_elems = tf.keras.layers.Input(
-        shape=(config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]),
+        shape=(
+            config["dataset"]["padded_num_elem_size"],
+            config["dataset"]["num_input_features"],
+        ),
         batch_size=2 * batch_size,
         name="input_detector_elements",
     )
     input_reco = tf.keras.layers.Input(
-        shape=(config["dataset"]["padded_num_elem_size"], ypred.shape[-1]), name="input_reco_particles"
+        shape=(config["dataset"]["padded_num_elem_size"], ypred.shape[-1]),
+        name="input_reco_particles",
     )
     pf_out = tf.keras.layers.Lambda(concat_pf)([model_pf(input_elems), input_elems])
     disc_out1 = model_disc([input_elems, pf_out])
     disc_out2 = model_disc([input_elems, input_reco])
     m1 = tf.keras.models.Model(inputs=[input_elems], outputs=[disc_out1], name="model_mlpf_disc")
-    m2 = tf.keras.models.Model(inputs=[input_elems, input_reco], outputs=[disc_out2], name="model_reco_disc")
+    m2 = tf.keras.models.Model(
+        inputs=[input_elems, input_reco],
+        outputs=[disc_out2],
+        name="model_reco_disc",
+    )
 
     def loss(x, y):
         return tf.keras.losses.binary_crossentropy(x, y, from_logits=True)
@@ -159,7 +177,10 @@ def main(config):
 
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
             mlpf_train_disc_targets = tf.concat([batch_size * [0.99], batch_size * [0.01]], axis=0)
-            loss2 = m2.train_on_batch([mlpf_train_inputs, mlpf_train_outputs], mlpf_train_disc_targets)
+            loss2 = m2.train_on_batch(
+                [mlpf_train_inputs, mlpf_train_outputs],
+                mlpf_train_disc_targets,
+            )
 
             # Train the MLPF reconstruction (generative) model with an inverted target
             disc_train_disc_targets = tf.concat([batch_size * [1.0]], axis=0)
@@ -189,7 +210,10 @@ def main(config):
             mlpf_train_inputs = tf.concat([xb, xb], axis=0)
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
             mlpf_train_disc_targets = tf.concat([batch_size * [0.99], batch_size * [0.01]], axis=0)
-            loss2 = m2.test_on_batch([mlpf_train_inputs, mlpf_train_outputs], mlpf_train_disc_targets)
+            loss2 = m2.test_on_batch(
+                [mlpf_train_inputs, mlpf_train_outputs],
+                mlpf_train_disc_targets,
+            )
 
             # Train the MLPF reconstruction (generative) model with an inverted target
             disc_train_disc_targets = tf.concat([batch_size * [1.0]], axis=0)

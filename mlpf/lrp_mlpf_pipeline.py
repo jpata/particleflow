@@ -10,17 +10,45 @@ from pyg import PFGraphDataset, dataloader_qcd, load_model
 parser = argparse.ArgumentParser()
 
 # for saving the model
-parser.add_argument("--dataset_qcd", type=str, default="../data/delphes/pythia8_qcd", help="testing dataset path")
-parser.add_argument("--outpath", type=str, default="../experiments/", help="path to the trained model directory")
+parser.add_argument(
+    "--dataset_qcd",
+    type=str,
+    default="../data/delphes/pythia8_qcd",
+    help="testing dataset path",
+)
+parser.add_argument(
+    "--outpath",
+    type=str,
+    default="../experiments/",
+    help="path to the trained model directory",
+)
 parser.add_argument("--load_model", type=str, default="", help="Which model to load")
-parser.add_argument("--load_epoch", type=int, default=0, help="Which epoch of the model to load")
-parser.add_argument("--out_neuron", type=int, default=0, help="the output neuron you wish to explain")
+parser.add_argument(
+    "--load_epoch",
+    type=int,
+    default=0,
+    help="Which epoch of the model to load",
+)
+parser.add_argument(
+    "--out_neuron",
+    type=int,
+    default=0,
+    help="the output neuron you wish to explain",
+)
 parser.add_argument("--pid", type=str, default="chhadron", help="Which model to load")
 parser.add_argument(
-    "--n_test", type=int, default=50, help="number of data files to use for testing.. each file contains 100 events"
+    "--n_test",
+    type=int,
+    default=50,
+    help="number of data files to use for testing.. each file contains 100 events",
 )
 parser.add_argument("--run_lrp", dest="run_lrp", action="store_true", help="runs lrp")
-parser.add_argument("--make_rmaps", dest="make_rmaps", action="store_true", help="makes rmaps")
+parser.add_argument(
+    "--make_rmaps",
+    dest="make_rmaps",
+    action="store_true",
+    help="makes rmaps",
+)
 
 args = parser.parse_args()
 
@@ -40,7 +68,12 @@ if __name__ == "__main__":
         # get sample dataset
         print("Fetching the data..")
         full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
-        loader = dataloader_qcd(full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1)
+        loader = dataloader_qcd(
+            full_dataset_qcd,
+            multi_gpu=False,
+            n_test=args.n_test,
+            batch_size=1,
+        )
 
         # load a pretrained model and update the outpath
         outpath = args.outpath + args.load_model
@@ -86,5 +119,11 @@ if __name__ == "__main__":
 
         print("Making Rmaps..")
         make_Rmaps(
-            args.outpath, Rtensors_list, inputs_list, preds_list, pid=args.pid, neighbors=3, out_neuron=args.out_neuron
+            args.outpath,
+            Rtensors_list,
+            inputs_list,
+            preds_list,
+            pid=args.pid,
+            neighbors=3,
+            out_neuron=args.out_neuron,
         )

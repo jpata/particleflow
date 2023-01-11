@@ -91,17 +91,32 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
                 for key, var in vars.items():
                     var = var[:padded_num_elem_size]
                     var = torch.nn.functional.pad(
-                        var, (0, 0, 0, padded_num_elem_size - var.shape[0]), mode="constant", value=0
+                        var,
+                        (0, 0, 0, padded_num_elem_size - var.shape[0]),
+                        mode="constant",
+                        value=0,
                     ).unsqueeze(0)
                     vars_padded[key] = var
 
                 X.append(vars_padded["X"])
                 Y_pid.append(
                     torch.cat(
-                        [vars_padded["gen_ids_one_hot"], vars_padded["cand_ids_one_hot"], vars_padded["pred_ids_one_hot"]]
+                        [
+                            vars_padded["gen_ids_one_hot"],
+                            vars_padded["cand_ids_one_hot"],
+                            vars_padded["pred_ids_one_hot"],
+                        ]
                     ).unsqueeze(0)
                 )
-                Y_p4.append(torch.cat([vars_padded["ygen"], vars_padded["ycand"], vars_padded["pred_p4"]]).unsqueeze(0))
+                Y_p4.append(
+                    torch.cat(
+                        [
+                            vars_padded["ygen"],
+                            vars_padded["ycand"],
+                            vars_padded["pred_p4"],
+                        ]
+                    ).unsqueeze(0)
+                )
 
             outfile = f"{PATH}/predictions/pred_batch{ibatch}_{rank}.pt"
             print(f"saving predictions at {outfile}")
@@ -200,9 +215,17 @@ def postprocess_predictions(pred_path):
     t0 = time.time()
     torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
     torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
-    torch.save(msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4)
+    torch.save(
+        msk_X_f,
+        f"{pred_path}/post_processed_msk_X_f.pt",
+        pickle_protocol=4,
+    )
     torch.save(yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4)
-    torch.save(yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4)
+    torch.save(
+        yvals_f,
+        f"{pred_path}/post_processed_yvals_f.pt",
+        pickle_protocol=4,
+    )
     print(f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     return Xs, X_f, msk_X_f, yvals, yvals_f
@@ -225,8 +248,22 @@ def make_plots_cms(pred_path, plot_path, sample):
     # plot distributions
     print("plot_dist...")
     plot_dist(yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample)
-    plot_dist(yvals_f, "energy", np.linspace(0, 2000, 61), r"$E$", plot_path, sample)
-    plot_dist(yvals_f, "eta", np.linspace(-6, 6, 61), r"$\eta$", plot_path, sample)
+    plot_dist(
+        yvals_f,
+        "energy",
+        np.linspace(0, 2000, 61),
+        r"$E$",
+        plot_path,
+        sample,
+    )
+    plot_dist(
+        yvals_f,
+        "eta",
+        np.linspace(-6, 6, 61),
+        r"$\eta$",
+        plot_path,
+        sample,
+    )
 
     # plot cm
     print("plot_cm...")
@@ -235,7 +272,17 @@ def make_plots_cms(pred_path, plot_path, sample):
 
     # plot eff_and_fake_rate
     print("plot_eff_and_fake_rate...")
-    plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=1, ivar=4, ielem=1, bins=np.logspace(-1, 3, 41), log=True)
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=1,
+        ivar=4,
+        ielem=1,
+        bins=np.logspace(-1, 3, 41),
+        log=True,
+    )
     plot_eff_and_fake_rate(
         X_f,
         yvals_f,
@@ -246,9 +293,19 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=1,
         bins=np.linspace(-4, 4, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
-    plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=2, ivar=4, ielem=5, bins=np.logspace(-1, 3, 41), log=True)
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=2,
+        ivar=4,
+        ielem=5,
+        bins=np.logspace(-1, 3, 41),
+        log=True,
+    )
     plot_eff_and_fake_rate(
         X_f,
         yvals_f,
@@ -259,9 +316,19 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=5,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
-    plot_eff_and_fake_rate(X_f, yvals_f, plot_path, sample, icls=5, ivar=4, ielem=4, bins=np.logspace(-1, 2, 41), log=True)
+    plot_eff_and_fake_rate(
+        X_f,
+        yvals_f,
+        plot_path,
+        sample,
+        icls=5,
+        ivar=4,
+        ielem=4,
+        bins=np.logspace(-1, 2, 41),
+        log=True,
+    )
     plot_eff_and_fake_rate(
         X_f,
         yvals_f,
@@ -272,7 +339,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=4,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
 
     # distribution_icls

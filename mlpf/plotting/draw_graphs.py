@@ -41,7 +41,12 @@ def main(args):
     hidden_dim = 32
     edge_dim = 1
     n_iters = 1
-    model = EdgeNet(input_dim=input_dim, hidden_dim=hidden_dim, edge_dim=edge_dim, n_iters=n_iters).to(device)
+    model = EdgeNet(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        edge_dim=edge_dim,
+        n_iters=n_iters,
+    ).to(device)
     modpath = "data/EdgeNet_14001_ca9bbfb3bb_jduarte.best.pth"
     model.load_state_dict(torch.load(modpath))
     data = data.to(device)
@@ -79,7 +84,11 @@ def main(args):
                 seg_args = dict(c="r", alpha=0.5, zorder=2)
                 plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
             if "output" in plot_type:
-                seg_args = dict(c="g", alpha=output[k].item() * (output[k].item() > 0.9), zorder=3)
+                seg_args = dict(
+                    c="g",
+                    alpha=output[k].item() * (output[k].item() > 0.9),
+                    zorder=3,
+                )
                 plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
             k += 1
 
@@ -88,15 +97,54 @@ def main(args):
         )
         cluster_mask = cut_mask & ~df["isTrack"]
         track_mask = cut_mask & df["isTrack"]
-        plt.scatter(df[x][cluster_mask], df[y][cluster_mask], c="g", marker="o", s=50, zorder=4, alpha=1)
-        plt.scatter(df[x][track_mask], df[y][track_mask], c="b", marker="p", s=50, zorder=5, alpha=1)
-        plt.xlabel("Track or Cluster $\eta$", fontsize=14)
-        plt.ylabel("Track or Cluster $\phi$", fontsize=14)
+        plt.scatter(
+            df[x][cluster_mask],
+            df[y][cluster_mask],
+            c="g",
+            marker="o",
+            s=50,
+            zorder=4,
+            alpha=1,
+        )
+        plt.scatter(
+            df[x][track_mask],
+            df[y][track_mask],
+            c="b",
+            marker="p",
+            s=50,
+            zorder=5,
+            alpha=1,
+        )
+        plt.xlabel(r"Track or Cluster $\eta$", fontsize=14)
+        plt.ylabel(r"Track or Cluster $\phi$", fontsize=14)
         plt.xlim(min_eta, max_eta)
         plt.ylim(min_phi, max_phi)
-        plt.figtext(0.12, 0.90, "CMS", fontweight="bold", wrap=True, horizontalalignment="left", fontsize=16)
-        plt.figtext(0.22, 0.90, "Simulation Preliminary", style="italic", wrap=True, horizontalalignment="left", fontsize=14)
-        plt.figtext(0.67, 0.90, "Run 3 (14 TeV)", wrap=True, horizontalalignment="left", fontsize=14)
+        plt.figtext(
+            0.12,
+            0.90,
+            "CMS",
+            fontweight="bold",
+            wrap=True,
+            horizontalalignment="left",
+            fontsize=16,
+        )
+        plt.figtext(
+            0.22,
+            0.90,
+            "Simulation Preliminary",
+            style="italic",
+            wrap=True,
+            horizontalalignment="left",
+            fontsize=14,
+        )
+        plt.figtext(
+            0.67,
+            0.90,
+            "Run 3 (14 TeV)",
+            wrap=True,
+            horizontalalignment="left",
+            fontsize=14,
+        )
         plt.savefig("graph_%s_%s_%s.pdf" % (x, y, "_".join(plot_type)))
 
 

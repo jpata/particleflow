@@ -225,7 +225,13 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
         # determine the GenParticle to reconstruct from this tower
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
-            gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
+            gen_ptcl = {
+                "pid": pid,
+                "pt": lv.pt,
+                "eta": lv.eta,
+                "phi": lv.phi,
+                "energy": lv.energy,
+            }
 
             # charged gen particles outside the tracker acceptance should be reconstructed as neutrals
             if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
@@ -250,7 +256,11 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
             pf_ptcl = None
 
         triplets.append((t, gen_ptcl, pf_ptcl))
-    return triplets, list(remaining_particles), list(remaining_pfcandidates)
+    return (
+        triplets,
+        list(remaining_particles),
+        list(remaining_pfcandidates),
+    )
 
 
 def process_chunk(infile, ev_start, ev_stop, outfile):
@@ -380,7 +390,10 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
 
         # write the full graph, mainly for study purposes
         if iev < 10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)))
+            nx.readwrite.write_gpickle(
+                graph,
+                outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)),
+            )
 
         # now clean up the graph, keeping only reconstructable genparticles
         # we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -390,7 +403,11 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         tracks = [n for n in graph.nodes if n[0] == "track"]
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
-        triplets, remaining_particles, remaining_pfcandidates = make_triplets(graph, tracks, towers, particles, pfcand)
+        (
+            triplets,
+            remaining_particles,
+            remaining_pfcandidates,
+        ) = make_triplets(graph, tracks, towers, particles, pfcand)
         print("remaining PF", len(remaining_pfcandidates))
         for pf in remaining_pfcandidates:
             print(pf, graph.nodes[pf])
@@ -433,7 +450,16 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ygen = np.stack(ygen)
         ygen_remaining = np.stack(ygen_remaining)
         ycand = np.stack(ycand)
-        print("X", X.shape, "ygen", ygen.shape, "ygen_remaining", ygen_remaining.shape, "ycand", ycand.shape)
+        print(
+            "X",
+            X.shape,
+            "ygen",
+            ygen.shape,
+            "ygen_remaining",
+            ygen_remaining.shape,
+            "ycand",
+            ycand.shape,
+        )
 
         X_all.append(X)
         ygen_all.append(ygen)

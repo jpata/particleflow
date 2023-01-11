@@ -191,7 +191,14 @@ def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, out
             pkl.dump(var, f)
 
 
-def define_regions(num_eta_regions=10, num_phi_regions=10, max_eta=5, min_eta=-5, max_phi=1.5, min_phi=-1.5):
+def define_regions(
+    num_eta_regions=10,
+    num_phi_regions=10,
+    max_eta=5,
+    min_eta=-5,
+    max_phi=1.5,
+    min_phi=-1.5,
+):
     """
     Defines regions in (eta,phi) space to make bins within an event and build graphs within these bins.
 
@@ -259,7 +266,10 @@ def batch_event_into_regions(data, regions):
                 ycand = torch.cat([ycand, data.ycand[in_region_msk]])
                 ycand_id = torch.cat([ycand_id, data.ycand_id[in_region_msk]])
                 batch = torch.cat(
-                    [batch, region + torch.zeros([len(data.x[in_region_msk])])]
+                    [
+                        batch,
+                        region + torch.zeros([len(data.x[in_region_msk])]),
+                    ]
                 )  # assumes events were already fed one at a time (i.e. batch_size=1)
 
     data = Batch(

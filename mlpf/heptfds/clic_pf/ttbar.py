@@ -34,7 +34,13 @@ class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(None, max(len(X_FEATURES_TRK), len(X_FEATURES_CL))), dtype=tf.float32),
+                    "X": tfds.features.Tensor(
+                        shape=(
+                            None,
+                            max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
+                        ),
+                        dtype=tf.float32,
+                    ),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
@@ -43,7 +49,9 @@ class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
-                x_features_track=X_FEATURES_TRK, x_features_cluster=X_FEATURES_CL, y_features=Y_FEATURES
+                x_features_track=X_FEATURES_TRK,
+                x_features_cluster=X_FEATURES_CL,
+                y_features=Y_FEATURES,
             ),
         )
 

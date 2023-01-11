@@ -108,17 +108,30 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
     hyper_train = int(args.n_train / world_size)
     hyper_valid = int(args.n_valid / world_size)
 
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
+    train_dataset = torch.utils.data.Subset(
+        dataset,
+        np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train),
+    )
     valid_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
+        dataset,
+        np.arange(
+            start=args.n_train + rank * hyper_valid,
+            stop=args.n_train + (rank + 1) * hyper_valid,
+        ),
     )
 
     # construct file loaders
     file_loader_train = make_file_loaders(
-        world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        train_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
     file_loader_valid = make_file_loaders(
-        world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        valid_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # copy the model to the GPU with id=rank
@@ -164,11 +177,17 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     # give each gpu a subset of the data
     hyper_test = int(args.n_test / world_size)
 
-    test_dataset = torch.utils.data.Subset(dataset, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
+    test_dataset = torch.utils.data.Subset(
+        dataset,
+        np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test),
+    )
 
     # construct data loaders
     file_loader_test = make_file_loaders(
-        world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        test_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # copy the model to the GPU with id=rank
@@ -177,7 +196,14 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(rank, ddp_model, file_loader_test, args.batch_size, num_classes, PATH)
+    make_predictions(
+        rank,
+        ddp_model,
+        file_loader_test,
+        args.batch_size,
+        num_classes,
+        PATH,
+    )
 
     cleanup()
 
@@ -195,14 +221,23 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
         device = device.index
 
     train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
-    valid_dataset = torch.utils.data.Subset(dataset, np.arange(start=args.n_train, stop=args.n_train + args.n_valid))
+    valid_dataset = torch.utils.data.Subset(
+        dataset,
+        np.arange(start=args.n_train, stop=args.n_train + args.n_valid),
+    )
 
     # construct file loaders
     file_loader_train = make_file_loaders(
-        world_size, train_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        train_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
     file_loader_valid = make_file_loaders(
-        world_size, valid_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        valid_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # move the model to the device (cuda or cpu)
@@ -244,7 +279,10 @@ def inference(device, world_size, args, dataset, model, num_classes, PATH):
 
     # construct data loaders
     file_loader_test = make_file_loaders(
-        world_size, test_dataset, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor
+        world_size,
+        test_dataset,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # copy the model to the GPU with id=rank
@@ -309,9 +347,25 @@ if __name__ == "__main__":
         dataset = PFGraphDataset(args.dataset, args.data)
 
         if world_size >= 2:
-            run_demo(train_ddp, world_size, args, dataset, model, num_classes, outpath)
+            run_demo(
+                train_ddp,
+                world_size,
+                args,
+                dataset,
+                model,
+                num_classes,
+                outpath,
+            )
         else:
-            train(device, world_size, args, dataset, model, num_classes, outpath)
+            train(
+                device,
+                world_size,
+                args,
+                dataset,
+                model,
+                num_classes,
+                outpath,
+            )
 
         # load the best epoch state
         state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
@@ -341,9 +395,25 @@ if __name__ == "__main__":
         dataset_test = PFGraphDataset(args.dataset_test, args.data)
 
         if world_size >= 2:
-            run_demo(inference_ddp, world_size, args, dataset_test, model, num_classes, PATH)
+            run_demo(
+                inference_ddp,
+                world_size,
+                args,
+                dataset_test,
+                model,
+                num_classes,
+                PATH,
+            )
         else:
-            inference(device, world_size, args, dataset_test, model, num_classes, PATH)
+            inference(
+                device,
+                world_size,
+                args,
+                dataset_test,
+                model,
+                num_classes,
+                PATH,
+            )
 
         postprocess_predictions(pred_path)
 

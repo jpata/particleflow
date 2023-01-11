@@ -11,7 +11,11 @@ def parse_args():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-d", "--dir", type=str, default="parameters/delphes-gnn-skipconn.yaml", help="dir containing csv files"
+        "-d",
+        "--dir",
+        type=str,
+        default="parameters/delphes-gnn-skipconn.yaml",
+        help="dir containing csv files",
     )
     args = parser.parse_args()
     return args

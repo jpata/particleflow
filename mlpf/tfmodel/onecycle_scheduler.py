@@ -68,7 +68,10 @@ class OneCycleScheduler(LearningRateSchedule):
         self.final_div = final_div
         self.name = name
 
-        phases = [CosineAnnealer(lr_min, lr_max, phase_1_steps), CosineAnnealer(lr_max, final_lr, phase_2_steps)]
+        phases = [
+            CosineAnnealer(lr_min, lr_max, phase_1_steps),
+            CosineAnnealer(lr_max, final_lr, phase_2_steps),
+        ]
 
         step = 0
         phase = 0
@@ -116,7 +119,10 @@ class MomentumOneCycleScheduler(Callback):
         self.phase = 0
         self.step = 0
 
-        self.phases = [CosineAnnealer(mom_max, mom_min, phase_1_steps), CosineAnnealer(mom_min, mom_max, phase_2_steps)]
+        self.phases = [
+            CosineAnnealer(mom_max, mom_min, phase_1_steps),
+            CosineAnnealer(mom_min, mom_max, phase_2_steps),
+        ]
 
     def _get_opt(self):
         opt = self.model.optimizer

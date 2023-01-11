@@ -30,7 +30,16 @@ TTbar and QCD events with PU~200.
 _CITATION = """
 """
 
-DELPHES_CLASS_NAMES = ["none", "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
+DELPHES_CLASS_NAMES = [
+    "none",
+    "charged hadron",
+    "neutral hadron",
+    "hfem",
+    "hfhad",
+    "photon",
+    "electron",
+    "muon",
+]
 
 # based on delphes/ntuplizer.py
 X_FEATURES = [
@@ -48,7 +57,16 @@ X_FEATURES = [
     "is_gen_electron",
 ]
 
-Y_FEATURES = ["type", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+Y_FEATURES = [
+    "type",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "jet_idx",
+]
 
 
 class DelphesPf(tfds.core.GeneratorBasedBuilder):
@@ -140,8 +158,20 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             ycand = data["ycand"][i].astype(np.float32)
 
             # add jet_idx column
-            ygen = np.concatenate([ygen.astype(np.float32), np.zeros((len(ygen), 1), dtype=np.float32)], axis=-1)
-            ycand = np.concatenate([ycand.astype(np.float32), np.zeros((len(ycand), 1), dtype=np.float32)], axis=-1)
+            ygen = np.concatenate(
+                [
+                    ygen.astype(np.float32),
+                    np.zeros((len(ygen), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+            ycand = np.concatenate(
+                [
+                    ycand.astype(np.float32),
+                    np.zeros((len(ycand), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
 
             # prepare gen candidates for clustering
             cls_id = ygen[..., 0]
@@ -154,7 +184,10 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
 
             pt = ygen[valid, Y_FEATURES.index("pt")]
             eta = ygen[valid, Y_FEATURES.index("eta")]
-            phi = np.arctan2(ygen[valid, Y_FEATURES.index("sin_phi")], ygen[valid, Y_FEATURES.index("cos_phi")])
+            phi = np.arctan2(
+                ygen[valid, Y_FEATURES.index("sin_phi")],
+                ygen[valid, Y_FEATURES.index("cos_phi")],
+            )
             e = ygen[valid, Y_FEATURES.index("energy")]
             vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 

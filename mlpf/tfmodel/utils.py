@@ -27,11 +27,24 @@ from tfmodel.datasets.BaseDatasetFactory import (
     mlpf_dataset_from_config,
 )
 from tfmodel.model_setup import configure_model_weights, make_model
-from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
+from tfmodel.onecycle_scheduler import (
+    MomentumOneCycleScheduler,
+    OneCycleScheduler,
+)
 
 
 @tf.function
-def histogram_2d(mask, eta, phi, weights_px, weights_py, eta_range, phi_range, nbins, bin_dtype=tf.float32):
+def histogram_2d(
+    mask,
+    eta,
+    phi,
+    weights_px,
+    weights_py,
+    eta_range,
+    phi_range,
+    nbins,
+    bin_dtype=tf.float32,
+):
     eta_bins = tf.histogram_fixed_width_bins(eta, eta_range, nbins=nbins, dtype=bin_dtype)
     phi_bins = tf.histogram_fixed_width_bins(phi, phi_range, nbins=nbins, dtype=bin_dtype)
 
@@ -51,9 +64,29 @@ def histogram_2d(mask, eta, phi, weights_px, weights_py, eta_range, phi_range, n
 
 
 @tf.function
-def batched_histogram_2d(mask, eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+def batched_histogram_2d(
+    mask,
+    eta,
+    phi,
+    w_px,
+    w_py,
+    x_range,
+    y_range,
+    nbins,
+    bin_dtype=tf.float32,
+):
     return tf.map_fn(
-        lambda a: histogram_2d(a[0], a[1], a[2], a[3], a[4], x_range, y_range, nbins, bin_dtype),
+        lambda a: histogram_2d(
+            a[0],
+            a[1],
+            a[2],
+            a[3],
+            a[4],
+            x_range,
+            y_range,
+            nbins,
+            bin_dtype,
+        ),
         (mask, eta, phi, w_px, w_py),
         fn_output_signature=tf.TensorSpec(
             [nbins, nbins],
@@ -109,7 +142,7 @@ def create_experiment_dir(prefix=None, suffix=None):
 def get_best_checkpoint(train_dir):
     checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
     # Sort the checkpoints according to the loss in their filenames
-    checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x.name))[0].split("-")[-1]))
+    checkpoint_list.sort(key=lambda x: float(re.search(r"\d+-\d+.\d+", str(x.name))[0].split("-")[-1]))
     # Return the checkpoint with smallest loss
     return str(checkpoint_list[0])
 
@@ -117,7 +150,7 @@ def get_best_checkpoint(train_dir):
 def get_latest_checkpoint(train_dir):
     checkpoint_list = list(Path(Path(train_dir) / "weights").glob("weights*.hdf5"))
     # Sort the checkpoints according to the epoch number in their filenames
-    checkpoint_list.sort(key=lambda x: int(re.search("\d+-\d+.\d+", str(x.name))[0].split("-")[0]))
+    checkpoint_list.sort(key=lambda x: int(re.search(r"\d+-\d+.\d+", str(x.name))[0].split("-")[0]))
     # Return the checkpoint with highest epoch number
     return str(checkpoint_list[-1])
 
@@ -131,7 +164,7 @@ def delete_all_but_best_checkpoint(train_dir, dry_run):
         raise UserWarning("Couldn't find any checkpoints. No deletion was made.")
     else:
         # Sort the checkpoints according to the loss in their filenames
-        checkpoint_list.sort(key=lambda x: float(re.search("\d+-\d+.\d+", str(x))[0].split("-")[-1]))
+        checkpoint_list.sort(key=lambda x: float(re.search(r"\d+-\d+.\d+", str(x))[0].split("-")[-1]))
         best_ckpt = checkpoint_list.pop(0)
         for ckpt in checkpoint_list:
             if not dry_run:
@@ -260,10 +293,18 @@ def get_optimizer(config, lr_schedule=None):
         return opt
     elif config["setup"]["optimizer"] == "adamw":
         cfg_adamw = config["optimizer"]["adamw"]
-        return tfa.optimizers.AdamW(learning_rate=lr, weight_decay=cfg_adamw["weight_decay"], amsgrad=cfg_adamw["amsgrad"])
+        return tfa.optimizers.AdamW(
+            learning_rate=lr,
+            weight_decay=cfg_adamw["weight_decay"],
+            amsgrad=cfg_adamw["amsgrad"],
+        )
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        return tf.keras.optimizers.legacy.SGD(learning_rate=lr, momentum=cfg_sgd["momentum"], nesterov=cfg_sgd["nesterov"])
+        return tf.keras.optimizers.legacy.SGD(
+            learning_rate=lr,
+            momentum=cfg_sgd["momentum"],
+            nesterov=cfg_sgd["nesterov"],
+        )
     else:
         raise ValueError(
             "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
@@ -332,7 +373,15 @@ def targets_multi_output(num_output_classes):
     return func
 
 
-def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_multiplier, split, batch_size, max_events):
+def load_and_interleave(
+    joint_dataset_name,
+    dataset_names,
+    config,
+    num_batches_multiplier,
+    split,
+    batch_size,
+    max_events,
+):
     datasets = [mlpf_dataset_from_config(ds_name, config, split, max_events) for ds_name in dataset_names]
     ds = interleave_datasets(joint_dataset_name, split, datasets)
     tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config))
@@ -377,7 +426,13 @@ def load_and_interleave(joint_dataset_name, dataset_names, config, num_batches_m
 
 
 # Load multiple datasets and mix them together
-def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, max_events=None):
+def get_datasets(
+    datasets_to_interleave,
+    config,
+    num_batches_multiplier,
+    split,
+    max_events=None,
+):
     datasets = []
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
@@ -426,7 +481,8 @@ def set_config_loss(config, trainable):
 def get_class_loss(config):
     if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
         cls_loss = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False, label_smoothing=config["setup"].get("classification_label_smoothing", 0.0)
+            from_logits=False,
+            label_smoothing=config["setup"].get("classification_label_smoothing", 0.0),
         )
     elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
         cls_loss = tfa.losses.sigmoid_focal_crossentropy
@@ -665,9 +721,26 @@ def get_loss_dict(config):
 
 # get the datasets for training, testing and validation
 def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
-    ds_train = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train", ntrain)
-    ds_test = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "test", ntest)
-    ds_val = mlpf_dataset_from_config(config["validation_dataset"], config, "test", config["validation_num_events"])
+    ds_train = get_datasets(
+        config["train_test_datasets"],
+        config,
+        num_batches_multiplier,
+        "train",
+        ntrain,
+    )
+    ds_test = get_datasets(
+        config["train_test_datasets"],
+        config,
+        num_batches_multiplier,
+        "test",
+        ntest,
+    )
+    ds_val = mlpf_dataset_from_config(
+        config["validation_dataset"],
+        config,
+        "test",
+        config["validation_num_events"],
+    )
     ds_val.tensorflow_dataset = ds_val.tensorflow_dataset.padded_batch(config["validation_batch_size"])
 
     return ds_train, ds_test, ds_val
