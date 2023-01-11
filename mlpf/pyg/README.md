@@ -51,11 +51,3 @@ To load a pretrained model which is stored in a directory under `particleflow/ex
 cd ../
 python -u pyg_pipeline.py --data cms --load --load_model=<model_directory> --load_epoch=<epoch_to_load> --dataset=<path_to_cms_data> --dataset_qcd=<path_to_cms_data>
 ```
-
-# XAI studies on MLPF
-
-You must have a pre-trained model under `particleflow/experiments`:
-```bash
-cd ../
-python -u lrp_mlpf_pipeline.py --run_lrp --make_rmaps --load_model=<your_model> --load_epoch=<your_epoch>
-```

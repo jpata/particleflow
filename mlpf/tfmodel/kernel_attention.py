@@ -71,10 +71,15 @@ def pad_to_chunk_length(tensor, axis, chunk_length, padding=None):
         axis_paddings = [[pad_length, 0]]
     elif padding is None:
         if pad_length != 0:
-            raise ValueError("When padding is None, the axis dimension" "has to be divisible by the chunk_length.")
+            raise ValueError(
+                "When padding is None, the axis dimension"
+                "has to be divisible by the chunk_length."
+            )
         return tensor
     else:
-        raise ValueError('Illegal padding value; must be one of "left"' '"right" or None.')
+        raise ValueError(
+            'Illegal padding value; must be one of "left"' '"right" or None.'
+        )
     paddings = tf.concat(
         [
             tf.zeros([axis, 2], dtype=tf.int32),
@@ -100,8 +105,7 @@ def split_tensor_into_chunks(tensor, axis, chunk_length):
     shape = tf.shape(tensor)
     num_chunks = shape[axis] // chunk_length
     new_shape = tf.concat(
-        [shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]],
-        axis=0,
+        [shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]], axis=0
     )
     return tf.reshape(tensor, new_shape)
 
@@ -172,20 +176,28 @@ def causal_windowed_performer_attention(
         value_matrix, -3, chunk_length
     )  # [-1, T//chunk_length, chunk_length, N, out_dim]
 
-    kp_v = tf.einsum("BNCHD,BNCHO->BNHDO", chunked_key_matrix, chunked_value_matrix)
+    kp_v = tf.einsum(
+        "BNCHD,BNCHO->BNHDO", chunked_key_matrix, chunked_value_matrix
+    )
     kp_v_cumsum = tf.cumsum(kp_v, axis=-4)
     kp_v_winsum = (
         kp_v_cumsum
         - tf.pad(
-            kp_v_cumsum,
-            [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]],
+            kp_v_cumsum, [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]]
         )[:, :-window_length]
     )
-    numerator = tf.einsum("BNCHD,BNHDO->BNCHO", chunked_query_matrix, kp_v_winsum)
+    numerator = tf.einsum(
+        "BNCHD,BNHDO->BNCHO", chunked_query_matrix, kp_v_winsum
+    )
 
     k_sum = tf.reduce_sum(chunked_key_matrix, axis=-3)
     k_cumsum = tf.cumsum(k_sum, axis=-3)
-    k_winsum = k_cumsum - tf.pad(k_cumsum, [[0, 0], [window_length, 0], [0, 0], [0, 0]])[:, :-window_length]
+    k_winsum = (
+        k_cumsum
+        - tf.pad(k_cumsum, [[0, 0], [window_length, 0], [0, 0], [0, 0]])[
+            :, :-window_length
+        ]
+    )
     denominator = tf.einsum("BNCHD,BNHD->BNCH", chunked_query_matrix, k_winsum)
     denominator = tf.expand_dims(denominator, -1) + _NUMERIC_STABLER
 
@@ -215,7 +227,9 @@ def create_projection_matrix(m, d, seed=None):
       The matrix of random projections of the shape [m, d].
     """
     nb_full_blocks = math.ceil(m / d)
-    block_list = tf.TensorArray(tf.float32, size=tf.cast(nb_full_blocks, dtype=tf.int32))
+    block_list = tf.TensorArray(
+        tf.float32, size=tf.cast(nb_full_blocks, dtype=tf.int32)
+    )
     stateful = False
     if seed is None:
         stateful = True
@@ -226,8 +240,12 @@ def create_projection_matrix(m, d, seed=None):
         if stateful:
             unstructured_block = tf.random.normal((d, d))
         else:
-            unstructured_block = tf.random.stateless_normal((d, d), seed=current_seed)
-            current_seed = tf.random.stateless_uniform([2], seed=current_seed, minval=None, dtype=tf.int32)
+            unstructured_block = tf.random.stateless_normal(
+                (d, d), seed=current_seed
+            )
+            current_seed = tf.random.stateless_uniform(
+                [2], seed=current_seed, minval=None, dtype=tf.int32
+            )
         q, _ = tf.linalg.qr(unstructured_block)
         q = tf.transpose(q)
         block_list = block_list.write(i, q)
@@ -235,7 +253,9 @@ def create_projection_matrix(m, d, seed=None):
     if stateful is None:
         multiplier = tf.norm(tf.random.normal((m, d)), axis=1)
     else:
-        multiplier = tf.norm(tf.random.stateless_normal((m, d), seed=current_seed), axis=1)
+        multiplier = tf.norm(
+            tf.random.stateless_normal((m, d), seed=current_seed), axis=1
+        )
     return tf.linalg.matmul(tf.linalg.diag(multiplier), final_matrix)
 
 
@@ -259,7 +279,11 @@ def _generalized_kernel(x, projection_matrix, f, h):
     else:
         projection_matrix = tf.cast(projection_matrix, x.dtype)
         x_projected = tf.einsum("BTNH,MH->BTNM", x, projection_matrix)
-        return h(x) * f(x_projected) / tf.math.sqrt(tf.cast(tf.shape(projection_matrix)[0], x.dtype))
+        return (
+            h(x)
+            * f(x_projected)
+            / tf.math.sqrt(tf.cast(tf.shape(projection_matrix)[0], x.dtype))
+        )
 
 
 def expplus(
@@ -299,7 +323,9 @@ def expplus(
         return data_orig
     projection_matrix = tf.cast(projection_matrix, data.dtype)
     if normalize_data:
-        data_normalizer = 1.0 / tf.math.sqrt((tf.math.sqrt(tf.dtypes.cast(data.shape[-1], data.dtype))))
+        data_normalizer = 1.0 / tf.math.sqrt(
+            (tf.math.sqrt(tf.dtypes.cast(data.shape[-1], data.dtype)))
+        )
     else:
         data_normalizer = 1.0
         lengths = tf.math.square(data)
@@ -307,10 +333,16 @@ def expplus(
         lengths = tf.expand_dims(lengths, axis=tf.keras.backend.ndim(data) - 1)
         lengths = tf.math.sqrt(lengths)
         data /= lengths
-    ratio = 1.0 / tf.math.sqrt(tf.dtypes.cast(projection_matrix.shape[0], data.dtype))
-    data_dash = tf.einsum("blhd,md->blhm", data_normalizer * data, projection_matrix)
+    ratio = 1.0 / tf.math.sqrt(
+        tf.dtypes.cast(projection_matrix.shape[0], data.dtype)
+    )
+    data_dash = tf.einsum(
+        "blhd,md->blhm", data_normalizer * data, projection_matrix
+    )
     diag_data = tf.math.square(data)
-    diag_data = tf.math.reduce_sum(diag_data, axis=tf.keras.backend.ndim(data) - 1)
+    diag_data = tf.math.reduce_sum(
+        diag_data, axis=tf.keras.backend.ndim(data) - 1
+    )
     diag_data = (diag_data / 2.0) * data_normalizer * data_normalizer
     diag_data = tf.expand_dims(diag_data, axis=tf.keras.backend.ndim(data) - 1)
 
@@ -319,11 +351,15 @@ def expplus(
 
     l = tf.cast(l, dtype=data.dtype)
     first_sum_of_squares = tf.math.square(data)
-    first_sum_of_squares = tf.math.reduce_sum(first_sum_of_squares, axis=(1, -1), keepdims=True)
+    first_sum_of_squares = tf.math.reduce_sum(
+        first_sum_of_squares, axis=(1, -1), keepdims=True
+    )
     first_sum_of_squares *= data_normalizer * data_normalizer
     first_sum_of_squares /= l  # data.shape[1]
     second_sum_of_squares = tf.math.square(other_data)
-    second_sum_of_squares = tf.math.reduce_sum(second_sum_of_squares, axis=(1, -1), keepdims=True)
+    second_sum_of_squares = tf.math.reduce_sum(
+        second_sum_of_squares, axis=(1, -1), keepdims=True
+    )
     second_sum_of_squares *= data_normalizer * data_normalizer
     second_sum_of_squares /= l  #  other_data.shape[1]
     data_sum = tf.math.reduce_sum(data, axis=(1,), keepdims=True)
@@ -334,7 +370,11 @@ def expplus(
     d_prod *= 2.0 / (l * l)
     ave = first_sum_of_squares + second_sum_of_squares + d_prod
     dim = projection_matrix.shape[-1]
-    a_coeff = (1.0 / (4.0 * ave)) * (tf.math.sqrt((2.0 * ave + dim) * (2.0 * ave + dim) + 8.0 * dim * ave) - 2.0 * ave - dim)
+    a_coeff = (1.0 / (4.0 * ave)) * (
+        tf.math.sqrt((2.0 * ave + dim) * (2.0 * ave + dim) + 8.0 * dim * ave)
+        - 2.0 * ave
+        - dim
+    )
     a_coeff = (1.0 - 1.0 / a_coeff) / 8.0
     b_coeff = tf.math.sqrt(1.0 - 4.0 * a_coeff)
     d_coeff = tf.math.pow(1.0 - 4.0 * a_coeff, dim / 4.0)
@@ -344,7 +384,9 @@ def expplus(
 
     # Calculating diag_omega for the FAVOR++ mechanism:
     diag_omega = tf.math.square(projection_matrix)
-    diag_omega = tf.math.reduce_sum(diag_omega, axis=tf.keras.backend.ndim(projection_matrix) - 1)
+    diag_omega = tf.math.reduce_sum(
+        diag_omega, axis=tf.keras.backend.ndim(projection_matrix) - 1
+    )
     diag_omega = tf.expand_dims(diag_omega, axis=0)
     diag_omega = tf.expand_dims(diag_omega, axis=0)
     diag_omega = tf.expand_dims(diag_omega, axis=0)
@@ -354,17 +396,33 @@ def expplus(
     if numerical_renormalizer:
         if is_query:
             last_dims_t = (len(data_dash.shape) - 1,)
-            stab = b_coeff * tf.math.reduce_max(data_dash, axis=last_dims_t, keepdims=True)
+            stab = b_coeff * tf.math.reduce_max(
+                data_dash, axis=last_dims_t, keepdims=True
+            )
         else:
             stab = b_coeff * tf.math.reduce_max(data_dash, keepdims=True)
         if extra_renormalize_exp_fun:
             extra_stab = tf.reduce_max(diag_data, axis=1, keepdims=True)
             stab = tf.math.maximum(stab, extra_stab)
         data_dash = (
-            ratio * d_coeff * (tf.math.exp(b_coeff * data_dash - stab - diag_data + diag_omega) + numerical_stabilizer)
+            ratio
+            * d_coeff
+            * (
+                tf.math.exp(
+                    b_coeff * data_dash - stab - diag_data + diag_omega
+                )
+                + numerical_stabilizer
+            )
         )
     else:
-        data_dash = ratio * d_coeff * (tf.math.exp(b_coeff * data_dash - diag_data + diag_omega) + numerical_stabilizer)
+        data_dash = (
+            ratio
+            * d_coeff
+            * (
+                tf.math.exp(b_coeff * data_dash - diag_data + diag_omega)
+                + numerical_stabilizer
+            )
+        )
 
     return data_dash
 
@@ -383,20 +441,33 @@ _TRANSFORM_MAP = {
         f=lambda x: tf.keras.activations.relu(x) + 1e-3,
         h=lambda x: 1,
     ),
-    "square": functools.partial(_generalized_kernel, f=tf.math.square, h=lambda x: 1),
+    "square": functools.partial(
+        _generalized_kernel, f=tf.math.square, h=lambda x: 1
+    ),
     "exp": functools.partial(
         _generalized_kernel,
         # Avoid exp explosion by shifting.
-        f=lambda x: tf.math.exp(x - tf.math.reduce_max(x, axis=[1, 2, 3], keepdims=True)),
-        h=lambda x: tf.math.exp(-0.5 * tf.math.reduce_sum(tf.math.square(x), axis=-1, keepdims=True)),
+        f=lambda x: tf.math.exp(
+            x - tf.math.reduce_max(x, axis=[1, 2, 3], keepdims=True)
+        ),
+        h=lambda x: tf.math.exp(
+            -0.5
+            * tf.math.reduce_sum(tf.math.square(x), axis=-1, keepdims=True)
+        ),
     ),
     "expmod": functools.partial(
         _generalized_kernel,
         # Avoid exp explosion by shifting.
-        f=lambda x: tf.math.exp(x - tf.math.reduce_max(x, axis=[1, 2, 3], keepdims=True)),
-        h=lambda x: tf.math.exp(-0.5 * tf.math.sqrt(tf.cast(tf.shape(x)[-1], tf.float32))),
+        f=lambda x: tf.math.exp(
+            x - tf.math.reduce_max(x, axis=[1, 2, 3], keepdims=True)
+        ),
+        h=lambda x: tf.math.exp(
+            -0.5 * tf.math.sqrt(tf.cast(tf.shape(x)[-1], tf.float32))
+        ),
     ),
-    "identity": functools.partial(_generalized_kernel, f=lambda x: x, h=lambda x: 1),
+    "identity": functools.partial(
+        _generalized_kernel, f=lambda x: x, h=lambda x: 1
+    ),
 }
 # pylint: enable=g-long-lambda
 
@@ -482,14 +553,19 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
           **kwargs:
             The same arguments `MultiHeadAttention` layer.
         """
-        if feature_transform not in _TRANSFORM_MAP and feature_transform != "expplus":
+        if (
+            feature_transform not in _TRANSFORM_MAP
+            and feature_transform != "expplus"
+        ):
             raise ValueError(
                 "Unsupported feature_transform. The supported "
                 "feature_transform are %s. "
                 "Got '%s'." % (_TRANSFORM_MAP.keys(), feature_transform)
             )
         if num_random_features <= 0 and redraw:
-            raise ValueError("There is nothing to redraw when num_random_features <= 0.")
+            raise ValueError(
+                "There is nothing to redraw when num_random_features <= 0."
+            )
         self._feature_transform = feature_transform
         self._num_random_features = num_random_features
         self._redraw = redraw
@@ -517,7 +593,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
         self.causal_window_length = causal_window_length
         self.causal_padding = causal_padding
         if self.use_causal_windowed and self._is_short_seq:
-            raise ValueError("use_causal_windowed and short_seq methods are mutually exclusive")
+            raise ValueError(
+                "use_causal_windowed and short_seq methods are mutually exclusive"
+            )
 
     def _compute_attention(
         self,
@@ -558,12 +636,18 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
 
         if self._num_random_features > 0:
             if self._redraw and training:
-                projection_matrix = create_projection_matrix(self._num_random_features, self._key_dim)
+                projection_matrix = create_projection_matrix(
+                    self._num_random_features, self._key_dim
+                )
             else:
                 projection_matrix = self._projection_matrix
 
         if self._scale_by_length:
-            scale = tf.math.log(tf.reduce_sum(attention_mask, axis=-1)) * self._scale / math.log(512)
+            scale = (
+                tf.math.log(tf.reduce_sum(attention_mask, axis=-1))
+                * self._scale
+                / math.log(512)
+            )
             scale = tf.reshape(scale, [-1, 1, 1, 1])
         else:
             scale = self._scale
@@ -583,8 +667,12 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
             query *= tf.math.sqrt(scale)
 
         if feature_transform != "expplus":
-            key_prime = _TRANSFORM_MAP[feature_transform](key, projection_matrix)
-            query_prime = _TRANSFORM_MAP[feature_transform](query, projection_matrix)
+            key_prime = _TRANSFORM_MAP[feature_transform](
+                key, projection_matrix
+            )
+            query_prime = _TRANSFORM_MAP[feature_transform](
+                query, projection_matrix
+            )
         else:
             key_prime = expplus(key, query, False, projection_matrix)
             query_prime = expplus(query, key, True, projection_matrix)
@@ -593,9 +681,13 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
             key_prime = tf.einsum("BSNH,BS->BSNH", key_prime, attention_mask)
 
         if is_short_seq:
-            attention_scores = tf.einsum("BTNH,BSNH->BTSN", query_prime, key_prime)
+            attention_scores = tf.einsum(
+                "BTNH,BSNH->BTSN", query_prime, key_prime
+            )
             attention_scores = tf.nn.softmax(attention_scores, axis=2)
-            attention_output = tf.einsum("BTSN,BSNH->BTNH", attention_scores, value)
+            attention_output = tf.einsum(
+                "BTSN,BSNH->BTNH", attention_scores, value
+            )
         elif self.use_causal_windowed:
             attention_output = causal_windowed_performer_attention(
                 query_prime,
@@ -615,11 +707,15 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
                 )
                 + _NUMERIC_STABLER
             )
-            attention_output = tf.einsum("BTNH,BNDH,BTN->BTND", query_prime, kv, denominator)
+            attention_output = tf.einsum(
+                "BTNH,BNDH,BTN->BTND", query_prime, kv, denominator
+            )
         return attention_output
 
     def _build_from_signature(self, query, value, key=None):
-        super()._build_from_signature(query=query, value=value, key=key)  # pytype: disable=attribute-error  # typed-keras
+        super()._build_from_signature(
+            query=query, value=value, key=key
+        )  # pytype: disable=attribute-error  # typed-keras
         if self._begin_kernel > 0:
             common_kwargs = dict(
                 kernel_initializer=self._kernel_initializer,
@@ -637,7 +733,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
             )
             self._dropout_softmax = tf.keras.layers.Dropout(rate=self._dropout)
 
-    def call(self, query, value, key=None, attention_mask=None, training=False):
+    def call(
+        self, query, value, key=None, attention_mask=None, training=False
+    ):
         """Compute attention with kernel mechanism.
 
         Args:
@@ -680,8 +778,12 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
                 attention_mask,
                 training,
             )
-            attention_output_softmax = self._dropout_softmax(attention_output_softmax)
-            attention_output_softmax = self._output_dense_softmax(attention_output_softmax)
+            attention_output_softmax = self._dropout_softmax(
+                attention_output_softmax
+            )
+            attention_output_softmax = self._output_dense_softmax(
+                attention_output_softmax
+            )
 
             attention_output_kernel = self._compute_attention(
                 query[:, self._begin_kernel :],
@@ -692,9 +794,15 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
                 attention_mask,
                 training,
             )
-            attention_output_kernel = self._dropout_layer(attention_output_kernel)
-            attention_output_kernel = self._output_dense(attention_output_kernel)
-            attention_output = tf.concat([attention_output_softmax, attention_output_kernel], axis=1)
+            attention_output_kernel = self._dropout_layer(
+                attention_output_kernel
+            )
+            attention_output_kernel = self._output_dense(
+                attention_output_kernel
+            )
+            attention_output = tf.concat(
+                [attention_output_softmax, attention_output_kernel], axis=1
+            )
         else:
             attention_output = self._compute_attention(
                 query,

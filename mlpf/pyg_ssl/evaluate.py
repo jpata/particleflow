@@ -1,19 +1,9 @@
-import json
-import math
-import os
-import os.path as osp
-import pickle as pkl
-import time
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn
 import sklearn.metrics
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch_geometric
 from torch_geometric.nn import global_mean_pool
 
 from .utils import (
@@ -45,7 +35,9 @@ def evaluate(device, encoder, decoder, mlpf, test_loader):
             embedding_tracks, embedding_clusters = encoder(tracks, clusters)
             ### POOLING
             pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-            pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
+            pooled_clusters = global_mean_pool(
+                embedding_clusters, clusters.batch
+            )
             ### DECODE
             out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
@@ -101,7 +93,9 @@ def plot_conf_matrix(cm, title, outpath):
         rotation=45,
         fontsize=15,
     )
-    plt.yticks(range(len(CLASS_NAMES_CLIC_LATEX)), CLASS_NAMES_CLIC_LATEX, fontsize=15)
+    plt.yticks(
+        range(len(CLASS_NAMES_CLIC_LATEX)), CLASS_NAMES_CLIC_LATEX, fontsize=15
+    )
 
     plt.tight_layout()
 

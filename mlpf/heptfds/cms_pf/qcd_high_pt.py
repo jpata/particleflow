@@ -1,7 +1,6 @@
 """CMS PF QCD High Pt dataset."""
 import cms_utils
 import tensorflow as tf
-
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -41,15 +40,23 @@ class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "X": tfds.features.Tensor(
+                        shape=(None, len(X_FEATURES)), dtype=tf.float32
+                    ),
+                    "ygen": tfds.features.Tensor(
+                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
+                    ),
+                    "ycand": tfds.features.Tensor(
+                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
+                    ),
                 }
             ),
             supervised_keys=("X", "ycand"),
             homepage="",
             citation=_CITATION,
-            metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),
+            metadata=tfds.core.MetadataDict(
+                x_features=X_FEATURES, y_features=Y_FEATURES
+            ),
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):

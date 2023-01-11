@@ -15,7 +15,9 @@ print("using device %s" % device)
 
 def main(args):
 
-    full_dataset = PFGraphDataset(root="/storage/user/jduarte/particleflow/graph_data/")
+    full_dataset = PFGraphDataset(
+        root="/storage/user/jduarte/particleflow/graph_data/"
+    )
 
     data = full_dataset.get(1)
 
@@ -23,7 +25,12 @@ def main(args):
 
     x_data = data.x.cpu().detach().numpy()
 
-    mask = (x_data[:, 4] == 0) & (x_data[:, 5] == 0) & (x_data[:, 6] == 0) & (x_data[:, 7] == 0)
+    mask = (
+        (x_data[:, 4] == 0)
+        & (x_data[:, 5] == 0)
+        & (x_data[:, 6] == 0)
+        & (x_data[:, 7] == 0)
+    )
     # good_index = np.zeros((x_data.shape[0], 1, 2), dtype=int)
 
     good_x = x_data[:, 2:4].copy()
@@ -73,27 +80,40 @@ def main(args):
             x2 = df[x][j]
             y1 = df[y][i]
             y2 = df[y][j]
-            if (x1 < min_eta - extra or x1 > max_eta + extra) or (x2 < min_eta - extra or x2 > max_eta + extra):
+            if (x1 < min_eta - extra or x1 > max_eta + extra) or (
+                x2 < min_eta - extra or x2 > max_eta + extra
+            ):
                 continue
-            if (y1 < min_phi - extra or y1 > max_phi + extra) or (y2 < min_phi - extra or y2 > max_phi + extra):
+            if (y1 < min_phi - extra or y1 > max_phi + extra) or (
+                y2 < min_phi - extra or y2 > max_phi + extra
+            ):
                 continue
             if "input" in plot_type:
                 seg_args = dict(c="b", alpha=0.1, zorder=1)
-                plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
+                plt.plot(
+                    [df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args
+                )
             if "truth" in plot_type and y_truth[k]:
                 seg_args = dict(c="r", alpha=0.5, zorder=2)
-                plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
+                plt.plot(
+                    [df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args
+                )
             if "output" in plot_type:
                 seg_args = dict(
                     c="g",
                     alpha=output[k].item() * (output[k].item() > 0.9),
                     zorder=3,
                 )
-                plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
+                plt.plot(
+                    [df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args
+                )
             k += 1
 
         cut_mask = (
-            (df[x] > min_eta - extra) & (df[x] < max_eta + extra) & (df[y] > min_phi - extra) & (df[y] < max_phi + extra)
+            (df[x] > min_eta - extra)
+            & (df[x] < max_eta + extra)
+            & (df[y] > min_phi - extra)
+            & (df[y] < max_phi + extra)
         )
         cluster_mask = cut_mask & ~df["isTrack"]
         track_mask = cut_mask & df["isTrack"]
@@ -115,8 +135,8 @@ def main(args):
             zorder=5,
             alpha=1,
         )
-        plt.xlabel(r"Track or Cluster $\eta$", fontsize=14)
-        plt.ylabel(r"Track or Cluster $\phi$", fontsize=14)
+        plt.xlabel("Track or Cluster $\eta$", fontsize=14)
+        plt.ylabel("Track or Cluster $\phi$", fontsize=14)
         plt.xlim(min_eta, max_eta)
         plt.ylim(min_phi, max_phi)
         plt.figtext(

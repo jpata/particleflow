@@ -4,12 +4,22 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
 
+    # samples to be used
+    parser.add_argument(
+        "--samples", default=-1, help="specefies samples to use"
+    )
+
+    # directory containing datafiles
+    parser.add_argument(
+        "--dataset", type=str, default="../data/clic/", help="dataset path"
+    )
+
     # for loading a pre-trained model
     parser.add_argument(
         "--load_VICReg",
         dest="load_VICReg",
         action="store_true",
-        help="Load the model (no training)",
+        help="loads the model without training",
     )
 
     # for training mlpf
@@ -23,35 +33,39 @@ def parse_args():
     parser.add_argument(
         "--outpath", type=str, default="../experiments/", help="output folder"
     )
+
     parser.add_argument(
         "--model_prefix_VICReg",
         type=str,
         default="VICReg_model",
-        help="directory to hold the VICReg model and all plots under args.outpath/args.model_prefix_VICReg",
+        help="directory to hold the VICReg model and all its plots",
     )
     parser.add_argument(
         "--model_prefix_mlpf",
         type=str,
         default="MLPF_model",
-        help="directory to hold the mlpf model and all plots under args.outpath/args.model_prefix_VICReg/args.model_prefix_mlpf",
+        help="directory to hold the mlpf model and all its plots",
     )
-
-    # for loading the data
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="../data/clic/",
-        help="dataset path",
-    )
-
     parser.add_argument(
         "--overwrite",
         dest="overwrite",
         action="store_true",
-        help="Overwrites the model if True",
+        help="overwrites the model if True",
     )
 
     # for training hyperparameters
+    parser.add_argument(
+        "--lmbd",
+        type=float,
+        default=25,
+        help="the lambda term in the VICReg loss",
+    )
+    parser.add_argument(
+        "--u", type=float, default=25, help="the mu term in the VICReg loss"
+    )
+    parser.add_argument(
+        "--v", type=float, default=1, help="the nu term in the VICReg loss"
+    )
     parser.add_argument(
         "--n_epochs", type=int, default=3, help="number of training epochs"
     )
@@ -60,10 +74,13 @@ def parse_args():
         "--batch_size",
         type=int,
         default=100,
-        help="number of events to run inference on before updating the loss",
+        help="number of events to process at once",
     )
     parser.add_argument(
-        "--patience", type=int, default=30, help="patience before early stopping"
+        "--patience",
+        type=int,
+        default=30,
+        help="patience before early stopping",
     )
 
     # VICReg encoder architecture
@@ -71,28 +88,25 @@ def parse_args():
         "--width_encoder",
         type=int,
         default=126,
-        help="hidden dimension of layer of the encoder",
+        help="hidden dimension of the encoder",
     )
     parser.add_argument(
-        "--embedding_dim", type=int, default=34, help="encoded element dimension"
+        "--embedding_dim",
+        type=int,
+        default=34,
+        help="encoded element dimension",
     )
     parser.add_argument(
         "--num_convs", type=int, default=2, help="number of graph convolutions"
     )
     parser.add_argument(
-        "--space_dim",
-        type=int,
-        default=4,
-        help="Spatial dimension for clustering in gravnet layer",
+        "--space_dim", type=int, default=4, help="Gravnet hyperparameter"
     )
     parser.add_argument(
-        "--propagate_dim",
-        type=int,
-        default=22,
-        help="The number of features to be propagated between the vertices",
+        "--propagate_dim", type=int, default=22, help="Gravnet hyperparameter"
     )
     parser.add_argument(
-        "--nearest", type=int, default=8, help="k nearest neighbors in gravnet layer"
+        "--nearest", type=int, default=8, help="k nearest neighbors"
     )
 
     # VICReg decoder architecture
@@ -100,22 +114,20 @@ def parse_args():
         "--width_decoder",
         type=int,
         default=126,
-        help="hidden dimension of layers of the decoder/expander",
+        help="hidden dimension of the decoder",
     )
     parser.add_argument(
         "--expand_dim",
         type=int,
         default=200,
-        help="dimension of the output of the expander",
+        help="dimension of the output of the decoder",
     )
 
     # MLPF architecture
     parser.add_argument(
-        "--width_mlpf",
-        type=int,
-        default=126,
-        help="hidden dimension of layers of mlpf",
+        "--width_mlpf", type=int, default=126, help="hidden dimension of mlpf"
     )
+
     args = parser.parse_args()
 
     return args

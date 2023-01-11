@@ -1,19 +1,13 @@
 import json
-import math
 import os
-import os.path as osp
 import pickle as pkl
 import time
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import sklearn
-import sklearn.metrics
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch_geometric
 from torch_geometric.nn import global_mean_pool
 
 from .utils import distinguish_PFelements
@@ -23,8 +17,9 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
+
 # VICReg loss function
-def criterion(x, y, device="cuda", lmbd=5e-3, u=1, v=1, epsilon=1e-3):
+def criterion(x, y, device="cuda", lmbd=25, u=25, v=1, epsilon=1e-3):
     bs = x.size(0)
     emb = x.size(1)
 
@@ -38,7 +33,10 @@ def criterion(x, y, device="cuda", lmbd=5e-3, u=1, v=1, epsilon=1e-3):
     yNorm = (y - y.mean(0)) / y.std(0)
     crossCorMat = (xNorm.T @ yNorm) / bs
     cross_loss = (
-        (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd)
+        (
+            crossCorMat * lmbd
+            - torch.eye(emb, device=torch.device(device)) * lmbd
+        )
         .pow(2)
         .sum()
     )
@@ -55,6 +53,9 @@ def validation_run(
     decoder,
     train_loader,
     valid_loader,
+    lmbd,
+    u,
+    v,
 ):
     with torch.no_grad():
         optimizer = None
@@ -65,6 +66,9 @@ def validation_run(
             train_loader,
             valid_loader,
             optimizer,
+            lmbd,
+            u,
+            v,
         )
     return ret
 
@@ -76,6 +80,9 @@ def train(
     train_loader,
     valid_loader,
     optimizer,
+    lmbd,
+    u,
+    v,
 ):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
@@ -85,12 +92,12 @@ def train(
     is_train = not (optimizer is None)
 
     if is_train:
-        print(f"---->Initiating a training run")
+        print("---->Initiating a training run")
         encoder.train()
         decoder.train()
         loader = train_loader
     else:
-        print(f"---->Initiating a validation run")
+        print("---->Initiating a validation run")
         encoder.eval()
         decoder.eval()
         loader = valid_loader
@@ -103,16 +110,16 @@ def train(
         # make transformation
         tracks, clusters = distinguish_PFelements(batch.to(device))
 
-        ### ENCODE
+        # ENCODE
         embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-        ### POOLING
+        # POOLING
         pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
         pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
-        ### DECODE
+        # DECODE
         out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
         # compute loss
-        loss = criterion(out_tracks, out_clusters, device=device)
+        loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
 
         # update parameters
         if is_train:
@@ -143,6 +150,9 @@ def training_loop_VICReg(
     patience,
     optimizer,
     outpath,
+    lmbd,
+    u,
+    v,
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -179,6 +189,9 @@ def training_loop_VICReg(
             train_loader,
             valid_loader,
             optimizer,
+            lmbd,
+            u,
+            v,
         )
 
         losses_train.append(losses)
@@ -190,6 +203,9 @@ def training_loop_VICReg(
             decoder,
             train_loader,
             valid_loader,
+            lmbd,
+            u,
+            v,
         )
 
         losses_valid.append(losses)
@@ -208,8 +224,12 @@ def training_loop_VICReg(
             except AttributeError:
                 decoder_state_dict = decoder.state_dict()
 
-            torch.save(encoder_state_dict, f"{outpath}/encoder_best_epoch_weights.pth")
-            torch.save(decoder_state_dict, f"{outpath}/decoder_best_epoch_weights.pth")
+            torch.save(
+                encoder_state_dict, f"{outpath}/encoder_best_epoch_weights.pth"
+            )
+            torch.save(
+                decoder_state_dict, f"{outpath}/decoder_best_epoch_weights.pth"
+            )
 
             with open(
                 f"{outpath}/VICReg_best_epoch.json", "w"
@@ -233,21 +253,17 @@ def training_loop_VICReg(
             + f"eta={round(eta, 1)}m"
         )
 
-        # create directory to hold loss plots
-        if not os.path.exists(outpath + "/training_plots_VICReg/"):
-            os.makedirs(outpath + "/training_plots_VICReg/")
-
         fig, ax = plt.subplots()
         ax.plot(range(len(losses_train)), losses_train, label="training")
         ax.plot(range(len(losses_valid)), losses_valid, label="validation")
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
         ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/training_plots_VICReg/VICReg_loss.pdf")
+        plt.savefig(f"{outpath}/VICReg_loss.pdf")
 
-        with open(f"{outpath}/training_plots_VICReg/VICReg_loss_train.pkl", "wb") as f:
+        with open(f"{outpath}/VICReg_loss_train.pkl", "wb") as f:
             pkl.dump(losses_train, f)
-        with open(f"{outpath}/training_plots_VICReg/VICReg_loss_valid.pkl", "wb") as f:
+        with open(f"{outpath}/VICReg_loss_valid.pkl", "wb") as f:
             pkl.dump(losses_valid, f)
 
         print("----------------------------------------------------------")

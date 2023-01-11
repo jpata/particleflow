@@ -92,7 +92,9 @@ if __name__ == "__main__":
     ypred_flat = flatten(ypred)
     msk = X_flat[:, 0] != 0
 
-    confusion = sklearn.metrics.confusion_matrix(ycand_flat[msk, 0], ypred_flat[msk, 0], labels=range(8))
+    confusion = sklearn.metrics.confusion_matrix(
+        ycand_flat[msk, 0], ypred_flat[msk, 0], labels=range(8)
+    )
 
     fig, ax = plot_confusion_matrix(
         cm=confusion,

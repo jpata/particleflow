@@ -1,12 +1,5 @@
-from typing import Optional, Union
-
-import torch
 import torch.nn as nn
-from torch import Tensor
-from torch.nn import Linear
-from torch_geometric.nn.conv import GravNetConv, MessagePassing
-from torch_geometric.typing import OptTensor, PairOptTensor, PairTensor
-from torch_scatter import scatter
+from torch_geometric.nn.conv import GravNetConv
 
 from .utils import NUM_CLASSES
 

@@ -14,7 +14,9 @@ def debugging_train_step(self, data):
 
     with tf.GradientTape() as tape:
         y_pred = self(x, training=True)  # Forward pass
-        loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+        loss = self.compiled_loss(
+            y, y_pred, sample_weights, regularization_losses=self.losses
+        )
 
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
@@ -33,7 +35,9 @@ def debugging_test_step(self, data):
     y_pred = self(x, training=False)
 
     # Updates the metrics tracking the loss
-    self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+    self.compiled_loss(
+        y, y_pred, sample_weights, regularization_losses=self.losses
+    )
     # Update the metrics.
     self.compiled_metrics.update_state(y, y_pred)
     # Return a dict mapping metric names to current value.
@@ -44,8 +48,12 @@ def debugging_test_step(self, data):
 
 
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
-    bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
-    bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
+    bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(
+        tf.where(~msk, nbins - 1, 0), tf.int64
+    )
+    bins_split = tf.reshape(
+        tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size)
+    )
     return bins_split
 
 
@@ -83,7 +91,9 @@ def pairwise_learnable_dist(A, B, ffn, training=False):
     )
     inds1 = tf.stack([mg[0], mg[1], mg[2]], axis=-1)
     inds2 = tf.stack([mg[0], mg[1], mg[3]], axis=-1)
-    res = tf.concat([tf.gather_nd(A, inds1), tf.gather_nd(B, inds2)], axis=-1)  # (batch, bin, elem, elem, feat)
+    res = tf.concat(
+        [tf.gather_nd(A, inds1), tf.gather_nd(B, inds2)], axis=-1
+    )  # (batch, bin, elem, elem, feat)
 
     # run a feedforward net on ffn(src, dst) -> output_dim
     res_transformed = ffn(res, training=training)
@@ -129,10 +139,16 @@ def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
         n_points = shp[1] * shp[2]
         n_features = shp[-1]
         bins_split_flat = tf.reshape(bins_split, (batch_dim, n_points))
-        points_binned_enc_flat = tf.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+        points_binned_enc_flat = tf.reshape(
+            points_binned_enc, (batch_dim, n_points, n_features)
+        )
 
-        batch_inds = tf.reshape(tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points))
-        bins_split_flat_batch = tf.stack([batch_inds, bins_split_flat], axis=-1)
+        batch_inds = tf.reshape(
+            tf.repeat(tf.range(batch_dim), n_points), (batch_dim, n_points)
+        )
+        bins_split_flat_batch = tf.stack(
+            [batch_inds, bins_split_flat], axis=-1
+        )
 
         ret = tf.scatter_nd(
             bins_split_flat_batch,
@@ -247,8 +263,12 @@ class InputEncodingCMS(tf.keras.layers.Layer):
         Xpt_0p5 = tf.math.sqrt(Xpt)
         Xpt_2 = tf.math.pow(Xpt, 2)
 
-        Xeta1 = tf.clip_by_value(tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1), -10, 10)
-        Xeta2 = tf.clip_by_value(tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1), -10, 10)
+        Xeta1 = tf.clip_by_value(
+            tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1), -10, 10
+        )
+        Xeta2 = tf.clip_by_value(
+            tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1), -10, 10
+        )
         Xabs_eta = tf.expand_dims(tf.math.abs(X[:, :, 2]), axis=-1)
         Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
         Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
@@ -287,7 +307,9 @@ class InputEncodingCMS(tf.keras.layers.Layer):
 
 class GHConvDense(tf.keras.layers.Layer):
     def __init__(self, *args, **kwargs):
-        self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
+        self.activation = getattr(
+            tf.keras.activations, kwargs.pop("activation")
+        )
         self.output_dim = kwargs.pop("output_dim")
         self.normalize_degrees = kwargs.pop("normalize_degrees", True)
 
@@ -375,7 +397,9 @@ class NodeMessageLearnable(tf.keras.layers.Layer):
         self.output_dim = kwargs.pop("output_dim")
         self.hidden_dim = kwargs.pop("hidden_dim")
         self.num_layers = kwargs.pop("num_layers")
-        self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
+        self.activation = getattr(
+            tf.keras.activations, kwargs.pop("activation")
+        )
 
         self.ffn = point_wise_feed_forward_network(
             self.output_dim,
@@ -440,9 +464,7 @@ def point_wise_feed_forward_network(
 
     layers.append(
         tf.keras.layers.Dense(
-            d_model,
-            dtype=dtype,
-            name="{}_dense_{}".format(name, ilayer + 1),
+            d_model, dtype=dtype, name="{}_dense_{}".format(name, ilayer + 1)
         )
     )
     return tf.keras.Sequential(layers, name=name)
@@ -489,7 +511,15 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
 
 
 class NodePairTrainableKernel(tf.keras.layers.Layer):
-    def __init__(self, output_dim=4, hidden_dim_node=128, hidden_dim_pair=32, num_layers=1, activation="elu", **kwargs):
+    def __init__(
+        self,
+        output_dim=4,
+        hidden_dim_node=128,
+        hidden_dim_pair=32,
+        num_layers=1,
+        activation="elu",
+        **kwargs
+    ):
         self.output_dim = output_dim
         self.hidden_dim_node = hidden_dim_node
         self.hidden_dim_pair = hidden_dim_pair
@@ -525,7 +555,9 @@ class NodePairTrainableKernel(tf.keras.layers.Layer):
         node_proj = self.activation(self.ffn_node(x_msg_binned))
 
         dm = tf.cast(
-            pairwise_learnable_dist(node_proj, node_proj, self.pair_kernel, training=training),
+            pairwise_learnable_dist(
+                node_proj, node_proj, self.pair_kernel, training=training
+            ),
             x_msg_binned.dtype,
         )
         return dm
@@ -608,19 +640,27 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
             tf.debugging.assert_greater(
                 n_bins,
                 0,
-                "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size),
+                "number of points (dim 1) must be greater than bin_size={}".format(
+                    self.bin_size
+                ),
             )
             tf.debugging.assert_equal(
                 tf.math.floormod(n_points, self.bin_size),
                 0,
-                "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
+                "number of points (dim 1) must be an integer multiple of bin_size={}".format(
+                    self.bin_size
+                ),
             )
             mul = tf.linalg.matmul(
                 x_msg,
-                self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)],
+                self.codebook_random_rotations[
+                    :, : tf.math.maximum(1, n_bins // 2)
+                ],
             )
             cmul = tf.concat([mul, -mul], axis=-1)
-            bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
+            bins_split = split_indices_to_bins_batch(
+                cmul, n_bins, self.bin_size, msk
+            )
             x_msg_binned = tf.gather(x_msg, bins_split, batch_dims=1)
             x_features_binned = tf.gather(x_node, bins_split, batch_dims=1)
             msk_f_binned = tf.gather(msk_f, bins_split, batch_dims=1)
@@ -678,21 +718,11 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
             [
                 (
                     x_msg_binned,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_msg_features",
-                    ),
+                    ("n_batch", "n_bins", "n_points_bin", "n_msg_features"),
                 ),
                 (
                     x_features_binned,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_node_features",
-                    ),
+                    ("n_batch", "n_bins", "n_points_bin", "n_node_features"),
                 ),
                 (msk_f_binned, ("n_batch", "n_bins", "n_points_bin", 1)),
                 (
@@ -712,7 +742,9 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
 
 
 class MessageBuildingLayerFull(tf.keras.layers.Layer):
-    def __init__(self, distance_dim=128, kernel=NodePairGaussianKernel(), **kwargs):
+    def __init__(
+        self, distance_dim=128, kernel=NodePairGaussianKernel(), **kwargs
+    ):
         self.distance_dim = distance_dim
         self.kernel = kernel
 
@@ -781,7 +813,9 @@ class OutputDecoding(tf.keras.Model):
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
-            self.layernorm = tf.keras.layers.LayerNormalization(axis=-1, name="output_layernorm")
+            self.layernorm = tf.keras.layers.LayerNormalization(
+                axis=-1, name="output_layernorm"
+            )
 
         self.event_set_output = event_set_output
         self.met_output = met_output
@@ -881,8 +915,12 @@ class OutputDecoding(tf.keras.Model):
         # FIXME: better schema propagation between hep_tfds
         # skip connection from raw input values
         if self.schema == "cms":
-            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
-            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
+            orig_sin_phi = tf.cast(
+                tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype
+            )
+            orig_cos_phi = tf.cast(
+                tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype
+            )
             orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_pt = X_input[:, :, 1:2]
         elif self.schema == "delphes":
@@ -941,9 +979,15 @@ class OutputDecoding(tf.keras.Model):
         pred_energy = orig_energy + pred_energy_corr
         pred_energy = tf.abs(pred_energy)
 
-        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
+        pred_pt_corr = (
+            self.ffn_pt(X_encoded_energy, training=training)
+            * msk_input_outtype
+        )
         if self.pt_as_correction:
-            pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+            pred_pt = (
+                tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1]
+                + pred_pt_corr[..., 1:2]
+            )
         else:
             pred_pt = pred_pt_corr[..., 0:1]
         pred_pt = tf.abs(pred_pt)
@@ -964,7 +1008,9 @@ class OutputDecoding(tf.keras.Model):
         # multiply the logits by a coefficient 10 to make the probabilities "harder",
         # i.e. p(particle | no particle) would be close to 0
         if self.mask_reg_cls0:
-            msk_outparticle = (1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]) * msk_input_outtype
+            msk_outparticle = (
+                1.0 - tf.nn.softmax(10 * out_id_logits, axis=-1)[..., 0:1]
+            ) * msk_input_outtype
         else:
             msk_outparticle = tf.ones_like(pred_pt)
 
@@ -986,7 +1032,10 @@ class OutputDecoding(tf.keras.Model):
         if self.met_output:
             px = pred_pt * pred_cos_phi * msk_input_outtype * msk_outparticle
             py = pred_pt * pred_sin_phi * msk_input_outtype * msk_outparticle
-            met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
+            met = tf.sqrt(
+                tf.reduce_sum(px, axis=-2) ** 2
+                + tf.reduce_sum(py, axis=-2) ** 2
+            )
             ret["met"] = met
 
         return ret
@@ -1016,8 +1065,12 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
         self.do_lsh = kwargs.pop("do_lsh", True)
         self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
-        self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
-        self.dist_activation = getattr(tf.keras.activations, kwargs.pop("dist_activation", "linear"))
+        self.activation = getattr(
+            tf.keras.activations, kwargs.pop("activation")
+        )
+        self.dist_activation = getattr(
+            tf.keras.activations, kwargs.pop("dist_activation", "linear")
+        )
         self.small_graph_opt = kwargs.pop("small_graph_opt")
 
         if self.do_layernorm:
@@ -1041,7 +1094,9 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
             distance_dim=self.distance_dim,
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
-            kernel=build_kernel_from_conf(self.kernel, kwargs.get("name") + "_kernel"),
+            kernel=build_kernel_from_conf(
+                self.kernel, kwargs.get("name") + "_kernel"
+            ),
             small_graph_opt=self.small_graph_opt,
         )
 
@@ -1184,10 +1239,16 @@ class PFNetDense(tf.keras.Model):
         self.bin_size = combined_graph_layer["bin_size"]
 
         self.cg_id = [
-            CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)
+            CombinedGraphLayer(
+                name="cg_id_{}".format(i), **combined_graph_layer
+            )
+            for i in range(num_graph_layers_id)
         ]
         self.cg_reg = [
-            CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_reg)
+            CombinedGraphLayer(
+                name="cg_reg_{}".format(i), **combined_graph_layer
+            )
+            for i in range(num_graph_layers_reg)
         ]
 
         output_decoding["schema"] = schema
@@ -1212,7 +1273,9 @@ class PFNetDense(tf.keras.Model):
         ]
 
         if self.small_graph_opt:
-            X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
+            X = tf.cond(
+                bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X
+            )
         else:
             X = tf.pad(X, pad_size)
         # tf.print("\nshape:", shp, tf.shape(X))
@@ -1232,7 +1295,9 @@ class PFNetDense(tf.keras.Model):
 
         X_enc_cg = X_enc
         if self.do_node_encoding:
-            X_enc_ffn = self.activation(self.node_encoding(X_enc_cg, training=training))
+            X_enc_ffn = self.activation(
+                self.node_encoding(X_enc_cg, training=training)
+            )
             X_enc_cg = X_enc_ffn
 
         for cg in self.cg_id:
@@ -1351,8 +1416,12 @@ class KernelEncoder(tf.keras.layers.Layer):
             num_layers=1,
             activation="elu",
         )
-        self.norm1 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln0")
-        self.norm2 = tf.keras.layers.LayerNormalization(axis=-1, name=kwargs.get("name") + "_ln1")
+        self.norm1 = tf.keras.layers.LayerNormalization(
+            axis=-1, name=kwargs.get("name") + "_ln0"
+        )
+        self.norm2 = tf.keras.layers.LayerNormalization(
+            axis=-1, name=kwargs.get("name") + "_ln1"
+        )
         super(KernelEncoder, self).__init__(*args, **kwargs)
 
     def call(self, args, training=False):
@@ -1361,11 +1430,7 @@ class KernelEncoder(tf.keras.layers.Layer):
         X = self.norm1(X, training=training)
         attn_output = (
             self.attn(
-                query=Q,
-                value=X,
-                key=X,
-                training=training,
-                attention_mask=mask,
+                query=Q, value=X, key=X, training=training, attention_mask=mask
             )
             * msk_input
         )
@@ -1434,24 +1499,30 @@ class PFNetTransformer(tf.keras.Model):
         self.key_dim = hiddem_dim
 
         self.ffn = point_wise_feed_forward_network(
-            self.key_dim,
-            self.key_dim,
-            "ffn",
-            num_layers=1,
-            activation="elu",
+            self.key_dim, self.key_dim, "ffn", num_layers=1, activation="elu"
         )
 
         self.encoders = []
         for i in range(num_layers_encoder):
-            self.encoders.append(KernelEncoder(key_dim=self.key_dim, name="enc{}".format(i)))
+            self.encoders.append(
+                KernelEncoder(key_dim=self.key_dim, name="enc{}".format(i))
+            )
 
         self.decoders_cls = []
         for i in range(num_layers_decoder_reg):
-            self.decoders_cls.append(KernelEncoder(key_dim=self.key_dim, name="dec-cls-{}".format(i)))
+            self.decoders_cls.append(
+                KernelEncoder(
+                    key_dim=self.key_dim, name="dec-cls-{}".format(i)
+                )
+            )
 
         self.decoders_reg = []
         for i in range(num_layers_decoder_cls):
-            self.decoders_reg.append(KernelEncoder(key_dim=self.key_dim, name="dec-reg-{}".format(i)))
+            self.decoders_reg.append(
+                KernelEncoder(
+                    key_dim=self.key_dim, name="dec-reg-{}".format(i)
+                )
+            )
 
         self.queries = QueryLayer(self.key_dim)
 
@@ -1500,7 +1571,10 @@ class PFNetTransformer(tf.keras.Model):
         )
 
         # query the encoded state of each element with the trainable classification query
-        X_cls = self.decoders_cls[0]([Q_cls, X_cls, msk], training=training) * msk_input
+        X_cls = (
+            self.decoders_cls[0]([Q_cls, X_cls, msk], training=training)
+            * msk_input
+        )
         for dec in self.decoders_cls[1:]:
             X_cls = dec([X_cls, X_cls, msk], training=training) * msk_input
 
@@ -1514,7 +1588,10 @@ class PFNetTransformer(tf.keras.Model):
         )
 
         # query the encoded state of each element with the trainable regression query
-        X_reg = self.decoders_reg[0]([Q_reg, X_reg, msk], training=training) * msk_input
+        X_reg = (
+            self.decoders_reg[0]([Q_reg, X_reg, msk], training=training)
+            * msk_input
+        )
         for dec in self.decoders_reg[1:]:
             X_reg = dec([X_reg, X_reg, msk], training=training) * msk_input
 

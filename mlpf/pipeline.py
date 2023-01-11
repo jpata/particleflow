@@ -107,8 +107,12 @@ def main():
     help="plot detailed validation every N epochs",
     type=int,
 )
-@click.option("--customize", help="customization function", type=str, default=None)
-@click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
+@click.option(
+    "--customize", help="customization function", type=str, default=None
+)
+@click.option(
+    "--comet-offline", help="log comet-ml experiment locally", is_flag=True
+)
 @click.option(
     "-j",
     "--jobid",
@@ -137,13 +141,14 @@ def main():
     default=None,
 )
 @click.option(
-    "--batch-multiplier",
-    help="batch size per device",
-    type=int,
-    default=None,
+    "--batch-multiplier", help="batch size per device", type=int, default=None
 )
-@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
-@click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
+@click.option(
+    "--num-cpus", help="number of CPU threads to use", type=int, default=1
+)
+@click.option(
+    "--seeds", help="set the random seeds", is_flag=True, default=True
+)
 def train(
     config,
     weights,
@@ -173,7 +178,9 @@ def train(
 
     """Train a model defined by config"""
     config_file_path = config
-    config, config_file_stem = parse_config(config, nepochs=nepochs, weights=weights)
+    config, config_file_stem = parse_config(
+        config, nepochs=nepochs, weights=weights
+    )
     logging.info(f"loaded config file: {config_file_path}")
 
     if plot_freq:
@@ -194,10 +201,13 @@ def train(
                     "Static batching is enabled, changing batch size for dataset {} from {} to {}".format(
                         key,
                         config["train_test_datasets"][key]["batch_per_gpu"],
-                        config["train_test_datasets"][key]["batch_per_gpu"] * batch_multiplier,
+                        config["train_test_datasets"][key]["batch_per_gpu"]
+                        * batch_multiplier,
                     )
                 )
-                config["train_test_datasets"][key]["batch_per_gpu"] *= batch_multiplier
+                config["train_test_datasets"][key][
+                    "batch_per_gpu"
+                ] *= batch_multiplier
 
     if customize:
         config = customization_functions[customize](config)
@@ -213,21 +223,31 @@ def train(
         htf.load_habana_module()
         from habana_frameworks.tensorflow.distribute import HPUStrategy
 
-        logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
+        logging.info(
+            "Using habana_frameworks.tensorflow.distribute.HPUStrategy"
+        )
         strategy = HPUStrategy()
         num_gpus = 1
         num_batches_multiplier = 1
     else:
-        strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
+        strategy, num_gpus, num_batches_multiplier = get_strategy(
+            num_cpus=num_cpus
+        )
 
     outdir = ""
     if not horovod_enabled or hvd.rank() == 0:
-        outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
-        shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+        outdir = create_experiment_dir(
+            prefix=prefix + config_file_stem + "_", suffix=platform.node()
+        )
+        shutil.copy(
+            config_file_path, outdir + "/config.yaml"
+        )  # Copy the config file to the train dir for later reference
 
     try:
         if comet_offline:
-            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
+            logging.info(
+                "Using comet-ml OfflineExperiment, saving logs locally."
+            )
 
             experiment = OfflineExperiment(
                 project_name="particleflow-tf",
@@ -239,7 +259,9 @@ def train(
                 offline_directory=outdir + "/cometml",
             )
         else:
-            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+            logging.info(
+                "Using comet-ml Experiment, streaming logs to www.comet.ml."
+            )
 
             experiment = Experiment(
                 project_name="particleflow-tf",
@@ -250,7 +272,9 @@ def train(
                 auto_histogram_activation_logging=False,
             )
     except Exception as e:
-        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
+        logging.warning(
+            "Failed to initialize comet-ml dashboard: {}".format(e)
+        )
         experiment = None
 
     if experiment:
@@ -263,13 +287,17 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(
+        config, num_batches_multiplier, ntrain, ntest
+    )
 
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
     logging.info("num_train_steps: {}".format(ds_train.num_steps()))
     logging.info("num_test_steps: {}".format(ds_test.num_steps()))
-    logging.info("epochs: {}, total_train_steps: {}".format(epochs, total_steps))
+    logging.info(
+        "epochs: {}, total_train_steps: {}".format(epochs, total_steps)
+    )
 
     if experiment:
         experiment.log_parameter("num_train_steps", ds_train.num_steps())
@@ -277,10 +305,14 @@ def train(
         experiment.log_parameter("num_val_steps", ds_val.num_steps())
 
     if horovod_enabled:
-        model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
+        model, optim_callbacks, initial_epoch = model_scope(
+            config, total_steps, weights, horovod_enabled
+        )
     else:
         with strategy.scope():
-            model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
+            model, optim_callbacks, initial_epoch = model_scope(
+                config, total_steps, weights
+            )
 
     with strategy.scope():
         callbacks = prepare_callbacks(
@@ -334,13 +366,19 @@ def train(
     help="trained weights to load",
     type=click.Path(),
 )
-@click.option("--customize", help="customization function", type=str, default=None)
-@click.option("--nevents", help="maximum number of events", type=int, default=-1)
+@click.option(
+    "--customize", help="customization function", type=str, default=None
+)
+@click.option(
+    "--nevents", help="maximum number of events", type=int, default=-1
+)
 def evaluate(config, train_dir, weights, customize, nevents):
     """Evaluate the trained model in train_dir"""
     if config is None:
         config = Path(train_dir) / "config.yaml"
-        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
+        assert (
+            config.exists()
+        ), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
 
     if customize:
@@ -352,7 +390,9 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     if not weights:
         weights = get_best_checkpoint(train_dir)
-        logging.info("Loading best weights that could be found from {}".format(weights))
+        logging.info(
+            "Loading best weights that could be found from {}".format(weights)
+        )
 
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
@@ -364,8 +404,15 @@ def evaluate(config, train_dir, weights, customize, nevents):
             "test",
             nevents if nevents >= 0 else val_ds["num_events"],
         )
-        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
-        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
+        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(
+            val_ds["batch_size"]
+        )
+        eval_dir = str(
+            Path(train_dir)
+            / "evaluation"
+            / "epoch_{}".format(initial_epoch)
+            / dsname
+        )
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test_tfds, config, eval_dir)
 
@@ -376,11 +423,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
 @click.option(
-    "-o",
-    "--outdir",
-    help="output directory",
-    type=click.Path(),
-    default=".",
+    "-o", "--outdir", help="output directory", type=click.Path(), default="."
 )
 @click.option(
     "-n",
@@ -405,10 +448,7 @@ def find_lr(config, outdir, figname, logscale):
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
     ds_train, _, _ = get_datasets(
-        config["train_test_datasets"],
-        config,
-        num_batches_multiplier,
-        "train",
+        config["train_test_datasets"], config, num_batches_multiplier, "train"
     )
 
     with strategy.scope():
@@ -429,7 +469,9 @@ def find_lr(config, outdir, figname, logscale):
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-t", "--train_dir", help="training directory", type=click.Path())
+@click.option(
+    "-t", "--train_dir", help="training directory", type=click.Path()
+)
 @click.option(
     "-d",
     "--dry_run",
@@ -451,7 +493,9 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
     type=click.Path(),
     required=True,
 )
-@click.option("-o", "--outdir", help="output dir", type=click.Path(), required=True)
+@click.option(
+    "-o", "--outdir", help="output dir", type=click.Path(), required=True
+)
 @click.option(
     "--ntrain",
     default=None,
@@ -471,20 +515,30 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
     is_flag=True,
     default=False,
 )
-@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+@click.option(
+    "--num-cpus", help="number of CPU threads to use", type=int, default=1
+)
 def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     config_file_path = config
     config, _ = parse_config(config, ntrain=ntrain, ntest=ntest)
 
     # Override number of epochs with max_epochs from Hyperband config if specified
     if config["hypertune"]["algorithm"] == "hyperband":
-        config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
+        config["setup"]["num_epochs"] = config["hypertune"]["hyperband"][
+            "max_epochs"
+        ]
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
+    strategy, num_gpus, num_batches_multiplier = get_strategy(
+        num_cpus=num_cpus
+    )
 
-    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(
+        config, num_batches_multiplier, ntrain, ntest
+    )
 
-    model_builder, optim_callbacks = hypertuning.get_model_builder(config, ds_train.num_steps())
+    model_builder, optim_callbacks = hypertuning.get_model_builder(
+        config, ds_train.num_steps()
+    )
 
     callbacks = prepare_callbacks(
         config,
@@ -494,9 +548,13 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
 
     for cb in optim_callbacks:
         callbacks.append(cb)
-    callbacks.append(tf.keras.callbacks.EarlyStopping(patience=20, monitor="val_loss"))
+    callbacks.append(
+        tf.keras.callbacks.EarlyStopping(patience=20, monitor="val_loss")
+    )
 
-    tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
+    tuner = get_tuner(
+        config["hypertune"], model_builder, outdir, recreate, strategy
+    )
     tuner.search_space_summary()
 
     tuner.search(
@@ -508,7 +566,9 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
         callbacks=[],
     )
     logging.info("Hyperparameter search complete.")
-    shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
+    shutil.copy(
+        config_file_path, outdir + "/config.yaml"
+    )  # Copy the config file to the train dir for later reference
 
     tuner.results_summary()
     for trial in tuner.oracle.get_best_trials(num_trials=10):
@@ -544,7 +604,9 @@ def raytune_build_model_and_train(
     full_config, config_file_stem = parse_config(full_config)
 
     if config is not None:
-        full_config = set_raytune_search_parameters(search_space=config, config=full_config)
+        full_config = set_raytune_search_parameters(
+            search_space=config, config=full_config
+        )
 
     logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
     experiment = OfflineExperiment(
@@ -558,7 +620,9 @@ def raytune_build_model_and_train(
     )
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
-    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(
+        config, num_batches_multiplier, ntrain, ntest
+    )
 
     logging.info("num_train_steps", ds_train.num_steps())
     logging.info("num_test_steps", ds_test.num_steps())
@@ -566,8 +630,14 @@ def raytune_build_model_and_train(
     logging.info("total_steps", total_steps)
 
     with strategy.scope():
-        weights = get_latest_checkpoint(Path(checkpoint_dir).parent) if (checkpoint_dir is not None) else None
-        model, optim_callbacks, initial_epoch = model_scope(full_config, total_steps, weights=weights)
+        weights = (
+            get_latest_checkpoint(Path(checkpoint_dir).parent)
+            if (checkpoint_dir is not None)
+            else None
+        )
+        model, optim_callbacks, initial_epoch = model_scope(
+            full_config, total_steps, weights=weights
+        )
 
     callbacks = prepare_callbacks(
         full_config,
@@ -608,10 +678,18 @@ def raytune_build_model_and_train(
     # To make TuneReportCheckpointCallback continue the numbering of checkpoints correctly
     if weights is not None:
         latest_saved_checkpoint_number = int(Path(weights).name.split("-")[1])
-        logging.info("setting TuneReportCheckpointCallback epoch number to {}".format(latest_saved_checkpoint_number))
+        logging.info(
+            "setting TuneReportCheckpointCallback epoch number to {}".format(
+                latest_saved_checkpoint_number
+            )
+        )
         tune_report_checkpoint_callback._checkpoint._counter = Counter()
-        tune_report_checkpoint_callback._checkpoint._counter["epoch_end"] = latest_saved_checkpoint_number
-        tune_report_checkpoint_callback._checkpoint._cp_count = latest_saved_checkpoint_number
+        tune_report_checkpoint_callback._checkpoint._counter[
+            "epoch_end"
+        ] = latest_saved_checkpoint_number
+        tune_report_checkpoint_callback._checkpoint._cp_count = (
+            latest_saved_checkpoint_number
+        )
     callbacks.append(tune_report_checkpoint_callback)
 
     try:
@@ -625,9 +703,17 @@ def raytune_build_model_and_train(
             initial_epoch=initial_epoch,
         )
     except tf.errors.ResourceExhaustedError:
-        logging.warning("Resource exhausted, skipping this hyperparameter configuration.")
-        skiplog_file_path = Path(full_config["raytune"]["local_dir"]) / name / "skipped_configurations.txt"
-        lines = ["{}: {}\n".format(item[0], item[1]) for item in config.items()]
+        logging.warning(
+            "Resource exhausted, skipping this hyperparameter configuration."
+        )
+        skiplog_file_path = (
+            Path(full_config["raytune"]["local_dir"])
+            / name
+            / "skipped_configurations.txt"
+        )
+        lines = [
+            "{}: {}\n".format(item[0], item[1]) for item in config.items()
+        ]
 
         with open(skiplog_file_path, "a") as f:
             f.write("#" * 80 + "\n")
@@ -640,11 +726,15 @@ def raytune_build_model_and_train(
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-n", "--name", help="experiment name", type=str, default="test_exp")
+@click.option(
+    "-n", "--name", help="experiment name", type=str, default="test_exp"
+)
 @click.option("-l", "--local", help="run locally", is_flag=True)
 @click.option("--cpus", help="number of cpus per worker", type=int, default=1)
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
-@click.option("--tune_result_dir", help="Tune result dir", type=str, default=None)
+@click.option(
+    "--tune_result_dir", help="Tune result dir", type=str, default=None
+)
 @click.option("-r", "--resume", help="resume run from local_dir", is_flag=True)
 @click.option(
     "--ntrain",
@@ -690,7 +780,9 @@ def raytune(
         os.environ["TUNE_RESULT_DIR"] = tune_result_dir
     else:
         if isinstance(cfg["raytune"]["local_dir"], type(None)):
-            raise TypeError("Please specify a local_dir in the raytune section of the config file.")
+            raise TypeError(
+                "Please specify a local_dir in the raytune section of the config file."
+            )
         trd = cfg["raytune"]["local_dir"] + "/tune_result_dir"
         os.environ["TUNE_RESULT_DIR"] = trd
 
@@ -705,7 +797,9 @@ def raytune(
         str(Path(cfg["raytune"]["local_dir"]) / name / "config.yaml"),
     )  # Copy the config file to the train dir for later reference
 
-    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
+    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = (
+        1 * 60 * 60
+    )  # Avoid timeout errors
     if not local:
         ray.init(address="auto")
 
@@ -742,10 +836,11 @@ def raytune(
     logging.info("Total time of tune.run(...): {}".format(end - start))
 
     logging.info(
-        "Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
+        "Best hyperparameters found according to {} were: ".format(
+            cfg["raytune"]["default_metric"]
+        ),
         analysis.get_best_config(
-            cfg["raytune"]["default_metric"],
-            cfg["raytune"]["default_mode"],
+            cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]
         ),
     )
 
@@ -755,19 +850,30 @@ def raytune(
     analysis.default_metric = cfg["raytune"]["default_metric"]
     analysis.default_mode = cfg["raytune"]["default_mode"]
     plot_ray_analysis(analysis, save=True, skip=skip)
-    topk_summary_plot_v2(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
-    summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
+    topk_summary_plot_v2(
+        analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent
+    )
+    summarize_top_k(
+        analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent
+    )
 
-    best_params = analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"])
+    best_params = analysis.get_best_config(
+        cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]
+    )
     with open(
-        Path(analysis.get_best_logdir()).parent / "best_parameters.txt",
-        "a",
+        Path(analysis.get_best_logdir()).parent / "best_parameters.txt", "a"
     ) as best_params_file:
-        best_params_file.write("Best hyperparameters according to {}\n".format(cfg["raytune"]["default_metric"]))
+        best_params_file.write(
+            "Best hyperparameters according to {}\n".format(
+                cfg["raytune"]["default_metric"]
+            )
+        )
         for key, val in best_params.items():
             best_params_file.write(("{}: {}\n".format(key, val)))
 
-    with open(Path(analysis.get_best_logdir()).parent / "time.txt", "a") as timefile:
+    with open(
+        Path(analysis.get_best_logdir()).parent / "time.txt", "a"
+    ) as timefile:
         timefile.write(str(end - start) + "\n")
 
     num_skipped = count_skipped_configurations(analysis.get_best_logdir())
@@ -797,7 +903,9 @@ def count_skipped(exp_dir):
 def raytune_analysis(exp_dir, save, skip, mode, metric):
     from ray.tune import ExperimentAnalysis
 
-    experiment_analysis = ExperimentAnalysis(exp_dir, default_metric=metric, default_mode=mode)
+    experiment_analysis = ExperimentAnalysis(
+        exp_dir, default_metric=metric, default_mode=mode
+    )
     plot_ray_analysis(experiment_analysis, save=save, skip=skip)
     analyze_ray_experiment(exp_dir, default_metric=metric, default_mode=mode)
 
@@ -833,18 +941,38 @@ def test_datasets(config):
             )
 
             histograms[dataset] = {}
-            histograms[dataset]["gen_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
-            histograms[dataset]["gen_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
-            histograms[dataset]["cand_energy"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
-            histograms[dataset]["cand_energy_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+            histograms[dataset]["gen_energy"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 5000)
+            )
+            histograms[dataset]["gen_energy_log"] = bh.Histogram(
+                bh.axis.Regular(100, -1, 5)
+            )
+            histograms[dataset]["cand_energy"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 5000)
+            )
+            histograms[dataset]["cand_energy_log"] = bh.Histogram(
+                bh.axis.Regular(100, -1, 5)
+            )
 
-            histograms[dataset]["gen_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
-            histograms[dataset]["cand_eta_energy"] = bh.Histogram(bh.axis.Regular(100, -6, 6))
+            histograms[dataset]["gen_eta_energy"] = bh.Histogram(
+                bh.axis.Regular(100, -6, 6)
+            )
+            histograms[dataset]["cand_eta_energy"] = bh.Histogram(
+                bh.axis.Regular(100, -6, 6)
+            )
 
-            histograms[dataset]["gen_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
-            histograms[dataset]["gen_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
-            histograms[dataset]["cand_pt"] = bh.Histogram(bh.axis.Regular(100, 0, 5000))
-            histograms[dataset]["cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
+            histograms[dataset]["gen_pt"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 5000)
+            )
+            histograms[dataset]["gen_pt_log"] = bh.Histogram(
+                bh.axis.Regular(100, -1, 5)
+            )
+            histograms[dataset]["cand_pt"] = bh.Histogram(
+                bh.axis.Regular(100, 0, 5000)
+            )
+            histograms[dataset]["cand_pt_log"] = bh.Histogram(
+                bh.axis.Regular(100, -1, 5)
+            )
 
             histograms[dataset]["sum_gen_cand_energy"] = bh.Histogram(
                 bh.axis.Regular(100, 0, 100000),
@@ -858,9 +986,13 @@ def test_datasets(config):
                 bh.axis.Regular(100, 0, 100000),
                 bh.axis.Regular(100, 0, 100000),
             )
-            histograms[dataset]["sum_gen_cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
+            histograms[dataset]["sum_gen_cand_pt_log"] = bh.Histogram(
+                bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6)
+            )
 
-            histograms[dataset]["confusion_matrix_Xelem_to_ygen"] = confusion_matrix_Xelem_to_ygen
+            histograms[dataset][
+                "confusion_matrix_Xelem_to_ygen"
+            ] = confusion_matrix_Xelem_to_ygen
 
             for elem in tqdm.tqdm(ds.tensorflow_dataset, total=ds.num_steps()):
                 X = elem["X"].numpy()
@@ -876,7 +1008,9 @@ def test_datasets(config):
                 # assert ygen.shape[1] == config["dataset"]["num_output_features"] + 1
                 # assert ycand.shape[1] == config["dataset"]["num_output_features"] + 1
 
-                histograms[dataset]["confusion_matrix_Xelem_to_ygen"] += coo_matrix(
+                histograms[dataset][
+                    "confusion_matrix_Xelem_to_ygen"
+                ] += coo_matrix(
                     (
                         np.ones(len(X), dtype=np.int64),
                         (
@@ -892,53 +1026,60 @@ def test_datasets(config):
 
                 vals_ygen = ygen[ygen[:, 0] != 0]
                 vals_ygen = unpack_target(
-                    vals_ygen,
-                    config["dataset"]["num_output_classes"],
-                    config,
+                    vals_ygen, config["dataset"]["num_output_classes"], config
                 )
                 # assert np.all(vals_ygen["energy"] > 0)
                 # assert np.all(vals_ygen["pt"] > 0)
                 # assert not np.any(np.isinf(ygen))
                 # assert not np.any(np.isnan(ygen))
 
-                histograms[dataset]["gen_energy"].fill(vals_ygen["energy"][:, 0])
-                histograms[dataset]["gen_energy_log"].fill(np.log10(vals_ygen["energy"][:, 0]))
+                histograms[dataset]["gen_energy"].fill(
+                    vals_ygen["energy"][:, 0]
+                )
+                histograms[dataset]["gen_energy_log"].fill(
+                    np.log10(vals_ygen["energy"][:, 0])
+                )
                 histograms[dataset]["gen_pt"].fill(vals_ygen["pt"][:, 0])
-                histograms[dataset]["gen_pt_log"].fill(np.log10(vals_ygen["pt"][:, 0]))
+                histograms[dataset]["gen_pt_log"].fill(
+                    np.log10(vals_ygen["pt"][:, 0])
+                )
                 histograms[dataset]["gen_eta_energy"].fill(
-                    vals_ygen["eta"][:, 0],
-                    weight=vals_ygen["energy"][:, 0],
+                    vals_ygen["eta"][:, 0], weight=vals_ygen["energy"][:, 0]
                 )
 
                 vals_ycand = ycand[ycand[:, 0] != 0]
                 vals_ycand = unpack_target(
-                    vals_ycand,
-                    config["dataset"]["num_output_classes"],
-                    config,
+                    vals_ycand, config["dataset"]["num_output_classes"], config
                 )
                 # assert(np.all(vals_ycand["energy"]>0))
                 # assert(np.all(vals_ycand["pt"]>0))
                 # assert not np.any(np.isinf(ycand))
                 # assert not np.any(np.isnan(ycand))
 
-                histograms[dataset]["cand_energy"].fill(vals_ycand["energy"][:, 0])
-                histograms[dataset]["cand_energy_log"].fill(np.log10(vals_ycand["energy"][:, 0]))
+                histograms[dataset]["cand_energy"].fill(
+                    vals_ycand["energy"][:, 0]
+                )
+                histograms[dataset]["cand_energy_log"].fill(
+                    np.log10(vals_ycand["energy"][:, 0])
+                )
                 histograms[dataset]["cand_pt"].fill(vals_ycand["pt"][:, 0])
-                histograms[dataset]["cand_pt_log"].fill(np.log10(vals_ycand["pt"][:, 0]))
+                histograms[dataset]["cand_pt_log"].fill(
+                    np.log10(vals_ycand["pt"][:, 0])
+                )
                 histograms[dataset]["cand_eta_energy"].fill(
-                    vals_ycand["eta"][:, 0],
-                    weight=vals_ycand["energy"][:, 0],
+                    vals_ycand["eta"][:, 0], weight=vals_ycand["energy"][:, 0]
                 )
 
                 histograms[dataset]["sum_gen_cand_energy"].fill(
-                    np.sum(vals_ygen["energy"]),
-                    np.sum(vals_ycand["energy"]),
+                    np.sum(vals_ygen["energy"]), np.sum(vals_ycand["energy"])
                 )
                 histograms[dataset]["sum_gen_cand_energy_log"].fill(
                     np.log10(np.sum(vals_ygen["energy"])),
                     np.log10(np.sum(vals_ycand["energy"])),
                 )
-                histograms[dataset]["sum_gen_cand_pt"].fill(np.sum(vals_ygen["pt"]), np.sum(vals_ycand["pt"]))
+                histograms[dataset]["sum_gen_cand_pt"].fill(
+                    np.sum(vals_ygen["pt"]), np.sum(vals_ycand["pt"])
+                )
                 histograms[dataset]["sum_gen_cand_pt_log"].fill(
                     np.log10(np.sum(vals_ygen["pt"])),
                     np.log10(np.sum(vals_ycand["pt"])),
@@ -946,8 +1087,14 @@ def test_datasets(config):
 
             print(confusion_matrix_Xelem_to_ygen)
 
-    for dsname, dsval in sorted(dataset_sizes["train"].items(), reverse=True, key=lambda x: x[1]):
-        print("{}: {:.1E} {:.1E}".format(dsname, dsval, dataset_sizes["test"][dsname]))
+    for dsname, dsval in sorted(
+        dataset_sizes["train"].items(), reverse=True, key=lambda x: x[1]
+    ):
+        print(
+            "{}: {:.1E} {:.1E}".format(
+                dsname, dsval, dataset_sizes["test"][dsname]
+            )
+        )
 
     with open("datasets.pkl", "wb") as fi:
         pickle.dump(histograms, fi)
@@ -993,7 +1140,9 @@ def plots(train_dir, max_files):
             cp_dir = dataset_dir / "plots"
             if not os.path.isdir(str(cp_dir)):
                 os.makedirs(str(cp_dir))
-            yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
+            yvals, X, _ = load_eval_data(
+                str(dataset_dir / "*.parquet"), max_files
+            )
 
             plot_num_elements(X, cp_dir=cp_dir, title=_title)
             plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)

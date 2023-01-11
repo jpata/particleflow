@@ -1,20 +1,14 @@
 import json
 import math
 import os
-import os.path as osp
 import pickle as pkl
 import time
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import sklearn
 import sklearn.metrics
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch_geometric
-from torch_geometric.nn import global_mean_pool
 
 from .utils import combine_PFelements, distinguish_PFelements
 
@@ -197,9 +191,13 @@ def training_loop_mlpf(
             except AttributeError:
                 mlpf_state_dict = mlpf.state_dict()
 
-            torch.save(mlpf_state_dict, f"{outpath}/mlpf_best_epoch_weights.pth")
+            torch.save(
+                mlpf_state_dict, f"{outpath}/mlpf_best_epoch_weights.pth"
+            )
 
-            with open(f"{outpath}/mlpf_best_epoch.json", "w") as fp:  # dump best epoch
+            with open(
+                f"{outpath}/mlpf_best_epoch.json", "w"
+            ) as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1
@@ -219,21 +217,19 @@ def training_loop_mlpf(
             + f"eta={round(eta, 1)}m"
         )
 
-        # create directory to hold loss plots
-        if not os.path.exists(outpath + "/training_plots_mlpf/"):
-            os.makedirs(outpath + "/training_plots_mlpf/")
-
         fig, ax = plt.subplots()
         ax.plot(range(len(losses_train)), losses_train, label="training")
         ax.plot(range(len(losses_valid)), losses_valid, label="validation")
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
-        ax.legend(title='SSL-based MLPF', loc="best", title_fontsize=20, fontsize=15);
-        plt.savefig(f"{outpath}/training_plots_mlpf/mlpf_loss.pdf")
+        ax.legend(
+            title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15
+        )
+        plt.savefig(f"{outpath}/mlpf_loss.pdf")
 
-        with open(f"{outpath}/training_plots_mlpf/mlpf_loss_train.pkl", "wb") as f:
+        with open(f"{outpath}/mlpf_loss_train.pkl", "wb") as f:
             pkl.dump(losses_train, f)
-        with open(f"{outpath}/training_plots_mlpf/mlpf_loss_valid.pkl", "wb") as f:
+        with open(f"{outpath}/mlpf_loss_valid.pkl", "wb") as f:
             pkl.dump(losses_valid, f)
 
         print("----------------------------------------------------------")

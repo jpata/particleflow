@@ -1,9 +1,13 @@
 import multiprocessing
 import os.path as osp
+import sys
 from glob import glob
 
 import torch
 from torch_geometric.data import Data, Dataset
+
+sys.path.append("..")
+from data_clic import prepare_data_clic
 
 
 def process_func(args):
@@ -24,10 +28,9 @@ class PFGraphDataset(Dataset):
         root (str): path
     """
 
-    def __init__(self, root, data, transform=None, pre_transform=None):
+    def __init__(self, root, transform=None, pre_transform=None):
         super(PFGraphDataset, self).__init__(root, transform, pre_transform)
         self._processed_dir = Dataset.processed_dir.fget(self)
-        self.data = data
 
     @property
     def raw_file_names(self):
@@ -72,19 +75,23 @@ class PFGraphDataset(Dataset):
             raw_file_name: raw data file name.
         Returns
             batched_data: a list of Data() objects of the form
-             cms ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
-             delphes ~ Data(x=[#, 12], ygen=[#elem, 6], ygen_id=[#, 6], ycand=[#, 6], ycand_id=[#, 6])
+             clic ~ Data(x=[#, 12], ygen=[#, 5], ygen_id=[#], ycand=[#, 5], ycand_id=[#])
         """
 
-        if self.data == "cms":
-            from cms.cms_utils import prepare_data_cms
+        events = prepare_data_clic(osp.join(self.raw_dir, raw_file_name))
+        data = []
+        for event in events:
+            Xs, ys_gen, ys_cand = event[0], event[1], event[2]
+            d = Data(
+                x=torch.tensor(Xs),
+                ygen=torch.tensor(ys_gen[:, 1:]),
+                ygen_id=torch.tensor(ys_gen[:, 0]).long(),
+                ycand=torch.tensor(ys_cand[:, 1:]),
+                ycand_id=torch.tensor(ys_cand[:, 0]).long(),
+            )
+            data.append(d)
 
-            return prepare_data_cms(osp.join(self.raw_dir, raw_file_name))
-
-        elif self.data == "delphes":
-            from delphes.delphes_utils import prepare_data_delphes
-
-            return prepare_data_delphes(osp.join(self.raw_dir, raw_file_name))
+        return data
 
     def process_multiple_files(self, filenames, idx_file):
         datas = []
@@ -128,9 +135,6 @@ def parse_args():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--data", type=str, required=True, help="'cms' or 'delphes'?"
-    )
-    parser.add_argument(
         "--dataset", type=str, required=True, help="Input data path"
     )
     parser.add_argument(
@@ -156,19 +160,14 @@ def parse_args():
 if __name__ == "__main__":
 
     """
-    e.g. to run for cms
-    python PFGraphDataset.py --data cms --dataset ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi --processed_dir \
-        ../../data/cms/TTbar_14TeV_TuneCUETP8M1_cfi/processed --num-files-merge 1 --num-proc 1
-
-    e.g. to run for delphes
-    python3 PFGraphDataset.py --data delphes --dataset $sample --processed_dir $sample/processed \
-        --num-files-merge 1 --num-proc 1
+    e.g. to run for clic
+    python3 PFGraphDataset.py --dataset $sample --processed_dir $sample/processed --num-files-merge 100
 
     """
 
     args = parse_args()
 
-    pfgraphdataset = PFGraphDataset(root=args.dataset, data=args.data)
+    pfgraphdataset = PFGraphDataset(root=args.dataset)
 
     if args.processed_dir:
         pfgraphdataset._processed_dir = args.processed_dir

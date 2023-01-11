@@ -135,8 +135,12 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
         if (abs(ys[0]) in neutrinos) or (abs(cand[0]) in neutrinos):
             continue
         else:
-            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
-            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
+            ys[0] = labels_ys_gen.index(
+                map_pdgid_to_candid(abs(ys[0]), ys[-1])
+            )
+            cand[0] = labels_ys_cand.index(
+                map_pdgid_to_candid(abs(cand[0]), cand[-1])
+            )
 
         ys_gen.append(ys)
         ys_cand.append(cand)
@@ -159,14 +163,20 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
         if (abs(ys[0]) in neutrinos) or (abs(cand[0]) in neutrinos):
             continue
         else:
-            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
-            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
+            ys[0] = labels_ys_gen.index(
+                map_pdgid_to_candid(abs(ys[0]), ys[-1])
+            )
+            cand[0] = labels_ys_cand.index(
+                map_pdgid_to_candid(abs(cand[0]), cand[-1])
+            )
 
         ys_gen.append(ys)
         ys_cand.append(cand)
         Xs_clusters.append(cluster_as_array(df_cl, icl))
 
-    Xs_clusters = np.stack(Xs_clusters, axis=-1).T  # [Nclusters, Nfeat_cluster]
+    Xs_clusters = np.stack(
+        Xs_clusters, axis=-1
+    ).T  # [Nclusters, Nfeat_cluster]
     Xs_tracks = np.stack(Xs_tracks, axis=-1).T  # [Ntracks, Nfeat_track]
 
     # Here we pad the tracks and clusters to the same shape along the feature dimension
@@ -181,7 +191,9 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
             [(0, 0), (0, Xs_clusters.shape[-1] - Xs_tracks.shape[1])],
         )
 
-    Xs = np.concatenate([Xs_tracks, Xs_clusters], axis=0)  # [Ntracks+Nclusters, max(Nfeat_cluster, Nfeat_track)]
+    Xs = np.concatenate(
+        [Xs_tracks, Xs_clusters], axis=0
+    )  # [Ntracks+Nclusters, max(Nfeat_cluster, Nfeat_track)]
     ys_gen = np.stack(ys_gen, axis=-1).T
     ys_cand = np.stack(ys_cand, axis=-1).T
 
@@ -189,6 +201,13 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
 
 
 def prepare_data_clic(fn):
+    """
+    Processing function that takes as input a raw parquet file and processes it.
+
+    Returns
+        a list of events, each containing three arrays [Xs, ygen, ycand].
+
+    """
 
     data = awkward.from_parquet(fn)
 
@@ -203,7 +222,12 @@ def prepare_data_clic(fn):
         # print("Clusters={}, tracks={}, PFs={}, Gen={}".format(len(df_cl), len(df_tr), len(df_pfs), len(df_gen)))
 
         # skip events that don't have enough activity from training
-        if len(df_pfs) < 2 or len(df_gen) < 2 or len(df_tr) < 2 or len(df_cl) < 2:
+        if (
+            len(df_pfs) < 2
+            or len(df_gen) < 2
+            or len(df_tr) < 2
+            or len(df_cl) < 2
+        ):
             continue
 
         # compute pt, px,py,pz
@@ -307,7 +331,10 @@ def prepare_data_clic(fn):
             # print("genparticle {} is merged and cannot be reconstructed".format(gp))
             # print(df_gen.loc[gp])
 
-        Xs, ys_gen, ys_cand = flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs)
+        Xs, ys_gen, ys_cand = flatten_event(
+            df_tr, df_cl, df_gen, df_pfs, pairs
+        )
+
         ret.append([Xs, ys_gen, ys_cand])
 
     return ret
