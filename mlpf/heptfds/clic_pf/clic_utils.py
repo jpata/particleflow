@@ -35,7 +35,10 @@ def split_sample(path, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
-    return {"train": generate_examples(files_train), "test": generate_examples(files_test)}
+    return {
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
+    }
 
 
 def generate_examples(files):
@@ -47,8 +50,20 @@ def generate_examples(files):
         for iev, (X, ycand, ygen) in enumerate(ret):
 
             # add jet_idx column
-            ygen = np.concatenate([ygen.astype(np.float32), np.zeros((len(ygen), 1), dtype=np.float32)], axis=-1)
-            ycand = np.concatenate([ycand.astype(np.float32), np.zeros((len(ycand), 1), dtype=np.float32)], axis=-1)
+            ygen = np.concatenate(
+                [
+                    ygen.astype(np.float32),
+                    np.zeros((len(ygen), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+            ycand = np.concatenate(
+                [
+                    ycand.astype(np.float32),
+                    np.zeros((len(ycand), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
 
             # prepare gen candidates for clustering
             cls_id = ygen[..., 0]
@@ -63,14 +78,20 @@ def generate_examples(files):
             py = ygen[valid, Y_FEATURES.index("py")]
             pz = ygen[valid, Y_FEATURES.index("pz")]
             e = ygen[valid, Y_FEATURES.index("energy")]
-            vec = vector.awk(ak.zip({"px": px, "py": py, "pz": pz, "energy": e}))
+            vec = vector.awk(
+                ak.zip({"px": px, "py": py, "pz": pz, "energy": e})
+            )
 
             # cluster jets, sort jet indices in descending order by pt
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
             jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+            sorted_jet_idx = ak.argsort(
+                jets.pt, axis=-1, ascending=False
+            ).to_list()
             # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+            constituent_idx = cluster.constituent_index(
+                min_pt=min_jet_pt
+            ).to_list()
 
             # add index information to ygen and ycand
             # index jets in descending order by pt starting from 1:
@@ -81,8 +102,12 @@ def generate_examples(files):
                 jet_constituents = [
                     index_mapping[idx] for idx in constituent_idx[jet_idx]
                 ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = (
+                    jet_idx + 1
+                )  # jet index starts from 1
+                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = (
+                    jet_idx + 1
+                )
 
             yield str(fi) + "_" + str(iev), {
                 "X": X.astype(np.float32),

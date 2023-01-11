@@ -15,7 +15,13 @@ class LRFinder(Callback):
     paper: https://arxiv.org/pdf/1803.09820.pdf.
     """
 
-    def __init__(self, start_lr: float = 1e-7, end_lr: float = 1e-2, max_steps: int = 200, smoothing=0.9):
+    def __init__(
+        self,
+        start_lr: float = 1e-7,
+        end_lr: float = 1e-2,
+        max_steps: int = 200,
+        smoothing=0.9,
+    ):
         super(LRFinder, self).__init__()
         self.start_lr, self.end_lr = start_lr, end_lr
         self.max_steps = max_steps
@@ -39,15 +45,21 @@ class LRFinder(Callback):
         step = self.step
         if loss:
             print("loss", loss)
-            self.avg_loss = self.smoothing * self.avg_loss + (1 - self.smoothing) * loss
-            smooth_loss = self.avg_loss / (1 - self.smoothing ** (self.step + 1))
+            self.avg_loss = (
+                self.smoothing * self.avg_loss + (1 - self.smoothing) * loss
+            )
+            smooth_loss = self.avg_loss / (
+                1 - self.smoothing ** (self.step + 1)
+            )
             self.losses.append(smooth_loss)
             self.lrs.append(self.lr)
 
             if step == 0 or loss < self.best_loss:
                 self.best_loss = loss
 
-            if smooth_loss > 100 * self.best_loss or tf.math.is_nan(smooth_loss):
+            if smooth_loss > 100 * self.best_loss or tf.math.is_nan(
+                smooth_loss
+            ):
                 self.model.stop_training = True
                 print("Loss reached predefined maximum... stopping")
         if step >= self.max_steps:
@@ -56,7 +68,9 @@ class LRFinder(Callback):
         self.step += 1
 
     def exp_annealing(self, step):
-        return self.start_lr * (self.end_lr / self.start_lr) ** (step * 1.0 / self.max_steps)
+        return self.start_lr * (self.end_lr / self.start_lr) ** (
+            step * 1.0 / self.max_steps
+        )
 
     def plot(self, save_dir=None, figname="lr_finder.jpg", log_scale=False):
         fig, ax = plt.subplots(1, 1)

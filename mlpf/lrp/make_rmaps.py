@@ -73,7 +73,9 @@ def process_Rtensor(node, Rtensor, neighbors):
     return Rtensor[: neighbors + 1]
 
 
-def make_Rmaps(outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, out_neuron=0):  # noqa C901
+def make_Rmaps(
+    outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, out_neuron=0
+):  # noqa C901
     """
     Recall each event has a corresponding Rmap per node in the event.
     This function process the Rmaps for a given pid.
@@ -85,7 +87,9 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, ou
     """
     in_features = Rtensors[0].shape[-1]
 
-    Rtensor_correct, Rtensor_incorrect = torch.zeros(neighbors + 1, in_features), torch.zeros(neighbors + 1, in_features)
+    Rtensor_correct, Rtensor_incorrect = torch.zeros(
+        neighbors + 1, in_features
+    ), torch.zeros(neighbors + 1, in_features)
     num_Rtensors_correct, num_Rtensors_incorrect = 0, 0
 
     for event, event_Rscores in enumerate(Rtensors):
@@ -97,10 +101,14 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, ou
             if label_to_class[true_class] == pid:
                 # check if the node was correctly classified
                 if pred_class == true_class:
-                    Rtensor_correct = Rtensor_correct + process_Rtensor(node, node_Rtensor, neighbors)
+                    Rtensor_correct = Rtensor_correct + process_Rtensor(
+                        node, node_Rtensor, neighbors
+                    )
                     num_Rtensors_correct = num_Rtensors_correct + 1
                 else:
-                    Rtensor_incorrect = Rtensor_incorrect + process_Rtensor(node, node_Rtensor, neighbors)
+                    Rtensor_incorrect = Rtensor_incorrect + process_Rtensor(
+                        node, node_Rtensor, neighbors
+                    )
                     num_Rtensors_incorrect = num_Rtensors_incorrect + 1
 
     Rtensor_correct = Rtensor_correct / num_Rtensors_correct
@@ -120,9 +128,14 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, ou
         "is_gen_el",
     ]
 
-    node_types = indexing_by_relevance(neighbors + 1, pid)  # only plot 6 rows/neighbors in Rmap
+    node_types = indexing_by_relevance(
+        neighbors + 1, pid
+    )  # only plot 6 rows/neighbors in Rmap
 
-    for status, var in {"correct": Rtensor_correct, "incorrect": Rtensor_incorrect}.items():
+    for status, var in {
+        "correct": Rtensor_correct,
+        "incorrect": Rtensor_incorrect,
+    }.items():
         print(f"Making Rmaps for {status}ly classified {pid}")
         if status == "correct":
             num = num_Rtensors_correct
@@ -154,10 +167,21 @@ def make_Rmaps(outpath, Rtensors, inputs, preds, pid="chhadron", neighbors=2, ou
         ax.set_yticklabels(node_types, fontsize=20)
         for col in range(len(features)):
             for row in range(len(node_types)):
-                ax.text(col, row, round(var[row, col].item(), 5), ha="center", va="center", color="w", fontsize=14)
+                ax.text(
+                    col,
+                    row,
+                    round(var[row, col].item(), 5),
+                    ha="center",
+                    va="center",
+                    color="w",
+                    fontsize=14,
+                )
 
         plt.imshow(
-            (var[: neighbors + 1] + 1e-12).numpy(), cmap="copper", aspect="auto", norm=matplotlib.colors.LogNorm(vmin=1e-3)
+            (var[: neighbors + 1] + 1e-12).numpy(),
+            cmap="copper",
+            aspect="auto",
+            norm=matplotlib.colors.LogNorm(vmin=1e-3),
         )
 
         # create directory to hold Rmaps

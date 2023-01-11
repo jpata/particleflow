@@ -75,7 +75,9 @@ class LRP_MLPF:
         # get the activations
         self.activations = activations
         self.num_layers = len(activations.keys())
-        self.in_features_dim = self.name2layer(list(activations.keys())[0]).in_features
+        self.in_features_dim = self.name2layer(
+            list(activations.keys())[0]
+        ).in_features
 
         print(f"Total number of layers: {self.num_layers}")
 
@@ -87,13 +89,17 @@ class LRP_MLPF:
         Rscores = preds[:, neuron_to_explain].reshape(-1, 1).detach()
 
         # build the Rtensor which is going to be a whole graph of Rscores per node
-        R_tensor = torch.zeros([Rscores.shape[0], Rscores.shape[0], Rscores.shape[1]]).to(self.device)
+        R_tensor = torch.zeros(
+            [Rscores.shape[0], Rscores.shape[0], Rscores.shape[1]]
+        ).to(self.device)
         for node in range(R_tensor.shape[0]):
             R_tensor[node][node] = Rscores[node]
 
         # loop over layers in the model to propagate Rscores backward
         for layer_index in range(self.num_layers, 0, -1):
-            R_tensor = self.explain_single_layer(R_tensor, layer_index, neuron_to_explain)
+            R_tensor = self.explain_single_layer(
+                R_tensor, layer_index, neuron_to_explain
+            )
 
         print("Finished explaining all layers.")
 
@@ -102,7 +108,9 @@ class LRP_MLPF:
 
         return R_tensor, preds, input
 
-    def explain_single_layer(self, R_tensor_old, layer_index, neuron_to_explain):
+    def explain_single_layer(
+        self, R_tensor_old, layer_index, neuron_to_explain
+    ):
         """
         Attempts to explain a single layer in the model by propagating Rscores backwards using the lrp-epsilon rule.
 
@@ -121,17 +129,31 @@ class LRP_MLPF:
 
         # get layer activations (depends wether it's a message passing step)
         if layer_name in self.msg_passing_layers.keys():
-            print(f"Explaining layer {self.num_layers+1-layer_index}/{self.num_layers}: MessagePassing layer")
-            input = self.msg_activations[layer_name[:-6]].to(self.device).detach()
+            print(
+                f"Explaining layer {self.num_layers+1-layer_index}/{self.num_layers}: MessagePassing layer"
+            )
+            input = (
+                self.msg_activations[layer_name[:-6]].to(self.device).detach()
+            )
             msg_passing_layer = True
         else:
-            print(f"Explaining layer {self.num_layers+1-layer_index}/{self.num_layers}: {layer}")
+            print(
+                f"Explaining layer {self.num_layers+1-layer_index}/{self.num_layers}: {layer}"
+            )
             input = self.activations[layer_name].to(self.device).detach()
             msg_passing_layer = False
 
         # run lrp
         if "Linear" in str(layer):
-            R_tensor_new = self.eps_rule(self, layer, layer_name, input, R_tensor_old, neuron_to_explain, msg_passing_layer)
+            R_tensor_new = self.eps_rule(
+                self,
+                layer,
+                layer_name,
+                input,
+                R_tensor_old,
+                neuron_to_explain,
+                msg_passing_layer,
+            )
             print("- Finished computing Rscores")
             return R_tensor_new
         else:
@@ -147,7 +169,15 @@ class LRP_MLPF:
     """
 
     @staticmethod
-    def eps_rule(self, layer, layer_name, x, R_tensor_old, neuron_to_explain, msg_passing_layer):
+    def eps_rule(
+        self,
+        layer,
+        layer_name,
+        x,
+        R_tensor_old,
+        neuron_to_explain,
+        msg_passing_layer,
+    ):
         """
         Implements the lrp-epsilon rule presented in the following reference:
         https://doi.org/10.1007/978-3-030-28954-6_10.
@@ -173,9 +203,13 @@ class LRP_MLPF:
         torch.cuda.empty_cache()
 
         if msg_passing_layer:  # message_passing hack
-            x = torch.transpose(x, 0, 1)  # transpose the activations to distribute the Rscores over the other dimension
+            x = torch.transpose(
+                x, 0, 1
+            )  # transpose the activations to distribute the Rscores over the other dimension
             # (over nodes instead of features)
-            W = self.A[layer_name[:-6]].detach().to(self.device)  # use the adjacency matrix as the weight matrix
+            W = (
+                self.A[layer_name[:-6]].detach().to(self.device)
+            )  # use the adjacency matrix as the weight matrix
         else:
             W = layer.weight.detach()  # get weight matrix
             W = torch.transpose(W, 0, 1)  # sanity check of forward pass:
@@ -198,15 +232,22 @@ class LRP_MLPF:
         # checking conservation of Rscores for a given random node (# 17)
         rtol = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
         for tol in rtol:
-            if torch.allclose(R_tensor_new[17].sum(), R_tensor_old[17].sum(), rtol=tol):
-                print(f"- Rscores are conserved up to relative tolerance {str(tol)}")
+            if torch.allclose(
+                R_tensor_new[17].sum(), R_tensor_old[17].sum(), rtol=tol
+            ):
+                print(
+                    f"- Rscores are conserved up to relative tolerance {str(tol)}"
+                )
                 break
 
         if layer in self.skip_connections:
             # set aside the relevance of the input_features in the skip connection
             # recall: it is assumed that the skip connections are defined in the following order:
             # torch.cat[(input_features, ...)] )
-            self.skip_connections_relevance = self.skip_connections_relevance + R_tensor_new[:, :, : self.in_features_dim]
+            self.skip_connections_relevance = (
+                self.skip_connections_relevance
+                + R_tensor_new[:, :, : self.in_features_dim]
+            )
             return R_tensor_new[:, :, self.in_features_dim :]
 
         if msg_passing_layer:  # message_passing hack
@@ -240,14 +281,19 @@ class LRP_MLPF:
         """
         explainable_layers = []
         for name, module in self.model.named_modules():
-            if "lin_s" in name:  # for models that are based on Gravnet, skip the lin_s layers
+            if (
+                "lin_s" in name
+            ):  # for models that are based on Gravnet, skip the lin_s layers
                 continue
             if "Linear" in str(type(module)):
                 explainable_layers.append(module)
 
         skip_connections = []
         for layer_index in range(len(explainable_layers) - 1):
-            if explainable_layers[layer_index].out_features != explainable_layers[layer_index + 1].in_features:
+            if (
+                explainable_layers[layer_index].out_features
+                != explainable_layers[layer_index + 1].in_features
+            ):
                 skip_connections.append(explainable_layers[layer_index + 1])
 
         return skip_connections
@@ -258,7 +304,9 @@ class LRP_MLPF:
         """
         msg_passing_layers = {}
         for name, module in self.model.named_modules():
-            if "lin_s" in name:  # for models that are based on Gravnet, replace the .lin_s layers with message_passing
+            if (
+                "lin_s" in name
+            ):  # for models that are based on Gravnet, replace the .lin_s layers with message_passing
                 msg_passing_layers[name] = {}
 
         return msg_passing_layers

@@ -10,16 +10,66 @@ from torch_geometric.data import Data
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-ELEM_NAMES_CMS = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
+ELEM_NAMES_CMS = [
+    "NONE",
+    "TRACK",
+    "PS1",
+    "PS2",
+    "ECAL",
+    "HCAL",
+    "GSF",
+    "BREM",
+    "HFEM",
+    "HFHAD",
+    "SC",
+    "HO",
+]
 
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
-CLASS_NAMES_CMS_LATEX = ["none", "chhad", "nhad", "HFEM", "HFHAD", "$\gamma$", "$e^\pm$", "$\mu^\pm$", r"$\tau$"]
-CLASS_NAMES_CMS = ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"]
+CLASS_NAMES_CMS_LATEX = [
+    "none",
+    "chhad",
+    "nhad",
+    "HFEM",
+    "HFHAD",
+    "$\gamma$",
+    "$e^\pm$",
+    "$\mu^\pm$",
+    r"$\tau$",
+]
+CLASS_NAMES_CMS = [
+    "none",
+    "chhad",
+    "nhad",
+    "HFEM",
+    "HFHAD",
+    "gamma",
+    "ele",
+    "mu",
+    "tau",
+]
 
-CLASS_NAMES_LONG_CMS = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon", "tau"]
+CLASS_NAMES_LONG_CMS = [
+    "none" "charged hadron",
+    "neutral hadron",
+    "hfem",
+    "hfhad",
+    "photon",
+    "electron",
+    "muon",
+    "tau",
+]
 
-CMS_PF_CLASS_NAMES = ["none" "charged hadron", "neutral hadron", "hfem", "hfhad", "photon", "electron", "muon"]
+CMS_PF_CLASS_NAMES = [
+    "none" "charged hadron",
+    "neutral hadron",
+    "hfem",
+    "hfhad",
+    "photon",
+    "electron",
+    "muon",
+]
 
 X_FEATURES = [
     "typ_idx",
@@ -91,22 +141,37 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
 
         # remove PS and BREM from inputs
-        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        msk_ps = (
+            (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+        )
 
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]
         ycand = ycand[~msk_ps]
 
         Xelem = append_fields(
-            Xelem, "typ_idx", np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
+            Xelem,
+            "typ_idx",
+            np.array(
+                [ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]],
+                dtype=np.float32,
+            ),
         )
         ygen = append_fields(
-            ygen, "typ_idx", np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32)
+            ygen,
+            "typ_idx",
+            np.array(
+                [CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]],
+                dtype=np.float32,
+            ),
         )
         ycand = append_fields(
             ycand,
             "typ_idx",
-            np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32),
+            np.array(
+                [CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]],
+                dtype=np.float32,
+            ),
         )
 
         Xelem_flat = np.stack(

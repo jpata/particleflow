@@ -34,21 +34,35 @@ class ClicZpoleeePf(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(None, max(len(X_FEATURES_TRK), len(X_FEATURES_CL))), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "X": tfds.features.Tensor(
+                        shape=(
+                            None,
+                            max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
+                        ),
+                        dtype=tf.float32,
+                    ),
+                    "ygen": tfds.features.Tensor(
+                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
+                    ),
+                    "ycand": tfds.features.Tensor(
+                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
+                    ),
                 }
             ),
             supervised_keys=None,
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
-                x_features_track=X_FEATURES_TRK, x_features_cluster=X_FEATURES_CL, y_features=Y_FEATURES
+                x_features_track=X_FEATURES_TRK,
+                x_features_cluster=X_FEATURES_CL,
+                y_features=Y_FEATURES,
             ),
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        return split_sample(Path("data/clic/gev380ee_pythia6_zpole_ee_rfull201/"))
+        return split_sample(
+            Path("data/clic/gev380ee_pythia6_zpole_ee_rfull201/")
+        )
 
     def _generate_examples(self, files):
         return generate_examples(files)

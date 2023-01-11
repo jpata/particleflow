@@ -32,14 +32,46 @@ def compute_weights(rank, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, alpha, target_type, num_classes, outpath):
+def validation_run(
+    rank,
+    model,
+    train_loader,
+    valid_loader,
+    batch_size,
+    alpha,
+    target_type,
+    num_classes,
+    outpath,
+):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target_type, num_classes, outpath)
+        ret = train(
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            optimizer,
+            alpha,
+            target_type,
+            num_classes,
+            outpath,
+        )
     return ret
 
 
-def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target_type, num_classes, outpath):
+def train(
+    rank,
+    model,
+    train_loader,
+    valid_loader,
+    batch_size,
+    optimizer,
+    alpha,
+    target_type,
+    num_classes,
+    outpath,
+):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -64,10 +96,14 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
 
     t0, tf = time.time(), 0
     for num, file in enumerate(file_loader):
-        print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s")
+        print(
+            f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s"
+        )
         tf = tf + (time.time() - t0)
 
-        file = [x for t in file for x in t]  # unpack the list of tuples to a list
+        file = [
+            x for t in file for x in t
+        ]  # unpack the list of tuples to a list
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
@@ -101,8 +137,12 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             msk2 = (pred_ids != 0) & (pred_ids == target_ids)
 
             # compute the loss
-            weights = compute_weights(rank, target_ids, num_classes)  # to accomodate class imbalance
-            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+            weights = compute_weights(
+                rank, target_ids, num_classes
+            )  # to accomodate class imbalance
+            loss_clf = torch.nn.functional.cross_entropy(
+                pred_ids_one_hot, target_ids, weight=weights
+            )  # for classifying PID
             loss_reg = torch.nn.functional.mse_loss(
                 pred_p4[msk2], target_p4[msk2]
             )  # for regressing p4 # TODO: add mse weights for scales to match? huber?
@@ -122,7 +162,9 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             losses_tot = losses_tot + loss_tot.detach()
 
             conf_matrix += sklearn.metrics.confusion_matrix(
-                target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes)
+                target_ids.detach().cpu(),
+                pred_ids.detach().cpu(),
+                labels=range(num_classes),
             )
 
         #     if i == 2:
@@ -130,11 +172,15 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
         # if num == 2:
         #     break
 
-        print(f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s")
+        print(
+            f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s"
+        )
 
         t0 = time.time()
 
-    print(f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s")
+    print(
+        f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s"
+    )
 
     losses_clf = losses_clf / (len(loader) * len(file_loader))
     losses_reg = losses_reg / (len(loader) * len(file_loader))
@@ -202,7 +248,16 @@ def training_loop(
         # training step
         model.train()
         losses, conf_matrix_train = train(
-            rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target, num_classes, outpath
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            optimizer,
+            alpha,
+            target,
+            num_classes,
+            outpath,
         )
 
         losses_clf_train.append(losses["losses_clf"])
@@ -212,7 +267,15 @@ def training_loop(
         # validation step
         model.eval()
         losses, conf_matrix_val = validation_run(
-            rank, model, train_loader, valid_loader, batch_size, alpha, target, num_classes, outpath
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            alpha,
+            target,
+            num_classes,
+            outpath,
         )
 
         losses_clf_valid.append(losses["losses_clf"])
@@ -230,7 +293,9 @@ def training_loop(
                 state_dict = model.state_dict()
             torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
 
-            with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
+            with open(
+                f"{outpath}/best_epoch.json", "w"
+            ) as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1
@@ -271,8 +336,20 @@ def training_loop(
         elif data == "cms":
             target_names = CLASS_NAMES_CMS
 
-        plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f"epoch_{str(epoch)}_cmTrain")
-        plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f"epoch_{str(epoch)}_cmValid")
+        plot_confusion_matrix(
+            conf_matrix_train,
+            target_names,
+            epoch + 1,
+            cm_path,
+            f"epoch_{str(epoch)}_cmTrain",
+        )
+        plot_confusion_matrix(
+            conf_matrix_val,
+            target_names,
+            epoch + 1,
+            cm_path,
+            f"epoch_{str(epoch)}_cmValid",
+        )
 
         # make loss plots
         make_plot_from_lists(
@@ -307,4 +384,6 @@ def training_loop(
         )
 
         print("----------------------------------------------------------")
-    print(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
+    print(
+        f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min"
+    )

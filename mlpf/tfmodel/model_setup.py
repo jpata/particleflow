@@ -49,7 +49,15 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False, comet_experiment=None):
+    def __init__(
+        self,
+        outpath,
+        dataset,
+        config,
+        plot_freq=1,
+        horovod_enabled=False,
+        comet_experiment=None,
+    ):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.dataset = dataset
@@ -60,7 +68,9 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if not self.horovod_enabled or hvd.rank() == 0:
-            epoch_end(self, epoch, logs, comet_experiment=self.comet_experiment)
+            epoch_end(
+                self, epoch, logs, comet_experiment=self.comet_experiment
+            )
 
 
 def epoch_end(self, epoch, logs, comet_experiment=None):
@@ -94,9 +104,13 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
         jet_distances = compute_distances(
-            yvals["jet_gen_to_pred_genpt"], yvals["jet_gen_to_pred_predpt"], yvals["jet_ratio_pred"]
+            yvals["jet_gen_to_pred_genpt"],
+            yvals["jet_gen_to_pred_predpt"],
+            yvals["jet_ratio_pred"],
         )
-        met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
+        met_distances = compute_distances(
+            met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"]
+        )
 
         N_jets = len(awkward.flatten(yvals["jets_gen_pt"]))
         N_jets_matched_pred = len(yvals["jet_gen_to_pred_genpt"])
@@ -133,10 +147,14 @@ def prepare_callbacks(
     callbacks += [terminate_cb]
 
     if not horovod_enabled or hvd.rank() == 0:
-        callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
+        callbacks += get_checkpoint_history_callback(
+            outdir, config, dataset, comet_experiment, horovod_enabled
+        )
 
     if benchmark_dir:
-        if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+        if (
+            benchmark_dir == "exp_dir"
+        ):  # save benchmarking results in experiment output folder
             benchmark_dir = outdir
         if config["dataset"]["schema"] == "delphes":
             bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
@@ -170,7 +188,9 @@ def prepare_callbacks(
     return callbacks
 
 
-def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled):
+def get_checkpoint_history_callback(
+    outdir, config, dataset, comet_experiment, horovod_enabled
+):
     callbacks = []
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
@@ -268,7 +288,9 @@ def make_gnn_dense(config, dtype):
         schema=config["dataset"]["schema"],
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
-        cls_output_as_logits=config["setup"].get("cls_output_as_logits", False),
+        cls_output_as_logits=config["setup"].get(
+            "cls_output_as_logits", False
+        ),
         small_graph_opt=config["setup"].get("small_graph_opt", False),
         **kwargs
     )
@@ -397,7 +419,15 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
 
 # Given a model, evaluates it on each batch of the validation dataset
 # For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
-def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, verbose=False):
+def eval_model(
+    model,
+    dataset,
+    config,
+    outdir,
+    jet_ptcut=5.0,
+    jet_match_dr=0.1,
+    verbose=False,
+):
 
     ibatch = 0
 
@@ -414,8 +444,12 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
         if verbose:
             print("unpacking outputs")
 
-        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
-        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
+        ygen = unpack_target(
+            elem["ygen"], config["dataset"]["num_output_classes"], config
+        )
+        ycand = unpack_target(
+            elem["ycand"], config["dataset"]["num_output_classes"], config
+        )
 
         # in the delphes dataset, the pt is only defined for charged PFCandidates
         # and energy only for the neutral PFCandidates.
@@ -438,9 +472,15 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             ycand["energy"] = msk_neutral * ycand["energy"] + msk_charged * e
 
         X = awkward.Array(elem["X"].numpy())
-        ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})
-        ycand = awkward.Array({k: squeeze_if_one(ycand[k].numpy()) for k in keys_particle})
-        ypred = awkward.Array({k: squeeze_if_one(ypred[k]) for k in keys_particle})
+        ygen = awkward.Array(
+            {k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle}
+        )
+        ycand = awkward.Array(
+            {k: squeeze_if_one(ycand[k].numpy()) for k in keys_particle}
+        )
+        ypred = awkward.Array(
+            {k: squeeze_if_one(ypred[k]) for k in keys_particle}
+        )
 
         awkvals = {
             "gen": ygen,
@@ -455,14 +495,33 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
         for typ in ["gen", "cand", "pred"]:
             phi = np.arctan2(awkvals[typ]["sin_phi"], awkvals[typ]["cos_phi"])
 
-            cls_id = awkward.argmax(awkvals[typ]["cls"], axis=-1, mask_identity=False)
+            cls_id = awkward.argmax(
+                awkvals[typ]["cls"], axis=-1, mask_identity=False
+            )
             valid = cls_id != 0
 
             # mask the particles in each event in the batch that were not predicted
-            pt = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["pt"], valid)])
-            eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])
-            energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
-            phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
+            pt = awkward.from_iter(
+                [
+                    np.array(v[m], np.float32)
+                    for v, m in zip(awkvals[typ]["pt"], valid)
+                ]
+            )
+            eta = awkward.from_iter(
+                [
+                    np.array(v[m], np.float32)
+                    for v, m in zip(awkvals[typ]["eta"], valid)
+                ]
+            )
+            energy = awkward.from_iter(
+                [
+                    np.array(v[m], np.float32)
+                    for v, m in zip(awkvals[typ]["energy"], valid)
+                ]
+            )
+            phi = awkward.from_iter(
+                [np.array(v[m], np.float32) for v, m in zip(phi, valid)]
+            )
 
             # If there were no particles, build dummy arrays with the correct datatype
             if len(awkward.flatten(pt)) == 0:
@@ -471,19 +530,30 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
                 phi = build_dummy_array(len(pt), np.float64)
                 energy = build_dummy_array(len(pt), np.float64)
 
-            vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            vec = vector.awk(
+                awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy})
+            )
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
             if verbose:
-                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)))
+                print(
+                    "jets {}".format(typ),
+                    awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)),
+                )
 
         # DeltaR match between genjets and MLPF jets
-        gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
-        gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
+        gen_to_pred = match_two_jet_collections(
+            jets_coll, "gen", "pred", jet_match_dr
+        )
+        gen_to_cand = match_two_jet_collections(
+            jets_coll, "gen", "cand", jet_match_dr
+        )
 
-        matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
+        matched_jets = awkward.Array(
+            {"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand}
+        )
 
         # Save output file
         outfile = "{}/pred_batch{}.parquet".format(outdir, ibatch)
@@ -491,7 +561,14 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             print("saving to {}".format(outfile))
 
         awkward.to_parquet(
-            awkward.Array({"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets}),
+            awkward.Array(
+                {
+                    "inputs": X,
+                    "particles": awkvals,
+                    "jets": jets_coll,
+                    "matched_jets": matched_jets,
+                }
+            ),
             outfile,
         )
 
@@ -505,7 +582,16 @@ def freeze_model(model, config, outdir):
 
     def model_output(ret):
         return tf.concat(
-            [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
+            [
+                ret["cls"],
+                ret["charge"],
+                ret["pt"],
+                ret["eta"],
+                ret["sin_phi"],
+                ret["cos_phi"],
+                ret["energy"],
+            ],
+            axis=-1,
         )
 
     full_model = tf.function(lambda x: model_output(model(x, training=False)))
@@ -515,7 +601,9 @@ def freeze_model(model, config, outdir):
     model_proto, _ = tf2onnx.convert.from_function(
         full_model,
         opset=12,
-        input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
+        input_signature=(
+            tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),
+        ),
         output_path=str(Path(outdir) / "model.onnx"),
     )
 
@@ -556,9 +644,23 @@ def configure_model_weights(model, trainable_layers):
         model.set_trainable_named(trainable_layers)
 
     model.compile()
-    trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.trainable_weights])
-    non_trainable_count = sum([np.prod(tf.keras.backend.get_value(w).shape) for w in model.non_trainable_weights])
-    print("trainable={} non_trainable={}".format(trainable_count, non_trainable_count))
+    trainable_count = sum(
+        [
+            np.prod(tf.keras.backend.get_value(w).shape)
+            for w in model.trainable_weights
+        ]
+    )
+    non_trainable_count = sum(
+        [
+            np.prod(tf.keras.backend.get_value(w).shape)
+            for w in model.non_trainable_weights
+        ]
+    )
+    print(
+        "trainable={} non_trainable={}".format(
+            trainable_count, non_trainable_count
+        )
+    )
 
 
 def make_focal_loss(config):

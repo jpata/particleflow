@@ -29,17 +29,10 @@ repos:
 - repo: https://github.com/psf/black
   rev: 22.12.0
   hooks:
-  - id: black-jupyter
-    language_version: python3
-    args: [--line-length=125]
-
-- repo: https://github.com/PyCQA/flake8
-  rev: 6.0.0
-  hooks:
-  - id: flake8
-    # black-compatible flake-8 config
-
-    # E203 is not PEP8 compliant
-    # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=125',  # github viewer width
-           '--extend-ignore=E203,W605,E402']
+    - id: black
+      # It is recommended to specify the latest version of Python
+      # supported by your project here, or alternatively use
+      # pre-commit's default_language_version, see
+      # https://pre-commit.com/#top_level-default_language_version
+      language_version: python3
+      args: [--line-length=79]

@@ -105,7 +105,9 @@ def divide_zero(a, b):
     return out
 
 
-def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname, legend_title=""):
+def plot_distribution(
+    data, pid, target, mlpf, var_name, rng, target_type, fname, legend_title=""
+):
     """
     plot distributions for the target and mlpf of a given feature for a given PID
     """
@@ -119,9 +121,13 @@ def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname
     fig = plt.figure(figsize=(10, 10))
 
     if target_type == "cand":
-        plt.hist(target, bins=rng, density=True, histtype="step", lw=2, label="cand")
+        plt.hist(
+            target, bins=rng, density=True, histtype="step", lw=2, label="cand"
+        )
     elif target_type == "gen":
-        plt.hist(target, bins=rng, density=True, histtype="step", lw=2, label="gen")
+        plt.hist(
+            target, bins=rng, density=True, histtype="step", lw=2, label="gen"
+        )
 
     plt.hist(mlpf, bins=rng, density=True, histtype="step", lw=2, label="MLPF")
     plt.xlabel(var_name)
@@ -139,7 +145,18 @@ def plot_distribution(data, pid, target, mlpf, var_name, rng, target_type, fname
 
 
 def plot_distributions_pid(
-    data, pid, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""
+    data,
+    pid,
+    true_id,
+    true_p4,
+    pred_id,
+    pred_p4,
+    pf_id,
+    cand_p4,
+    target,
+    epoch,
+    outpath,
+    legend_title="",
 ):
     """
     plot distributions for the target and mlpf of the regressed features for a given PID
@@ -162,13 +179,26 @@ def plot_distributions_pid(
             bin_dict[0],
             bin_dict[1],
             target,
-            fname=outpath + "/distribution_plots/" + pid_to_name[pid] + f"_{bin_dict[0]}_distribution",
+            fname=outpath
+            + "/distribution_plots/"
+            + pid_to_name[pid]
+            + f"_{bin_dict[0]}_distribution",
             legend_title=legend_title,
         )
 
 
 def plot_distributions_all(
-    data, true_id, true_p4, pred_id, pred_p4, pf_id, cand_p4, target, epoch, outpath, legend_title=""
+    data,
+    true_id,
+    true_p4,
+    pred_id,
+    pred_p4,
+    pf_id,
+    cand_p4,
+    target,
+    epoch,
+    outpath,
+    legend_title="",
 ):
     """
     plot distributions for the target and mlpf of a all features, merging all PIDs
@@ -188,7 +218,8 @@ def plot_distributions_all(
             bin_dict[0],
             bin_dict[1],
             target,
-            fname=outpath + f"/distribution_plots/all_{bin_dict[0]}_distribution",
+            fname=outpath
+            + f"/distribution_plots/all_{bin_dict[0]}_distribution",
             legend_title=legend_title,
         )
 
@@ -247,7 +278,9 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
         target_list[key],
         cand_list[key],
         marker="^",
-        label="MLPF, $r={0:.3f}$\n$\mu={1:.3f}\\ \sigma={2:.3f}$".format(np.corrcoef(a, b)[0, 1], mu_mlpf, sigma_mlpf),
+        label="MLPF, $r={0:.3f}$\n$\mu={1:.3f}\\ \sigma={2:.3f}$".format(
+            np.corrcoef(a, b)[0, 1], mu_mlpf, sigma_mlpf
+        ),
         alpha=0.5,
     )
 
@@ -267,7 +300,18 @@ def plot_particle_multiplicity(data, list, key, ax=None, legend_title=""):
     plt.title("Particle multiplicity")
 
 
-def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, both=True, legend_title=""):
+def draw_efficiency_fakerate(
+    data,
+    ygen,
+    ypred,
+    ycand,
+    pid,
+    var,
+    bins,
+    outpath,
+    both=True,
+    legend_title="",
+):
     if data == "delphes":
         pid_to_name = pid_to_name_delphes
     elif data == "cms":
@@ -298,7 +342,8 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
     ax1.errorbar(
         midpoints(hist_gen[1]),
         divide_zero(hist_cand[0], hist_gen[0]),
-        divide_zero(np.sqrt(hist_gen[0]), hist_gen[0]) * divide_zero(hist_cand[0], hist_gen[0]),
+        divide_zero(np.sqrt(hist_gen[0]), hist_gen[0])
+        * divide_zero(hist_cand[0], hist_gen[0]),
         lw=0,
         label="Rule-based PF",
         elinewidth=2,
@@ -308,7 +353,8 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
     ax1.errorbar(
         midpoints(hist_gen[1]),
         divide_zero(hist_pred[0], hist_gen[0]),
-        divide_zero(np.sqrt(hist_gen[0]), hist_gen[0]) * divide_zero(hist_pred[0], hist_gen[0]),
+        divide_zero(np.sqrt(hist_gen[0]), hist_gen[0])
+        * divide_zero(hist_pred[0], hist_gen[0]),
         lw=0,
         label="MLPF",
         elinewidth=2,
@@ -322,10 +368,18 @@ def draw_efficiency_fakerate(data, ygen, ypred, ycand, pid, var, bins, outpath, 
     ax1.set_xlabel(var_names[var])
     ax1.set_ylabel("Efficiency")
 
-    hist_cand2 = np.histogram(ygen[msk_cand & (ygen[:, 0] != 0), var_idx], bins=bins)
-    hist_pred2 = np.histogram(ygen[msk_pred & (ygen[:, 0] != 0), var_idx], bins=bins)
-    hist_cand_gen2 = np.histogram(ygen[msk_cand & ~msk_gen & (ygen[:, 0] != 0), var_idx], bins=bins)
-    hist_pred_gen2 = np.histogram(ygen[msk_pred & ~msk_gen & (ygen[:, 0] != 0), var_idx], bins=bins)
+    hist_cand2 = np.histogram(
+        ygen[msk_cand & (ygen[:, 0] != 0), var_idx], bins=bins
+    )
+    hist_pred2 = np.histogram(
+        ygen[msk_pred & (ygen[:, 0] != 0), var_idx], bins=bins
+    )
+    hist_cand_gen2 = np.histogram(
+        ygen[msk_cand & ~msk_gen & (ygen[:, 0] != 0), var_idx], bins=bins
+    )
+    hist_pred_gen2 = np.histogram(
+        ygen[msk_pred & ~msk_gen & (ygen[:, 0] != 0), var_idx], bins=bins
+    )
 
     hist_cand2 = mask_empty(hist_cand2)
     hist_cand_gen2 = mask_empty(hist_cand_gen2)
@@ -398,9 +452,19 @@ def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     ax.hist(
-        ratio_dpf, bins=bins, histtype="step", lw=2, label="Rule-based PF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_dpf)
+        ratio_dpf,
+        bins=bins,
+        histtype="step",
+        lw=2,
+        label="Rule-based PF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_dpf),
     )
-    ax.hist(ratio_mlpf, bins=bins, histtype="step", lw=2, label="MLPF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_mlpf))
+    ax.hist(
+        ratio_mlpf,
+        bins=bins,
+        histtype="step",
+        lw=2,
+        label="MLPF\n$\mu={:.2f},\\ \sigma={:.2f}$".format(*res_mlpf),
+    )
     ax.legend(frameon=False, title=legend_title + pfcand)
     ax.set_xlabel(
         "{nounit} resolution, $({bare}^\prime - {bare})/{bare}$".format(
@@ -410,13 +474,24 @@ def plot_reso(data, ygen, ypred, ycand, pfcand, var, outpath, legend_title=""):
     ax.set_ylabel("Particles")
     ax.set_ylim(1, 1e10)
     ax.set_yscale("log")
-    plt.savefig(outpath + f"/resolution_plots/res_{pfcand}_{var}.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + f"/resolution_plots/res_{pfcand}_{var}.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
 
 def plot_confusion_matrix(
-    cm, target_names, epoch, outpath, save_as, title="Confusion matrix", cmap=None, normalize=True, target=None
+    cm,
+    target_names,
+    epoch,
+    outpath,
+    save_as,
+    title="Confusion matrix",
+    cmap=None,
+    normalize=True,
+    target=None,
 ):
     """
     given a sklearn confusion matrix (cm), make a nice plot
@@ -494,7 +569,11 @@ def plot_confusion_matrix(
             )
         else:
             plt.text(
-                j, i, "{:,}".format(cm[i, j]), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black"
+                j,
+                i,
+                "{:,}".format(cm[i, j]),
+                horizontalalignment="center",
+                color="white" if cm[i, j] > thresh else "black",
             )
 
     plt.ylabel("True label")

@@ -104,8 +104,12 @@ def make_track_array(track_dict):
             np.sin(track_dict["phi_outer"]),
             np.cos(track_dict["phi_outer"]),
             track_dict["charge"],
-            track_dict["is_gen_muon"],  # muon bit set from generator to mimic PFDelphes
-            track_dict["is_gen_electron"],  # electron bit set from generator to mimic PFDelphes
+            track_dict[
+                "is_gen_muon"
+            ],  # muon bit set from generator to mimic PFDelphes
+            track_dict[
+                "is_gen_electron"
+            ],  # electron bit set from generator to mimic PFDelphes
         ]
     )
 
@@ -116,7 +120,9 @@ def make_gen_array(gen_dict):
         return np.zeros(7)
 
     encoded_pid = gen_pid_encoding.get(abs(gen_dict["pid"]), 1)
-    charge = math.copysign(1, gen_dict["pid"]) if encoded_pid in [1, 4, 5] else 0
+    charge = (
+        math.copysign(1, gen_dict["pid"]) if encoded_pid in [1, 4, 5] else 0
+    )
 
     return np.array(
         [
@@ -174,7 +180,10 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
         # we assume the track makes only one genparticle, and the GenParticle makes only one charged PFCandidate
         pf_ptcl = None
         for e in g.edges(ptcl):
-            if e[1][0] in ["pfcharged", "pfel", "pfmu"] and e[1] in remaining_pfcandidates:
+            if (
+                e[1][0] in ["pfcharged", "pfel", "pfmu"]
+                and e[1] in remaining_pfcandidates
+            ):
                 pf_ptcl = e[1]
                 break
 
@@ -225,7 +234,13 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
         # determine the GenParticle to reconstruct from this tower
         if len(lvs) > 0:
             lv = sum(lvs[1:], lvs[0])
-            gen_ptcl = {"pid": pid, "pt": lv.pt, "eta": lv.eta, "phi": lv.phi, "energy": lv.energy}
+            gen_ptcl = {
+                "pid": pid,
+                "pt": lv.pt,
+                "eta": lv.eta,
+                "phi": lv.phi,
+                "energy": lv.energy,
+            }
 
             # charged gen particles outside the tracker acceptance should be reconstructed as neutrals
             if gen_ptcl["pid"] == 211 and abs(gen_ptcl["eta"]) > 2.5:
@@ -240,7 +255,9 @@ def make_triplets(g, tracks, towers, particles, pfparticles):
         # again, we need to loop over the GenParticles that are associated to the tower.
         found_pf = False
         for pf_ptcl in remaining_pfcandidates:
-            if (g.nodes[pf_ptcl]["eta"] == g.nodes[t]["eta"]) and (g.nodes[pf_ptcl]["phi"] == g.nodes[t]["phi"]):
+            if (g.nodes[pf_ptcl]["eta"] == g.nodes[t]["eta"]) and (
+                g.nodes[pf_ptcl]["phi"] == g.nodes[t]["phi"]
+            ):
                 found_pf = True
                 break
 
@@ -263,7 +280,11 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
     ycand_all = []
 
     for iev in range(ev_start, ev_stop):
-        print("event {}/{} out of {} in the full file".format(iev, ev_stop, tree.GetEntries()))
+        print(
+            "event {}/{} out of {} in the full file".format(
+                iev, ev_stop, tree.GetEntries()
+            )
+        )
 
         tree.GetEntry(iev)
         pileupmix = list(tree.PileUpMix)
@@ -309,7 +330,9 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         for i in range(len(tracks)):
             node = ("track", i)
             graph.add_node(node)
-            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(tracks[i].Eta)  # tracks[i].P
+            graph.nodes[node]["p"] = tracks[i].PT * np.cosh(
+                tracks[i].Eta
+            )  # tracks[i].P
             graph.nodes[node]["eta"] = tracks[i].Eta
             graph.nodes[node]["phi"] = tracks[i].Phi
             graph.nodes[node]["eta_outer"] = tracks[i].EtaOuter
@@ -380,7 +403,9 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
 
         # write the full graph, mainly for study purposes
         if iev < 10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)))
+            nx.readwrite.write_gpickle(
+                graph, outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev))
+            )
 
         # now clean up the graph, keeping only reconstructable genparticles
         # we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -390,7 +415,9 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         tracks = [n for n in graph.nodes if n[0] == "track"]
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
-        triplets, remaining_particles, remaining_pfcandidates = make_triplets(graph, tracks, towers, particles, pfcand)
+        triplets, remaining_particles, remaining_pfcandidates = make_triplets(
+            graph, tracks, towers, particles, pfcand
+        )
         print("remaining PF", len(remaining_pfcandidates))
         for pf in remaining_pfcandidates:
             print(pf, graph.nodes[pf])
@@ -433,7 +460,16 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         ygen = np.stack(ygen)
         ygen_remaining = np.stack(ygen_remaining)
         ycand = np.stack(ycand)
-        print("X", X.shape, "ygen", ygen.shape, "ygen_remaining", ygen_remaining.shape, "ycand", ycand.shape)
+        print(
+            "X",
+            X.shape,
+            "ygen",
+            ygen.shape,
+            "ygen_remaining",
+            ygen_remaining.shape,
+            "ycand",
+            ycand.shape,
+        )
 
         X_all.append(X)
         ygen_all.append(ygen)

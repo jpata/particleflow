@@ -12,7 +12,9 @@ def get_hp_str(result):
             return key.split("config/")[-1]
 
     s = ""
-    for ii, hp in enumerate(list(filter(None.__ne__, [func(key) for key in result.keys()]))):
+    for ii, hp in enumerate(
+        list(filter(None.__ne__, [func(key) for key in result.keys()]))
+    ):
         if ii % 6 == 0:
             s += "\n"
         s += "{}={}; ".format(hp, result["config/{}".format(hp)].values[0])
@@ -46,13 +48,17 @@ def plot_ray_analysis(analysis, save=False, skip=0):
 
     dfs = analysis.fetch_trial_dataframes()
     result_df = analysis.dataframe()
-    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
+    for key in tqdm(
+        dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())
+    ):
         result = result_df[result_df["logdir"] == key]
 
         fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
         for var, ax in zip(to_plot, axs.flat):
             # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
-            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
+            ax.plot(
+                dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8
+            )
             ax.set_xlabel("Epoch")
             ax.set_ylabel(var)
             ax.grid(alpha=0.3)
@@ -172,16 +178,27 @@ def topk_summary_plot_v2(analysis, k, save=False, save_dir=None):
     dd = get_top_k_df(analysis, k)
     dfs = analysis.trial_dataframes
 
-    fig, axs = plt.subplots(len(to_plot), 1, figsize=(12, 9), tight_layout=True, sharex=True)
+    fig, axs = plt.subplots(
+        len(to_plot), 1, figsize=(12, 9), tight_layout=True, sharex=True
+    )
     for var, ax_row in zip(to_plot, axs):
         for ii, key in enumerate(dd["logdir"]):
-            ax_row.plot(dfs[key].index.values, dfs[key][var], alpha=0.8, label="#{}".format(ii + 1))
+            ax_row.plot(
+                dfs[key].index.values,
+                dfs[key][var],
+                alpha=0.8,
+                label="#{}".format(ii + 1),
+            )
             ax_row.set_ylabel(var)
             ax_row.grid(alpha=0.3)
             ax_row.legend()
     ax_row.set_xlabel("Epoch")
 
-    plt.suptitle("Top {} best trials according to '{}'".format(k, analysis.default_metric))
+    plt.suptitle(
+        "Top {} best trials according to '{}'".format(
+            k, analysis.default_metric
+        )
+    )
     if save or save_dir:
         if save_dir:
             file_name = str(Path(save_dir) / "topk_summary_plot_v2.jpg")
@@ -217,15 +234,27 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
     cm_green = sns.light_palette("green", as_cmap=True)
     cm_red = sns.light_palette("red", as_cmap=True)
 
-    max_is_better = ["cls_acc_unweighted", "val_cls_acc_weighted", "val_cls_acc_unweighted"]
+    max_is_better = [
+        "cls_acc_unweighted",
+        "val_cls_acc_weighted",
+        "val_cls_acc_unweighted",
+    ]
     min_is_better = ["loss", "cls_loss", "val_loss", "val_cls_loss"]
 
     styled_summary = (
         summary.style.background_gradient(cmap=cm_green, subset=max_is_better)
         .background_gradient(cmap=cm_red, subset=min_is_better)
-        .highlight_max(subset=max_is_better, props="color:black; font-weight:bold; background-color:yellow;")
-        .highlight_min(subset=min_is_better, props="color:black; font-weight:bold; background-color:yellow;")
-        .set_caption("Top {} trials according to {}".format(k, analysis.default_metric))
+        .highlight_max(
+            subset=max_is_better,
+            props="color:black; font-weight:bold; background-color:yellow;",
+        )
+        .highlight_min(
+            subset=min_is_better,
+            props="color:black; font-weight:bold; background-color:yellow;",
+        )
+        .set_caption(
+            "Top {} trials according to {}".format(k, analysis.default_metric)
+        )
         .hide_index()
     )
     if save or save_dir:
@@ -241,7 +270,9 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
 def analyze_ray_experiment(exp_dir, default_metric, default_mode):
     from ray.tune import Analysis
 
-    analysis = Analysis(exp_dir, default_metric=default_metric, default_mode=default_mode)
+    analysis = Analysis(
+        exp_dir, default_metric=default_metric, default_mode=default_mode
+    )
 
     topk_summary_plot_v2(analysis, 5, save_dir=exp_dir)
 

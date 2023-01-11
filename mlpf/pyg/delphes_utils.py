@@ -18,14 +18,37 @@ from pyg.utils import one_hot_embedding
 matplotlib.use("Agg")
 
 
-def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epoch, num_classes):
+def make_predictions_delphes(
+    model, multi_gpu, test_loader, outpath, device, epoch, num_classes
+):
 
     print("Making predictions...")
     t0 = time.time()
 
-    gen_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    pred_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    cand_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
+    gen_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
+    pred_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
+    cand_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
 
     t = []
 
@@ -40,8 +63,12 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
         pred_ids_one_hot, pred_p4 = model(X)
 
         gen_p4 = X.ygen.detach().to("cpu")
-        cand_ids_one_hot = one_hot_embedding(X.ycand_id.detach().to("cpu"), num_classes)
-        gen_ids_one_hot = one_hot_embedding(X.ygen_id.detach().to("cpu"), num_classes)
+        cand_ids_one_hot = one_hot_embedding(
+            X.ycand_id.detach().to("cpu"), num_classes
+        )
+        gen_ids_one_hot = one_hot_embedding(
+            X.ygen_id.detach().to("cpu"), num_classes
+        )
         cand_p4 = X.ycand.detach().to("cpu")
 
         tf = time.time()
@@ -105,11 +132,17 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
         if i == 4999:
             break
 
-    print("Average Inference time per event is: ", round((sum(t) / len(t)), 2), "s")
+    print(
+        "Average Inference time per event is: ",
+        round((sum(t) / len(t)), 2),
+        "s",
+    )
 
     t1 = time.time()
 
-    print("Time taken to make predictions is:", round(((t1 - t0) / 60), 2), "min")
+    print(
+        "Time taken to make predictions is:", round(((t1 - t0) / 60), 2), "min"
+    )
 
     # store the 3 list dictionaries in a list (this is done only to compute the particle multiplicity plots)
     list = [pred_list, gen_list, cand_list]
@@ -124,8 +157,12 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
     torch.save(cand_p4_all, outpath + "/cand_p4.pt")
 
     ygen = torch.cat([gen_ids_all.reshape(-1, 1).float(), gen_p4_all], axis=1)
-    ypred = torch.cat([pred_ids_all.reshape(-1, 1).float(), pred_p4_all], axis=1)
-    ycand = torch.cat([cand_ids_all.reshape(-1, 1).float(), cand_p4_all], axis=1)
+    ypred = torch.cat(
+        [pred_ids_all.reshape(-1, 1).float(), pred_p4_all], axis=1
+    )
+    ycand = torch.cat(
+        [cand_ids_all.reshape(-1, 1).float(), cand_p4_all], axis=1
+    )
 
     # store the actual predictions to make all the other plots
     predictions = {
@@ -137,7 +174,9 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
     torch.save(predictions, outpath + "/predictions.pt")
 
 
-def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
+def make_plots_delphes(
+    model, test_loader, outpath, target, device, epoch, tag
+):
 
     print("Making plots...")
     t0 = time.time()
@@ -150,7 +189,9 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     cand_ids = torch.load(outpath + "/cand_ids.pt", map_location=device)
     cand_p4 = torch.load(outpath + "/cand_p4.pt", map_location=device)
 
-    list_for_multiplicities = torch.load(outpath + "/list_for_multiplicities.pt", map_location=device)
+    list_for_multiplicities = torch.load(
+        outpath + "/list_for_multiplicities.pt", map_location=device
+    )
 
     predictions = torch.load(outpath + "/predictions.pt", map_location=device)
 
@@ -161,17 +202,30 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
 
     # make confusion matrix for MLPF
     target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
-    conf_matrix_mlpf = sklearn.metrics.confusion_matrix(gen_ids.cpu(), pred_ids.cpu(), labels=range(6), normalize="true")
+    conf_matrix_mlpf = sklearn.metrics.confusion_matrix(
+        gen_ids.cpu(), pred_ids.cpu(), labels=range(6), normalize="true"
+    )
 
     plot_confusion_matrix(
-        conf_matrix_mlpf, target_names, epoch, outpath + "/confusion_matrix_plots/", f"cm_mlpf_epoch_{str(epoch)}"
+        conf_matrix_mlpf,
+        target_names,
+        epoch,
+        outpath + "/confusion_matrix_plots/",
+        f"cm_mlpf_epoch_{str(epoch)}",
     )
 
     # make confusion matrix for rule based PF
-    conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(), cand_ids.cpu(), labels=range(6), normalize="true")
+    conf_matrix_cand = sklearn.metrics.confusion_matrix(
+        gen_ids.cpu(), cand_ids.cpu(), labels=range(6), normalize="true"
+    )
 
     plot_confusion_matrix(
-        conf_matrix_cand, target_names, epoch, outpath + "/confusion_matrix_plots/", "cm_cand", target="rule-based"
+        conf_matrix_cand,
+        target_names,
+        epoch,
+        outpath + "/confusion_matrix_plots/",
+        "cm_cand",
+        target="rule-based",
     )
 
     # making all the other plots
@@ -263,38 +317,62 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     # plot particle multiplicity plots
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "null", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_null.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_null.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_null.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_null.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "chhadron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_chhadron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_chhadron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_chhadron.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_chhadron.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "nhadron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_nhadron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_nhadron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_nhadron.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_nhadron.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "photon", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_photon.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_photon.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_photon.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_photon.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "electron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_electron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_electron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_electron.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_electron.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "muon", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_muon.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_muon.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_muon.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_muon.pdf", bbox_inches="tight"
+    )
     plt.close(fig)
 
     # make efficiency and fake rate plots for charged hadrons
@@ -369,111 +447,236 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
 
     # make resolution plots for chhadrons: pid=1
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 1, "pt", 2, ax=ax1, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_pt.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_pt.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 1, "pt", 2, ax=ax1, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_pt.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_pt.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 1, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_eta.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_eta.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 1, "eta", 0.2, ax=ax2, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_eta.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_eta.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 1, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        1,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_energy.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_energy.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for nhadrons: pid=2
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 2, "pt", 2, ax=ax1, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_pt.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_pt.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 2, "pt", 2, ax=ax1, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_pt.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_pt.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 2, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_eta.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_eta.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 2, "eta", 0.2, ax=ax2, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_eta.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_eta.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 2, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        2,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_energy.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_energy.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for photons: pid=3
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 3, "pt", 2, ax=ax1, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_pt.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_pt.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 3, "pt", 2, ax=ax1, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_pt.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_pt.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 3, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_eta.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_eta.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 3, "eta", 0.2, ax=ax2, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_eta.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_eta.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 3, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        3,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_energy.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_energy.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for electrons: pid=4
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 4, "pt", 2, ax=ax1, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_pt.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_pt.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 4, "pt", 2, ax=ax1, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_pt.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_pt.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 4, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_eta.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_eta.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 4, "eta", 0.2, ax=ax2, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_eta.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_eta.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 4, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        4,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_energy.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_energy.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     # make resolution plots for muons: pid=5
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 5, "pt", 2, ax=ax1, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_pt.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_pt.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 5, "pt", 2, ax=ax1, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_pt.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_pt.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 5, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_eta.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_eta.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen, ypred, ycand, 5, "eta", 0.2, ax=ax2, legend_title=sample + "\n"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_eta.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_eta.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 5, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        5,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_energy.png", bbox_inches="tight"
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_energy.pdf", bbox_inches="tight"
+    )
     plt.tight_layout()
     plt.close(fig)
 
