@@ -32,14 +32,46 @@ def compute_weights(rank, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, alpha, target_type, num_classes, outpath):
+def validation_run(
+    rank,
+    model,
+    train_loader,
+    valid_loader,
+    batch_size,
+    alpha,
+    target_type,
+    num_classes,
+    outpath,
+):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target_type, num_classes, outpath)
+        ret = train(
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            optimizer,
+            alpha,
+            target_type,
+            num_classes,
+            outpath,
+        )
     return ret
 
 
-def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target_type, num_classes, outpath):
+def train(
+    rank,
+    model,
+    train_loader,
+    valid_loader,
+    batch_size,
+    optimizer,
+    alpha,
+    target_type,
+    num_classes,
+    outpath,
+):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -122,7 +154,9 @@ def train(rank, model, train_loader, valid_loader, batch_size, optimizer, alpha,
             losses_tot = losses_tot + loss_tot.detach()
 
             conf_matrix += sklearn.metrics.confusion_matrix(
-                target_ids.detach().cpu(), pred_ids.detach().cpu(), labels=range(num_classes)
+                target_ids.detach().cpu(),
+                pred_ids.detach().cpu(),
+                labels=range(num_classes),
             )
 
         #     if i == 2:
@@ -202,7 +236,16 @@ def training_loop(
         # training step
         model.train()
         losses, conf_matrix_train = train(
-            rank, model, train_loader, valid_loader, batch_size, optimizer, alpha, target, num_classes, outpath
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            optimizer,
+            alpha,
+            target,
+            num_classes,
+            outpath,
         )
 
         losses_clf_train.append(losses["losses_clf"])
@@ -212,7 +255,15 @@ def training_loop(
         # validation step
         model.eval()
         losses, conf_matrix_val = validation_run(
-            rank, model, train_loader, valid_loader, batch_size, alpha, target, num_classes, outpath
+            rank,
+            model,
+            train_loader,
+            valid_loader,
+            batch_size,
+            alpha,
+            target,
+            num_classes,
+            outpath,
         )
 
         losses_clf_valid.append(losses["losses_clf"])
@@ -271,8 +322,20 @@ def training_loop(
         elif data == "cms":
             target_names = CLASS_NAMES_CMS
 
-        plot_confusion_matrix(conf_matrix_train, target_names, epoch + 1, cm_path, f"epoch_{str(epoch)}_cmTrain")
-        plot_confusion_matrix(conf_matrix_val, target_names, epoch + 1, cm_path, f"epoch_{str(epoch)}_cmValid")
+        plot_confusion_matrix(
+            conf_matrix_train,
+            target_names,
+            epoch + 1,
+            cm_path,
+            f"epoch_{str(epoch)}_cmTrain",
+        )
+        plot_confusion_matrix(
+            conf_matrix_val,
+            target_names,
+            epoch + 1,
+            cm_path,
+            f"epoch_{str(epoch)}_cmValid",
+        )
 
         # make loss plots
         make_plot_from_lists(

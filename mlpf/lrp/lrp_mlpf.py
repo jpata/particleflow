@@ -131,7 +131,15 @@ class LRP_MLPF:
 
         # run lrp
         if "Linear" in str(layer):
-            R_tensor_new = self.eps_rule(self, layer, layer_name, input, R_tensor_old, neuron_to_explain, msg_passing_layer)
+            R_tensor_new = self.eps_rule(
+                self,
+                layer,
+                layer_name,
+                input,
+                R_tensor_old,
+                neuron_to_explain,
+                msg_passing_layer,
+            )
             print("- Finished computing Rscores")
             return R_tensor_new
         else:
@@ -147,7 +155,15 @@ class LRP_MLPF:
     """
 
     @staticmethod
-    def eps_rule(self, layer, layer_name, x, R_tensor_old, neuron_to_explain, msg_passing_layer):
+    def eps_rule(
+        self,
+        layer,
+        layer_name,
+        x,
+        R_tensor_old,
+        neuron_to_explain,
+        msg_passing_layer,
+    ):
         """
         Implements the lrp-epsilon rule presented in the following reference:
         https://doi.org/10.1007/978-3-030-28954-6_10.

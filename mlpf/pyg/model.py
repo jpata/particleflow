@@ -48,7 +48,15 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv_MLPF(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(
+                GravNetConv_MLPF(
+                    embedding_dim,
+                    embedding_dim,
+                    space_dim,
+                    propagate_dim,
+                    k,
+                )
+            )
             # self.conv.append(GravNetConv_cmspepr(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
             # self.conv.append(EdgeConvBlock(embedding_dim, embedding_dim, k))
 
@@ -138,7 +146,11 @@ class GravNetConv_MLPF(MessagePassing):
         self.lin_p.reset_parameters()
         self.lin_out.reset_parameters()
 
-    def forward(self, x: Union[Tensor, PairTensor], batch: Union[OptTensor, Optional[PairTensor]] = None) -> Tensor:
+    def forward(
+        self,
+        x: Union[Tensor, PairTensor],
+        batch: Union[OptTensor, Optional[PairTensor]] = None,
+    ) -> Tensor:
 
         is_bipartite: bool = True
         if isinstance(x, Tensor):
@@ -175,7 +187,12 @@ class GravNetConv_MLPF(MessagePassing):
         edge_weight = torch.exp(-10.0 * edge_weight)  # 10 gives a better spread
 
         # message passing
-        out = self.propagate(edge_index, x=(msg_activations, None), edge_weight=edge_weight, size=(s_l.size(0), s_r.size(0)))
+        out = self.propagate(
+            edge_index,
+            x=(msg_activations, None),
+            edge_weight=edge_weight,
+            size=(s_l.size(0), s_r.size(0)),
+        )
 
         return self.lin_out(out)
 
@@ -183,7 +200,13 @@ class GravNetConv_MLPF(MessagePassing):
         return x_j * edge_weight.unsqueeze(1)
 
     def aggregate(self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None) -> Tensor:
-        out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum")
+        out_mean = scatter(
+            inputs,
+            index,
+            dim=self.node_dim,
+            dim_size=dim_size,
+            reduce="sum",
+        )
         return out_mean
 
     def __repr__(self) -> str:

@@ -21,7 +21,15 @@ X_FEATURES_TRK = [
 ]
 
 # these labels are for clusters from cluster_as_array
-X_FEATURES_CL = ["type", "x", "y", "z", "nhits_ecal", "nhits_hcal", "energy"]
+X_FEATURES_CL = [
+    "type",
+    "x",
+    "y",
+    "z",
+    "nhits_ecal",
+    "nhits_hcal",
+    "energy",
+]
 
 Y_FEATURES = ["type", "charge", "px", "py", "pz", "energy", "jet_idx"]
 
@@ -35,7 +43,10 @@ def split_sample(path, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
-    return {"train": generate_examples(files_train), "test": generate_examples(files_test)}
+    return {
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
+    }
 
 
 def generate_examples(files):
@@ -47,8 +58,20 @@ def generate_examples(files):
         for iev, (X, ycand, ygen) in enumerate(ret):
 
             # add jet_idx column
-            ygen = np.concatenate([ygen.astype(np.float32), np.zeros((len(ygen), 1), dtype=np.float32)], axis=-1)
-            ycand = np.concatenate([ycand.astype(np.float32), np.zeros((len(ycand), 1), dtype=np.float32)], axis=-1)
+            ygen = np.concatenate(
+                [
+                    ygen.astype(np.float32),
+                    np.zeros((len(ygen), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+            ycand = np.concatenate(
+                [
+                    ycand.astype(np.float32),
+                    np.zeros((len(ycand), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
 
             # prepare gen candidates for clustering
             cls_id = ygen[..., 0]

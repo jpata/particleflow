@@ -76,7 +76,12 @@ def pad_to_chunk_length(tensor, axis, chunk_length, padding=None):
     else:
         raise ValueError('Illegal padding value; must be one of "left"' '"right" or None.')
     paddings = tf.concat(
-        [tf.zeros([axis, 2], dtype=tf.int32), axis_paddings, tf.zeros([rank - axis - 1, 2], dtype=tf.int32)], axis=0
+        [
+            tf.zeros([axis, 2], dtype=tf.int32),
+            axis_paddings,
+            tf.zeros([rank - axis - 1, 2], dtype=tf.int32),
+        ],
+        axis=0,
     )
     return tf.pad(tensor, paddings)
 
@@ -94,11 +99,21 @@ def split_tensor_into_chunks(tensor, axis, chunk_length):
     """
     shape = tf.shape(tensor)
     num_chunks = shape[axis] // chunk_length
-    new_shape = tf.concat([shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]], axis=0)
+    new_shape = tf.concat(
+        [shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]],
+        axis=0,
+    )
     return tf.reshape(tensor, new_shape)
 
 
-def causal_windowed_performer_attention(query_matrix, key_matrix, value_matrix, chunk_length, window_length, padding=None):
+def causal_windowed_performer_attention(
+    query_matrix,
+    key_matrix,
+    value_matrix,
+    chunk_length,
+    window_length,
+    padding=None,
+):
     """Applies windowed causal kernel attention with query, key, value tensors.
 
     We partition the T-length input sequence into N chunks, each of chunk_length
@@ -159,7 +174,13 @@ def causal_windowed_performer_attention(query_matrix, key_matrix, value_matrix, 
 
     kp_v = tf.einsum("BNCHD,BNCHO->BNHDO", chunked_key_matrix, chunked_value_matrix)
     kp_v_cumsum = tf.cumsum(kp_v, axis=-4)
-    kp_v_winsum = kp_v_cumsum - tf.pad(kp_v_cumsum, [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]])[:, :-window_length]
+    kp_v_winsum = (
+        kp_v_cumsum
+        - tf.pad(
+            kp_v_cumsum,
+            [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]],
+        )[:, :-window_length]
+    )
     numerator = tf.einsum("BNCHD,BNHDO->BNCHO", chunked_query_matrix, kp_v_winsum)
 
     k_sum = tf.reduce_sum(chunked_key_matrix, axis=-3)
@@ -350,7 +371,11 @@ def expplus(
 
 # pylint: disable=g-long-lambda
 _TRANSFORM_MAP = {
-    "elu": functools.partial(_generalized_kernel, f=lambda x: tf.keras.activations.elu(x) + 1, h=lambda x: 1),
+    "elu": functools.partial(
+        _generalized_kernel,
+        f=lambda x: tf.keras.activations.elu(x) + 1,
+        h=lambda x: 1,
+    ),
     "relu": functools.partial(
         _generalized_kernel,
         # Improve numerical stability and avoid NaNs in some cases by adding
@@ -483,7 +508,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
         self._projection_matrix = None
         if num_random_features > 0:
             self._projection_matrix = create_projection_matrix(
-                self._num_random_features, self._key_dim, tf.constant([self._seed, self._seed + 1])
+                self._num_random_features,
+                self._key_dim,
+                tf.constant([self._seed, self._seed + 1]),
             )
         self.use_causal_windowed = use_causal_windowed
         self.causal_chunk_length = causal_chunk_length
@@ -581,7 +608,12 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
         else:
             kv = tf.einsum("BSNH,BSND->BNDH", key_prime, value)
             denominator = 1.0 / (
-                tf.einsum("BTNH,BNH->BTN", query_prime, tf.reduce_sum(key_prime, axis=1)) + _NUMERIC_STABLER
+                tf.einsum(
+                    "BTNH,BNH->BTN",
+                    query_prime,
+                    tf.reduce_sum(key_prime, axis=1),
+                )
+                + _NUMERIC_STABLER
             )
             attention_output = tf.einsum("BTNH,BNDH,BTN->BTND", query_prime, kv, denominator)
         return attention_output
@@ -599,7 +631,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
                 bias_constraint=self._bias_constraint,
             )
             self._output_dense_softmax = self._make_output_dense(
-                self._query_shape.rank - 1, common_kwargs, name="attention_output_softmax"
+                self._query_shape.rank - 1,
+                common_kwargs,
+                name="attention_output_softmax",
             )
             self._dropout_softmax = tf.keras.layers.Dropout(rate=self._dropout)
 
@@ -638,7 +672,13 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
 
         if self._begin_kernel > 0:
             attention_output_softmax = self._compute_attention(
-                query[:, : self._begin_kernel], key, value, "identity", True, attention_mask, training
+                query[:, : self._begin_kernel],
+                key,
+                value,
+                "identity",
+                True,
+                attention_mask,
+                training,
             )
             attention_output_softmax = self._dropout_softmax(attention_output_softmax)
             attention_output_softmax = self._output_dense_softmax(attention_output_softmax)
@@ -657,7 +697,13 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
             attention_output = tf.concat([attention_output_softmax, attention_output_kernel], axis=1)
         else:
             attention_output = self._compute_attention(
-                query, key, value, self._feature_transform, self._is_short_seq, attention_mask, training
+                query,
+                key,
+                value,
+                self._feature_transform,
+                self._is_short_seq,
+                attention_mask,
+                training,
             )
             # This is actually dropping out entire tokens to attend to, which might
             # seem a bit unusual, but is taken from the original Transformer paper.

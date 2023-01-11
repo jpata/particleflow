@@ -31,7 +31,13 @@ def get_model_builder(config, total_steps):
         config["parameters"]["output_decoding"]["mask_reg_cls0"] = hp.Choice("output_mask_reg_cls0", values=[True, False])
 
         model = make_model(config, dtype="float32")
-        model.build((1, config["dataset"]["padded_num_elem_size"], config["dataset"]["num_input_features"]))
+        model.build(
+            (
+                1,
+                config["dataset"]["padded_num_elem_size"],
+                config["dataset"]["num_input_features"],
+            )
+        )
 
         opt = get_optimizer(config, lr_schedule)
 
