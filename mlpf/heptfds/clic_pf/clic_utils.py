@@ -21,7 +21,15 @@ X_FEATURES_TRK = [
 ]
 
 # these labels are for clusters from cluster_as_array
-X_FEATURES_CL = ["type", "x", "y", "z", "nhits_ecal", "nhits_hcal", "energy"]
+X_FEATURES_CL = [
+    "type",
+    "x",
+    "y",
+    "z",
+    "nhits_ecal",
+    "nhits_hcal",
+    "energy",
+]
 
 Y_FEATURES = ["type", "charge", "px", "py", "pz", "energy", "jet_idx"]
 
@@ -78,20 +86,14 @@ def generate_examples(files):
             py = ygen[valid, Y_FEATURES.index("py")]
             pz = ygen[valid, Y_FEATURES.index("pz")]
             e = ygen[valid, Y_FEATURES.index("energy")]
-            vec = vector.awk(
-                ak.zip({"px": px, "py": py, "pz": pz, "energy": e})
-            )
+            vec = vector.awk(ak.zip({"px": px, "py": py, "pz": pz, "energy": e}))
 
             # cluster jets, sort jet indices in descending order by pt
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
             jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(
-                jets.pt, axis=-1, ascending=False
-            ).to_list()
+            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
             # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(
-                min_pt=min_jet_pt
-            ).to_list()
+            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
 
             # add index information to ygen and ycand
             # index jets in descending order by pt starting from 1:
@@ -102,12 +104,8 @@ def generate_examples(files):
                 jet_constituents = [
                     index_mapping[idx] for idx in constituent_idx[jet_idx]
                 ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = (
-                    jet_idx + 1
-                )  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = (
-                    jet_idx + 1
-                )
+                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 
             yield str(fi) + "_" + str(iev), {
                 "X": X.astype(np.float32),

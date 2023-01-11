@@ -41,12 +41,8 @@ class ClicZpoleeePf(tfds.core.GeneratorBasedBuilder):
                         ),
                         dtype=tf.float32,
                     ),
-                    "ygen": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
-                    "ycand": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,
@@ -60,9 +56,7 @@ class ClicZpoleeePf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        return split_sample(
-            Path("data/clic/gev380ee_pythia6_zpole_ee_rfull201/")
-        )
+        return split_sample(Path("data/clic/gev380ee_pythia6_zpole_ee_rfull201/"))
 
     def _generate_examples(self, files):
         return generate_examples(files)

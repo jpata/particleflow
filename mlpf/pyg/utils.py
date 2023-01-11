@@ -110,23 +110,17 @@ def save_model(args, model_fname, outpath, model_kwargs):
 
         print(f"model {model_fname} already exists, deleting it")
 
-        filelist = [
-            f for f in os.listdir(outpath) if not f.endswith(".txt")
-        ]  # don't remove the newly created logs.txt
+        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
         for f in filelist:
             try:
                 os.remove(os.path.join(outpath, f))
             except IsADirectoryError:
                 shutil.rmtree(os.path.join(outpath, f))
 
-    with open(
-        f"{outpath}/model_kwargs.pkl", "wb"
-    ) as f:  # dump model architecture
+    with open(f"{outpath}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    with open(
-        f"{outpath}/hyperparameters.json", "w"
-    ) as fp:  # dump hyperparameters
+    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump(
             {
                 "data": args.data,
@@ -174,9 +168,7 @@ def load_model(device, outpath, model_directory, load_epoch):
     return state_dict, model_kwargs, outpath
 
 
-def make_plot_from_lists(
-    title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath
-):
+def make_plot_from_lists(title, xaxis, yaxis, save_as, X, Xlabel, X_save_as, outpath):
     """
     Given a list A of lists B, makes a scatter plot of each list B and saves it.
     """
@@ -274,7 +266,10 @@ def batch_event_into_regions(data, regions):
                 ycand = torch.cat([ycand, data.ycand[in_region_msk]])
                 ycand_id = torch.cat([ycand_id, data.ycand_id[in_region_msk]])
                 batch = torch.cat(
-                    [batch, region + torch.zeros([len(data.x[in_region_msk])])]
+                    [
+                        batch,
+                        region + torch.zeros([len(data.x[in_region_msk])]),
+                    ]
                 )  # assumes events were already fed one at a time (i.e. batch_size=1)
 
     data = Batch(
@@ -310,9 +305,7 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def make_file_loaders(
-    world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2
-):
+def make_file_loaders(world_size, dataset, num_files=1, num_workers=0, prefetch_factor=2):
     """
     This function is only one line, but it's worth explaining why it's needed
     and what it's doing. It uses native torch Dataloaders with a custom collate_fn
@@ -395,12 +388,8 @@ def dataloader_qcd(multi_gpu, test_dataset, batch_size):
         test_data = test_data + data
 
     if not multi_gpu:
-        test_loader = DataLoader(
-            test_data, batch_size=batch_size, shuffle=True
-        )
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
     else:
-        test_loader = DataListLoader(
-            test_data, batch_size=batch_size, shuffle=True
-        )
+        test_loader = DataListLoader(test_data, batch_size=batch_size, shuffle=True)
 
     return test_loader

@@ -28,14 +28,14 @@ ELEM_NAMES_CMS = [
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13, 15]
 CLASS_NAMES_CMS_LATEX = [
-    "none",
-    "chhad",
-    "nhad",
-    "HFEM",
-    "HFHAD",
-    "$\gamma$",
-    "$e^\pm$",
-    "$\mu^\pm$",
+    r"none",
+    r"chhad",
+    r"nhad",
+    r"HFEM",
+    r"HFHAD",
+    r"$\gamma$",
+    r"$e^\pm$",
+    r"$\mu^\pm$",
     r"$\tau$",
 ]
 CLASS_NAMES_CMS = [
@@ -141,9 +141,7 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
 
         # remove PS and BREM from inputs
-        msk_ps = (
-            (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
-        )
+        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]

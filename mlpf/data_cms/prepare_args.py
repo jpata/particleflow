@@ -37,17 +37,9 @@ if __name__ == "__main__":
         os.makedirs(outdir + "/" + s + "/root", exist_ok=True)
 
         for nsamp in range(NUM_SAMPLES):
-            if not os.path.isfile(
-                outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(SEED)
-            ):
+            if not os.path.isfile(outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(SEED)):
                 if is_pu:
-                    print(
-                        "sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(
-                            s, SEED
-                        )
-                    )
+                    print("sbatch mlpf/tallinn/genjob_pu.sh {} {}".format(s, SEED))
                 else:
-                    print(
-                        "sbatch mlpf/tallinn/genjob.sh {} {}".format(s, SEED)
-                    )
+                    print("sbatch mlpf/tallinn/genjob.sh {} {}".format(s, SEED))
             SEED += 1

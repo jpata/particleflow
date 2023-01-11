@@ -22,9 +22,7 @@ parser.add_argument(
     default="../experiments/",
     help="path to the trained model directory",
 )
-parser.add_argument(
-    "--load_model", type=str, default="", help="Which model to load"
-)
+parser.add_argument("--load_model", type=str, default="", help="Which model to load")
 parser.add_argument(
     "--load_epoch",
     type=int,
@@ -37,20 +35,19 @@ parser.add_argument(
     default=0,
     help="the output neuron you wish to explain",
 )
-parser.add_argument(
-    "--pid", type=str, default="chhadron", help="Which model to load"
-)
+parser.add_argument("--pid", type=str, default="chhadron", help="Which model to load")
 parser.add_argument(
     "--n_test",
     type=int,
     default=50,
     help="number of data files to use for testing.. each file contains 100 events",
 )
+parser.add_argument("--run_lrp", dest="run_lrp", action="store_true", help="runs lrp")
 parser.add_argument(
-    "--run_lrp", dest="run_lrp", action="store_true", help="runs lrp"
-)
-parser.add_argument(
-    "--make_rmaps", dest="make_rmaps", action="store_true", help="makes rmaps"
+    "--make_rmaps",
+    dest="make_rmaps",
+    action="store_true",
+    help="makes rmaps",
 )
 
 args = parser.parse_args()
@@ -72,14 +69,15 @@ if __name__ == "__main__":
         print("Fetching the data..")
         full_dataset_qcd = PFGraphDataset(args.dataset_qcd)
         loader = dataloader_qcd(
-            full_dataset_qcd, multi_gpu=False, n_test=args.n_test, batch_size=1
+            full_dataset_qcd,
+            multi_gpu=False,
+            n_test=args.n_test,
+            batch_size=1,
         )
 
         # load a pretrained model and update the outpath
         outpath = args.outpath + args.load_model
-        state_dict, model_kwargs, outpath = load_model(
-            device, outpath, args.load_model, args.load_epoch
-        )
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.load_model, args.load_epoch)
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
         model.to(device)
@@ -96,9 +94,7 @@ if __name__ == "__main__":
             print(f"Explaining event # {i}")
 
             # run lrp on the event
-            Rtensor, pred, input = lrp_instance.explain(
-                event, neuron_to_explain=args.out_neuron
-            )
+            Rtensor, pred, input = lrp_instance.explain(event, neuron_to_explain=args.out_neuron)
 
             # store the Rscores, the event inputs, and the event predictions
             Rtensors_list.append(Rtensor.detach().to("cpu"))

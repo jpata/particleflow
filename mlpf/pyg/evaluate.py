@@ -42,14 +42,10 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
 
     ibatch = 0
     for num, file in enumerate(file_loader):
-        print(
-            f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s"
-        )
+        print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s")
         tf = tf + (time.time() - t0)
 
-        file = [
-            x for t in file for x in t
-        ]  # unpack the list of tuples to a list
+        file = [x for t in file for x in t]  # unpack the list of tuples to a list
 
         loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
 
@@ -73,9 +69,7 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
             pred_ids_one_hot_list = []
             pred_p4_list = []
             for z in range(batch_size):
-                pred_ids_one_hot_list.append(
-                    pred_ids_one_hot[batch.batch == z]
-                )
+                pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
             X = []
@@ -88,15 +82,9 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
                     "ygen": event.ygen.detach().to("cpu"),
                     "ycand": event.ycand.detach().to("cpu"),
                     "pred_p4": pred_p4_list[j].detach().to("cpu"),
-                    "gen_ids_one_hot": one_hot_embedding(
-                        event.ygen_id.detach().to("cpu"), num_classes
-                    ),
-                    "cand_ids_one_hot": one_hot_embedding(
-                        event.ycand_id.detach().to("cpu"), num_classes
-                    ),
-                    "pred_ids_one_hot": pred_ids_one_hot_list[j]
-                    .detach()
-                    .to("cpu"),
+                    "gen_ids_one_hot": one_hot_embedding(event.ygen_id.detach().to("cpu"), num_classes),
+                    "cand_ids_one_hot": one_hot_embedding(event.ycand_id.detach().to("cpu"), num_classes),
+                    "pred_ids_one_hot": pred_ids_one_hot_list[j].detach().to("cpu"),
                 }
 
                 vars_padded = {}
@@ -148,19 +136,13 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
         # if num == 2:
         #     break
 
-        print(
-            f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s"
-        )
+        print(f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s")
 
         t0 = time.time()
 
-    print(
-        f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s"
-    )
+    print(f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s")
 
-    print(
-        f"Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min"
-    )
+    print(f"Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min")
 
 
 def postprocess_predictions(pred_path):
@@ -199,9 +181,7 @@ def postprocess_predictions(pred_path):
         yvals[f"cand_{key}"] = Y_p4s[:, 1, :, feat].unsqueeze(-1).numpy()
         yvals[f"pred_{key}"] = Y_p4s[:, 2, :, feat].unsqueeze(-1).numpy()
 
-    print(
-        f"Time taken to concatenate all predictions is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to concatenate all predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     print("--> Further processing for convenient plotting")
     t0 = time.time()
@@ -214,12 +194,8 @@ def postprocess_predictions(pred_path):
     msk_X_f = X_f[:, 0] != 0
 
     for val in ["gen", "cand", "pred"]:
-        yvals[f"{val}_phi"] = np.arctan2(
-            yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"]
-        )
-        yvals[f"{val}_cls_id"] = np.argmax(
-            yvals[f"{val}_cls"], axis=-1
-        ).reshape(
+        yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
+        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(
             yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1
         )  # cz for some reason keepdims doesn't work
 
@@ -233,26 +209,24 @@ def postprocess_predictions(pred_path):
         if yvals_f[k].shape[-1] == 1:
             yvals_f[k] = yvals_f[k][..., -1]
 
-    print(
-        f"Time taken to process the predictions is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to process the predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     print("-->Saving the processed events")
     t0 = time.time()
     torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
     torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
     torch.save(
-        msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4
+        msk_X_f,
+        f"{pred_path}/post_processed_msk_X_f.pt",
+        pickle_protocol=4,
     )
+    torch.save(yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4)
     torch.save(
-        yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4
+        yvals_f,
+        f"{pred_path}/post_processed_yvals_f.pt",
+        pickle_protocol=4,
     )
-    torch.save(
-        yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4
-    )
-    print(
-        f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     return Xs, X_f, msk_X_f, yvals, yvals_f
 
@@ -267,22 +241,28 @@ def make_plots_cms(pred_path, plot_path, sample):
     msk_X_f = torch.load(f"{pred_path}/post_processed_msk_X_f.pt")
     yvals = torch.load(f"{pred_path}/post_processed_yvals.pt")
     yvals_f = torch.load(f"{pred_path}/post_processed_yvals_f.pt")
-    print(
-        f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     print(f"--> Making plots using {len(X)} events...")
 
     # plot distributions
     print("plot_dist...")
+    plot_dist(yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample)
     plot_dist(
-        yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample
+        yvals_f,
+        "energy",
+        np.linspace(0, 2000, 61),
+        r"$E$",
+        plot_path,
+        sample,
     )
     plot_dist(
-        yvals_f, "energy", np.linspace(0, 2000, 61), r"$E$", plot_path, sample
-    )
-    plot_dist(
-        yvals_f, "eta", np.linspace(-6, 6, 61), r"$\eta$", plot_path, sample
+        yvals_f,
+        "eta",
+        np.linspace(-6, 6, 61),
+        r"$\eta$",
+        plot_path,
+        sample,
     )
 
     # plot cm
@@ -313,7 +293,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=1,
         bins=np.linspace(-4, 4, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
     plot_eff_and_fake_rate(
         X_f,
@@ -336,7 +316,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=5,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
     plot_eff_and_fake_rate(
         X_f,
@@ -359,7 +339,7 @@ def make_plots_cms(pred_path, plot_path, sample):
         ielem=4,
         bins=np.linspace(-5, 5, 41),
         log=False,
-        xlabel="PFElement $\eta$",
+        xlabel=r"PFElement $\eta$",
     )
 
     # distribution_icls
@@ -397,6 +377,4 @@ def make_plots_cms(pred_path, plot_path, sample):
     for pid, ylim in dic.items():
         plot_eta_res(X, yvals_f, pid, ylim, plot_path, sample)
 
-    print(
-        f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min"
-    )
+    print(f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min")

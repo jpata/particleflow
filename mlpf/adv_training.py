@@ -14,9 +14,7 @@ def make_disc_model(config, reco_features):
             config["dataset"]["num_input_features"],
         )
     )
-    input_reco = tf.keras.layers.Input(
-        shape=(config["dataset"]["padded_num_elem_size"], reco_features)
-    )
+    input_reco = tf.keras.layers.Input(shape=(config["dataset"]["padded_num_elem_size"], reco_features))
 
     nhidden = 256
     # process the input elements
@@ -37,12 +35,8 @@ def make_disc_model(config, reco_features):
     dc2 = tf.keras.layers.Dense(nhidden / 2, activation="elu")(dc1)
 
     # sum across the encoded (element, target) pairs in the event to create an event encoding
-    msk = tf.keras.layers.Lambda(
-        lambda x: tf.cast(x[:, :, 0:1] != 0, tf.float32)
-    )(input_elems)
-    sc = tf.keras.layers.Lambda(
-        lambda args: tf.reduce_sum(args[0] * args[1], axis=-2)
-    )([dc2, msk])
+    msk = tf.keras.layers.Lambda(lambda x: tf.cast(x[:, :, 0:1] != 0, tf.float32))(input_elems)
+    sc = tf.keras.layers.Lambda(lambda args: tf.reduce_sum(args[0] * args[1], axis=-2))([dc2, msk])
 
     # classify the embedded event as real (true target) or fake (MLPF reconstructed)
     c1 = tf.keras.layers.Dense(nhidden / 2, activation="elu")(sc)
@@ -51,9 +45,7 @@ def make_disc_model(config, reco_features):
 
     # classification output logits
     c4 = tf.keras.layers.Dense(1, activation="linear")(c3)
-    model_disc = tf.keras.models.Model(
-        inputs=[input_elems, input_reco], outputs=[c4]
-    )
+    model_disc = tf.keras.models.Model(inputs=[input_elems, input_reco], outputs=[c4])
     return model_disc
 
 
@@ -62,8 +54,7 @@ def concat_pf(args):
     msk_X = tf.expand_dims(tf.cast(X[:, :, 0] != 0, tf.float32), axis=-1)
     return tf.concat(
         [
-            tf.keras.activations.softmax(ypred["cls"] * 100.0, axis=-1)
-            * msk_X,
+            tf.keras.activations.softmax(ypred["cls"] * 100.0, axis=-1) * msk_X,
             ypred["charge"] * msk_X,
             ypred["pt"] * msk_X,
             ypred["eta"] * msk_X,
@@ -135,14 +126,10 @@ def main(config):
         shape=(config["dataset"]["padded_num_elem_size"], ypred.shape[-1]),
         name="input_reco_particles",
     )
-    pf_out = tf.keras.layers.Lambda(concat_pf)(
-        [model_pf(input_elems), input_elems]
-    )
+    pf_out = tf.keras.layers.Lambda(concat_pf)([model_pf(input_elems), input_elems])
     disc_out1 = model_disc([input_elems, pf_out])
     disc_out2 = model_disc([input_elems, input_reco])
-    m1 = tf.keras.models.Model(
-        inputs=[input_elems], outputs=[disc_out1], name="model_mlpf_disc"
-    )
+    m1 = tf.keras.models.Model(inputs=[input_elems], outputs=[disc_out1], name="model_mlpf_disc")
     m2 = tf.keras.models.Model(
         inputs=[input_elems, input_reco],
         outputs=[disc_out2],
@@ -189,9 +176,7 @@ def main(config):
             # mlpf_train_inputs = mlpf_train_inputs + tf.random.normal(mlpf_train_inputs.shape, stddev=0.0001)
 
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
-            mlpf_train_disc_targets = tf.concat(
-                [batch_size * [0.99], batch_size * [0.01]], axis=0
-            )
+            mlpf_train_disc_targets = tf.concat([batch_size * [0.99], batch_size * [0.01]], axis=0)
             loss2 = m2.train_on_batch(
                 [mlpf_train_inputs, mlpf_train_outputs],
                 mlpf_train_disc_targets,
@@ -224,9 +209,7 @@ def main(config):
             # true target particles have a classification target of 1, MLPF reconstructed a target of 0
             mlpf_train_inputs = tf.concat([xb, xb], axis=0)
             mlpf_train_outputs = tf.concat([yb, yp], axis=0)
-            mlpf_train_disc_targets = tf.concat(
-                [batch_size * [0.99], batch_size * [0.01]], axis=0
-            )
+            mlpf_train_disc_targets = tf.concat([batch_size * [0.99], batch_size * [0.01]], axis=0)
             loss2 = m2.test_on_batch(
                 [mlpf_train_inputs, mlpf_train_outputs],
                 mlpf_train_disc_targets,

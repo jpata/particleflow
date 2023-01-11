@@ -41,12 +41,8 @@ class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
                         ),
                         dtype=tf.float32,
                     ),
-                    "ygen": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
-                    "ycand": tfds.features.Tensor(
-                        shape=(None, len(Y_FEATURES)), dtype=tf.float32
-                    ),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,

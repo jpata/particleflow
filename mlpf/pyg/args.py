@@ -20,7 +20,10 @@ def parse_args():
 
     # for saving the model
     parser.add_argument(
-        "--outpath", type=str, default="../experiments/", help="output folder"
+        "--outpath",
+        type=str,
+        default="../experiments/",
+        help="output folder",
     )
     parser.add_argument(
         "--model_prefix",
@@ -30,9 +33,7 @@ def parse_args():
     )
 
     # for loading the data
-    parser.add_argument(
-        "--data", type=str, required=True, help="cms or delphes?"
-    )
+    parser.add_argument("--data", type=str, required=True, help="cms or delphes?")
     parser.add_argument(
         "--dataset",
         type=str,
@@ -45,9 +46,7 @@ def parse_args():
         default="../data/delphes/pythia8_qcd",
         help="testing dataset path",
     )
-    parser.add_argument(
-        "--sample", type=str, default="QCD", help="sample to test on"
-    )
+    parser.add_argument("--sample", type=str, default="QCD", help="sample to test on")
     parser.add_argument(
         "--n_train",
         type=int,
@@ -89,9 +88,7 @@ def parse_args():
     )
 
     # for training hyperparameters
-    parser.add_argument(
-        "--n_epochs", type=int, default=3, help="number of training epochs"
-    )
+    parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -145,7 +142,10 @@ def parse_args():
         help="encoded element dimension",
     )
     parser.add_argument(
-        "--num_convs", type=int, default=3, help="number of graph convolutions"
+        "--num_convs",
+        type=int,
+        default=3,
+        help="number of graph convolutions",
     )
     parser.add_argument(
         "--space_dim",

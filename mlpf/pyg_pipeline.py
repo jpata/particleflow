@@ -58,9 +58,7 @@ def setup(rank, world_size):
     os.environ["MASTER_PORT"] = "12355"
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    dist.init_process_group(
-        "nccl", rank=rank, world_size=world_size
-    )  # should be faster for DistributedDataParallel on gpus
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)  # should be faster for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -104,9 +102,7 @@ def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
 
     setup(rank, world_size)
 
-    print(
-        f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}"
-    )
+    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     # give each gpu a subset of the data
     hyper_train = int(args.n_train / world_size)
@@ -176,9 +172,7 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
 
     setup(rank, world_size)
 
-    print(
-        f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}"
-    )
+    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
 
     # give each gpu a subset of the data
     hyper_test = int(args.n_test / world_size)
@@ -203,7 +197,12 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     ddp_model = DDP(model, device_ids=[rank])
 
     make_predictions(
-        rank, ddp_model, file_loader_test, args.batch_size, num_classes, PATH
+        rank,
+        ddp_model,
+        file_loader_test,
+        args.batch_size,
+        num_classes,
+        PATH,
     )
 
     cleanup()
@@ -221,9 +220,7 @@ def train(device, world_size, args, dataset, model, num_classes, outpath):
         print(f"Running training on: {torch.cuda.get_device_name(device)}")
         device = device.index
 
-    train_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=0, stop=args.n_train)
-    )
+    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
     valid_dataset = torch.utils.data.Subset(
         dataset,
         np.arange(start=args.n_train, stop=args.n_train + args.n_valid),
@@ -278,9 +275,7 @@ def inference(device, world_size, args, dataset, model, num_classes, PATH):
         print(f"Running inference on: {torch.cuda.get_device_name(device)}")
         device = device.index
 
-    test_dataset = torch.utils.data.Subset(
-        dataset, np.arange(start=0, stop=args.n_test)
-    )
+    test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
 
     # construct data loaders
     file_loader_test = make_file_loaders(
@@ -294,9 +289,7 @@ def inference(device, world_size, args, dataset, model, num_classes, PATH):
     model = model.to(device)
     model.eval()
 
-    make_predictions(
-        device, model, file_loader_test, args.batch_size, num_classes, PATH
-    )
+    make_predictions(device, model, file_loader_test, args.batch_size, num_classes, PATH)
 
 
 if __name__ == "__main__":
@@ -321,9 +314,7 @@ if __name__ == "__main__":
 
     # load a pre-trained specified model, otherwise, instantiate and train a new model
     if args.load:
-        state_dict, model_kwargs, outpath = load_model(
-            device, outpath, args.model_prefix, args.load_epoch
-        )
+        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
@@ -367,22 +358,24 @@ if __name__ == "__main__":
             )
         else:
             train(
-                device, world_size, args, dataset, model, num_classes, outpath
+                device,
+                world_size,
+                args,
+                dataset,
+                model,
+                num_classes,
+                outpath,
             )
 
         # load the best epoch state
-        state_dict = torch.load(
-            outpath + "/best_epoch_weights.pth", map_location=device
-        )
+        state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
         model.load_state_dict(state_dict)
 
     # specify which epoch/state to load to run the inference and make plots
     if args.load and args.load_epoch != -1:
         epoch_to_load = args.load_epoch
     else:
-        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))[
-            "best_epoch"
-        ]
+        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
 
     PATH = f"{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/"
     pred_path = f"{PATH}/predictions/"

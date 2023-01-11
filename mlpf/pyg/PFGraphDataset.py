@@ -39,9 +39,7 @@ class PFGraphDataset(Dataset):
     def raw_file_names(self):
         raw_list = glob(osp.join(self.raw_dir, "*.pkl"))
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
-        return sorted(
-            [raw_path.replace(self.raw_dir, ".") for raw_path in raw_list]
-        )
+        return sorted([raw_path.replace(self.raw_dir, ".") for raw_path in raw_list])
 
     def _download(self):
         pass
@@ -56,12 +54,7 @@ class PFGraphDataset(Dataset):
     @property
     def processed_file_names(self):
         proc_list = glob(osp.join(self.processed_dir, "*.pt"))
-        return sorted(
-            [
-                processed_path.replace(self.processed_dir, ".")
-                for processed_path in proc_list
-            ]
-        )
+        return sorted([processed_path.replace(self.processed_dir, ".") for processed_path in proc_list])
 
     def __len__(self):
         return len(self.processed_file_names)
@@ -100,18 +93,10 @@ class PFGraphDataset(Dataset):
                 # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
                 d = Data(
                     x=torch.tensor(data["X"][i], dtype=torch.float),
-                    ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[
-                        :, 1:
-                    ],
-                    ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[
-                        :, 0
-                    ].long(),
-                    ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[
-                        :, 1:
-                    ],
-                    ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[
-                        :, 0
-                    ].long(),
+                    ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 1:],
+                    ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 0].long(),
+                    ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 1:],
+                    ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 0].long(),
                 )
 
                 batched_data.append(d)
@@ -153,12 +138,8 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--data", type=str, required=True, help="'cms' or 'delphes'?"
-    )
-    parser.add_argument(
-        "--dataset", type=str, required=True, help="Input data path"
-    )
+    parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
+    parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument(
         "--processed_dir",
         type=str,
@@ -172,9 +153,7 @@ def parse_args():
         default=10,
         help="number of files to merge",
     )
-    parser.add_argument(
-        "--num-proc", type=int, default=24, help="number of processes"
-    )
+    parser.add_argument("--num-proc", type=int, default=24, help="number of processes")
     args = parser.parse_args()
     return args
 
