@@ -390,7 +390,10 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
 
         # write the full graph, mainly for study purposes
         if iev < 10 and save_full_graphs:
-            nx.readwrite.write_gpickle(graph, outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)))
+            nx.readwrite.write_gpickle(
+                graph,
+                outfile.replace(".pkl.bz2", "_graph_{}.pkl".format(iev)),
+            )
 
         # now clean up the graph, keeping only reconstructable genparticles
         # we also merge neutral genparticles within towers, as they are otherwise not reconstructable
@@ -400,7 +403,11 @@ def process_chunk(infile, ev_start, ev_stop, outfile):
         tracks = [n for n in graph.nodes if n[0] == "track"]
         towers = [n for n in graph.nodes if n[0] == "tower"]
 
-        triplets, remaining_particles, remaining_pfcandidates = make_triplets(graph, tracks, towers, particles, pfcand)
+        (
+            triplets,
+            remaining_particles,
+            remaining_pfcandidates,
+        ) = make_triplets(graph, tracks, towers, particles, pfcand)
         print("remaining PF", len(remaining_pfcandidates))
         for pf in remaining_pfcandidates:
             print(pf, graph.nodes[pf])

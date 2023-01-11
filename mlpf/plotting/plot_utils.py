@@ -53,11 +53,11 @@ ELEM_NAMES_CMS = [
 
 CLASS_LABELS_CMS = [0, 211, 130, 1, 2, 22, 11, 13]
 CLASS_NAMES_CMS = [
-    "none",
-    "ch.had",
-    "n.had",
-    "HFHAD",
-    "HFEM",
+    r"none",
+    r"ch.had",
+    r"n.had",
+    r"HFHAD",
+    r"HFEM",
     r"$\gamma$",
     r"$e^\pm$",
     r"$\mu^\pm$",
@@ -304,7 +304,12 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None)
     plt.legend(loc="best")
     if title:
         plt.title(title)
-    save_img("jet_pt.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+    save_img(
+        "jet_pt.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
 
 
 def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
@@ -334,7 +339,12 @@ def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.legend(loc="best")
     if title:
         plt.title(title)
-    save_img("jet_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+    save_img(
+        "jet_res.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
 
 
 def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None):
@@ -416,7 +426,12 @@ def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None
     plt.legend(loc="best")
     if title:
         plt.title(title)
-    save_img("met_res.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
+    save_img(
+        "met_res.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
 
 
 def compute_distances(distribution_1, distribution_2, ratio):

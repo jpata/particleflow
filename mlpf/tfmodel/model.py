@@ -438,7 +438,13 @@ def point_wise_feed_forward_network(
         if dim_decrease:
             dff = dff // 2
 
-    layers.append(tf.keras.layers.Dense(d_model, dtype=dtype, name="{}_dense_{}".format(name, ilayer + 1)))
+    layers.append(
+        tf.keras.layers.Dense(
+            d_model,
+            dtype=dtype,
+            name="{}_dense_{}".format(name, ilayer + 1),
+        )
+    )
     return tf.keras.Sequential(layers, name=name)
 
 
@@ -672,11 +678,21 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
             [
                 (
                     x_msg_binned,
-                    ("n_batch", "n_bins", "n_points_bin", "n_msg_features"),
+                    (
+                        "n_batch",
+                        "n_bins",
+                        "n_points_bin",
+                        "n_msg_features",
+                    ),
                 ),
                 (
                     x_features_binned,
-                    ("n_batch", "n_bins", "n_points_bin", "n_node_features"),
+                    (
+                        "n_batch",
+                        "n_bins",
+                        "n_points_bin",
+                        "n_node_features",
+                    ),
                 ),
                 (msk_f_binned, ("n_batch", "n_bins", "n_points_bin", 1)),
                 (
@@ -1343,7 +1359,16 @@ class KernelEncoder(tf.keras.layers.Layer):
         Q, X, mask = args
         msk_input = tf.expand_dims(tf.cast(mask, X.dtype), -1)
         X = self.norm1(X, training=training)
-        attn_output = self.attn(query=Q, value=X, key=X, training=training, attention_mask=mask) * msk_input
+        attn_output = (
+            self.attn(
+                query=Q,
+                value=X,
+                key=X,
+                training=training,
+                attention_mask=mask,
+            )
+            * msk_input
+        )
         out1 = self.norm2(X + attn_output, training=training)
         out2 = self.ffn(out1, training=training)
         return out2
@@ -1408,7 +1433,13 @@ class PFNetTransformer(tf.keras.Model):
 
         self.key_dim = hiddem_dim
 
-        self.ffn = point_wise_feed_forward_network(self.key_dim, self.key_dim, "ffn", num_layers=1, activation="elu")
+        self.ffn = point_wise_feed_forward_network(
+            self.key_dim,
+            self.key_dim,
+            "ffn",
+            num_layers=1,
+            activation="elu",
+        )
 
         self.encoders = []
         for i in range(num_layers_encoder):

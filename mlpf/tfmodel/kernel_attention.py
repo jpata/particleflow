@@ -99,7 +99,10 @@ def split_tensor_into_chunks(tensor, axis, chunk_length):
     """
     shape = tf.shape(tensor)
     num_chunks = shape[axis] // chunk_length
-    new_shape = tf.concat([shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]], axis=0)
+    new_shape = tf.concat(
+        [shape[:axis], [num_chunks, chunk_length], shape[(axis + 1) :]],
+        axis=0,
+    )
     return tf.reshape(tensor, new_shape)
 
 
@@ -171,7 +174,13 @@ def causal_windowed_performer_attention(
 
     kp_v = tf.einsum("BNCHD,BNCHO->BNHDO", chunked_key_matrix, chunked_value_matrix)
     kp_v_cumsum = tf.cumsum(kp_v, axis=-4)
-    kp_v_winsum = kp_v_cumsum - tf.pad(kp_v_cumsum, [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]])[:, :-window_length]
+    kp_v_winsum = (
+        kp_v_cumsum
+        - tf.pad(
+            kp_v_cumsum,
+            [[0, 0], [window_length, 0], [0, 0], [0, 0], [0, 0]],
+        )[:, :-window_length]
+    )
     numerator = tf.einsum("BNCHD,BNHDO->BNCHO", chunked_query_matrix, kp_v_winsum)
 
     k_sum = tf.reduce_sum(chunked_key_matrix, axis=-3)

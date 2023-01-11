@@ -136,7 +136,12 @@ def main():
     type=str,
     default=None,
 )
-@click.option("--batch-multiplier", help="batch size per device", type=int, default=None)
+@click.option(
+    "--batch-multiplier",
+    help="batch size per device",
+    type=int,
+    default=None,
+)
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
 @click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
@@ -370,7 +375,13 @@ def evaluate(config, train_dir, weights, customize, nevents):
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-o", "--outdir", help="output directory", type=click.Path(), default=".")
+@click.option(
+    "-o",
+    "--outdir",
+    help="output directory",
+    type=click.Path(),
+    default=".",
+)
 @click.option(
     "-n",
     "--figname",
@@ -393,7 +404,12 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, _, _ = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
+    ds_train, _, _ = get_datasets(
+        config["train_test_datasets"],
+        config,
+        num_batches_multiplier,
+        "train",
+    )
 
     with strategy.scope():
         model, _, _ = model_scope(config, 1)
@@ -727,7 +743,10 @@ def raytune(
 
     logging.info(
         "Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
-        analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]),
+        analysis.get_best_config(
+            cfg["raytune"]["default_metric"],
+            cfg["raytune"]["default_mode"],
+        ),
     )
 
     skip = 20
@@ -740,7 +759,10 @@ def raytune(
     summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
 
     best_params = analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"])
-    with open(Path(analysis.get_best_logdir()).parent / "best_parameters.txt", "a") as best_params_file:
+    with open(
+        Path(analysis.get_best_logdir()).parent / "best_parameters.txt",
+        "a",
+    ) as best_params_file:
         best_params_file.write("Best hyperparameters according to {}\n".format(cfg["raytune"]["default_metric"]))
         for key, val in best_params.items():
             best_params_file.write(("{}: {}\n".format(key, val)))
@@ -869,7 +891,11 @@ def test_datasets(config):
                 ).todense()
 
                 vals_ygen = ygen[ygen[:, 0] != 0]
-                vals_ygen = unpack_target(vals_ygen, config["dataset"]["num_output_classes"], config)
+                vals_ygen = unpack_target(
+                    vals_ygen,
+                    config["dataset"]["num_output_classes"],
+                    config,
+                )
                 # assert np.all(vals_ygen["energy"] > 0)
                 # assert np.all(vals_ygen["pt"] > 0)
                 # assert not np.any(np.isinf(ygen))
@@ -879,10 +905,17 @@ def test_datasets(config):
                 histograms[dataset]["gen_energy_log"].fill(np.log10(vals_ygen["energy"][:, 0]))
                 histograms[dataset]["gen_pt"].fill(vals_ygen["pt"][:, 0])
                 histograms[dataset]["gen_pt_log"].fill(np.log10(vals_ygen["pt"][:, 0]))
-                histograms[dataset]["gen_eta_energy"].fill(vals_ygen["eta"][:, 0], weight=vals_ygen["energy"][:, 0])
+                histograms[dataset]["gen_eta_energy"].fill(
+                    vals_ygen["eta"][:, 0],
+                    weight=vals_ygen["energy"][:, 0],
+                )
 
                 vals_ycand = ycand[ycand[:, 0] != 0]
-                vals_ycand = unpack_target(vals_ycand, config["dataset"]["num_output_classes"], config)
+                vals_ycand = unpack_target(
+                    vals_ycand,
+                    config["dataset"]["num_output_classes"],
+                    config,
+                )
                 # assert(np.all(vals_ycand["energy"]>0))
                 # assert(np.all(vals_ycand["pt"]>0))
                 # assert not np.any(np.isinf(ycand))
@@ -892,9 +925,15 @@ def test_datasets(config):
                 histograms[dataset]["cand_energy_log"].fill(np.log10(vals_ycand["energy"][:, 0]))
                 histograms[dataset]["cand_pt"].fill(vals_ycand["pt"][:, 0])
                 histograms[dataset]["cand_pt_log"].fill(np.log10(vals_ycand["pt"][:, 0]))
-                histograms[dataset]["cand_eta_energy"].fill(vals_ycand["eta"][:, 0], weight=vals_ycand["energy"][:, 0])
+                histograms[dataset]["cand_eta_energy"].fill(
+                    vals_ycand["eta"][:, 0],
+                    weight=vals_ycand["energy"][:, 0],
+                )
 
-                histograms[dataset]["sum_gen_cand_energy"].fill(np.sum(vals_ygen["energy"]), np.sum(vals_ycand["energy"]))
+                histograms[dataset]["sum_gen_cand_energy"].fill(
+                    np.sum(vals_ygen["energy"]),
+                    np.sum(vals_ycand["energy"]),
+                )
                 histograms[dataset]["sum_gen_cand_energy_log"].fill(
                     np.log10(np.sum(vals_ygen["energy"])),
                     np.log10(np.sum(vals_ycand["energy"])),

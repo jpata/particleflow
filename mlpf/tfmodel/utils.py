@@ -27,7 +27,10 @@ from tfmodel.datasets.BaseDatasetFactory import (
     mlpf_dataset_from_config,
 )
 from tfmodel.model_setup import configure_model_weights, make_model
-from tfmodel.onecycle_scheduler import MomentumOneCycleScheduler, OneCycleScheduler
+from tfmodel.onecycle_scheduler import (
+    MomentumOneCycleScheduler,
+    OneCycleScheduler,
+)
 
 
 @tf.function
@@ -61,9 +64,29 @@ def histogram_2d(
 
 
 @tf.function
-def batched_histogram_2d(mask, eta, phi, w_px, w_py, x_range, y_range, nbins, bin_dtype=tf.float32):
+def batched_histogram_2d(
+    mask,
+    eta,
+    phi,
+    w_px,
+    w_py,
+    x_range,
+    y_range,
+    nbins,
+    bin_dtype=tf.float32,
+):
     return tf.map_fn(
-        lambda a: histogram_2d(a[0], a[1], a[2], a[3], a[4], x_range, y_range, nbins, bin_dtype),
+        lambda a: histogram_2d(
+            a[0],
+            a[1],
+            a[2],
+            a[3],
+            a[4],
+            x_range,
+            y_range,
+            nbins,
+            bin_dtype,
+        ),
         (mask, eta, phi, w_px, w_py),
         fn_output_signature=tf.TensorSpec(
             [nbins, nbins],

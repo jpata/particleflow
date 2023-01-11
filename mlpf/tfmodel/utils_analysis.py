@@ -46,13 +46,21 @@ def plot_ray_analysis(analysis, save=False, skip=0):
 
     dfs = analysis.fetch_trial_dataframes()
     result_df = analysis.dataframe()
-    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
+    for key in tqdm(
+        dfs.keys(),
+        desc="Creating Ray analysis plots",
+        total=len(dfs.keys()),
+    ):
         result = result_df[result_df["logdir"] == key]
 
         fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
         for var, ax in zip(to_plot, axs.flat):
             # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
-            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
+            ax.plot(
+                dfs[key].index.values[skip:],
+                dfs[key][var][skip:],
+                alpha=0.8,
+            )
             ax.set_xlabel("Epoch")
             ax.set_ylabel(var)
             ax.grid(alpha=0.3)

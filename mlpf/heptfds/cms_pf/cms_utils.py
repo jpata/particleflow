@@ -154,7 +154,11 @@ def prepare_data_cms(fn):
                 dtype=np.float32,
             ),
         )
-        ycand = append_fields(ycand, "jet_idx", np.zeros(ycand["typ"].shape, dtype=np.float32))
+        ycand = append_fields(
+            ycand,
+            "jet_idx",
+            np.zeros(ycand["typ"].shape, dtype=np.float32),
+        )
 
         Xelem_flat = np.stack(
             [Xelem[k].view(np.float32).data for k in X_FEATURES],
