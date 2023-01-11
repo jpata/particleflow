@@ -25,7 +25,10 @@ import tensorflow as tf
 import tqdm
 from customizations import customization_functions
 from tfmodel import hypertuning
-from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config, unpack_target
+from tfmodel.datasets.BaseDatasetFactory import (
+    mlpf_dataset_from_config,
+    unpack_target,
+)
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
 from tfmodel.utils import (
@@ -60,18 +63,71 @@ def main():
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-w", "--weights", default=None, help="trained weights to load", type=click.Path())
-@click.option("--ntrain", default=None, help="override the number of training steps", type=int)
-@click.option("--ntest", default=None, help="override the number of testing steps", type=int)
-@click.option("--nepochs", default=None, help="override the number of training epochs", type=int)
-@click.option("-r", "--recreate", help="force creation of new experiment dir", is_flag=True)
-@click.option("-p", "--prefix", default="", help="prefix to put at beginning of training dir name", type=str)
-@click.option("--plot-freq", default=None, help="plot detailed validation every N epochs", type=int)
+@click.option(
+    "-w",
+    "--weights",
+    default=None,
+    help="trained weights to load",
+    type=click.Path(),
+)
+@click.option(
+    "--ntrain",
+    default=None,
+    help="override the number of training steps",
+    type=int,
+)
+@click.option(
+    "--ntest",
+    default=None,
+    help="override the number of testing steps",
+    type=int,
+)
+@click.option(
+    "--nepochs",
+    default=None,
+    help="override the number of training epochs",
+    type=int,
+)
+@click.option(
+    "-r",
+    "--recreate",
+    help="force creation of new experiment dir",
+    is_flag=True,
+)
+@click.option(
+    "-p",
+    "--prefix",
+    default="",
+    help="prefix to put at beginning of training dir name",
+    type=str,
+)
+@click.option(
+    "--plot-freq",
+    default=None,
+    help="plot detailed validation every N epochs",
+    type=int,
+)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--comet-offline", help="log comet-ml experiment locally", is_flag=True)
-@click.option("-j", "--jobid", help="log the Slurm job ID in experiments dir", type=str, default=None)
-@click.option("-m", "--horovod-enabled", help="Enable multi-node training using Horovod", is_flag=True)
-@click.option("-g", "--habana-enabled", help="Enable training on Habana Gaudi", is_flag=True)
+@click.option(
+    "-j",
+    "--jobid",
+    help="log the Slurm job ID in experiments dir",
+    type=str,
+    default=None,
+)
+@click.option(
+    "-m",
+    "--horovod-enabled",
+    help="Enable multi-node training using Horovod",
+    is_flag=True,
+)
+@click.option(
+    "-g",
+    "--habana-enabled",
+    help="Enable training on Habana Gaudi",
+    is_flag=True,
+)
 @click.option(
     "-b",
     "--benchmark_dir",
@@ -80,7 +136,12 @@ def main():
     type=str,
     default=None,
 )
-@click.option("--batch-multiplier", help="batch size per device", type=int, default=None)
+@click.option(
+    "--batch-multiplier",
+    help="batch size per device",
+    type=int,
+    default=None,
+)
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
 @click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
 def train(
@@ -122,7 +183,8 @@ def train(
         if config["batching"]["bucket_by_sequence_length"]:
             logging.info(
                 "Dynamic batching is enabled, changing batch size multiplier from {} to {}".format(
-                    config["batching"]["batch_multiplier"], config["batching"]["batch_multiplier"] * batch_multiplier
+                    config["batching"]["batch_multiplier"],
+                    config["batching"]["batch_multiplier"] * batch_multiplier,
                 )
             )
             config["batching"]["batch_multiplier"] *= batch_multiplier
@@ -259,9 +321,19 @@ def train(
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
+@click.option(
+    "--train-dir",
+    required=True,
+    help="directory containing a completed training",
+    type=click.Path(),
+)
 @click.option("--config", help="configuration file", type=click.Path())
-@click.option("--weights", default=None, help="trained weights to load", type=click.Path())
+@click.option(
+    "--weights",
+    default=None,
+    help="trained weights to load",
+    type=click.Path(),
+)
 @click.option("--customize", help="customization function", type=str, default=None)
 @click.option("--nevents", help="maximum number of events", type=int, default=-1)
 def evaluate(config, train_dir, weights, customize, nevents):
@@ -286,7 +358,12 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
-        ds_test = mlpf_dataset_from_config(dsname, config, "test", nevents if nevents >= 0 else val_ds["num_events"])
+        ds_test = mlpf_dataset_from_config(
+            dsname,
+            config,
+            "test",
+            nevents if nevents >= 0 else val_ds["num_events"],
+        )
         ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
         eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
@@ -298,9 +375,27 @@ def evaluate(config, train_dir, weights, customize, nevents):
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
-@click.option("-o", "--outdir", help="output directory", type=click.Path(), default=".")
-@click.option("-n", "--figname", help="name of saved figure", type=click.Path(), default="lr_finder.jpg")
-@click.option("-l", "--logscale", help="use log scale on y-axis in figure", default=False, is_flag=True)
+@click.option(
+    "-o",
+    "--outdir",
+    help="output directory",
+    type=click.Path(),
+    default=".",
+)
+@click.option(
+    "-n",
+    "--figname",
+    help="name of saved figure",
+    type=click.Path(),
+    default="lr_finder.jpg",
+)
+@click.option(
+    "-l",
+    "--logscale",
+    help="use log scale on y-axis in figure",
+    default=False,
+    is_flag=True,
+)
 def find_lr(config, outdir, figname, logscale):
     """Run the Learning Rate Finder to produce a batch loss vs. LR plot from
     which an appropriate LR-range can be determined"""
@@ -309,7 +404,12 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, _, _ = get_datasets(config["train_test_datasets"], config, num_batches_multiplier, "train")
+    ds_train, _, _ = get_datasets(
+        config["train_test_datasets"],
+        config,
+        num_batches_multiplier,
+        "train",
+    )
 
     with strategy.scope():
         model, _, _ = model_scope(config, 1)
@@ -330,7 +430,13 @@ def find_lr(config, outdir, figname, logscale):
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-t", "--train_dir", help="training directory", type=click.Path())
-@click.option("-d", "--dry_run", help="do not delete anything", is_flag=True, default=False)
+@click.option(
+    "-d",
+    "--dry_run",
+    help="do not delete anything",
+    is_flag=True,
+    default=False,
+)
 def delete_all_but_best_ckpt(train_dir, dry_run):
     """Delete all checkpoint weights in <train_dir>/weights/ except the one with lowest loss in its filename."""
     delete_all_but_best_checkpoint(train_dir, dry_run)
@@ -338,11 +444,33 @@ def delete_all_but_best_ckpt(train_dir, dry_run):
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("-c", "--config", help="configuration file", type=click.Path(), required=True)
+@click.option(
+    "-c",
+    "--config",
+    help="configuration file",
+    type=click.Path(),
+    required=True,
+)
 @click.option("-o", "--outdir", help="output dir", type=click.Path(), required=True)
-@click.option("--ntrain", default=None, help="override the number of training events", type=int)
-@click.option("--ntest", default=None, help="override the number of testing events", type=int)
-@click.option("-r", "--recreate", help="overwrite old hypertune results", is_flag=True, default=False)
+@click.option(
+    "--ntrain",
+    default=None,
+    help="override the number of training events",
+    type=int,
+)
+@click.option(
+    "--ntest",
+    default=None,
+    help="override the number of testing events",
+    type=int,
+)
+@click.option(
+    "-r",
+    "--recreate",
+    help="overwrite old hypertune results",
+    is_flag=True,
+    default=False,
+)
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
 def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     config_file_path = config
@@ -393,7 +521,13 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
 
 
 def raytune_build_model_and_train(
-    config, checkpoint_dir=None, full_config=None, ntrain=None, ntest=None, name=None, seeds=False
+    config,
+    checkpoint_dir=None,
+    full_config=None,
+    ntrain=None,
+    ntest=None,
+    name=None,
+    seeds=False,
 ):
     from collections import Counter
 
@@ -512,10 +646,31 @@ def raytune_build_model_and_train(
 @click.option("--gpus", help="number of gpus per worker", type=int, default=0)
 @click.option("--tune_result_dir", help="Tune result dir", type=str, default=None)
 @click.option("-r", "--resume", help="resume run from local_dir", is_flag=True)
-@click.option("--ntrain", default=None, help="override the number of training steps", type=int)
-@click.option("--ntest", default=None, help="override the number of testing steps", type=int)
+@click.option(
+    "--ntrain",
+    default=None,
+    help="override the number of training steps",
+    type=int,
+)
+@click.option(
+    "--ntest",
+    default=None,
+    help="override the number of testing steps",
+    type=int,
+)
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
-def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, ntest, seeds):
+def raytune(
+    config,
+    name,
+    local,
+    cpus,
+    gpus,
+    tune_result_dir,
+    resume,
+    ntrain,
+    ntest,
+    seeds,
+):
     import ray
     from ray import tune
     from ray.tune.logger import TBXLoggerCallback
@@ -542,10 +697,12 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     expdir = Path(cfg["raytune"]["local_dir"]) / name
     expdir.mkdir(parents=True, exist_ok=True)
     shutil.copy(
-        "mlpf/raytune/search_space.py", str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py")
+        "mlpf/raytune/search_space.py",
+        str(Path(cfg["raytune"]["local_dir"]) / name / "search_space.py"),
     )  # Copy the config file to the train dir for later reference
     shutil.copy(
-        config_file_path, str(Path(cfg["raytune"]["local_dir"]) / name / "config.yaml")
+        config_file_path,
+        str(Path(cfg["raytune"]["local_dir"]) / name / "config.yaml"),
     )  # Copy the config file to the train dir for later reference
 
     ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
@@ -560,7 +717,12 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     start = datetime.now()
     analysis = tune.run(
         partial(
-            raytune_build_model_and_train, full_config=config_file_path, ntrain=ntrain, ntest=ntest, name=name, seeds=seeds
+            raytune_build_model_and_train,
+            full_config=config_file_path,
+            ntrain=ntrain,
+            ntest=ntest,
+            name=name,
+            seeds=seeds,
         ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},
@@ -581,7 +743,10 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
 
     logging.info(
         "Best hyperparameters found according to {} were: ".format(cfg["raytune"]["default_metric"]),
-        analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"]),
+        analysis.get_best_config(
+            cfg["raytune"]["default_metric"],
+            cfg["raytune"]["default_mode"],
+        ),
     )
 
     skip = 20
@@ -594,7 +759,10 @@ def raytune(config, name, local, cpus, gpus, tune_result_dir, resume, ntrain, nt
     summarize_top_k(analysis, k=5, save_dir=Path(analysis.get_best_logdir()).parent)
 
     best_params = analysis.get_best_config(cfg["raytune"]["default_metric"], cfg["raytune"]["default_mode"])
-    with open(Path(analysis.get_best_logdir()).parent / "best_parameters.txt", "a") as best_params_file:
+    with open(
+        Path(analysis.get_best_logdir()).parent / "best_parameters.txt",
+        "a",
+    ) as best_params_file:
         best_params_file.write("Best hyperparameters according to {}\n".format(cfg["raytune"]["default_metric"]))
         for key, val in best_params.items():
             best_params_file.write(("{}: {}\n".format(key, val)))
@@ -618,7 +786,12 @@ def count_skipped(exp_dir):
 @click.help_option("-h", "--help")
 @click.option("-d", "--exp_dir", help="experiment dir", type=click.Path())
 @click.option("-s", "--save", help="save plots in trial dirs", is_flag=True)
-@click.option("-k", "--skip", help="skip first values to avoid large losses at start of training", type=int)
+@click.option(
+    "-k",
+    "--skip",
+    help="skip first values to avoid large losses at start of training",
+    type=int,
+)
 @click.option("--metric", help="experiment dir", type=str, default="val_loss")
 @click.option("--mode", help="experiment dir", type=str, default="min")
 def raytune_analysis(exp_dir, save, skip, mode, metric):
@@ -652,7 +825,11 @@ def test_datasets(config):
 
             continue
             confusion_matrix_Xelem_to_ygen = np.zeros(
-                (config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]), dtype=np.int64
+                (
+                    config["dataset"]["num_input_classes"],
+                    config["dataset"]["num_output_classes"],
+                ),
+                dtype=np.int64,
             )
 
             histograms[dataset] = {}
@@ -670,14 +847,16 @@ def test_datasets(config):
             histograms[dataset]["cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, -1, 5))
 
             histograms[dataset]["sum_gen_cand_energy"] = bh.Histogram(
-                bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+                bh.axis.Regular(100, 0, 100000),
+                bh.axis.Regular(100, 0, 100000),
             )
             histograms[dataset]["sum_gen_cand_energy_log"] = bh.Histogram(
                 bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6)
             )
 
             histograms[dataset]["sum_gen_cand_pt"] = bh.Histogram(
-                bh.axis.Regular(100, 0, 100000), bh.axis.Regular(100, 0, 100000)
+                bh.axis.Regular(100, 0, 100000),
+                bh.axis.Regular(100, 0, 100000),
             )
             histograms[dataset]["sum_gen_cand_pt_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
 
@@ -698,12 +877,25 @@ def test_datasets(config):
                 # assert ycand.shape[1] == config["dataset"]["num_output_features"] + 1
 
                 histograms[dataset]["confusion_matrix_Xelem_to_ygen"] += coo_matrix(
-                    (np.ones(len(X), dtype=np.int64), (np.array(X[:, 0], np.int32), np.array(ygen[:, 0], np.int32))),
-                    shape=(config["dataset"]["num_input_classes"], config["dataset"]["num_output_classes"]),
+                    (
+                        np.ones(len(X), dtype=np.int64),
+                        (
+                            np.array(X[:, 0], np.int32),
+                            np.array(ygen[:, 0], np.int32),
+                        ),
+                    ),
+                    shape=(
+                        config["dataset"]["num_input_classes"],
+                        config["dataset"]["num_output_classes"],
+                    ),
                 ).todense()
 
                 vals_ygen = ygen[ygen[:, 0] != 0]
-                vals_ygen = unpack_target(vals_ygen, config["dataset"]["num_output_classes"], config)
+                vals_ygen = unpack_target(
+                    vals_ygen,
+                    config["dataset"]["num_output_classes"],
+                    config,
+                )
                 # assert np.all(vals_ygen["energy"] > 0)
                 # assert np.all(vals_ygen["pt"] > 0)
                 # assert not np.any(np.isinf(ygen))
@@ -713,10 +905,17 @@ def test_datasets(config):
                 histograms[dataset]["gen_energy_log"].fill(np.log10(vals_ygen["energy"][:, 0]))
                 histograms[dataset]["gen_pt"].fill(vals_ygen["pt"][:, 0])
                 histograms[dataset]["gen_pt_log"].fill(np.log10(vals_ygen["pt"][:, 0]))
-                histograms[dataset]["gen_eta_energy"].fill(vals_ygen["eta"][:, 0], weight=vals_ygen["energy"][:, 0])
+                histograms[dataset]["gen_eta_energy"].fill(
+                    vals_ygen["eta"][:, 0],
+                    weight=vals_ygen["energy"][:, 0],
+                )
 
                 vals_ycand = ycand[ycand[:, 0] != 0]
-                vals_ycand = unpack_target(vals_ycand, config["dataset"]["num_output_classes"], config)
+                vals_ycand = unpack_target(
+                    vals_ycand,
+                    config["dataset"]["num_output_classes"],
+                    config,
+                )
                 # assert(np.all(vals_ycand["energy"]>0))
                 # assert(np.all(vals_ycand["pt"]>0))
                 # assert not np.any(np.isinf(ycand))
@@ -726,15 +925,23 @@ def test_datasets(config):
                 histograms[dataset]["cand_energy_log"].fill(np.log10(vals_ycand["energy"][:, 0]))
                 histograms[dataset]["cand_pt"].fill(vals_ycand["pt"][:, 0])
                 histograms[dataset]["cand_pt_log"].fill(np.log10(vals_ycand["pt"][:, 0]))
-                histograms[dataset]["cand_eta_energy"].fill(vals_ycand["eta"][:, 0], weight=vals_ycand["energy"][:, 0])
+                histograms[dataset]["cand_eta_energy"].fill(
+                    vals_ycand["eta"][:, 0],
+                    weight=vals_ycand["energy"][:, 0],
+                )
 
-                histograms[dataset]["sum_gen_cand_energy"].fill(np.sum(vals_ygen["energy"]), np.sum(vals_ycand["energy"]))
+                histograms[dataset]["sum_gen_cand_energy"].fill(
+                    np.sum(vals_ygen["energy"]),
+                    np.sum(vals_ycand["energy"]),
+                )
                 histograms[dataset]["sum_gen_cand_energy_log"].fill(
-                    np.log10(np.sum(vals_ygen["energy"])), np.log10(np.sum(vals_ycand["energy"]))
+                    np.log10(np.sum(vals_ygen["energy"])),
+                    np.log10(np.sum(vals_ycand["energy"])),
                 )
                 histograms[dataset]["sum_gen_cand_pt"].fill(np.sum(vals_ygen["pt"]), np.sum(vals_ycand["pt"]))
                 histograms[dataset]["sum_gen_cand_pt_log"].fill(
-                    np.log10(np.sum(vals_ygen["pt"])), np.log10(np.sum(vals_ycand["pt"]))
+                    np.log10(np.sum(vals_ygen["pt"])),
+                    np.log10(np.sum(vals_ycand["pt"])),
                 )
 
             print(confusion_matrix_Xelem_to_ygen)
@@ -748,8 +955,19 @@ def test_datasets(config):
 
 @main.command()
 @click.help_option("-h", "--help")
-@click.option("--train-dir", required=True, help="directory containing a completed training", type=click.Path())
-@click.option("--max-files", required=False, help="maximum number of files per dataset to load", type=int, default=None)
+@click.option(
+    "--train-dir",
+    required=True,
+    help="directory containing a completed training",
+    type=click.Path(),
+)
+@click.option(
+    "--max-files",
+    required=False,
+    help="maximum number of files per dataset to load",
+    type=int,
+    default=None,
+)
 def plots(train_dir, max_files):
     import mplhep
     from plotting.plot_utils import (

@@ -113,7 +113,10 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None):
 def get_map_to_supervised(config):
     target_particles = config["dataset"]["target_particles"]
     num_output_classes = config["dataset"]["num_output_classes"]
-    assert target_particles in ["gen", "cand"], "Target particles has to be 'cand' or 'gen'."
+    assert target_particles in [
+        "gen",
+        "cand",
+    ], "Target particles has to be 'cand' or 'gen'."
 
     def func(data_item):
         X = data_item["X"]
@@ -171,7 +174,12 @@ def interleave_datasets(joint_dataset_name, split, datasets):
         [ds.tensorflow_dataset for ds in datasets], choice_dataset
     )
 
-    ds = MLPFDataset(joint_dataset_name, split, interleaved_tensorflow_dataset, sum([ds.num_samples for ds in datasets]))
+    ds = MLPFDataset(
+        joint_dataset_name,
+        split,
+        interleaved_tensorflow_dataset,
+        sum([ds.num_samples for ds in datasets]),
+    )
     ds._num_steps = num_steps_total
     logging.info(
         "Interleaved joint dataset {}:{} with {} steps, {} samples".format(ds.name, ds.split, ds.num_steps(), ds.num_samples)
@@ -198,7 +206,10 @@ class MLPFDataset:
                 # In case dynamic batching was applied, we don't know the number of steps for the dataset
                 # compute it using https://stackoverflow.com/a/61019377
                 self._num_steps = (
-                    self.tensorflow_dataset.map(lambda *args: 1, num_parallel_calls=tf.data.AUTOTUNE)
+                    self.tensorflow_dataset.map(
+                        lambda *args: 1,
+                        num_parallel_calls=tf.data.AUTOTUNE,
+                    )
                     .reduce(tf.constant(0), lambda x, _: x + 1)
                     .numpy()
                 )

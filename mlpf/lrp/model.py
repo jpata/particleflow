@@ -57,7 +57,15 @@ class MLPF(nn.Module):
 
         self.conv = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(GravNetConv_LRP(embedding_dim, embedding_dim, space_dim, propagate_dim, k))
+            self.conv.append(
+                GravNetConv_LRP(
+                    embedding_dim,
+                    embedding_dim,
+                    space_dim,
+                    propagate_dim,
+                    k,
+                )
+            )
 
         # (3) DNN layer: classifiying pid
         self.nn2 = nn.Sequential(
@@ -92,7 +100,11 @@ class MLPF(nn.Module):
         A = {}
         msg_activations = {}
         for num, conv in enumerate(self.conv):
-            embedding, A[f"conv.{num}"], msg_activations[f"conv.{num}"] = conv(embedding)
+            (
+                embedding,
+                A[f"conv.{num}"],
+                msg_activations[f"conv.{num}"],
+            ) = conv(embedding)
 
         # predict the pid's
         preds_id = self.nn2(torch.cat([x0, embedding], axis=-1))
@@ -145,7 +157,11 @@ class GravNetConv_LRP(MessagePassing):
         self.lin_p.reset_parameters()
         self.lin_out.reset_parameters()
 
-    def forward(self, x: Union[Tensor, PairTensor], batch: Union[OptTensor, Optional[PairTensor]] = None) -> Tensor:
+    def forward(
+        self,
+        x: Union[Tensor, PairTensor],
+        batch: Union[OptTensor, Optional[PairTensor]] = None,
+    ) -> Tensor:
         """"""
 
         is_bipartite: bool = True
@@ -180,7 +196,12 @@ class GravNetConv_LRP(MessagePassing):
         A = to_dense_adj(edge_index.to("cpu"), edge_attr=edge_weight.to("cpu"))[0]  # adjacency matrix
 
         # message passing
-        out = self.propagate(edge_index, x=(msg_activations, None), edge_weight=edge_weight, size=(s_l.size(0), s_r.size(0)))
+        out = self.propagate(
+            edge_index,
+            x=(msg_activations, None),
+            edge_weight=edge_weight,
+            size=(s_l.size(0), s_r.size(0)),
+        )
 
         return self.lin_out(out), A, msg_activations
 
@@ -188,7 +209,13 @@ class GravNetConv_LRP(MessagePassing):
         return x_j * edge_weight.unsqueeze(1)
 
     def aggregate(self, inputs: Tensor, index: Tensor, dim_size: Optional[int] = None) -> Tensor:
-        out_mean = scatter(inputs, index, dim=self.node_dim, dim_size=dim_size, reduce="sum")
+        out_mean = scatter(
+            inputs,
+            index,
+            dim=self.node_dim,
+            dim_size=dim_size,
+            reduce="sum",
+        )
         return out_mean
 
     def __repr__(self) -> str:

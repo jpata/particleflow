@@ -169,7 +169,12 @@ def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
         if pair[0] in g.nodes and pair[1] in g.nodes:
             lv = vector.obj(pt=0, eta=0, phi=0, E=0)
             for gp in pair:
-                lv += vector.obj(pt=g.nodes[gp]["pt"], eta=g.nodes[gp]["eta"], phi=g.nodes[gp]["phi"], E=g.nodes[gp]["e"])
+                lv += vector.obj(
+                    pt=g.nodes[gp]["pt"],
+                    eta=g.nodes[gp]["eta"],
+                    phi=g.nodes[gp]["phi"],
+                    E=g.nodes[gp]["e"],
+                )
 
             g.nodes[pair[0]]["pt"] = lv.pt
             g.nodes[pair[0]]["eta"] = lv.eta
@@ -346,7 +351,11 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         elems = [e for e in g.successors(gp)]
 
         # sort elements by energy deposit from genparticle
-        elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
+        elems_sorted = sorted(
+            [(g.edges[gp, e]["weight"], e) for e in elems],
+            key=lambda x: x[0],
+            reverse=True,
+        )
 
         chosen_elem = None
         for weight, elem in elems_sorted:
@@ -363,7 +372,11 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
     # assign unmatched genparticles to best element, allowing for overlaps
     for gp in sorted(unmatched_gp, key=lambda x: g.nodes[x]["e"], reverse=True):
         elems = [e for e in g.successors(gp)]
-        elems_sorted = sorted([(g.edges[gp, e]["weight"], e) for e in elems], key=lambda x: x[0], reverse=True)
+        elems_sorted = sorted(
+            [(g.edges[gp, e]["weight"], e) for e in elems],
+            key=lambda x: x[0],
+            reverse=True,
+        )
         _, elem = elems_sorted[0]
         elem_to_gp[elem] += [gp]
 
@@ -393,7 +406,11 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         else:
             # neighbors = [n for n in neighbors if g.nodes[n]["typ"] in [4,5,8,9,10]]
             # sorted_neighbors = sorted(neighbors, key=lambda x: g.nodes[x]["e"], reverse=True)
-            sorted_neighbors = sorted(neighbors, key=lambda x: g.edges[(x, cand)]["weight"], reverse=True)
+            sorted_neighbors = sorted(
+                neighbors,
+                key=lambda x: g.edges[(x, cand)]["weight"],
+                reverse=True,
+            )
             for elem in sorted_neighbors:
                 if not (elem in elem_to_cand):
                     chosen_elem = elem
@@ -404,16 +421,29 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             # print("unmatched candidate {}, {}".format(cand, g.nodes[cand]))
             unmatched_cand += [cand]
 
-    Xelem = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in elem_branches])
+    Xelem = np.recarray(
+        (len(all_elements),),
+        dtype=[(name, np.float32) for name in elem_branches],
+    )
     Xelem.fill(0.0)
-    ygen = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
+    ygen = np.recarray(
+        (len(all_elements),),
+        dtype=[(name, np.float32) for name in target_branches],
+    )
     ygen.fill(0.0)
-    ycand = np.recarray((len(all_elements),), dtype=[(name, np.float32) for name in target_branches])
+    ycand = np.recarray(
+        (len(all_elements),),
+        dtype=[(name, np.float32) for name in target_branches],
+    )
     ycand.fill(0.0)
 
     for ielem, elem in enumerate(all_elements):
         elem_type = g.nodes[elem]["typ"]
-        genparticles = sorted(elem_to_gp.get(elem, []), key=lambda x: g.edges[(x, elem)]["weight"], reverse=True)
+        genparticles = sorted(
+            elem_to_gp.get(elem, []),
+            key=lambda x: g.edges[(x, elem)]["weight"],
+            reverse=True,
+        )
         genparticles = [gp for gp in genparticles if g.nodes[gp]["e"] > genparticle_energy_threshold]
         candidate = elem_to_cand.get(elem, None)
 
@@ -452,7 +482,12 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
             charge = g.nodes[genparticles[0]]["charge"]
 
             for gp in genparticles:
-                lv += vector.obj(pt=g.nodes[gp]["pt"], eta=g.nodes[gp]["eta"], phi=g.nodes[gp]["phi"], e=g.nodes[gp]["e"])
+                lv += vector.obj(
+                    pt=g.nodes[gp]["pt"],
+                    eta=g.nodes[gp]["eta"],
+                    phi=g.nodes[gp]["phi"],
+                    e=g.nodes[gp]["e"],
+                )
 
             # remap PID in case of HCAL cluster to neutral
             if elem_type == 5 and (pid == 22 or pid == 11):
@@ -664,7 +699,9 @@ def make_graph(ev, iev):
     trackingparticle_to_element_cmp = ev["trackingparticle_to_element_cmp"][iev]
     # for trackingparticles associated to elements, set a very high edge weight
     for tp, elem, c in zip(
-        trackingparticle_to_element_first, trackingparticle_to_element_second, trackingparticle_to_element_cmp
+        trackingparticle_to_element_first,
+        trackingparticle_to_element_second,
+        trackingparticle_to_element_cmp,
     ):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("tp", tp), ("elem", elem), weight=float("inf"))
@@ -672,7 +709,11 @@ def make_graph(ev, iev):
     caloparticle_to_element_first = ev["caloparticle_to_element.first"][iev]
     caloparticle_to_element_second = ev["caloparticle_to_element.second"][iev]
     caloparticle_to_element_cmp = ev["caloparticle_to_element_cmp"][iev]
-    for sc, elem, c in zip(caloparticle_to_element_first, caloparticle_to_element_second, caloparticle_to_element_cmp):
+    for sc, elem, c in zip(
+        caloparticle_to_element_first,
+        caloparticle_to_element_second,
+        caloparticle_to_element_cmp,
+    ):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("sc", sc), ("elem", elem), weight=c)
 
@@ -681,7 +722,11 @@ def make_graph(ev, iev):
     for idx_sc, idx_tp in enumerate(caloparticle_idx_trackingparticle):
         if idx_tp != -1:
             for elem in g.neighbors(("sc", idx_sc)):
-                g.add_edge(("tp", idx_tp), elem, weight=g.edges[("sc", idx_sc), elem]["weight"])
+                g.add_edge(
+                    ("tp", idx_tp),
+                    elem,
+                    weight=g.edges[("sc", idx_sc), elem]["weight"],
+                )
             g.nodes[("tp", idx_tp)]["idx_sc"] = idx_sc
             nodes_to_remove += [("sc", idx_sc)]
     g.remove_nodes_from(nodes_to_remove)
@@ -745,7 +790,12 @@ def process(args):
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
         if args.save_normalized_table:
-            data = {"Xelem": Xelem, "ycand": ycand, "ygen": ygen, "pythia": arr_ptcls_pythia}
+            data = {
+                "Xelem": Xelem,
+                "ycand": ycand,
+                "ygen": ygen,
+                "pythia": arr_ptcls_pythia,
+            }
 
         if args.save_full_graph:
             data["full_graph"] = g
@@ -760,11 +810,29 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
+    parser.add_argument(
+        "--input",
+        type=str,
+        help="Input file from PFAnalysis",
+        required=True,
+    )
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--save-full-graph", action="store_true", help="save the full event graph")
-    parser.add_argument("--save-normalized-table", action="store_true", help="save the uniquely identified table")
-    parser.add_argument("--num-events", type=int, help="number of events to process", default=-1)
+    parser.add_argument(
+        "--save-full-graph",
+        action="store_true",
+        help="save the full event graph",
+    )
+    parser.add_argument(
+        "--save-normalized-table",
+        action="store_true",
+        help="save the uniquely identified table",
+    )
+    parser.add_argument(
+        "--num-events",
+        type=int,
+        help="number of events to process",
+        default=-1,
+    )
     args = parser.parse_args()
     return args
 

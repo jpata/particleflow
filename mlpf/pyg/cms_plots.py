@@ -5,17 +5,42 @@ import matplotlib.pyplot as plt
 import mplhep
 import numpy as np
 import sklearn.metrics
-from pyg.cms_utils import CLASS_LABELS_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CMS_LATEX
+from pyg.cms_utils import (
+    CLASS_LABELS_CMS,
+    CLASS_NAMES_CMS,
+    CLASS_NAMES_CMS_LATEX,
+)
 
 mplhep.style.use(mplhep.styles.CMS)
 
 
 def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
-    plt.figtext(x0, y, "CMS", fontweight="bold", wrap=True, horizontalalignment="left", transform=ax.transAxes)
     plt.figtext(
-        x1, y, "Simulation Preliminary", style="italic", wrap=True, horizontalalignment="left", transform=ax.transAxes
+        x0,
+        y,
+        "CMS",
+        fontweight="bold",
+        wrap=True,
+        horizontalalignment="left",
+        transform=ax.transAxes,
     )
-    plt.figtext(x2, y, "Run 3 (14 TeV)", wrap=False, horizontalalignment="right", transform=ax.transAxes)
+    plt.figtext(
+        x1,
+        y,
+        "Simulation Preliminary",
+        style="italic",
+        wrap=True,
+        horizontalalignment="left",
+        transform=ax.transAxes,
+    )
+    plt.figtext(
+        x2,
+        y,
+        "Run 3 (14 TeV)",
+        wrap=False,
+        horizontalalignment="right",
+        transform=ax.transAxes,
+    )
 
 
 # def cms_label_sample_label(x0=0.12, x1=0.23, x2=0.67, y=0.90):
@@ -26,9 +51,21 @@ def cms_label(ax, x0=0.01, x1=0.15, x2=0.98, y=0.94):
 
 def sample_label(sample, ax, additional_text="", x=0.01, y=0.87):
     if sample == "QCD":
-        plt.text(x, y, "QCD events" + additional_text, ha="left", transform=ax.transAxes)
+        plt.text(
+            x,
+            y,
+            "QCD events" + additional_text,
+            ha="left",
+            transform=ax.transAxes,
+        )
     else:
-        plt.text(x, y, "$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text, ha="left", transform=ax.transAxes)
+        plt.text(
+            x,
+            y,
+            r"$\mathrm{t}\overline{\mathrm{t}}$ events" + additional_text,
+            ha="left",
+            transform=ax.transAxes,
+        )
 
 
 def apply_thresholds_f(ypred_raw_f, thresholds):
@@ -96,14 +133,14 @@ def plot_met(X, yvals, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_a), np.std(vals_a)),
+        label=r"PF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_a), np.std(vals_a)),
     )
     plt.hist(
         vals_b,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_b), np.std(vals_b)),
+        label=r"MLPF, $\mu={:.2f}$, $\sigma={:.2f}$".format(np.mean(vals_b), np.std(vals_b)),
     )
     plt.yscale("log")
     cms_label(ax)
@@ -120,14 +157,24 @@ def plot_sum_energy(X, yvals, outpath, sample):
     plt.figure()
     ax = plt.axes()
 
-    plt.scatter(np.sum(yvals["gen_energy"], axis=1), np.sum(yvals["cand_energy"], axis=1), alpha=0.5, label="PF")
-    plt.scatter(np.sum(yvals["gen_energy"], axis=1), np.sum(yvals["pred_energy"], axis=1), alpha=0.5, label="MLPF")
+    plt.scatter(
+        np.sum(yvals["gen_energy"], axis=1),
+        np.sum(yvals["cand_energy"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
+    plt.scatter(
+        np.sum(yvals["gen_energy"], axis=1),
+        np.sum(yvals["pred_energy"], axis=1),
+        alpha=0.5,
+        label="MLPF",
+    )
     plt.plot([10000, 80000], [10000, 80000], color="black")
     plt.legend(loc=4)
     cms_label(ax)
     sample_label(sample, ax)
-    plt.xlabel("Gen $\sum E$ [GeV]")
-    plt.ylabel("Reconstructed $\sum E$ [GeV]")
+    plt.xlabel(r"Gen $\sum E$ [GeV]")
+    plt.ylabel(r"Reconstructed $\sum E$ [GeV]")
     plt.savefig(f"{outpath}/sum_energy.pdf", bbox_inches="tight")
     plt.close()
 
@@ -137,14 +184,24 @@ def plot_sum_pt(X, yvals, outpath, sample):
     plt.figure()
     ax = plt.axes()
 
-    plt.scatter(np.sum(yvals["gen_pt"], axis=1), np.sum(yvals["cand_pt"], axis=1), alpha=0.5, label="PF")
-    plt.scatter(np.sum(yvals["gen_pt"], axis=1), np.sum(yvals["pred_pt"], axis=1), alpha=0.5, label="PF")
+    plt.scatter(
+        np.sum(yvals["gen_pt"], axis=1),
+        np.sum(yvals["cand_pt"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
+    plt.scatter(
+        np.sum(yvals["gen_pt"], axis=1),
+        np.sum(yvals["pred_pt"], axis=1),
+        alpha=0.5,
+        label="PF",
+    )
     plt.plot([1000, 6000], [1000, 6000], color="black")
     plt.legend(loc=4)
     cms_label(ax)
     sample_label(sample, ax)
-    plt.xlabel("Gen $\sum p_T$ [GeV]")
-    plt.ylabel("Reconstructed $\sum p_T$ [GeV]")
+    plt.xlabel(r"Gen $\sum p_T$ [GeV]")
+    plt.ylabel(r"Reconstructed $\sum p_T$ [GeV]")
     plt.savefig(f"{outpath}/sum_pt.pdf", bbox_inches="tight")
     plt.close()
 
@@ -166,14 +223,14 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
+        label=r"PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
     )
     plt.hist(
         reso_2,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
+        label=r"MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
     )
     plt.yscale("log")
     plt.xlabel(r"$\frac{E_\mathrm{reco} - E_\mathrm{gen}}{E_\mathrm{gen}}$")
@@ -182,7 +239,10 @@ def plot_energy_res(X, yvals_f, pid, b, ylim, outpath, sample):
     sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[pid]}")
     plt.legend(loc=(0.4, 0.7))
     plt.ylim(1, ylim)
-    plt.savefig(f"{outpath}/energy_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
+    plt.savefig(
+        f"{outpath}/energy_res_{CLASS_NAMES_CMS[pid]}.pdf",
+        bbox_inches="tight",
+    )
     plt.close()
 
 
@@ -205,14 +265,14 @@ def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
         bins=b,
         histtype="step",
         lw=2,
-        label="PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
+        label=r"PF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_1), np.std(reso_1)),
     )
     plt.hist(
         reso_2,
         bins=b,
         histtype="step",
         lw=2,
-        label="MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
+        label=r"MLPF, $\mu={:.2f}, \sigma={:.2f}$".format(np.mean(reso_2), np.std(reso_2)),
     )
     plt.yscale("log")
     plt.xlabel(r"$\eta_\mathrm{reco} - \eta_\mathrm{gen}$")
@@ -221,7 +281,10 @@ def plot_eta_res(X, yvals_f, pid, ylim, outpath, sample):
     sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[pid]}")
     plt.legend(loc=(0.0, 0.7))
     plt.ylim(1, ylim)
-    plt.savefig(f"{outpath}/eta_res_{CLASS_NAMES_CMS[pid]}.pdf", bbox_inches="tight")
+    plt.savefig(
+        f"{outpath}/eta_res_{CLASS_NAMES_CMS[pid]}.pdf",
+        bbox_inches="tight",
+    )
     plt.close()
 
 
@@ -264,8 +327,8 @@ def plot_multiplicity(X, yvals, outpath, sample):
         plt.plot([minval, maxval], [minval, maxval], color="black")
         plt.xlim(minval, maxval)
         plt.ylim(minval, maxval)
-        plt.xlabel("true $\sum E$ [GeV]")
-        plt.xlabel("reconstructed $\sum E$ [GeV]")
+        plt.xlabel(r"true $\sum E$ [GeV]")
+        plt.xlabel(r"reconstructed $\sum E$ [GeV]")
         plt.legend(loc=4)
         cms_label(ax)
         sample_label(sample, ax, f", {CLASS_NAMES_CMS_LATEX[icls]}")
@@ -295,7 +358,10 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
     plt.figure()
     ax = plt.axes()
     v1 = mplhep.histplot(
-        [h[bh.rebin(2)] for h in hists_gen], stack=True, label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]], lw=1
+        [h[bh.rebin(2)] for h in hists_gen],
+        stack=True,
+        label=[class_names[k] for k in [13, 11, 22, 1, 2, 130, 211]],
+        lw=1,
     )
     mplhep.histplot(
         [h[bh.rebin(2)] for h in hists_pred],
@@ -305,7 +371,12 @@ def plot_dist(yvals_f, var, bin, label, outpath, sample):
         histtype="errorbar",
     )
 
-    legend1 = plt.legend(v1, [x.legend_artist.get_label() for x in v1], loc=(0.60, 0.44), title="true")
+    legend1 = plt.legend(
+        v1,
+        [x.legend_artist.get_label() for x in v1],
+        loc=(0.60, 0.44),
+        title="true",
+    )
     # legend2 = plt.legend(v2, [x.legend_artist.get_label() for x in v1], loc=(0.8, 0.44), title="pred")
     plt.gca().add_artist(legend1)
     plt.ylabel("Total number of particles / bin")
@@ -334,21 +405,34 @@ def plot_eff_and_fake_rate(
 
     values = X_f[:, ivar]
 
-    hist_gen = np.histogram(values[(yvals_f["gen_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_gen = np.histogram(
+        values[(yvals_f["gen_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
+    )
     hist_gen_pred = np.histogram(
-        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
     )
     hist_gen_cand = np.histogram(
-        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[(yvals_f["gen_cls_id"] == icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
     )
 
-    hist_pred = np.histogram(values[(yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
-    hist_cand = np.histogram(values[(yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins)
+    hist_pred = np.histogram(
+        values[(yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
+    )
+    hist_cand = np.histogram(
+        values[(yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
+    )
     hist_pred_fake = np.histogram(
-        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["pred_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
     )
     hist_cand_fake = np.histogram(
-        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)], bins=bins
+        values[(yvals_f["gen_cls_id"] != icls) & (yvals_f["cand_cls_id"] == icls) & (X_f[:, 0] == ielem)],
+        bins=bins,
     )
 
     eff_mlpf = hist_gen_pred[0] / hist_gen[0]
@@ -423,7 +507,10 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
         Y = yvals_f["cand_cls_id"][msk_X_f]
 
     cm_norm = sklearn.metrics.confusion_matrix(
-        yvals_f["gen_cls_id"][msk_X_f], Y, labels=range(0, len(CLASS_LABELS_CMS)), normalize="true"
+        yvals_f["gen_cls_id"][msk_X_f],
+        Y,
+        labels=range(0, len(CLASS_LABELS_CMS)),
+        normalize="true",
     )
 
     plt.imshow(cm_norm, cmap="Blues", origin="lower")
@@ -442,7 +529,11 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
 
     cms_label(ax, y=1.01)
     # cms_label_sample_label(x1=0.18, x2=0.52, y=0.82)
-    plt.xticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX, rotation=45)
+    plt.xticks(
+        range(len(CLASS_NAMES_CMS_LATEX)),
+        CLASS_NAMES_CMS_LATEX,
+        rotation=45,
+    )
     plt.yticks(range(len(CLASS_NAMES_CMS_LATEX)), CLASS_NAMES_CMS_LATEX)
 
     plt.xlabel(f"{label} candidate ID")
@@ -456,7 +547,12 @@ def plot_cm(yvals_f, msk_X_f, label, outpath):
 def distribution_icls(yvals_f, outpath):
     for icls in range(0, 8):
         fig, axs = plt.subplots(
-            2, 2, figsize=(2 * mplhep.styles.CMS["figure.figsize"][0], 2 * mplhep.styles.CMS["figure.figsize"][1])
+            2,
+            2,
+            figsize=(
+                2 * mplhep.styles.CMS["figure.figsize"][0],
+                2 * mplhep.styles.CMS["figure.figsize"][1],
+            ),
         )
 
         for ax, ivar in zip(axs.flatten(), ["pt", "energy", "eta", "phi"]):
@@ -479,7 +575,14 @@ def distribution_icls(yvals_f, outpath):
                 b = np.linspace(np.min(vals_true), np.max(vals_true), 41)
                 log = False
 
-            plt.hist(vals_true, bins=b, histtype="step", lw=2, label="gen", color="black")
+            plt.hist(
+                vals_true,
+                bins=b,
+                histtype="step",
+                lw=2,
+                label="gen",
+                color="black",
+            )
             plt.hist(vals_pf, bins=b, histtype="step", lw=2, label="PF")
             plt.hist(vals_pred, bins=b, histtype="step", lw=2, label="MLPF")
             plt.legend(loc=(0.75, 0.75))

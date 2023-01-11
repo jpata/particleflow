@@ -47,7 +47,10 @@ if __name__ == "__main__":
 
         print(
             "Nelem={} mean_time={:.2f} ms stddev_time={:.2f} ms mem_used={:.0f} MB".format(
-                num_elems, 1000.0 * np.mean(times), 1000.0 * np.std(times), np.max(mem_used)
+                num_elems,
+                1000.0 * np.mean(times),
+                1000.0 * np.std(times),
+                np.max(mem_used),
             )
         )
         time.sleep(5)

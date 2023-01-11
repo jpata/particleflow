@@ -54,7 +54,15 @@ def track_as_array(df_tr, itr):
 def cluster_as_array(df_cl, icl):
     row = df_cl[icl]
     return np.array(
-        [2, row["x"], row["y"], row["z"], row["nhits_ecal"], row["nhits_hcal"], row["energy"]]  # clusters are type 2
+        [
+            2,
+            row["x"],
+            row["y"],
+            row["z"],
+            row["nhits_ecal"],
+            row["nhits_hcal"],
+            row["energy"],
+        ]  # clusters are type 2
     )
 
 
@@ -62,7 +70,16 @@ def cluster_as_array(df_cl, icl):
 def gen_as_array(df_gen, igen):
     if igen:
         row = df_gen[igen]
-        return np.array([abs(row["pdgid"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"]])
+        return np.array(
+            [
+                abs(row["pdgid"]),
+                row["charge"],
+                row["px"],
+                row["py"],
+                row["pz"],
+                row["energy"],
+            ]
+        )
     else:
         return np.zeros(6)
 
@@ -71,7 +88,16 @@ def gen_as_array(df_gen, igen):
 def pf_as_array(df_pfs, igen):
     if igen:
         row = df_pfs[igen]
-        return np.array([abs(row["type"]), row["charge"], row["px"], row["py"], row["pz"], row["energy"]])
+        return np.array(
+            [
+                abs(row["type"]),
+                row["charge"],
+                row["px"],
+                row["py"],
+                row["pz"],
+                row["energy"],
+            ]
+        )
     else:
         return np.zeros(6)
 
@@ -145,9 +171,15 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
 
     # Here we pad the tracks and clusters to the same shape along the feature dimension
     if Xs_tracks.shape[1] > Xs_clusters.shape[-1]:
-        Xs_clusters = np.pad(Xs_clusters, [(0, 0), (0, Xs_tracks.shape[1] - Xs_clusters.shape[-1])])
+        Xs_clusters = np.pad(
+            Xs_clusters,
+            [(0, 0), (0, Xs_tracks.shape[1] - Xs_clusters.shape[-1])],
+        )
     elif Xs_tracks.shape[1] < Xs_clusters.shape[-1]:
-        Xs_clusters = np.pad(Xs_clusters, [(0, 0), (0, Xs_clusters.shape[-1] - Xs_tracks.shape[1])])
+        Xs_clusters = np.pad(
+            Xs_clusters,
+            [(0, 0), (0, Xs_clusters.shape[-1] - Xs_tracks.shape[1])],
+        )
 
     Xs = np.concatenate([Xs_tracks, Xs_clusters], axis=0)  # [Ntracks+Nclusters, max(Nfeat_cluster, Nfeat_track)]
     ys_gen = np.stack(ys_gen, axis=-1).T

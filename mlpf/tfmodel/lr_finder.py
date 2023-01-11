@@ -15,7 +15,13 @@ class LRFinder(Callback):
     paper: https://arxiv.org/pdf/1803.09820.pdf.
     """
 
-    def __init__(self, start_lr: float = 1e-7, end_lr: float = 1e-2, max_steps: int = 200, smoothing=0.9):
+    def __init__(
+        self,
+        start_lr: float = 1e-7,
+        end_lr: float = 1e-2,
+        max_steps: int = 200,
+        smoothing=0.9,
+    ):
         super(LRFinder, self).__init__()
         self.start_lr, self.end_lr = start_lr, end_lr
         self.max_steps = max_steps

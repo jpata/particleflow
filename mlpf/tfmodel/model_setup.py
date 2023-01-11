@@ -49,7 +49,15 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(self, outpath, dataset, config, plot_freq=1, horovod_enabled=False, comet_experiment=None):
+    def __init__(
+        self,
+        outpath,
+        dataset,
+        config,
+        plot_freq=1,
+        horovod_enabled=False,
+        comet_experiment=None,
+    ):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
         self.dataset = dataset
@@ -94,9 +102,15 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
 
         jet_distances = compute_distances(
-            yvals["jet_gen_to_pred_genpt"], yvals["jet_gen_to_pred_predpt"], yvals["jet_ratio_pred"]
+            yvals["jet_gen_to_pred_genpt"],
+            yvals["jet_gen_to_pred_predpt"],
+            yvals["jet_ratio_pred"],
         )
-        met_distances = compute_distances(met_data["gen_met"], met_data["pred_met"], met_data["ratio_pred"])
+        met_distances = compute_distances(
+            met_data["gen_met"],
+            met_data["pred_met"],
+            met_data["ratio_pred"],
+        )
 
         N_jets = len(awkward.flatten(yvals["jets_gen_pt"]))
         N_jets_matched_pred = len(yvals["jet_gen_to_pred_genpt"])
@@ -397,7 +411,15 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
 
 # Given a model, evaluates it on each batch of the validation dataset
 # For each batch, save the inputs, the generator-level target, the candidate-level target, and the prediction
-def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, verbose=False):
+def eval_model(
+    model,
+    dataset,
+    config,
+    outdir,
+    jet_ptcut=5.0,
+    jet_match_dr=0.1,
+    verbose=False,
+):
 
     ibatch = 0
 
@@ -477,7 +499,10 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
             if verbose:
-                print("jets {}".format(typ), awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)))
+                print(
+                    "jets {}".format(typ),
+                    awkward.to_numpy(awkward.count(jets_coll[typ].px, axis=1)),
+                )
 
         # DeltaR match between genjets and MLPF jets
         gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
@@ -491,7 +516,14 @@ def eval_model(model, dataset, config, outdir, jet_ptcut=5.0, jet_match_dr=0.1, 
             print("saving to {}".format(outfile))
 
         awkward.to_parquet(
-            awkward.Array({"inputs": X, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets}),
+            awkward.Array(
+                {
+                    "inputs": X,
+                    "particles": awkvals,
+                    "jets": jets_coll,
+                    "matched_jets": matched_jets,
+                }
+            ),
             outfile,
         )
 
@@ -505,7 +537,16 @@ def freeze_model(model, config, outdir):
 
     def model_output(ret):
         return tf.concat(
-            [ret["cls"], ret["charge"], ret["pt"], ret["eta"], ret["sin_phi"], ret["cos_phi"], ret["energy"]], axis=-1
+            [
+                ret["cls"],
+                ret["charge"],
+                ret["pt"],
+                ret["eta"],
+                ret["sin_phi"],
+                ret["cos_phi"],
+                ret["energy"],
+            ],
+            axis=-1,
         )
 
     full_model = tf.function(lambda x: model_output(model(x, training=False)))

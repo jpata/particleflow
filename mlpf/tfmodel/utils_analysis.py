@@ -46,13 +46,21 @@ def plot_ray_analysis(analysis, save=False, skip=0):
 
     dfs = analysis.fetch_trial_dataframes()
     result_df = analysis.dataframe()
-    for key in tqdm(dfs.keys(), desc="Creating Ray analysis plots", total=len(dfs.keys())):
+    for key in tqdm(
+        dfs.keys(),
+        desc="Creating Ray analysis plots",
+        total=len(dfs.keys()),
+    ):
         result = result_df[result_df["logdir"] == key]
 
         fig, axs = plt.subplots(5, 4, figsize=(12, 9), tight_layout=True)
         for var, ax in zip(to_plot, axs.flat):
             # Skip first `skip` values so loss plots don't include the very large losses which occur at start of training
-            ax.plot(dfs[key].index.values[skip:], dfs[key][var][skip:], alpha=0.8)
+            ax.plot(
+                dfs[key].index.values[skip:],
+                dfs[key][var][skip:],
+                alpha=0.8,
+            )
             ax.set_xlabel("Epoch")
             ax.set_ylabel(var)
             ax.grid(alpha=0.3)
@@ -175,7 +183,12 @@ def topk_summary_plot_v2(analysis, k, save=False, save_dir=None):
     fig, axs = plt.subplots(len(to_plot), 1, figsize=(12, 9), tight_layout=True, sharex=True)
     for var, ax_row in zip(to_plot, axs):
         for ii, key in enumerate(dd["logdir"]):
-            ax_row.plot(dfs[key].index.values, dfs[key][var], alpha=0.8, label="#{}".format(ii + 1))
+            ax_row.plot(
+                dfs[key].index.values,
+                dfs[key][var],
+                alpha=0.8,
+                label="#{}".format(ii + 1),
+            )
             ax_row.set_ylabel(var)
             ax_row.grid(alpha=0.3)
             ax_row.legend()
@@ -217,14 +230,24 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
     cm_green = sns.light_palette("green", as_cmap=True)
     cm_red = sns.light_palette("red", as_cmap=True)
 
-    max_is_better = ["cls_acc_unweighted", "val_cls_acc_weighted", "val_cls_acc_unweighted"]
+    max_is_better = [
+        "cls_acc_unweighted",
+        "val_cls_acc_weighted",
+        "val_cls_acc_unweighted",
+    ]
     min_is_better = ["loss", "cls_loss", "val_loss", "val_cls_loss"]
 
     styled_summary = (
         summary.style.background_gradient(cmap=cm_green, subset=max_is_better)
         .background_gradient(cmap=cm_red, subset=min_is_better)
-        .highlight_max(subset=max_is_better, props="color:black; font-weight:bold; background-color:yellow;")
-        .highlight_min(subset=min_is_better, props="color:black; font-weight:bold; background-color:yellow;")
+        .highlight_max(
+            subset=max_is_better,
+            props="color:black; font-weight:bold; background-color:yellow;",
+        )
+        .highlight_min(
+            subset=min_is_better,
+            props="color:black; font-weight:bold; background-color:yellow;",
+        )
         .set_caption("Top {} trials according to {}".format(k, analysis.default_metric))
         .hide_index()
     )

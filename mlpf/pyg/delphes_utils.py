@@ -23,9 +23,30 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
     print("Making predictions...")
     t0 = time.time()
 
-    gen_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    pred_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
-    cand_list = {"null": [], "chhadron": [], "nhadron": [], "photon": [], "electron": [], "muon": []}
+    gen_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
+    pred_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
+    cand_list = {
+        "null": [],
+        "chhadron": [],
+        "nhadron": [],
+        "photon": [],
+        "electron": [],
+        "muon": [],
+    }
 
     t = []
 
@@ -105,11 +126,19 @@ def make_predictions_delphes(model, multi_gpu, test_loader, outpath, device, epo
         if i == 4999:
             break
 
-    print("Average Inference time per event is: ", round((sum(t) / len(t)), 2), "s")
+    print(
+        "Average Inference time per event is: ",
+        round((sum(t) / len(t)), 2),
+        "s",
+    )
 
     t1 = time.time()
 
-    print("Time taken to make predictions is:", round(((t1 - t0) / 60), 2), "min")
+    print(
+        "Time taken to make predictions is:",
+        round(((t1 - t0) / 60), 2),
+        "min",
+    )
 
     # store the 3 list dictionaries in a list (this is done only to compute the particle multiplicity plots)
     list = [pred_list, gen_list, cand_list]
@@ -164,14 +193,23 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     conf_matrix_mlpf = sklearn.metrics.confusion_matrix(gen_ids.cpu(), pred_ids.cpu(), labels=range(6), normalize="true")
 
     plot_confusion_matrix(
-        conf_matrix_mlpf, target_names, epoch, outpath + "/confusion_matrix_plots/", f"cm_mlpf_epoch_{str(epoch)}"
+        conf_matrix_mlpf,
+        target_names,
+        epoch,
+        outpath + "/confusion_matrix_plots/",
+        f"cm_mlpf_epoch_{str(epoch)}",
     )
 
     # make confusion matrix for rule based PF
     conf_matrix_cand = sklearn.metrics.confusion_matrix(gen_ids.cpu(), cand_ids.cpu(), labels=range(6), normalize="true")
 
     plot_confusion_matrix(
-        conf_matrix_cand, target_names, epoch, outpath + "/confusion_matrix_plots/", "cm_cand", target="rule-based"
+        conf_matrix_cand,
+        target_names,
+        epoch,
+        outpath + "/confusion_matrix_plots/",
+        "cm_cand",
+        target="rule-based",
     )
 
     # making all the other plots
@@ -269,14 +307,26 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "chhadron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_chhadron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_chhadron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_chhadron.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_chhadron.pdf",
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "nhadron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_nhadron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_nhadron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_nhadron.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_nhadron.pdf",
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
@@ -287,8 +337,14 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
     plot_particle_multiplicity(list_for_multiplicities, "electron", ax)
-    plt.savefig(outpath + "/multiplicity_plots/num_electron.png", bbox_inches="tight")
-    plt.savefig(outpath + "/multiplicity_plots/num_electron.pdf", bbox_inches="tight")
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_electron.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/multiplicity_plots/num_electron.pdf",
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 2 * 8))
@@ -376,16 +432,40 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 1, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        1,
+        "eta",
+        0.2,
+        ax=ax2,
+        legend_title=sample + "\n",
+    )
     plt.savefig(outpath + "/resolution_plots/res_pid1_eta.png", bbox_inches="tight")
     plt.savefig(outpath + "/resolution_plots/res_pid1_eta.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 1, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid1_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        1,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_energy.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid1_energy.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
@@ -398,16 +478,40 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 2, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        2,
+        "eta",
+        0.2,
+        ax=ax2,
+        legend_title=sample + "\n",
+    )
     plt.savefig(outpath + "/resolution_plots/res_pid2_eta.png", bbox_inches="tight")
     plt.savefig(outpath + "/resolution_plots/res_pid2_eta.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 2, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid2_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        2,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_energy.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid2_energy.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
@@ -420,16 +524,40 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 3, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        3,
+        "eta",
+        0.2,
+        ax=ax2,
+        legend_title=sample + "\n",
+    )
     plt.savefig(outpath + "/resolution_plots/res_pid3_eta.png", bbox_inches="tight")
     plt.savefig(outpath + "/resolution_plots/res_pid3_eta.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 3, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid3_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        3,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_energy.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid3_energy.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
@@ -442,16 +570,40 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 4, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        4,
+        "eta",
+        0.2,
+        ax=ax2,
+        legend_title=sample + "\n",
+    )
     plt.savefig(outpath + "/resolution_plots/res_pid4_eta.png", bbox_inches="tight")
     plt.savefig(outpath + "/resolution_plots/res_pid4_eta.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 4, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid4_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        4,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_energy.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid4_energy.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
@@ -464,16 +616,40 @@ def make_plots_delphes(model, test_loader, outpath, target, device, epoch, tag):
     plt.close(fig)
 
     fig, (ax2) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 5, "eta", 0.2, ax=ax2, legend_title=sample + "\n")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        5,
+        "eta",
+        0.2,
+        ax=ax2,
+        legend_title=sample + "\n",
+    )
     plt.savefig(outpath + "/resolution_plots/res_pid5_eta.png", bbox_inches="tight")
     plt.savefig(outpath + "/resolution_plots/res_pid5_eta.pdf", bbox_inches="tight")
     plt.tight_layout()
     plt.close(fig)
 
     fig, (ax3) = plt.subplots(1, 1, figsize=(8, 8))
-    plot_reso(ygen, ypred, ycand, 5, "energy", 0.2, ax=ax3, legend_title=sample + "\n")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_energy.png", bbox_inches="tight")
-    plt.savefig(outpath + "/resolution_plots/res_pid5_energy.pdf", bbox_inches="tight")
+    plot_reso(
+        ygen,
+        ypred,
+        ycand,
+        5,
+        "energy",
+        0.2,
+        ax=ax3,
+        legend_title=sample + "\n",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_energy.png",
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        outpath + "/resolution_plots/res_pid5_energy.pdf",
+        bbox_inches="tight",
+    )
     plt.tight_layout()
     plt.close(fig)
 
