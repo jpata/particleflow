@@ -7,28 +7,22 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from pyg import (
-    MLPF,
-    PFGraphDataset,
-    features_cms,
-    features_delphes,
-    load_model,
-    make_file_loaders,
-    make_plots_cms,
-    make_predictions,
-    parse_args,
-    postprocess_predictions,
-    save_model,
-    target_p4,
-    training_loop,
-)
+from pyg.args import parse_args
+from pyg.cms.cms_plots import make_plots_cms
+from pyg.cms.cms_utils import X_FEATURES_CMS
+from pyg.delphes.delphes_utils import X_FEATURES_DELPHES
+from pyg.evaluate import make_predictions, postprocess_predictions
+from pyg.model import MLPF
+from pyg.PFGraphDataset import PFGraphDataset
+from pyg.training import training_loop
+from pyg.utils import load_model, make_file_loaders, save_model
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
 
 
 """
-Developing a PyTorch Geometric MLPF pipeline using DistributedDataParallel.
+Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
 
 Author: Farouk Mokhtar
 """
@@ -58,7 +52,9 @@ def setup(rank, world_size):
     os.environ["MASTER_PORT"] = "12355"
 
     # dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)  # should be faster for DistributedDataParallel on gpus
+    dist.init_process_group(
+        "nccl", rank=rank, world_size=world_size
+    )  # nccl should be faster than gloo for DistributedDataParallel on gpus
 
 
 def cleanup():
@@ -196,22 +192,15 @@ def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
     model.eval()
     ddp_model = DDP(model, device_ids=[rank])
 
-    make_predictions(
-        rank,
-        ddp_model,
-        file_loader_test,
-        args.batch_size,
-        num_classes,
-        PATH,
-    )
+    make_predictions(rank, ddp_model, file_loader_test, args.batch_size, num_classes, PATH)
 
     cleanup()
 
 
 def train(device, world_size, args, dataset, model, num_classes, outpath):
     """
-    A train() function that will load the training dataset and start a training_loop
-    on a single device (cuda or cpu).
+    A train() function that will load the training dataset and start a
+    training_loop on a single device (cuda or cpu).
     """
 
     if device == "cpu":
@@ -300,15 +289,14 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.benchmark = True
 
-    # retrieve the dimensions of the PF-elements & PF-candidates
-    # to set the input/output dimension of the model
+    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
     if args.data == "delphes":
-        input_dim = len(features_delphes)
+        input_dim = len(X_FEATURES_DELPHES)
         num_classes = 6  # we have 6 classes/pids for delphes
     elif args.data == "cms":
-        input_dim = len(features_cms)
+        input_dim = len(X_FEATURES_CMS)
         num_classes = 9  # we have 9 classes/pids for cms (including taus)
-    output_dim_p4 = len(target_p4)
+    output_dim_p4 = 6  # "charge, pt, eta, sin_phi, cos_phi, energy
 
     outpath = osp.join(args.outpath, args.model_prefix)
 
@@ -357,15 +345,7 @@ if __name__ == "__main__":
                 outpath,
             )
         else:
-            train(
-                device,
-                world_size,
-                args,
-                dataset,
-                model,
-                num_classes,
-                outpath,
-            )
+            train(device, world_size, args, dataset, model, num_classes, outpath)
 
         # load the best epoch state
         state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
@@ -386,10 +366,8 @@ if __name__ == "__main__":
 
         if not os.path.exists(PATH):
             os.makedirs(PATH)
-        if not os.path.exists(f"{PATH}/predictions/"):
-            os.makedirs(f"{PATH}/predictions/")
-        if not os.path.exists(f"{PATH}/plots/"):
-            os.makedirs(f"{PATH}/plots/")
+        if not os.path.exists(pred_path):
+            os.makedirs(pred_path)
 
         # run the inference using DDP if more than one gpu is available
         dataset_test = PFGraphDataset(args.dataset_test, args.data)

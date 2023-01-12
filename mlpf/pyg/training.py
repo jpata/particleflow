@@ -8,9 +8,9 @@ import numpy as np
 import sklearn.metrics
 import torch
 import torch_geometric
-from pyg import make_plot_from_lists
-from pyg.cms_utils import CLASS_NAMES_CMS
-from pyg.delphes_plots import plot_confusion_matrix
+from pyg import CLASS_NAMES_CMS, plot_confusion_matrix
+
+from .utils import make_plot_from_lists
 
 matplotlib.use("Agg")
 
@@ -110,11 +110,6 @@ def train(
             t0 = time.time()
             pred_ids_one_hot, pred_p4 = model(batch.to(rank))
             t1 = time.time()
-            # print(
-            #     f"batch {i}/{len(loader)}, "
-            #     + f"forward pass on rank {rank} = {round(t1 - t0, 3)}s, "
-            #     + f"for batch with {batch.num_nodes} nodes"
-            # )
             t = t + (t1 - t0)
 
             # define the target

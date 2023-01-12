@@ -5,22 +5,24 @@ import matplotlib
 import numpy as np
 import torch
 import torch_geometric
-from pyg.cms_plots import (
-    distribution_icls,
-    plot_cm,
-    plot_dist,
-    plot_eff_and_fake_rate,
-    plot_energy_res,
-    plot_eta_res,
-    plot_met,
-    plot_multiplicity,
-    plot_numPFelements,
-    plot_sum_energy,
-    plot_sum_pt,
-)
-from pyg.utils import one_hot_embedding, target_p4
+
+from .utils import Y_FEATURES
 
 matplotlib.use("Agg")
+
+
+def one_hot_embedding(labels, num_classes):
+    """
+    Embedding labels to one-hot form.
+
+    Args:
+      labels: (LongTensor) class labels, sized [N,].
+      num_classes: (int) number of classes.
+    Returns:
+      (tensor) encoded labels, sized [N, #classes].
+    """
+    y = torch.eye(num_classes)
+    return y[labels]
 
 
 def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
@@ -176,7 +178,7 @@ def postprocess_predictions(pred_path):
     yvals["cand_cls"] = Y_pids[:, 1, :, :].numpy()
     yvals["pred_cls"] = Y_pids[:, 2, :, :].numpy()
 
-    for feat, key in enumerate(target_p4):
+    for feat, key in enumerate(Y_FEATURES):
         yvals[f"gen_{key}"] = Y_p4s[:, 0, :, feat].unsqueeze(-1).numpy()
         yvals[f"cand_{key}"] = Y_p4s[:, 1, :, feat].unsqueeze(-1).numpy()
         yvals[f"pred_{key}"] = Y_p4s[:, 2, :, feat].unsqueeze(-1).numpy()
@@ -215,166 +217,9 @@ def postprocess_predictions(pred_path):
     t0 = time.time()
     torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
     torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
-    torch.save(
-        msk_X_f,
-        f"{pred_path}/post_processed_msk_X_f.pt",
-        pickle_protocol=4,
-    )
+    torch.save(msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4)
     torch.save(yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4)
-    torch.save(
-        yvals_f,
-        f"{pred_path}/post_processed_yvals_f.pt",
-        pickle_protocol=4,
-    )
+    torch.save(yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4)
     print(f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min")
 
     return Xs, X_f, msk_X_f, yvals, yvals_f
-
-
-def make_plots_cms(pred_path, plot_path, sample):
-
-    t0 = time.time()
-
-    print("--> Loading the processed predictions")
-    X = torch.load(f"{pred_path}/post_processed_Xs.pt")
-    X_f = torch.load(f"{pred_path}/post_processed_X_f.pt")
-    msk_X_f = torch.load(f"{pred_path}/post_processed_msk_X_f.pt")
-    yvals = torch.load(f"{pred_path}/post_processed_yvals.pt")
-    yvals_f = torch.load(f"{pred_path}/post_processed_yvals_f.pt")
-    print(f"Time taken to load the processed predictions is: {round(((time.time() - t0) / 60), 2)} min")
-
-    print(f"--> Making plots using {len(X)} events...")
-
-    # plot distributions
-    print("plot_dist...")
-    plot_dist(yvals_f, "pt", np.linspace(0, 200, 61), r"$p_T$", plot_path, sample)
-    plot_dist(
-        yvals_f,
-        "energy",
-        np.linspace(0, 2000, 61),
-        r"$E$",
-        plot_path,
-        sample,
-    )
-    plot_dist(
-        yvals_f,
-        "eta",
-        np.linspace(-6, 6, 61),
-        r"$\eta$",
-        plot_path,
-        sample,
-    )
-
-    # plot cm
-    print("plot_cm...")
-    plot_cm(yvals_f, msk_X_f, "MLPF", plot_path)
-    plot_cm(yvals_f, msk_X_f, "PF", plot_path)
-
-    # plot eff_and_fake_rate
-    print("plot_eff_and_fake_rate...")
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=1,
-        ivar=4,
-        ielem=1,
-        bins=np.logspace(-1, 3, 41),
-        log=True,
-    )
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=1,
-        ivar=3,
-        ielem=1,
-        bins=np.linspace(-4, 4, 41),
-        log=False,
-        xlabel=r"PFElement $\eta$",
-    )
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=2,
-        ivar=4,
-        ielem=5,
-        bins=np.logspace(-1, 3, 41),
-        log=True,
-    )
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=2,
-        ivar=3,
-        ielem=5,
-        bins=np.linspace(-5, 5, 41),
-        log=False,
-        xlabel=r"PFElement $\eta$",
-    )
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=5,
-        ivar=4,
-        ielem=4,
-        bins=np.logspace(-1, 2, 41),
-        log=True,
-    )
-    plot_eff_and_fake_rate(
-        X_f,
-        yvals_f,
-        plot_path,
-        sample,
-        icls=5,
-        ivar=3,
-        ielem=4,
-        bins=np.linspace(-5, 5, 41),
-        log=False,
-        xlabel=r"PFElement $\eta$",
-    )
-
-    # distribution_icls
-    print("distribution_icls...")
-    distribution_icls(yvals_f, plot_path)
-
-    print("plot_numPFelements...")
-    plot_numPFelements(X, plot_path, sample)
-    print("plot_met...")
-    plot_met(X, yvals, plot_path, sample)
-    print("plot_sum_energy...")
-    plot_sum_energy(X, yvals, plot_path, sample)
-    print("plot_sum_pt...")
-    plot_sum_pt(X, yvals, plot_path, sample)
-    print("plot_multiplicity...")
-    plot_multiplicity(X, yvals, plot_path, sample)
-
-    # for energy resolution plotting purposes, initialize pid -> (ylim, bins) dictionary
-    print("plot_energy_res...")
-    dic = {
-        1: (1e9, np.linspace(-2, 15, 100)),
-        2: (1e7, np.linspace(-2, 15, 100)),
-        3: (1e7, np.linspace(-2, 40, 100)),
-        4: (1e7, np.linspace(-2, 30, 100)),
-        5: (1e7, np.linspace(-2, 10, 100)),
-        6: (1e4, np.linspace(-1, 1, 100)),
-        7: (1e4, np.linspace(-0.1, 0.1, 100)),
-    }
-    for pid, tuple in dic.items():
-        plot_energy_res(X, yvals_f, pid, tuple[1], tuple[0], plot_path, sample)
-
-    # for eta resolution plotting purposes, initialize pid -> (ylim) dictionary
-    print("plot_eta_res...")
-    dic = {1: 1e10, 2: 1e8}
-    for pid, ylim in dic.items():
-        plot_eta_res(X, yvals_f, pid, ylim, plot_path, sample)
-
-    print(f"Time taken to make plots is: {round(((time.time() - t0) / 60), 2)} min")
