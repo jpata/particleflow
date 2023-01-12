@@ -810,12 +810,7 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--input",
-        type=str,
-        help="Input file from PFAnalysis",
-        required=True,
-    )
+    parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
     parser.add_argument(
         "--save-full-graph",
