@@ -189,6 +189,13 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
 
 
 def prepare_data_clic(fn):
+    """
+    Processing function that takes as input a raw parquet file and processes it.
+
+    Returns
+        a list of events, each containing three arrays [Xs, ygen, ycand].
+
+    """
 
     data = awkward.from_parquet(fn)
 
@@ -308,6 +315,7 @@ def prepare_data_clic(fn):
             # print(df_gen.loc[gp])
 
         Xs, ys_gen, ys_cand = flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs)
+
         ret.append([Xs, ys_gen, ys_cand])
 
     return ret

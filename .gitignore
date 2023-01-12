@@ -23,5 +23,8 @@ nohup.out
 
 *.pkl
 *.pkl.bz2
+*.parquet
 
 slurm-*.out
+
+.vscode
