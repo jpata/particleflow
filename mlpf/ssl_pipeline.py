@@ -175,6 +175,10 @@ if __name__ == "__main__":
         data_valid = data_mlpf[round(0.5 * len(data_mlpf)) : round(0.75 * len(data_mlpf))]
         data_test = data_mlpf[round(0.75 * len(data_mlpf)) :]
 
+        print(f"Will use {len(data_train)} events for train")
+        print(f"Will use {len(data_valid)} events for valid")
+        print(f"Will use {len(data_test)} events for test")
+
         train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
         valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
 
