@@ -14,13 +14,29 @@ from scipy.sparse import coo_matrix
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
+#the feature matrices will be saved in this order
 particle_feature_order = ["PDG", "charge", "pt", "eta", "phi", "energy"]
-track_feature_order = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit", "tanLambda", "D0", "phi", "omega", "Z0", "time"]
+
+#arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
+#so we can easily use them in skip connections
+track_feature_order = [
+    "type", "pt", "eta", "phi", "p",
+    "chi2", "ndf", "dEdx", "dEdxError",
+    "radiusOfInnermostHit", "tanLambda", "D0", "omega",
+    "Z0", "time"
+]
 cluster_feature_order = [
-    "type", "position.x", "position.y", "position.z",
-    "iTheta", "phi", "energy",
-    "energy_ecal", "energy_hcal", "energy_other",
-    "num_hits", "sigma_x", "sigma_y", "sigma_z"]
+    "type", "et", "eta", "phi", "energy",
+    "position.x", "position.y", "position.z", "iTheta",
+    "energy_ecal", "energy_hcal", "energy_other", "num_hits",
+    "sigma_x", "sigma_y", "sigma_z"
+]
+
+def track_pt(omega):
+    a = 3 * 10**-4
+    b = 4  # B-field in tesla, from clicRec_e4h_input
+
+    return a * np.abs(b / omega)
 
 def map_pdgid_to_candid(pdgid, charge):
     if pdgid == 0:
@@ -48,6 +64,10 @@ def map_neutral_to_charged(pdg):
     if pdg == 130 or pdg == 22:
         return 211
     return pdg
+
+def sanitize(arr):
+    arr[np.isnan(arr)] = 0.0 
+    arr[np.isinf(arr)] = 0.0 
 
 class EventData:
     def __init__(self,
@@ -261,6 +281,15 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ret["sigma_y"] = np.array(cl_sigma_y)
     ret["sigma_z"] = np.array(cl_sigma_z)
 
+    tt = np.tan(ret["iTheta"] / 2.0)
+    eta = awkward.to_numpy(-np.log(tt, where=tt>0))
+    eta[tt<=0] = 0.0
+    ret["eta"] = eta
+
+    costheta = np.cos(ret["iTheta"])
+    ez = ret["energy"]*costheta
+    ret["et"]  = np.sqrt(ret["energy"]**2 - ez**2)
+
     return awkward.Record(ret)
 
 def track_to_features(prop_data, iev):
@@ -274,6 +303,18 @@ def track_to_features(prop_data, iev):
     #get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
         ret[k] = prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx]
+
+    ret["pt"] = track_pt(ret["omega"])
+    ret["px"] = np.cos(ret["phi"]) * ret["pt"]
+    ret["py"] = np.sin(ret["phi"]) * ret["pt"]
+    ret["pz"] = ret["tanLambda"] * ret["pt"]
+    ret["p"] = np.sqrt(ret["px"]**2 + ret["py"]**2 + ret["pz"]**2)
+    cos_theta = np.divide(ret["pz"], ret["p"], where=ret["p"]>0)
+    theta = np.arccos(cos_theta)
+    tt = np.tan(theta / 2.0)
+    eta = awkward.to_numpy(-np.log(tt, where=tt>0))
+    eta[tt<=0] = 0.0
+    ret["eta"] = eta
 
     return awkward.Record(ret)
 
@@ -670,7 +711,7 @@ if __name__ == "__main__":
             ) < 1e-2)
 
 
-        #we don"t want to try to reconstruct charged particles from primary clusters
+        #we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert(np.all(gps_cluster[:, 1] == 0))
         assert(np.all(rps_cluster[:, 1] == 0))
 
@@ -680,6 +721,13 @@ if __name__ == "__main__":
         ygen_cluster = gps_cluster
         ycand_track = rps_track
         ycand_cluster = rps_cluster
+
+        sanitize(X_track)
+        sanitize(X_cluster)
+        sanitize(ygen_track)
+        sanitize(ygen_cluster)
+        sanitize(ycand_track)
+        sanitize(ycand_cluster)
 
         this_ev = awkward.Record({
             "X_track": X_track,

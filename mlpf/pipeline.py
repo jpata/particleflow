@@ -164,7 +164,7 @@ def train(
     seeds,
 ):
 
-    # tf.debugging.enable_check_numerics()
+    tf.debugging.enable_check_numerics()
 
     if seeds:
         random.seed(1234)
