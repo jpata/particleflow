@@ -135,8 +135,8 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
         if (abs(ys[0]) in neutrinos) or (abs(cand[0]) in neutrinos):
             continue
         else:
-            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
-            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
+            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[1]))
+            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[1]))
 
         ys_gen.append(ys)
         ys_cand.append(cand)
@@ -159,8 +159,8 @@ def flatten_event(df_tr, df_cl, df_gen, df_pfs, pairs):
         if (abs(ys[0]) in neutrinos) or (abs(cand[0]) in neutrinos):
             continue
         else:
-            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[-1]))
-            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[-1]))
+            ys[0] = labels_ys_gen.index(map_pdgid_to_candid(abs(ys[0]), ys[1]))
+            cand[0] = labels_ys_cand.index(map_pdgid_to_candid(abs(cand[0]), cand[1]))
 
         ys_gen.append(ys)
         ys_cand.append(cand)
