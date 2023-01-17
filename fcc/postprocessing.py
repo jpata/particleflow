@@ -230,7 +230,7 @@ def genparticle_track_adj(sitrack_links):
     genparticle_to_track_matrix_coo0 = awkward.to_numpy(trk_to_gen_genidx)
     genparticle_to_track_matrix_coo1 = awkward.to_numpy(trk_to_gen_trkidx)
     genparticle_to_track_matrix_w = awkward.to_numpy(trk_to_gen_w)
-
+    
     return genparticle_to_track_matrix_coo0, genparticle_to_track_matrix_coo1, genparticle_to_track_matrix_w
 
 def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
@@ -343,11 +343,14 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     n_hit = awkward.count(hit_features["type"])
     n_cluster = awkward.count(cluster_features["type"])
 
-    gp_to_track = coo_matrix(
-        (genparticle_to_track[2],
-        (genparticle_to_track[0], genparticle_to_track[1])),
-        shape=(n_gp, n_track)
-    ).max(axis=1).todense()
+    if len(genparticle_to_track[0])>0:
+        gp_to_track = coo_matrix(
+            (genparticle_to_track[2],
+            (genparticle_to_track[0], genparticle_to_track[1])),
+            shape=(n_gp, n_track)
+        ).max(axis=1).todense()
+    else:
+        gp_to_track = np.zeros((n_gp, 1))
 
     gp_to_calohit = coo_matrix(
         (genparticle_to_hit[2],
@@ -576,8 +579,11 @@ def get_particle_feature_matrix(pfelem_to_particle, feature_dict, features):
     feats = []
     for feat in features:
         feat_arr = feature_dict[feat]
-        feat_arr_reordered = awkward.to_numpy(feat_arr[pfelem_to_particle])
-        feat_arr_reordered[pfelem_to_particle==-1] = 0.0
+        if len(feat_arr)==0:
+            feat_arr_reordered = feat_arr
+        else:
+            feat_arr_reordered = awkward.to_numpy(feat_arr[pfelem_to_particle])
+            feat_arr_reordered[pfelem_to_particle==-1] = 0.0
         feats.append(feat_arr_reordered)
     feats = np.array(feats)
     return feats.T

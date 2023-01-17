@@ -236,6 +236,7 @@ train_test_datasets:
     batch_per_gpu: 1
     datasets:
       - clic_edm_ttbar_pf
+      - clic_edm_zz_fullhad_pf
 
 validation_dataset: clic_edm_ttbar_pf
 validation_batch_size: 50
@@ -248,6 +249,10 @@ evaluation_datasets:
 
 datasets:
   clic_edm_ttbar_pf:
+    version: 1.0.0
+    data_dir:
+    manual_dir:
+  clic_edm_zz_fullhad_pf:
     version: 1.0.0
     data_dir:
     manual_dir:
