@@ -118,6 +118,8 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
+        batch_size_test = 1
+
         if args.ssl:
 
             mlpf_model_kwargs = {
@@ -157,7 +159,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_ssl,
-                args.batch_size_mlpf,
+                batch_size_test,
                 "ssl",
                 data_valid_VICReg,
                 "valid_dataset_VICReg",
@@ -169,7 +171,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_ssl,
-                args.batch_size_mlpf,
+                batch_size_test,
                 "ssl",
                 data_valid_mlpf,
                 "valid_dataset_mlpf",
@@ -215,7 +217,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_native,
-                args.batch_size_mlpf,
+                batch_size_test,
                 "native",
                 data_valid_VICReg,
                 "valid_dataset_VICReg",
@@ -227,7 +229,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_native,
-                args.batch_size_mlpf,
+                batch_size_test,
                 "native",
                 data_valid_mlpf,
                 "valid_dataset_mlpf",
