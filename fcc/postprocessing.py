@@ -247,7 +247,9 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     cl_sigma_x = []
     cl_sigma_y = []
     cl_sigma_z = []
-    for cl in range(len(ret["type"])):
+
+    n_cl = len(ret["energy"])
+    for cl in range(n_cl):
         msk_cl = cluster_idx == cl
         hits = hit_idx[msk_cl]
 
@@ -290,12 +292,17 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ez = ret["energy"]*costheta
     ret["et"]  = np.sqrt(ret["energy"]**2 - ez**2)
 
+    #override cluster type with 1
+    ret["type"] = 2*np.ones(n_cl, dtype=np.float32)
+
     return awkward.Record(ret)
 
 def track_to_features(prop_data, iev):
     track_arr = prop_data[track_coll][iev]
     feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
     ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+    n_tr = len(ret["type"])
+
     #FIXME: add additional track features from track state
 
     #get the index of the first track state
@@ -315,6 +322,9 @@ def track_to_features(prop_data, iev):
     eta = awkward.to_numpy(-np.log(tt, where=tt>0))
     eta[tt<=0] = 0.0
     ret["eta"] = eta
+
+    #override track type with 1
+    ret["type"] = 1*np.ones(n_tr, dtype=np.float32)
 
     return awkward.Record(ret)
 
