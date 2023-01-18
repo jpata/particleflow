@@ -864,6 +864,7 @@ class OutputDecoding(tf.keras.Model):
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
+        orig_pt = tf.cast(X_input[:, :, 1:2], out_dtype)
         orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         # FIXME: better schema propagation between hep_tfds
@@ -872,12 +873,10 @@ class OutputDecoding(tf.keras.Model):
             orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-            orig_pt = X_input[:, :, 1:2]
         elif self.schema == "delphes":
             orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
-            orig_pt = X_input[:, :, 1:2]
 
         if self.regression_use_classification:
             X_encoded = tf.concat(
