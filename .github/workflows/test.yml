@@ -54,3 +54,16 @@ jobs:
           cache: 'pip'
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_cms_pipeline.sh
+
+  ssl-pipeline:
+    runs-on: ubuntu-20.04
+    needs: [deps]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.10'
+          cache: 'pip'
+      - run: conda env create -f environment.yml
+      - run conda activate mlpf
+      - run: ./scripts/local_test_ssl_pipeline.sh

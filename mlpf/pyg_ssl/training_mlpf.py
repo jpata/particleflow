@@ -30,34 +30,14 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(
-    device,
-    encoder,
-    mlpf,
-    train_loader,
-    valid_loader,
-):
+def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode):
     with torch.no_grad():
         optimizer = None
-        ret = train(
-            device,
-            encoder,
-            mlpf,
-            train_loader,
-            valid_loader,
-            optimizer,
-        )
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode)
     return ret
 
 
-def train(
-    device,
-    encoder,
-    mlpf,
-    train_loader,
-    valid_loader,
-    optimizer,
-):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -79,16 +59,20 @@ def train(
 
     for i, batch in enumerate(loader):
 
-        # make transformation
-        tracks, clusters = distinguish_PFelements(batch.to(device))
+        if mode == "ssl":
+            # make transformation
+            tracks, clusters = distinguish_PFelements(batch.to(device))
 
-        # ENCODE
-        embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+            # ENCODE
+            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-        tracks.x = embedding_tracks
-        clusters.x = embedding_clusters
+            tracks.x = embedding_tracks
+            clusters.x = embedding_clusters
 
-        event = combine_PFelements(tracks, clusters)
+            event = combine_PFelements(tracks, clusters)
+
+        elif mode == "native":
+            event = batch.to(device)
 
         # make mlpf forward pass
         pred_ids_one_hot = mlpf(event.to(device))
@@ -115,15 +99,7 @@ def train(
 
 
 def training_loop_mlpf(
-    device,
-    encoder,
-    mlpf,
-    train_loader,
-    valid_loader,
-    n_epochs,
-    patience,
-    optimizer,
-    outpath,
+    device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, optimizer, outpath, mode="ssl"
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -136,6 +112,7 @@ def training_loop_mlpf(
         patience: number of stale epochs allowed before stopping the training
         optimizer: optimizer to use for training (by default: Adam)
         outpath: path to store the model weights and training plots
+        mode: can be either `ssl` or `native`
     """
 
     t0_initial = time.time()
@@ -153,25 +130,12 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses = train(
-            device,
-            encoder,
-            mlpf,
-            train_loader,
-            valid_loader,
-            optimizer,
-        )
+        losses = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode)
 
         losses_train.append(losses)
 
         # validation step
-        losses = validation_run(
-            device,
-            encoder,
-            mlpf,
-            train_loader,
-            valid_loader,
-        )
+        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode)
 
         losses_valid.append(losses)
 
@@ -185,9 +149,9 @@ def training_loop_mlpf(
             except AttributeError:
                 mlpf_state_dict = mlpf.state_dict()
 
-            torch.save(mlpf_state_dict, f"{outpath}/mlpf_best_epoch_weights.pth")
+            torch.save(mlpf_state_dict, f"{outpath}/mlpf_{mode}_best_epoch_weights.pth")
 
-            with open(f"{outpath}/mlpf_best_epoch.json", "w") as fp:  # dump best epoch
+            with open(f"{outpath}/mlpf_{mode}_best_epoch.json", "w") as fp:  # dump best epoch
                 json.dump({"best_epoch": epoch}, fp)
         else:
             stale_epochs += 1
@@ -212,12 +176,15 @@ def training_loop_mlpf(
         ax.plot(range(len(losses_valid)), losses_valid, label="validation")
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
-        ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+        if mode == "ssl":
+            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+        else:
+            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
         plt.savefig(f"{outpath}/mlpf_loss.pdf")
 
-        with open(f"{outpath}/mlpf_loss_train.pkl", "wb") as f:
+        with open(f"{outpath}/mlpf_{mode}_loss_train.pkl", "wb") as f:
             pkl.dump(losses_train, f)
-        with open(f"{outpath}/mlpf_loss_valid.pkl", "wb") as f:
+        with open(f"{outpath}/mlpf_{mode}_loss_valid.pkl", "wb") as f:
             pkl.dump(losses_valid, f)
 
         print("----------------------------------------------------------")

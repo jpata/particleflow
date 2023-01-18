@@ -97,8 +97,8 @@ def train(
     # initialize loss counters
     losses = 0
 
+    # print(len(loader))
     for i, batch in enumerate(loader):
-
         # make transformation
         tracks, clusters = distinguish_PFelements(batch.to(device))
 
@@ -202,6 +202,7 @@ def training_loop_VICReg(
 
         losses_valid.append(losses)
 
+        # if (epoch % 4) == 0:
         # early-stopping
         if losses < best_val_loss:
             best_val_loss = losses
@@ -252,5 +253,5 @@ def training_loop_VICReg(
         with open(f"{outpath}/VICReg_loss_valid.pkl", "wb") as f:
             pkl.dump(losses_valid, f)
 
-        print("----------------------------------------------------------")
+    print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

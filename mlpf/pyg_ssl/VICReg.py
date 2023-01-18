@@ -26,10 +26,14 @@ class ENCODER(nn.Module):
             self.act(),
             nn.Linear(width, width),
             self.act(),
+            nn.Linear(width, width),
+            self.act(),
             nn.Linear(width, embedding_dim),
         )
         self.nn2 = nn.Sequential(
             nn.Linear(CLUSTERS_X, width),
+            self.act(),
+            nn.Linear(width, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -77,6 +81,8 @@ class DECODER(nn.Module):
         # DECODER
         self.expander = nn.Sequential(
             nn.Linear(input_dim, width),
+            self.act(),
+            nn.Linear(width, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
