@@ -1167,19 +1167,6 @@ class PFNetDense(tf.keras.Model):
             CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_reg)
         ]
 
-        self.summarizer_id = [
-            point_wise_feed_forward_network(
-                8, 128, "summarizer_id_{}".format(i), num_layers=1, activation=self.activation, dropout=self.dropout
-            )
-            for i in range(num_graph_layers_id)
-        ]
-        self.summarizer_reg = [
-            point_wise_feed_forward_network(
-                8, 128, "summarizer_reg_{}".format(i), num_layers=1, activation=self.activation, dropout=self.dropout
-            )
-            for i in range(num_graph_layers_reg)
-        ]
-
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes
         output_decoding["event_set_output"] = event_set_output
@@ -1217,7 +1204,6 @@ class PFNetDense(tf.keras.Model):
         msk_input = tf.expand_dims(tf.cast(msk, X_enc.dtype), -1)
 
         encs_id = []
-        summaries_id = []
         if self.skip_connection:
             encs_id.append(X_enc)
 
@@ -1226,7 +1212,7 @@ class PFNetDense(tf.keras.Model):
             X_enc_ffn = self.activation(self.node_encoding(X_enc_cg, training=training))
             X_enc_cg = X_enc_ffn
 
-        for cg, summarizer in zip(self.cg_id, self.summarizer_id):
+        for cg in self.cg_id:
             enc_all = cg(X_enc_cg, msk, training=training)
 
             if self.node_update_mode == "additive":
@@ -1238,30 +1224,20 @@ class PFNetDense(tf.keras.Model):
             if self.debug:
                 debugging_data[cg.name] = enc_all
 
-            # average across elements
-            mean_enc = tf.reduce_mean(enc_all["enc"], axis=-2, keepdims=True)
-            summaries_id.append(summarizer(mean_enc))
-
         if self.node_update_mode == "concat":
             dec_output_id = tf.concat(encs_id, axis=-1) * msk_input
         elif self.node_update_mode == "additive":
             dec_output_id = X_enc_cg
-
-        # repeat the summarized elements across the element axis for each element
-        summaries_id = tf.concat(summaries_id, axis=-1)
-        summaries_id = tf.tile(summaries_id, [1, n_points, 1])
-        dec_output_id = tf.concat([dec_output_id, summaries_id], axis=-1)
 
         X_enc_cg = X_enc
         if self.do_node_encoding:
             X_enc_cg = X_enc_ffn
 
         encs_reg = []
-        summaries_reg = []
         if self.skip_connection:
             encs_reg.append(X_enc)
 
-        for cg, summarizer in zip(self.cg_reg, self.summarizer_reg):
+        for cg in self.cg_reg:
             enc_all = cg(X_enc_cg, msk, training=training)
             if self.node_update_mode == "additive":
                 X_enc_cg += enc_all["enc"]
@@ -1273,17 +1249,10 @@ class PFNetDense(tf.keras.Model):
                 debugging_data[cg.name] = enc_all
             encs_reg.append(X_enc_cg)
 
-            mean_enc = tf.reduce_mean(enc_all["enc"], axis=-2, keepdims=True)
-            summaries_reg.append(summarizer(mean_enc))
-
         if self.node_update_mode == "concat":
             dec_output_reg = tf.concat(encs_reg, axis=-1) * msk_input
         elif self.node_update_mode == "additive":
             dec_output_reg = X_enc_cg
-
-        summaries_reg = tf.concat(summaries_reg, axis=-1)
-        summaries_reg = tf.tile(summaries_reg, [1, n_points, 1])
-        dec_output_reg = tf.concat([dec_output_reg, summaries_reg], axis=-1)
 
         if self.debug:
             debugging_data["dec_output_id"] = dec_output_id
