@@ -39,7 +39,8 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, data, save_a
     conf_matrix = np.zeros((6, 6))
     with torch.no_grad():
         for i, batch in enumerate(test_loader):
-            print(f"making predictions: {i+1}/{len(test_loader)}")
+            if i % 500 == 0:
+                print(f"making predictions: {i+1}/{len(test_loader)}")
 
             if mode == "ssl":
                 # make transformation
@@ -139,8 +140,8 @@ def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as):
         plt.scatter(ngen[class_], npred[class_], marker=".", alpha=0.4, label="MLPF")
         a = 0.5 * min(np.min(npred[class_]), np.min(ngen[class_]))
         b = 1.5 * max(np.max(npred[class_]), np.max(ngen[class_]))
-        plt.xlim(a, b)
-        plt.ylim(a, b)
+        # plt.xlim(a, b)
+        # plt.ylim(a, b)
         plt.plot([a, b], [a, b], color="black", ls="--")
         plt.title(class_)
         plt.xlabel("number of truth particles")

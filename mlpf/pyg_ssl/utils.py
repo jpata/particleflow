@@ -88,7 +88,13 @@ def load_VICReg(device, outpath):
     return encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs
 
 
-def save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs):
+def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs):
+
+    num_encoder_parameters = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    num_decoder_parameters = sum(p.numel() for p in decoder.parameters() if p.requires_grad)
+
+    print(f"Num of 'encoder' parameters: {num_encoder_parameters}")
+    print(f"Num of 'decoder' parameters: {num_decoder_parameters}")
 
     if not osp.isdir(outpath):
         os.makedirs(outpath)
@@ -131,12 +137,24 @@ def save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs):
                 "lmbd": args.lmbd,
                 "u": args.u,
                 "v": args.v,
+                "num_encoder_parameters": num_encoder_parameters,
+                "num_decoder_parameters": num_decoder_parameters,
             },
             fp,
         )
 
 
-def save_MLPF(args, outpath, mlpf_model_kwargs):
+def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
+    """
+    Saves the mlpf model in the `outpath` provided.
+    Dumps the hyperparameters of the mlpf model in a json file.
+
+    Args
+        mode: choices are "ssl" or "native"
+    """
+
+    num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
+    print(f"Num of 'encoder' parameters: {num_mlpf_parameters}")
 
     if not osp.isdir(outpath):
         os.makedirs(outpath)
@@ -165,6 +183,8 @@ def save_MLPF(args, outpath, mlpf_model_kwargs):
                 "space_dim": args.space_dim,
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
+                "mode": mode,
+                "num_mlpf_parameters": num_mlpf_parameters,
             },
             fp,
         )

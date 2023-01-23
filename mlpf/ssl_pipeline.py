@@ -86,7 +86,7 @@ if __name__ == "__main__":
         print(f"VICReg model name: {args.prefix_VICReg}")
 
         # save model_kwargs and hyperparameters
-        save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs)
+        save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs)
 
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
 
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
             # make mlpf specific directory
             outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
-            save_MLPF(args, outpath_ssl, mlpf_model_kwargs)
+            save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
             optimizer = torch.optim.SGD(mlpf_ssl.parameters(), lr=args.lr)
 
@@ -154,6 +154,7 @@ if __name__ == "__main__":
             )
 
             # evaluate the ssl-based mlpf on the VICReg validation
+            print("Testing the ssl model on the VICReg validation dataset")
             evaluate(
                 device,
                 encoder,
@@ -166,6 +167,7 @@ if __name__ == "__main__":
                 outpath_ssl,
             )
             # evaluate the ssl-based mlpf on the mlpf validation
+            print("Testing the ssl model on the mlpf validation dataset")
             evaluate(
                 device,
                 encoder,
@@ -192,7 +194,7 @@ if __name__ == "__main__":
 
             # make mlpf specific directory
             outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
-            save_MLPF(args, outpath_native, mlpf_model_kwargs)
+            save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
             optimizer = torch.optim.SGD(mlpf_native.parameters(), lr=args.lr)
 
@@ -212,6 +214,7 @@ if __name__ == "__main__":
             )
 
             # evaluate the native mlpf on the VICReg validation
+            print("Testing the native model on the VICReg validation dataset")
             evaluate(
                 device,
                 encoder,
@@ -224,6 +227,7 @@ if __name__ == "__main__":
                 outpath_native,
             )
             # evaluate the native mlpf on the mlpf validation
+            print("Testing the native model on the mlpf validation dataset")
             evaluate(
                 device,
                 encoder,
