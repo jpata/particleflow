@@ -154,7 +154,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
     """
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
-    print(f"Num of 'encoder' parameters: {num_mlpf_parameters}")
+    print(f"Num of '{mode}-mlpf' parameters: {num_mlpf_parameters}")
 
     if not osp.isdir(outpath):
         os.makedirs(outpath)

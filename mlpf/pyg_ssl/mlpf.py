@@ -30,6 +30,15 @@ class MLPF(nn.Module):
                 self.act(),
                 nn.Linear(126, embedding_dim),
             )
+        else:
+            # embedding of the inputs that is necessary for native mlpf training
+            self.nn0 = nn.Sequential(
+                nn.Linear(embedding_dim, 126),
+                self.act(),
+                nn.Linear(126, 126),
+                self.act(),
+                nn.Linear(126, embedding_dim),
+            )
 
         # GNN that uses the embeddings learnt by VICReg as the input features
         self.conv = nn.ModuleList()
