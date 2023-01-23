@@ -23,9 +23,7 @@ tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar
 # papermill --inject-output-path --log-output -p path ../data/clic/gev380ee_pythia6_ttbar_rfull201/ clic.ipynb ./out.ipynb
 # cd ..
 
-# tfds build mlpf/heptfds/clic_pf/ttbar --manual_dir `pwd`
-
 # #Train, evaluate and make plots
-# python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
-# python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
-# python mlpf/pipeline.py plots --train-dir ./experiments/clic*
+python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
+python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py plots --train-dir ./experiments/clic*
