@@ -184,6 +184,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
                 "mode": mode,
+                "FineTune_VICReg": args.FineTune_VICReg,
                 "num_mlpf_parameters": num_mlpf_parameters,
             },
             fp,

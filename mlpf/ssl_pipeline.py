@@ -136,8 +136,6 @@ if __name__ == "__main__":
             outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
             save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
-            optimizer = torch.optim.SGD(mlpf_ssl.parameters(), lr=args.lr)
-
             print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
 
             training_loop_mlpf(
@@ -148,9 +146,10 @@ if __name__ == "__main__":
                 valid_loader,
                 args.n_epochs_mlpf,
                 args.patience,
-                optimizer,
+                args.lr,
                 outpath_ssl,
                 mode="ssl",
+                FineTune_VICReg=args.FineTune_VICReg,
             )
 
             # evaluate the ssl-based mlpf on the VICReg validation
@@ -196,8 +195,6 @@ if __name__ == "__main__":
             outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
             save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
-            optimizer = torch.optim.SGD(mlpf_native.parameters(), lr=args.lr)
-
             print(f"- Training native MLPF over {args.n_epochs_mlpf} epochs")
 
             training_loop_mlpf(
@@ -208,9 +205,10 @@ if __name__ == "__main__":
                 valid_loader,
                 args.n_epochs_mlpf,
                 args.patience,
-                optimizer,
+                args.lr,
                 outpath_native,
                 mode="native",
+                FineTune_VICReg=False,
             )
 
             # evaluate the native mlpf on the VICReg validation

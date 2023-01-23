@@ -37,6 +37,9 @@ def parse_args():
     parser.add_argument("--batch_size_mlpf", type=int, default=500, help="number of events to process at once")
     parser.add_argument("--batch_size_VICReg", type=int, default=10000, help="number of events to process at once")
     parser.add_argument("--patience", type=int, default=30, help="patience before early stopping")
+    parser.add_argument(
+        "--FineTune_VICReg", dest="FineTune_VICReg", action="store_true", help="FineTune VICReg during MLPFtraining"
+    )
 
     # VICReg encoder architecture
     parser.add_argument("--width_encoder", type=int, default=126, help="hidden dimension of the encoder")

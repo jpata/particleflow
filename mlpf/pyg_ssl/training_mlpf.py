@@ -33,11 +33,12 @@ def compute_weights(device, target_ids, num_classes):
 def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode)
+        optimizer_VICReg = None
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
     return ret
 
 
-def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -49,10 +50,13 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode):
         print("---->Initiating a training run")
         mlpf.train()
         loader = train_loader
+        if optimizer_VICReg:
+            encoder.train()
     else:
         print("---->Initiating a validation run")
         mlpf.eval()
         loader = valid_loader
+        encoder.eval()
 
     # initialize loss counters
     losses = 0
@@ -85,13 +89,13 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode):
         if is_train:
             for param in mlpf.parameters():
                 param.grad = None
+            if optimizer_VICReg:
+                for param in encoder.parameters():
+                    param.grad = None
             loss.backward()
             optimizer.step()
 
         losses += loss.detach()
-
-        # if i == 20:
-        #     break
 
     losses = losses.cpu().item() / len(loader)
 
@@ -99,7 +103,7 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode):
 
 
 def training_loop_mlpf(
-    device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, optimizer, outpath, mode="ssl"
+    device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode, FineTune_VICReg
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -110,9 +114,10 @@ def training_loop_mlpf(
         train_loader: a pytorch Dataloader for training
         valid_loader: a pytorch Dataloader for validation
         patience: number of stale epochs allowed before stopping the training
-        optimizer: optimizer to use for training (by default: Adam)
+        lr: lr to use for training
         outpath: path to store the model weights and training plots
         mode: can be either `ssl` or `native`
+        FineTune_VICReg: if `True` will finetune VICReg with a lr that is 10% of the MLPF lr
     """
 
     t0_initial = time.time()
@@ -122,6 +127,14 @@ def training_loop_mlpf(
     best_val_loss = 99999.9
     stale_epochs = 0
 
+    optimizer = torch.optim.SGD(mlpf.parameters(), lr=lr)
+    if FineTune_VICReg:
+        print("Will finetune VICReg during mlpf training")
+        optimizer_VICReg = torch.optim.SGD(mlpf.parameters(), lr=lr * 0.1)
+    else:
+        print("Will fix VICReg during mlpf training")
+        optimizer_VICReg = None
+
     for epoch in range(n_epochs):
         t0 = time.time()
 
@@ -130,13 +143,11 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode)
-
+        losses = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
         losses_train.append(losses)
 
         # validation step
         losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode)
-
         losses_valid.append(losses)
 
         # early-stopping
