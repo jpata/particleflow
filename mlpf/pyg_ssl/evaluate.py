@@ -7,7 +7,6 @@ import sklearn
 import sklearn.metrics
 import torch
 import torch_geometric
-from torch_geometric.nn import global_mean_pool
 
 from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
 
@@ -25,64 +24,71 @@ CLASS_TO_ID = {
 }
 
 
-def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, data, save_as, outpath):
+def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, data_, save_as_):
 
-    npred, ngen, ncand = {}, {}, {}
-    for class_ in CLASS_TO_ID.keys():
-        npred[class_], ngen[class_], ncand[class_] = [], [], []
+    npred_, ngen_, ncand_, = (
+        {},
+        {},
+        {},
+    )
 
-    test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
+    for j, data in enumerate(data_):
+        print(f"Testing the {mode} model on the {save_as_[j]}")
+        test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
 
-    mlpf.eval()
-    encoder.eval()
-    decoder.eval()
-    conf_matrix = np.zeros((6, 6))
-    with torch.no_grad():
-        for i, batch in enumerate(test_loader):
-            if i % 500 == 0:
-                print(f"making predictions: {i+1}/{len(test_loader)}")
+        npred, ngen, ncand = {}, {}, {}
+        for class_ in CLASS_TO_ID.keys():
+            npred[class_], ngen[class_], ncand[class_] = [], [], []
 
-            if mode == "ssl":
-                # make transformation
-                tracks, clusters = distinguish_PFelements(batch.to(device))
+        mlpf.eval()
+        encoder.eval()
+        decoder.eval()
+        conf_matrix = np.zeros((6, 6))
+        with torch.no_grad():
+            for i, batch in enumerate(test_loader):
+                if i % 500 == 0:
+                    print(f"making predictions: {i+1}/{len(test_loader)}")
 
-                # ENCODE
-                embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-                # POOLING
-                pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-                pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
-                # DECODE
-                out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
+                if mode == "ssl":
+                    # make transformation
+                    tracks, clusters = distinguish_PFelements(batch.to(device))
 
-                # use the learnt representation as your input as well as the global feature vector
-                tracks.x = embedding_tracks
-                clusters.x = embedding_clusters
+                    # ENCODE
+                    embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-                event = combine_PFelements(tracks, clusters)
+                    # use the learnt representation as your input as well as the global feature vector
+                    tracks.x = embedding_tracks
+                    clusters.x = embedding_clusters
 
-            elif mode == "native":
-                event = batch
+                    event = combine_PFelements(tracks, clusters)
 
-            # make mlpf forward pass
-            pred_ids_one_hot = mlpf(event.to(device))
+                elif mode == "native":
+                    event = batch
 
-            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
-            target_ids = event.ygen_id
-            cand_ids = event.ycand_id
+                # make mlpf forward pass
+                pred_ids_one_hot = mlpf(event.to(device))
 
-            conf_matrix += sklearn.metrics.confusion_matrix(
-                target_ids.detach().cpu(),
-                pred_ids.detach().cpu(),
-                labels=range(NUM_CLASSES),
+                pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+                target_ids = event.ygen_id
+                cand_ids = event.ycand_id
+
+                conf_matrix += sklearn.metrics.confusion_matrix(
+                    target_ids.detach().cpu(),
+                    pred_ids.detach().cpu(),
+                    labels=range(NUM_CLASSES),
+                )
+
+                for class_, id_ in CLASS_TO_ID.items():
+                    npred[class_].append((pred_ids == id_).sum().item())
+                    ngen[class_].append((target_ids == id_).sum().item())
+                    ncand[class_].append((cand_ids == id_).sum().item())
+
+            make_conf_matrix(conf_matrix, outpath, mode, save_as_[j])
+            npred_[save_as_[j]], ngen_[save_as_[j]], ncand_[save_as_[j]] = make_multiplicity_plots(
+                npred, ngen, ncand, outpath, mode, save_as_[j]
             )
 
-            for class_, id_ in CLASS_TO_ID.items():
-                npred[class_].append((pred_ids == id_).sum().item())
-                ngen[class_].append((target_ids == id_).sum().item())
-                ncand[class_].append((cand_ids == id_).sum().item())
-
-        make_conf_matrix(conf_matrix, outpath, mode, save_as)
-        make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as)
+    return npred_, ngen_, ncand_
 
 
 def make_conf_matrix(cm, outpath, mode, save_as):
@@ -131,8 +137,7 @@ def make_conf_matrix(cm, outpath, mode, save_as):
 
 
 def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as):
-    for class_ in CLASS_TO_ID.keys():
-
+    for class_ in ["charged_hadron", "neutral_hadron", "photon"]:
         # Plot the particle multiplicities
         plt.figure()
         plt.axes()
@@ -149,3 +154,30 @@ def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as):
         plt.legend(loc=4)
         plt.savefig(f"{outpath}/multiplicity_plots_{CLASS_TO_ID[class_]}_{mode}_{save_as}.pdf")
         plt.close()
+
+    return npred, ngen, ncand
+
+
+def make_multiplicity_plots_both(ret_ssl, ret_native, outpath):
+
+    npred_ssl, ngen_ssl, _ = ret_ssl
+    npred_native, ngen_native, _ = ret_native
+
+    for data_ in npred_ssl.keys():
+        for class_ in ["charged_hadron", "neutral_hadron", "photon"]:
+            # Plot the particle multiplicities
+            plt.figure()
+            plt.axes()
+            plt.scatter(ngen_ssl[data_][class_], npred_ssl[data_][class_], marker=".", alpha=0.4, label="ssl-based MLPF")
+            plt.scatter(ngen_native[data_][class_], npred_native[data_][class_], marker=".", alpha=0.4, label="native MLPF")
+            a = 0.5 * min(np.min(npred_ssl[data_][class_]), np.min(ngen_ssl[data_][class_]))
+            b = 1.5 * max(np.max(npred_ssl[data_][class_]), np.max(ngen_ssl[data_][class_]))
+            # plt.xlim(a, b)
+            # plt.ylim(a, b)
+            plt.plot([a, b], [a, b], color="black", ls="--")
+            plt.title(class_)
+            plt.xlabel("number of truth particles")
+            plt.ylabel("number of reconstructed particles")
+            plt.legend(title=data_, loc=4)
+            plt.savefig(f"{outpath}/multiplicity_plots_{CLASS_TO_ID[class_]}_{data_}.pdf")
+            plt.close()

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch_geometric
 from pyg_ssl.args import parse_args
-from pyg_ssl.evaluate import evaluate
+from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
@@ -152,31 +152,17 @@ if __name__ == "__main__":
                 FineTune_VICReg=args.FineTune_VICReg,
             )
 
-            # evaluate the ssl-based mlpf on the VICReg validation
-            print("Testing the ssl model on the VICReg validation dataset")
-            evaluate(
+            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_ssl = evaluate(
                 device,
                 encoder,
                 decoder,
                 mlpf_ssl,
                 batch_size_test,
                 "ssl",
-                data_valid_VICReg,
-                "valid_dataset_VICReg",
                 outpath_ssl,
-            )
-            # evaluate the ssl-based mlpf on the mlpf validation
-            print("Testing the ssl model on the mlpf validation dataset")
-            evaluate(
-                device,
-                encoder,
-                decoder,
-                mlpf_ssl,
-                batch_size_test,
-                "ssl",
-                data_valid_mlpf,
-                "valid_dataset_mlpf",
-                outpath_ssl,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
             )
 
         if args.native:
@@ -211,29 +197,19 @@ if __name__ == "__main__":
                 FineTune_VICReg=False,
             )
 
-            # evaluate the native mlpf on the VICReg validation
-            print("Testing the native model on the VICReg validation dataset")
-            evaluate(
+            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_native = evaluate(
                 device,
                 encoder,
                 decoder,
                 mlpf_native,
                 batch_size_test,
                 "native",
-                data_valid_VICReg,
-                "valid_dataset_VICReg",
                 outpath_native,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
             )
-            # evaluate the native mlpf on the mlpf validation
-            print("Testing the native model on the mlpf validation dataset")
-            evaluate(
-                device,
-                encoder,
-                decoder,
-                mlpf_native,
-                batch_size_test,
-                "native",
-                data_valid_mlpf,
-                "valid_dataset_mlpf",
-                outpath_native,
-            )
+
+        if args.ssl & args.native:
+            # plot multiplicity plot of both at the same time
+            make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
