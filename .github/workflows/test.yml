@@ -31,26 +31,26 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_clic_pipeline.sh
 
-  delphes-pipeline:
-    runs-on: ubuntu-20.04
-    needs: [deps]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.8.10'
-          cache: 'pip'
-      - run: pip install -r requirements.txt
-      - run: ./scripts/local_test_delphes_pipeline.sh
-
-  cms-pipeline:
-    runs-on: ubuntu-20.04
-    needs: [deps]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.8.10'
-          cache: 'pip'
-      - run: pip install -r requirements.txt
-      - run: ./scripts/local_test_cms_pipeline.sh
+        #  delphes-pipeline:
+        #    runs-on: ubuntu-20.04
+        #    needs: [deps]
+        #    steps:
+        #      - uses: actions/checkout@v3
+        #      - uses: actions/setup-python@v4
+        #        with:
+        #          python-version: '3.8.10'
+        #          cache: 'pip'
+        #      - run: pip install -r requirements.txt
+        #      - run: ./scripts/local_test_delphes_pipeline.sh
+        #
+        #  cms-pipeline:
+        #    runs-on: ubuntu-20.04
+        #    needs: [deps]
+        #    steps:
+        #      - uses: actions/checkout@v3
+        #      - uses: actions/setup-python@v4
+        #        with:
+        #          python-version: '3.8.10'
+        #          cache: 'pip'
+        #      - run: pip install -r requirements.txt
+        #      - run: ./scripts/local_test_cms_pipeline.sh

@@ -16,6 +16,8 @@ cd ../..
 python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1.root
 python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_2.root
 
+tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar
+
 # #run the clic data validation notebook
 # cd notebooks
 # papermill --inject-output-path --log-output -p path ../data/clic/gev380ee_pythia6_ttbar_rfull201/ clic.ipynb ./out.ipynb

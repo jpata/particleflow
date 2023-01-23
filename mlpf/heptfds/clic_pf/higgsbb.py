@@ -22,7 +22,7 @@ _CITATION = """
 class ClicHiggsBbbarPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
-        "1.1.0": "Initial release.",
+        "1.0.0": "Initial release.",
         "1.1.0": "Fix postprocessing bug with charge",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
