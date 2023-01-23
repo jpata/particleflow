@@ -18,7 +18,10 @@ NUM=$1
 #SAMPLE=p8_ee_Z_Ztautau_ecm125
 #SAMPLE=p8_ee_tt_ecm365
 #SAMPLE=p8_ee_ZZ_fullhad_ecm365
-SAMPLE=p8_ee_qcd_ecm365
+#SAMPLE=p8_ee_qcd_ecm365
+#SAMPLE=p8_ee_qcd_ecm380
+#SAMPLE=p8_ee_ZH_Htautau_ecm380
+SAMPLE=p8_ee_qcd_ecm380
 
 mkdir -p $OUTDIR/$SAMPLE
 
