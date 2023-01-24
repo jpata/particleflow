@@ -279,7 +279,7 @@ def data_split(dataset, data_split_mode):
     elif data_split_mode == "mix":
 
         data = []
-        for sample in os.listdir(dataset):
+        for sample in ["p8_ee_qcd_ecm365", "p8_ee_tt_ecm365"]:
 
             files = glob.glob(f"{dataset}/{sample}/processed/*")
             data_per_sample = []
