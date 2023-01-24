@@ -1,9 +1,13 @@
+autopep8
 awkward
 boost_histogram
 click
 comet-ml
+cpuonly
 fastjet
 fsspec
+jupyter
+jupyter-book
 keras
 keras-tuner
 matplotlib
@@ -18,6 +22,8 @@ papermill
 plotly
 pre-commit
 pyarrow
+pyg
+pytorch
 ray[default]
 ray[tune]
 scikit-learn
