@@ -18,6 +18,18 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
+  deps-pyg:
+    runs-on: ubuntu-20.04
+    needs: [deps]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
 
   clic-pipeline:
     runs-on: ubuntu-20.04
@@ -57,12 +69,14 @@ jobs:
 
   ssl-pipeline:
     runs-on: ubuntu-20.04
-    needs: [deps]
+    needs: [deps-pyg]
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-    - run: $CONDA/bin/conda env update --file environment.yml --name base
-    - run: ./scripts/local_test_ssl_pipeline.sh
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: ./scripts/local_test_ssl_pipeline.sh

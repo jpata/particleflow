@@ -1,9 +1,12 @@
+autopep8
 awkward
 boost_histogram
 click
 comet-ml
 fastjet
 fsspec
+jupyter
+jupyter-book
 keras
 keras-tuner
 matplotlib
