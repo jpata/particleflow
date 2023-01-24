@@ -69,6 +69,9 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd_high_pt": r"CMS high-$p_T$ QCD+PU events",
     "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
+    "clic_edm_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "clic_edm_qcd_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
+    "clic_edm_zz_fullhad_pf": r"CLIC $ee \rightarrow \mathrm{ZZ} \rightarrow \mathrm{hadrons}$",
 }
 
 

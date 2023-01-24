@@ -1,0 +1,169 @@
+import awkward as ak
+import fastjet
+import numpy as np
+import vector
+
+# from fcc/postprocessing.py
+X_FEATURES_TRK = [
+    "type",
+    "pt",
+    "eta",
+    "phi",
+    "p",
+    "chi2",
+    "ndf",
+    "dEdx",
+    "dEdxError",
+    "radiusOfInnermostHit",
+    "tanLambda",
+    "D0",
+    "omega",
+    "Z0",
+    "time",
+]
+X_FEATURES_CL = [
+    "type",
+    "et",
+    "eta",
+    "phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "iTheta",
+    "energy_ecal",
+    "energy_hcal",
+    "energy_other",
+    "num_hits",
+    "sigma_x",
+    "sigma_y",
+    "sigma_z",
+]
+
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "phi", "energy", "jet_idx"]
+labels = [0, 211, 130, 22, 11, 13]
+
+
+def split_sample(path, test_frac=0.8):
+    files = sorted(list(path.glob("*.parquet")))
+    print("Found {} files in {}".format(files, path))
+    assert len(files) > 0
+    idx_split = int(test_frac * len(files))
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
+    assert len(files_train) > 0
+    assert len(files_test) > 0
+    return {
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
+    }
+
+
+def generate_examples(files):
+    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    min_jet_pt = 1.0  # GeV
+    for fi in files:
+        ret = ak.from_parquet(fi)
+
+        X_track = ret["X_track"]
+        X_cluster = ret["X_cluster"]
+
+        assert len(X_track) == len(X_cluster)
+        nev = len(X_track)
+
+        for iev in range(nev):
+
+            X1 = ak.to_numpy(X_track[iev])
+            X2 = ak.to_numpy(X_cluster[iev])
+
+            if len(X1) == 0 or len(X2) == 0:
+                continue
+
+            ygen_track = ak.to_numpy(ret["ygen_track"][iev])
+            ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
+            ycand_track = ak.to_numpy(ret["ycand_track"][iev])
+            ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+
+            if len(ygen_track) == 0 or len(ygen_cluster) == 0:
+                continue
+
+            # pad feature dim between tracks and clusters to the same size
+            if X1.shape[1] < X2.shape[1]:
+                X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
+            if X2.shape[1] < X1.shape[1]:
+                X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
+
+            # concatenate tracks and clusters in features and targets
+            X = np.concatenate([X1, X2])
+            ygen = np.concatenate([ygen_track, ygen_cluster])
+            ycand = np.concatenate([ycand_track, ycand_cluster])
+
+            assert ygen.shape[0] == X.shape[0]
+            assert ycand.shape[0] == X.shape[0]
+
+            # add jet_idx column
+            ygen = np.concatenate(
+                [
+                    ygen.astype(np.float32),
+                    np.zeros((len(ygen), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+            ycand = np.concatenate(
+                [
+                    ycand.astype(np.float32),
+                    np.zeros((len(ycand), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+
+            # replace PID with index in labels array
+            arr = np.array([labels.index(p) for p in ygen[:, 0]])
+            ygen[:, 0][:] = arr[:]
+            arr = np.array([labels.index(p) for p in ycand[:, 0]])
+            ycand[:, 0][:] = arr[:]
+
+            # prepare gen candidates for clustering
+            cls_id = ygen[..., 0]
+            valid = cls_id != 0
+            # save mapping of index after masking -> index before masking as numpy array
+            # inspired from:
+            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+            cumsum = np.cumsum(valid) - 1
+            _, index_mapping = np.unique(cumsum, return_index=True)
+
+            pt = ygen[valid, Y_FEATURES.index("pt")]
+            eta = ygen[valid, Y_FEATURES.index("eta")]
+            phi = ygen[valid, Y_FEATURES.index("phi")]
+            energy = ygen[valid, Y_FEATURES.index("energy")]
+            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "energy": energy}))
+
+            # cluster jets, sort jet indices in descending order by pt
+            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
+            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+            # retrieve corresponding indices of constituents
+            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+
+            # add index information to ygen and ycand
+            # index jets in descending order by pt starting from 1:
+            # 0 is null (unclustered),
+            # 1 is 1st highest-pt jet,
+            # 2 is 2nd highest-pt jet, ...
+            for jet_idx in sorted_jet_idx:
+                jet_constituents = [
+                    index_mapping[idx] for idx in constituent_idx[jet_idx]
+                ]  # map back to constituent index *before* masking
+                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+
+            yield str(fi) + "_" + str(iev), {
+                "X": X.astype(np.float32),
+                "ygen": ygen,
+                "ycand": ycand,
+            }
+
+
+if __name__ == "__main__":
+    for ex in generate_examples(["data/p8_ee_ZZ_fullhad_ecm365/reco_p8_ee_ZZ_fullhad_ecm365_1.parquet"]):
+        print(ex[0], ex[1]["X"].shape, ex[1]["ygen"].shape, ex[1]["ycand"].shape)

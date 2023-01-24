@@ -115,7 +115,7 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
         N_jets = len(awkward.flatten(yvals["jets_gen_pt"]))
         N_jets_matched_pred = len(yvals["jet_gen_to_pred_genpt"])
         for name, val in [
-            ("jet_matched_frac", N_jets_matched_pred / N_jets),
+            ("jet_matched_frac", N_jets_matched_pred / N_jets if N_jets > 0 else float("nan")),
             ("jet_wd", jet_distances["wd"]),
             ("jet_iqr", jet_distances["iqr"]),
             ("jet_med", jet_distances["p50"]),
@@ -485,6 +485,9 @@ def eval_model(
             eta = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["eta"], valid)])
             energy = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(awkvals[typ]["energy"], valid)])
             phi = awkward.from_iter([np.array(v[m], np.float32) for v, m in zip(phi, valid)])
+
+            if verbose:
+                print(typ, pt)
 
             # If there were no particles, build dummy arrays with the correct datatype
             if len(awkward.flatten(pt)) == 0:
