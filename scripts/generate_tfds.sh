@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # Tallinn
-MANUAL_DIR=/local/joosep/mlpf/cms/v2/
-DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets
-IMG=/home/software/singularity/tf-2.10.0.simg
-CMD="singularity exec -B /local -B /scratch-persistent--env PYTHONPATH=$PYTHONPATH $IMG tfds build "
+export MANUAL_DIR=/local/joosep/mlpf/cms/v2
+export DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets
+export IMG=/home/software/singularity/tf-2.11.0.simg
+export PYTHONPATH=`pwd`/mlpf
+export CMD="singularity exec -B /local -B /scratch-persistent --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # Desktop
 # IMG=/home/joosep/HEP-KBFI/singularity/tf-2.10.0.simg
@@ -29,12 +30,11 @@ $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR
 wait
 
 # CLIC
-$CMD mlpf/heptfds/clic_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qcd.log &
-$CMD mlpf/heptfds/clic_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
-$CMD mlpf/heptfds/clic_pf/zpoleee --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zpoleee.log &
-$CMD mlpf/heptfds/clic_pf/higgsbb --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_higgsbb.log &
-$CMD mlpf/heptfds/clic_pf/higgszz4l --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_higgszz4l.log &
-$CMD mlpf/heptfds/clic_pf/higgsgg --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_higgsgg.log &
+export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep
+$CMD mlpf/heptfds/clic_pf_edm4hep/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qcd.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/zh_htautau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh_htautau.log &
+$CMD mlpf/heptfds/clic_pf/zzfullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zzfullhad.log &
 wait
 
 $CMD mlpf/heptfds/delphes_pf/delphes_pf &> logs/tfds_delphes.log &

@@ -3,13 +3,13 @@ backend: tensorflow
 dataset:
   schema: clic
   target_particles: gen
-  num_input_features: 12
+  num_input_features: 16
   num_output_features: 5
   #(none=0, track=1, cluster=2)
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
   num_output_classes: 6
-  #(px, py, pz, E)
+  #(pt, eta, phi, E)
   num_momentum_outputs: 4
   cls_weight_by_pt: no
   reg_weight_by_pt: no
@@ -235,44 +235,34 @@ train_test_datasets:
   physical:
     batch_per_gpu: 1
     datasets:
-      - clic_ttbar_pf
-      - clic_qcd_pf
-      - clic_higgs_bbbar_pf
-      - clic_higgs_gg_pf
-      - clic_higgs_zz4l_pf
-      - clic_zpoleee_pf
+      - clic_edm_ttbar_pf
+      - clic_edm_zz_fullhad_pf
+      - clic_edm_qcd_pf
+      - clic_edm_zh_htautau_pf
 
-validation_dataset: clic_ttbar_pf
+validation_dataset: clic_edm_ttbar_pf
 validation_batch_size: 50
 validation_num_events: 500
 
 evaluation_datasets:
-  clic_ttbar_pf:
+  clic_edm_ttbar_pf:
     batch_size: 50
     num_events: -1
 
 datasets:
-  clic_ttbar_pf:
+  clic_edm_ttbar_pf:
     version: 1.0.0
     data_dir:
     manual_dir:
-  clic_qcd_pf:
+  clic_edm_zz_fullhad_pf:
     version: 1.0.0
     data_dir:
     manual_dir:
-  clic_higgs_bbbar_pf:
+  clic_edm_qcd_pf:
     version: 1.0.0
     data_dir:
     manual_dir:
-  clic_higgs_gg_pf:
-    version: 1.0.0
-    data_dir:
-    manual_dir:
-  clic_higgs_zz4l_pf:
-    version: 1.0.0
-    data_dir:
-    manual_dir:
-  clic_zpoleee_pf:
+  clic_edm_zh_htautau_pf:
     version: 1.0.0
     data_dir:
     manual_dir:
