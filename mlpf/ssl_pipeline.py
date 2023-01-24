@@ -9,7 +9,7 @@ from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
-from pyg_ssl.utils import data_split, load_VICReg, save_MLPF, save_VICReg
+from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
 from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
@@ -118,8 +118,6 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
-        batch_size_test = 1
-
         if args.ssl:
 
             mlpf_model_kwargs = {
@@ -158,7 +156,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_ssl,
-                batch_size_test,
+                args.batch_size_mlpf,
                 "ssl",
                 outpath_ssl,
                 [data_valid_VICReg, data_valid_mlpf],
@@ -166,8 +164,11 @@ if __name__ == "__main__":
             )
 
         if args.native:
+            input_ = (
+                max(CLUSTERS_X, TRACKS_X) + 1
+            )  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
             mlpf_model_kwargs = {
-                "input_dim": 12,
+                "input_dim": input_,
                 "width": args.width_mlpf,
                 "native_mlpf": True,
                 "embedding_dim": args.embedding_dim,
@@ -203,7 +204,7 @@ if __name__ == "__main__":
                 encoder,
                 decoder,
                 mlpf_native,
-                batch_size_test,
+                args.batch_size_mlpf,
                 "native",
                 outpath_native,
                 [data_valid_VICReg, data_valid_mlpf],

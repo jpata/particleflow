@@ -1,38 +1,39 @@
 #!/bin/bash
 set -e
 
-# download and process the datasets under particleflow/data/clic/
-rm -Rf data/clic/gev380ee_pythia6_ttbar_rfull201
-rm -Rf data/clic/gev380ee_pythia6_qcd_all_rfull201/
+# first go to the particleflow/ directory
+cd ../
 
-mkdir -p data/clic/gev380ee_pythia6_ttbar_rfull201/raw/
-mkdir -p data/clic/gev380ee_pythia6_qcd_all_rfull201/raw/
+# download and process the datasets under particleflow/data/clic_edm4hep/
+rm -Rf data/clic_edm4hep/p8_ee_tt_ecm365
+rm -Rf data/clic_edm4hep/p8_ee_qcd_ecm365/
+
+mkdir -p data/clic_edm4hep/p8_ee_tt_ecm365/raw/
+mkdir -p data/clic_edm4hep/p8_ee_qcd_ecm365/raw/
 
 # download some ttbar test data
-cd data/clic/gev380ee_pythia6_ttbar_rfull201/raw/
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0001_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0002_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0003_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0004_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_ttbar_rfull201/pythia6_ttbar_0005_pandora.parquet
+cd data/clic_edm4hep/p8_ee_tt_ecm365/raw/
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_10.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_100.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1000.parquet
 
 # download some qcd test data
-cd ../../gev380ee_pythia6_qcd_all_rfull201/raw/
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_qcd_all_rfull201/pythia6_qcd_all_0001_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_qcd_all_rfull201/pythia6_qcd_all_0002_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_qcd_all_rfull201/pythia6_qcd_all_0006_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_qcd_all_rfull201/pythia6_qcd_all_0007_pandora.parquet
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic/gev380ee_pythia6_qcd_all_rfull201/pythia6_qcd_all_0008_pandora.parquet
+cd ../../p8_ee_qcd_ecm365/raw/
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_qcd_ecm365/reco_p8_ee_qcd_ecm365_1.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_qcd_ecm365/reco_p8_ee_qcd_ecm365_10.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_qcd_ecm365/reco_p8_ee_qcd_ecm365_100.parquet
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep/p8_ee_qcd_ecm365/reco_p8_ee_qcd_ecm365_1000.parquet
 
 # setup directory for processed datafiles
 cd ../..
-mkdir -p gev380ee_pythia6_ttbar_rfull201/processed
-mkdir -p gev380ee_pythia6_qcd_all_rfull201/processed
+mkdir -p p8_ee_tt_ecm365/processed
+mkdir -p p8_ee_qcd_ecm365/processed
 
 # process the raw datafiles
 cd ../../mlpf/pyg_ssl/
 echo -----------------------
-for sample in ../../data/clic/* ; do
+for sample in ../../data/clic_edm4hep/* ; do
   echo Processing $sample sample
   python3 PFGraphDataset.py --dataset $sample \
     --processed_dir $sample/processed --num-files-merge 100 --num-proc 1

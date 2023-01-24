@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument("--samples", default=-1, help="specefies samples to use")
 
     # directory containing datafiles
-    parser.add_argument("--dataset", type=str, default="../data/clic/", help="dataset path")
+    parser.add_argument("--dataset", type=str, default="../data/clic_edm4hep/", help="dataset path")
 
     # flag to load a pre-trained model
     parser.add_argument("--load_VICReg", dest="load_VICReg", action="store_true", help="loads the model without training")
