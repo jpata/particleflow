@@ -21,8 +21,7 @@ papermill
 plotly
 pre-commit
 pyarrow
-pyg
-pytorch
+pyg-lib
 ray[default]
 ray[tune]
 scikit-learn
@@ -38,6 +37,14 @@ tensorflow-probability
 tensorflow-text
 tf-models-official
 tf2onnx
+torch
+torch-cluster
+torch-geometric
+torch-scatter
+torch-sparse
+torch-spline-conv
+torchaudio
+torchvision
 tqdm
 uproot
 vector
