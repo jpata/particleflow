@@ -53,20 +53,13 @@ def unpack_target_cms(y, num_output_classes, config):
 def unpack_target_clic(y, num_output_classes, config):
     msk_pid = tf.cast(y[..., 0:1] != 0, tf.float32)
 
-    px = y[..., 2:3] * msk_pid
-    py = y[..., 3:4] * msk_pid
-    pz = y[..., 4:5] * msk_pid
+    pt = y[..., 2:3] * msk_pid
+    eta = y[..., 3:4] * msk_pid
+    phi = y[..., 4:5] * msk_pid
     energy = y[..., 5:6] * msk_pid
 
-    pt = tf.math.sqrt(px**2 + py**2) * msk_pid
-    p = tf.math.sqrt(px**2 + py**2 + pz**2) * msk_pid
-
-    cos_theta = tf.math.divide_no_nan(pz, p)
-    theta = tf.math.acos(cos_theta)
-    eta = -tf.math.log(tf.math.tan(theta / 2.0)) * msk_pid
-
-    sin_phi = tf.math.divide_no_nan(py, pt) * msk_pid
-    cos_phi = tf.math.divide_no_nan(px, pt) * msk_pid
+    sin_phi = tf.math.sin(phi) * msk_pid
+    cos_phi = tf.math.cos(phi) * msk_pid
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
@@ -81,7 +74,7 @@ def unpack_target_clic(y, num_output_classes, config):
     if config["loss"]["event_loss"] != "none":
         jet_idx = y[..., 6:7] * msk_pid
         pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx, msk_pid], axis=-1)
-        ret["pt_e_eta_phi"] = pt_e_eta_phi * msk_pid
+        ret["pt_e_eta_phi"] = pt_e_eta_phi
 
     if config["loss"]["met_loss"] != "none":
         px = pt * cos_phi
@@ -121,6 +114,9 @@ def get_map_to_supervised(config):
     def func(data_item):
         X = data_item["X"]
         y = data_item["y{}".format(target_particles)]
+
+        X = tf.clip_by_value(X, -1e12, 1e12)
+        y = tf.clip_by_value(y, -1e12, 1e12)
 
         # mask to keep only nonzero (not zero-padded due to batching) elements
         msk_elems = tf.cast(X[..., 0:1] != 0, tf.float32)

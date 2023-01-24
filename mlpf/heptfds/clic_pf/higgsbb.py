@@ -20,11 +20,14 @@ _CITATION = """
 
 
 class ClicHiggsBbbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("1.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "1.1.0": "Fix postprocessing bug with charge",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
+    mkdir -p data
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic $MANUAL_DIR/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -56,7 +59,8 @@ class ClicHiggsBbbarPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        return split_sample(Path("data/clic/gev380ee_pythia6_higgs_bbar_full201/"))
+        path = dl_manager.manual_dir
+        return split_sample(Path(path / "gev380ee_pythia6_higgs_bbar_full201"))
 
     def _generate_examples(self, files):
         return generate_examples(files)
