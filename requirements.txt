@@ -3,7 +3,6 @@ awkward
 boost_histogram
 click
 comet-ml
-cpuonly
 fastjet
 fsspec
 jupyter
