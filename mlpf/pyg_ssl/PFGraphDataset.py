@@ -1,13 +1,77 @@
 import multiprocessing
 import os.path as osp
-import sys
 from glob import glob
 
+import awkward as ak
+import numpy as np
 import torch
 from torch_geometric.data import Data, Dataset
 
-sys.path.append("..")
-from data_clic.postprocessing import prepare_data_clic
+labels = [0, 211, 130, 22, 11, 13]
+
+
+def generate_examples(files):
+    """
+    Function that reads the clic data information from the paqruet files.
+
+    Args
+        list of files
+
+    Returns
+        a generator which yields [{filename}_{index}, X, ygen, ycand]
+
+    """
+
+    for fi in files:
+        ret = ak.from_parquet(fi)
+
+        X_track = ret["X_track"]
+        X_cluster = ret["X_cluster"]
+
+        assert len(X_track) == len(X_cluster)
+        nev = len(X_track)
+
+        for iev in range(nev):
+
+            X1 = ak.to_numpy(X_track[iev])
+            X2 = ak.to_numpy(X_cluster[iev])
+
+            if len(X1) == 0 or len(X2) == 0:
+                continue
+
+            ygen_track = ak.to_numpy(ret["ygen_track"][iev])
+            ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
+            ycand_track = ak.to_numpy(ret["ycand_track"][iev])
+            ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+
+            if len(ygen_track) == 0 or len(ygen_cluster) == 0:
+                continue
+
+            # pad feature dim between tracks and clusters to the same size
+            if X1.shape[1] < X2.shape[1]:
+                X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
+            if X2.shape[1] < X1.shape[1]:
+                X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
+
+            # concatenate tracks and clusters in features and targets
+            X = np.concatenate([X1, X2])
+            ygen = np.concatenate([ygen_track, ygen_cluster])
+            ycand = np.concatenate([ycand_track, ycand_cluster])
+
+            assert ygen.shape[0] == X.shape[0]
+            assert ycand.shape[0] == X.shape[0]
+
+            # replace PID with index in labels array
+            arr = np.array([labels.index(p) for p in ygen[:, 0]])
+            ygen[:, 0][:] = arr[:]
+            arr = np.array([labels.index(p) for p in ycand[:, 0]])
+            ycand[:, 0][:] = arr[:]
+
+            yield str(fi) + "_" + str(iev), {
+                "X": X.astype(np.float32),
+                "ygen": ygen,
+                "ycand": ycand,
+            }
 
 
 def process_func(args):
@@ -62,19 +126,20 @@ class PFGraphDataset(Dataset):
 
     def process_single_file(self, raw_file_name):
         """
-        Loads raw datafile information and generates PyG Data() objects and stores them in .pt format.
+        Loads raw information from parquet file and generates PyG Data() objects and stores them in .pt format.
 
         Args
-            raw_file_name: raw data file name.
+            raw_file_name: raw data file name (.parquet).
         Returns
             batched_data: a list of Data() objects of the form
              clic ~ Data(x=[#, 12], ygen=[#, 5], ygen_id=[#], ycand=[#, 5], ycand_id=[#])
         """
 
-        events = prepare_data_clic(osp.join(self.raw_dir, raw_file_name))
+        events = generate_examples([osp.join(self.raw_dir, raw_file_name)])
+
         data = []
         for event in events:
-            Xs, ys_gen, ys_cand = event[0], event[1], event[2]
+            Xs, ys_gen, ys_cand = event[1]["X"], event[1]["ygen"], event[1]["ycand"]
             d = Data(
                 x=torch.tensor(Xs),
                 ygen=torch.tensor(ys_gen[:, 1:]),

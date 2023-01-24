@@ -13,11 +13,50 @@ from torch_geometric.data import Batch
 
 matplotlib.use("Agg")
 
-# define input/output dimensions
-CLUSTERS_X = 6
-TRACKS_X = 11
-COMMON_X = 11
-NUM_CLASSES = 6
+# define input dimensions
+X_FEATURES_TRK = [
+    "type",
+    "pt",
+    "eta",
+    "phi",
+    "p",
+    "chi2",
+    "ndf",
+    "dEdx",
+    "dEdxError",
+    "radiusOfInnermostHit",
+    "tanLambda",
+    "D0",
+    "omega",
+    "Z0",
+    "time",
+]
+X_FEATURES_CL = [
+    "type",
+    "et",
+    "eta",
+    "phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "iTheta",
+    "energy_ecal",
+    "energy_hcal",
+    "energy_other",
+    "num_hits",
+    "sigma_x",
+    "sigma_y",
+    "sigma_z",
+]
+
+CLUSTERS_X = len(X_FEATURES_CL) - 1  # remove the `type` feature
+TRACKS_X = len(X_FEATURES_TRK) - 1  # remove the `type` feature
+
+# define regression output
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "phi", "energy"]
+
+# define classification output
 CLASS_NAMES_CLIC_LATEX = [
     "none",
     "chhad",
@@ -26,6 +65,7 @@ CLASS_NAMES_CLIC_LATEX = [
     r"$e^\pm$",
     r"$\mu^\pm$",
 ]
+NUM_CLASSES = len(CLASS_NAMES_CLIC_LATEX)
 
 
 # function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
@@ -35,7 +75,9 @@ def distinguish_PFelements(batch):
     cluster_id = 2
 
     tracks = Batch(
-        x=batch.x[batch.x[:, 0] == track_id][:, 1:].float(),  # remove the first input feature which is not needed anymore
+        x=batch.x[batch.x[:, 0] == track_id][:, 1:].float()[
+            :, :TRACKS_X
+        ],  # remove the first input feature which is not needed anymore
         ygen=batch.ygen[batch.x[:, 0] == track_id],
         ygen_id=batch.ygen_id[batch.x[:, 0] == track_id],
         ycand=batch.ycand[batch.x[:, 0] == track_id],
@@ -52,7 +94,6 @@ def distinguish_PFelements(batch):
         ycand_id=batch.ycand_id[batch.x[:, 0] == cluster_id],
         batch=batch.batch[batch.x[:, 0] == cluster_id],
     )
-
     return tracks, clusters
 
 
@@ -211,7 +252,7 @@ def data_split(dataset, data_split_mode):
     print(f"Will use data split mode `{data_split_mode}`.")
 
     if data_split_mode == "quick":
-        data = torch.load(f"{dataset}/gev380ee_pythia6_zpole_ee_rfull201/processed/data_0.pt")
+        data = torch.load(f"{dataset}/p8_ee_ZH_Htautau_ecm380/processed/data_0.pt")
         data_train_VICReg = data[: round(0.8 * len(data))]
         data_valid_VICReg = data[: round(0.8 * len(data))]
         data_train_mlpf = data_train_VICReg
@@ -219,8 +260,8 @@ def data_split(dataset, data_split_mode):
 
     elif data_split_mode == "domain_adaptation":
 
-        qcd_files = glob.glob(f"{dataset}/gev380ee_pythia6_qcd_all_rfull201/processed/*")
-        ttbar_files = glob.glob(f"{dataset}/gev380ee_pythia6_ttbar_rfull201/processed/*")
+        qcd_files = glob.glob(f"{dataset}/p8_ee_qcd_ecm365/processed/*")
+        ttbar_files = glob.glob(f"{dataset}/p8_ee_tt_ecm365/processed/*")
 
         qcd_data = []
         for file in qcd_files:

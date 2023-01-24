@@ -124,9 +124,6 @@ def train(
 
         losses += loss.detach()
 
-        # if i == 20:
-        #     break
-
     losses = losses.cpu().item() / len(loader)
 
     return losses
