@@ -32,6 +32,9 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
         {},
     )
 
+    mlpf.eval()
+    encoder.eval()
+    decoder.eval()
     for j, data in enumerate(data_):
         print(f"Testing the {mode} model on the {save_as_[j]}")
         test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
@@ -40,14 +43,10 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
         for class_ in CLASS_TO_ID.keys():
             npred[class_], ngen[class_], ncand[class_] = [], [], []
 
-        mlpf.eval()
-        encoder.eval()
-        decoder.eval()
         conf_matrix = np.zeros((6, 6))
         with torch.no_grad():
             for i, batch in enumerate(test_loader):
-                if i % 500 == 0:
-                    print(f"making predictions: {i+1}/{len(test_loader)}")
+                print(f"making predictions: {i+1}/{len(test_loader)}")
 
                 if mode == "ssl":
                     # make transformation
@@ -78,10 +77,17 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                     labels=range(NUM_CLASSES),
                 )
 
-                for class_, id_ in CLASS_TO_ID.items():
-                    npred[class_].append((pred_ids == id_).sum().item())
-                    ngen[class_].append((target_ids == id_).sum().item())
-                    ncand[class_].append((cand_ids == id_).sum().item())
+                # for multiplicity plots, must reduce the batch dimension
+                for batch_index in range(batch_size_mlpf):
+                    # unpack the batch
+                    pred = pred_ids[event.batch == batch_index]
+                    target = target_ids[event.batch == batch_index]
+                    cand = cand_ids[event.batch == batch_index]
+
+                    for class_, id_ in CLASS_TO_ID.items():
+                        npred[class_].append((pred == id_).sum().item())
+                        ngen[class_].append((target == id_).sum().item())
+                        ncand[class_].append((cand == id_).sum().item())
 
             make_conf_matrix(conf_matrix, outpath, mode, save_as_[j])
             npred_[save_as_[j]], ngen_[save_as_[j]], ncand_[save_as_[j]] = make_multiplicity_plots(
