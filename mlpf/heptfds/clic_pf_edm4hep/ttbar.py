@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import tensorflow as tf
-from clic_utils import (
+from utils_edm import (
     X_FEATURES_CL,
     X_FEATURES_TRK,
     Y_FEATURES,
@@ -12,22 +12,19 @@ from clic_utils import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC dataset with ttbar
+CLIC EDM4HEP dataset with ttbar
 """
 
 _CITATION = """
 """
 
 
-class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.1.0")
+class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
+    VERSION = tfds.core.Version("1.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
-        "1.1.0": "Fix postprocessing bug with charge",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    mkdir -p data
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic $MANUAL_DIR/
     """
 
     def _info(self) -> tfds.core.DatasetInfo:
@@ -59,8 +56,7 @@ class ClicTtbarPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        path = dl_manager.manual_dir
-        return split_sample(Path(path / "gev380ee_pythia6_ttbar_rfull201"))
+        return split_sample(Path("data/p8_ee_tt_ecm365/"))
 
     def _generate_examples(self, files):
         return generate_examples(files)
