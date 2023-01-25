@@ -1,43 +1,44 @@
-from ray.tune import grid_search, choice, loguniform, quniform
+from ray.tune import grid_search  # choice, loguniform, quniform
 
 raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
 samp = grid_search
 # search_space = {
-        # Optimizer parameters
-        # "lr": samp([1e-4, 1e-3]),
-        # "activation": samp(["elu"]),
-        # "batch_size_physical": samp([32, 40]),
-        # "batch_size_delphes": samp([32, 40]),
-        # "batch_size_gun": samp([600]),
-        # "expdecay_decay_steps": samp([2000]),
+# Optimizer parameters
+# "lr": samp([1e-4, 1e-3]),
+# "activation": samp(["elu"]),
+# "batch_size_physical": samp([32, 40]),
+# "batch_size_delphes": samp([32, 40]),
+# "batch_size_gun": samp([600]),
+# "expdecay_decay_steps": samp([2000]),
 
-        # Model parameters
-        # "layernorm": samp([False]),
-        # "ffn_dist_hidden_dim": samp([64, 256]),
-        # "ffn_dist_num_layers": samp([1]),
-        # "distance_dim": samp([128]),
-        # "num_node_messages": samp([1]),
-        # "num_graph_layers_id": samp([0, 1, 2, 3, 4]),
-        # "num_graph_layers_reg": samp([0, 1, 2, 3, 4]),
-        # "dropout": samp([0.0]),
-        # "bin_size": samp([32, 64, 128]),
-        # "clip_value_low": samp([0.0]),
-        # "dist_norm": samp(["l1", "l2"]),
-        # "normalize_degrees": samp([True]),
-        # "output_dim": samp([64, 128, 256]),
-        # "event_loss": samp(["none", "sliced_wasserstein", "gen_jet_logcosh", "hist_2d"]),  # none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
-        # "met_loss": samp([
-        #         "none",
-        #         {"type": "Huber", "delta": 10.0}
-        #     ]),
-        # "event_and_met_loss": samp([
-        #         ("none", "none"),
-        #         ("sliced_wasserstein", "none"),
-        #         ("gen_jet_logcosh", "none"),
-        #         # ("hist_2d", "none"),
-        #         ("none", "met"),
-            # ]),
-        # "mask_reg_cls0": samp([False, True]),
+# Model parameters
+# "layernorm": samp([False]),
+# "ffn_dist_hidden_dim": samp([64, 256]),
+# "ffn_dist_num_layers": samp([1]),
+# "distance_dim": samp([128]),
+# "num_node_messages": samp([1]),
+# "num_graph_layers_id": samp([0, 1, 2, 3, 4]),
+# "num_graph_layers_reg": samp([0, 1, 2, 3, 4]),
+# "dropout": samp([0.0]),
+# "bin_size": samp([32, 64, 128]),
+# "clip_value_low": samp([0.0]),
+# "dist_norm": samp(["l1", "l2"]),
+# "normalize_degrees": samp([True]),
+# "output_dim": samp([64, 128, 256]),
+# # none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+# "event_loss": samp(["none", "sliced_wasserstein", "gen_jet_logcosh", "hist_2d"]),
+# "met_loss": samp([
+#         "none",
+#         {"type": "Huber", "delta": 10.0}
+#     ]),
+# "event_and_met_loss": samp([
+#         ("none", "none"),
+#         ("sliced_wasserstein", "none"),
+#         ("gen_jet_logcosh", "none"),
+#         # ("hist_2d", "none"),
+#         ("none", "met"),
+# ]),
+# "mask_reg_cls0": samp([False, True]),
 # }
 
 # search_space = {
@@ -129,7 +130,7 @@ def set_raytune_search_parameters(search_space, config):
 
     if "batch_multiplier" in search_space.keys():
         if not config["batching"]["bucket_by_sequence_length"]:
-            raise ValueError("batch_multiplier given but bucket_by_sequence_length is set to False. Please check config.")
+            raise ValueError("batch_multiplier given but bucket_by_sequence_length is set to False. Check config.")
         config["batching"]["batch_multiplier"] = search_space["batch_multiplier"]
 
     if "batch_size_physical" in search_space.keys():
@@ -215,6 +216,5 @@ def set_raytune_search_parameters(search_space, config):
         config["parameters"]["output_decoding"]["eta_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["phi_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["energy_num_layers"] = search_space["out_num_layers"]
-
 
     return config

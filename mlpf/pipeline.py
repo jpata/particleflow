@@ -484,7 +484,6 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
-
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, ds_train.num_steps())
 
     callbacks = prepare_callbacks(
