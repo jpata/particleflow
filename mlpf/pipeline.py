@@ -404,7 +404,7 @@ def find_lr(config, outdir, figname, logscale):
     # Decide tf.distribute.strategy depending on number of available GPUs
     strategy, num_gpus, num_batches_multiplier = get_strategy()
 
-    ds_train, _, _ = get_datasets(
+    ds_train = get_datasets(
         config["train_test_datasets"],
         config,
         num_batches_multiplier,
@@ -418,7 +418,7 @@ def find_lr(config, outdir, figname, logscale):
         callbacks = [lr_finder]
 
         model.fit(
-            ds_train.repeat(),
+            ds_train.tensorflow_dataset.repeat(),
             epochs=max_steps,
             callbacks=callbacks,
             steps_per_epoch=1,
@@ -484,6 +484,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
+
     model_builder, optim_callbacks = hypertuning.get_model_builder(config, ds_train.num_steps())
 
     callbacks = prepare_callbacks(
@@ -528,6 +529,7 @@ def raytune_build_model_and_train(
     ntest=None,
     name=None,
     seeds=False,
+    comet_online=False,
 ):
     from collections import Counter
 
@@ -546,19 +548,30 @@ def raytune_build_model_and_train(
     if config is not None:
         full_config = set_raytune_search_parameters(search_space=config, config=full_config)
 
-    logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
-    experiment = OfflineExperiment(
-        project_name="particleflow-tf-gen",
-        auto_metric_logging=True,
-        auto_param_logging=True,
-        auto_histogram_weight_logging=True,
-        auto_histogram_gradient_logging=False,
-        auto_histogram_activation_logging=False,
-        offline_directory=tune.get_trial_dir() + "/cometml",
-    )
+    if comet_online:
+        logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+        experiment = Experiment(
+            project_name="particleflow-tf",
+            auto_metric_logging=True,
+            auto_param_logging=True,
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=False,
+            auto_histogram_activation_logging=False,
+        )
+    else:
+        logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
+        experiment = OfflineExperiment(
+            project_name="particleflow-tf",
+            auto_metric_logging=True,
+            auto_param_logging=True,
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=False,
+            auto_histogram_activation_logging=False,
+            offline_directory=tune.get_trial_dir() + "/cometml",
+        )
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
-    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(full_config, num_batches_multiplier, ntrain, ntest)
 
     logging.info("num_train_steps", ds_train.num_steps())
     logging.info("num_test_steps", ds_test.num_steps())
@@ -579,11 +592,12 @@ def raytune_build_model_and_train(
 
     callbacks.append(optim_callbacks)
 
+    # if metrics=None all Keras logs should be logged to the Tune logs
     tune_report_checkpoint_callback = TuneReportCheckpointCallback(
         metrics=[
-            "adam_beta_1",
+            # "adam_beta_1",
             "charge_loss",
-            "cls_acc_unweighted",
+            # "cls_acc_unweighted",
             "cls_loss",
             "cos_phi_loss",
             "energy_loss",
@@ -593,8 +607,8 @@ def raytune_build_model_and_train(
             "pt_loss",
             "sin_phi_loss",
             "val_charge_loss",
-            "val_cls_acc_unweighted",
-            "val_cls_acc_weighted",
+            # "val_cls_acc_unweighted",
+            # "val_cls_acc_weighted",
             "val_cls_loss",
             "val_cos_phi_loss",
             "val_energy_loss",
@@ -602,6 +616,12 @@ def raytune_build_model_and_train(
             "val_loss",
             "val_pt_loss",
             "val_sin_phi_loss",
+            "val_jet_wd",
+            "val_jet_iqr",
+            "val_jet_med",
+            "val_met_wd",
+            "val_met_iqr",
+            "val_met_med",
         ],
     )
 
@@ -616,8 +636,8 @@ def raytune_build_model_and_train(
 
     try:
         model.fit(
-            ds_train.repeat(),
-            validation_data=ds_test.repeat(),
+            ds_train.tensorflow_dataset.repeat(),
+            validation_data=ds_test.tensorflow_dataset.repeat(),
             epochs=full_config["setup"]["num_epochs"],
             callbacks=callbacks,
             steps_per_epoch=ds_train.num_steps(),
@@ -659,6 +679,7 @@ def raytune_build_model_and_train(
     type=int,
 )
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
+@click.option("--comet-online", help="use comet-ml online logging", is_flag=True)
 def raytune(
     config,
     name,
@@ -670,6 +691,7 @@ def raytune(
     ntrain,
     ntest,
     seeds,
+    comet_online,
 ):
     import ray
     from ray import tune
@@ -723,6 +745,7 @@ def raytune(
             ntest=ntest,
             name=name,
             seeds=seeds,
+            comet_online=comet_online,
         ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},
@@ -736,7 +759,7 @@ def raytune(
         resume=resume,
         max_failures=2,
         sync_config=sync_config,
-        stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
+        # stop=tune.stopper.MaximumIterationStopper(cfg["setup"]["num_epochs"]),
     )
     end = datetime.now()
     logging.info("Total time of tune.run(...): {}".format(end - start))

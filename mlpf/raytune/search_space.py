@@ -1,67 +1,86 @@
-from ray.tune import grid_search
+from ray.tune import grid_search, choice, loguniform, quniform
 
 raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
 samp = grid_search
-search_space = {
-    # Optimizer parameters
-    "lr": samp([1e-3]),
-    "activation": samp(["elu"]),
-    "batch_size_physical": samp([32]),
-    # "batch_size_gun": samp([600]),
-    "expdecay_decay_steps": samp([2000]),
-    # Model parameters
-    "layernorm": samp([False]),
-    "ffn_dist_hidden_dim": samp([64, 256]),
-    "ffn_dist_num_layers": samp([1]),
-    "distance_dim": samp([128]),
-    "num_node_messages": samp([1]),
-    "num_graph_layers_common": samp([3]),
-    "num_graph_layers_energy": samp([3]),
-    "dropout": samp([0.0]),
-    "bin_size": samp([160]),
-    "clip_value_low": samp([0.0]),
-    "normalize_degrees": samp([True]),
-    "output_dim": samp([128]),
-    # "event_loss": samp(["none", "sliced_wasserstein", "gen_jet_logcosh", "hist_2d"]),
-    # "met_loss": samp([
-    #         "none",
-    #         {"type": "Huber", "delta": 10.0}
-    #     ]),
-    "event_and_met_loss": samp(
-        [
-            ("none", "none"),
-            ("sliced_wasserstein", "none"),
-            ("gen_jet_logcosh", "none"),
-            ("hist_2d", "none"),
-            ("none", "met"),
-        ]
-    ),
-    # "mask_reg_cls0": samp([False, True]),
-}
+# search_space = {
+        # Optimizer parameters
+        # "lr": samp([1e-4, 1e-3]),
+        # "activation": samp(["elu"]),
+        # "batch_size_physical": samp([32, 40]),
+        # "batch_size_delphes": samp([32, 40]),
+        # "batch_size_gun": samp([600]),
+        # "expdecay_decay_steps": samp([2000]),
+
+        # Model parameters
+        # "layernorm": samp([False]),
+        # "ffn_dist_hidden_dim": samp([64, 256]),
+        # "ffn_dist_num_layers": samp([1]),
+        # "distance_dim": samp([128]),
+        # "num_node_messages": samp([1]),
+        # "num_graph_layers_id": samp([0, 1, 2, 3, 4]),
+        # "num_graph_layers_reg": samp([0, 1, 2, 3, 4]),
+        # "dropout": samp([0.0]),
+        # "bin_size": samp([32, 64, 128]),
+        # "clip_value_low": samp([0.0]),
+        # "dist_norm": samp(["l1", "l2"]),
+        # "normalize_degrees": samp([True]),
+        # "output_dim": samp([64, 128, 256]),
+        # "event_loss": samp(["none", "sliced_wasserstein", "gen_jet_logcosh", "hist_2d"]),  # none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
+        # "met_loss": samp([
+        #         "none",
+        #         {"type": "Huber", "delta": 10.0}
+        #     ]),
+        # "event_and_met_loss": samp([
+        #         ("none", "none"),
+        #         ("sliced_wasserstein", "none"),
+        #         ("gen_jet_logcosh", "none"),
+        #         # ("hist_2d", "none"),
+        #         ("none", "met"),
+            # ]),
+        # "mask_reg_cls0": samp([False, True]),
+# }
 
 # search_space = {
-# Optimizer parameters
-# "lr": loguniform(1e-4, 3e-2),
-# "activation": "elu",
-# "batch_size_physical": quniform(4, 32, 4),
-# "batch_size_gun": quniform(100, 800, 100),
-# "expdecay_decay_steps": quniform(10, 2000, 10),
-# "expdecay_decay_rate": uniform(0.9, 1),
-# Model parameters
-# "layernorm": quniform(0, 1, 1),
-# "ffn_dist_hidden_dim": quniform(64, 256, 64),
-# "ffn_dist_num_layers": quniform(1, 3, 1),
-# "distance_dim": quniform(64, 512, 64),
-# "num_node_messages": quniform(1, 3, 1),
-# "num_graph_layers_common": quniform(2, 4, 1),
-# "num_graph_layers_energy": quniform(2, 4, 1),
-# "dropout": uniform(0.0, 0.5),
-# "bin_size": quniform(160, 320, 160),
-# "clip_value_low": uniform(0.0, 0.2),
-# "dist_mult": uniform(0.01, 0.2),
-# "normalize_degrees": quniform(0, 1, 1),
-# "output_dim": quniform(64, 512, 64),
+#     # Optimizer parameters
+#     "lr": loguniform(1e-4, 1e-2),
+#     # "activation": "elu",
+#     "batch_size_physical": samp([24, 40]),
+#     # "batch_size_gun": quniform(100, 800, 100),
+#     # "batch_size_delphes": samp([8, 16, 24]),
+#     # "expdecay_decay_steps": quniform(10, 2000, 10),
+#     # "expdecay_decay_rate": uniform(0.9, 1),
+#     # Model parameters
+#     "out_hidden_dim": samp([32, 64, 128, 256]),
+#     "out_num_layers": samp([1, 2, 3]),
+#     "node_encoding_hidden_dim": samp([32, 64, 128, 256]),
+#     # "layernorm": quniform(0, 1, 1),
+#     "ffn_dist_hidden_dim": quniform(64, 256, 64),
+#     "ffn_dist_num_layers": quniform(1, 3, 1),
+#     "distance_dim": quniform(32, 256, 32),
+#     "num_node_messages": quniform(1, 3, 1),
+#     "num_graph_layers_id": quniform(0, 4, 1),
+#     "num_graph_layers_reg": quniform(0, 4, 1),
+#     # "dropout": uniform(0.0, 0.5),
+#     "bin_size": choice([32, 64, 128, 256]),
+#     # "clip_value_low": uniform(0.0, 0.1),
+#     # "dist_mult": uniform(0.01, 0.2),
+#     # "normalize_degrees": quniform(0, 1, 1),
+#     "output_dim": choice([8, 16, 32, 64, 128, 256]),
+#     "lr_schedule": choice(["none", "cosinedecay"])  # exponentialdecay, cosinedecay, onecycle, none
+#     # "weight_decay": loguniform(1e-6, 1e-1),
+#     # "event_loss": choice([None, "sliced_wasserstein", "gen_jet_logcosh", "gen_jet_mse", "hist_2d"]),
+#     # "mask_reg_cls0": choice([False, True]),
 # }
+
+# onecycle scan
+search_space = {
+    # "lr": samp([1e-4, 1e-3, 1e-2]),
+    # "batch_size_physical": samp([24, 40]),
+    "batch_multiplier": samp([1, 5, 10]),
+    # "model": samp(["gnn_dense", "transformer"]),
+    # "lr_schedule": samp(["none", "cosinedecay", "onecycle"]),
+    # "optimizer": samp(["pcgrad_adam", "adam", "sgd"]),
+}
 
 
 def set_raytune_search_parameters(search_space, config):
@@ -107,6 +126,11 @@ def set_raytune_search_parameters(search_space, config):
 
     if "lr" in search_space.keys():
         config["setup"]["lr"] = search_space["lr"]
+
+    if "batch_multiplier" in search_space.keys():
+        if not config["batching"]["bucket_by_sequence_length"]:
+            raise ValueError("batch_multiplier given but bucket_by_sequence_length is set to False. Please check config.")
+        config["batching"]["batch_multiplier"] = search_space["batch_multiplier"]
 
     if "batch_size_physical" in search_space.keys():
         config["train_test_datasets"]["physical"]["batch_per_gpu"] = int(search_space["batch_size_physical"])
@@ -162,5 +186,35 @@ def set_raytune_search_parameters(search_space, config):
 
     if "weight_decay" in search_space.keys():
         config["optimizer"]["adamw"]["weight_decay"] = search_space["weight_decay"]
+
+    if "optimizer" in search_space.keys():
+        if search_space["optimizer"] == "pcgrad_adam":
+            config["setup"]["optimizer"] = "adam"
+            config["optimizer"]["adam"]["pcgrad"] = True
+        elif search_space["optimizer"] == "adam":
+            config["setup"]["optimizer"] = "adam"
+            config["optimizer"]["adam"]["pcgrad"] = False
+        else:
+            config["setup"]["optimizer"] = search_space["optimizer"]
+
+    if "node_encoding_hidden_dim" in search_space.keys():
+        config["parameters"]["node_encoding_hidden_dim"] = search_space["node_encoding_hidden_dim"]
+
+    if "out_hidden_dim" in search_space.keys():
+        config["parameters"]["output_decoding"]["id_hidden_dim"] = search_space["out_hidden_dim"]
+        config["parameters"]["output_decoding"]["charge_hidden_dim"] = search_space["out_hidden_dim"]
+        config["parameters"]["output_decoding"]["pt_hidden_dim"] = search_space["out_hidden_dim"]
+        config["parameters"]["output_decoding"]["eta_hidden_dim"] = search_space["out_hidden_dim"]
+        config["parameters"]["output_decoding"]["phi_hidden_dim"] = search_space["out_hidden_dim"]
+        config["parameters"]["output_decoding"]["energy_hidden_dim"] = search_space["out_hidden_dim"]
+
+    if "hidden_dim" in search_space.keys():
+        config["parameters"]["output_decoding"]["id_num_layers"] = search_space["out_num_layers"]
+        config["parameters"]["output_decoding"]["charge_num_layers"] = search_space["out_num_layers"]
+        config["parameters"]["output_decoding"]["pt_num_layers"] = search_space["out_num_layers"]
+        config["parameters"]["output_decoding"]["eta_num_layers"] = search_space["out_num_layers"]
+        config["parameters"]["output_decoding"]["phi_num_layers"] = search_space["out_num_layers"]
+        config["parameters"]["output_decoding"]["energy_num_layers"] = search_space["out_num_layers"]
+
 
     return config
