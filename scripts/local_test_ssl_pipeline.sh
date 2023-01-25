@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-# first go to the particleflow/ directory
-cd ../
-
 # download and process the datasets under particleflow/data/clic_edm4hep/
 rm -Rf data/clic_edm4hep/p8_ee_tt_ecm365
 rm -Rf data/clic_edm4hep/p8_ee_qcd_ecm365/

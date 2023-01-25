@@ -79,11 +79,23 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
             event = batch.to(device)
 
         # make mlpf forward pass
-        pred_ids_one_hot = mlpf(event.to(device))
-        target_ids = event.to(device).ygen_id
+        event_on_device = event.to(device)
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event_on_device)
+        target_ids = event_on_device.ygen_id
+
+        target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
+        target_charge = event_on_device.ygen[:, 0:1].to(dtype=torch.float32)
 
         weights = compute_weights(device, target_ids, num_classes=6)  # to accomodate class imbalance
-        loss = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+        loss_id = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+        msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+        loss_momentum = torch.nn.functional.huber_loss(
+            pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+        )  # for regressing p4
+        loss_charge = torch.nn.functional.huber_loss(
+            pred_charge * msk_true_particle, target_charge * msk_true_particle
+        )  # for regressing p4
+        loss = loss_id + loss_momentum + loss_charge
 
         # update parameters
         if is_train:

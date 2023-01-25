@@ -168,9 +168,10 @@ def load_eval_data(path, max_files=None):
             yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
 
     # Get the classification output as a class ID
-    yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
-    yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
-    yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
+    if "gen_cls_id" not in yvals.keys():
+        yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
+        yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
+        yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
 
     for typ in ["gen", "cand", "pred"]:
 
@@ -185,7 +186,7 @@ def load_eval_data(path, max_files=None):
             yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
 
     for typ in ["gen", "cand", "pred"]:
-        for val in ["pt", "eta", "sin_phi", "cos_phi", "charge", "energy"]:
+        for val in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
             yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
 
     yvals.update(compute_jet_ratio(data, yvals))

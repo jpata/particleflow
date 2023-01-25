@@ -45,7 +45,7 @@ class MLPF(nn.Module):
             )
 
         # DNN that acts on the node level to predict the PID
-        self.nn = nn.Sequential(
+        self.nn_id = nn.Sequential(
             nn.Linear(embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
@@ -53,6 +53,26 @@ class MLPF(nn.Module):
             nn.Linear(width, width),
             self.act(),
             nn.Linear(width, NUM_CLASSES),
+        )
+
+        self.nn_reg = nn.Sequential(
+            nn.Linear(embedding_dim, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, 4),
+        )
+
+        self.nn_charge = nn.Sequential(
+            nn.Linear(embedding_dim, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, 1),
         )
 
     def forward(self, batch):
@@ -72,6 +92,11 @@ class MLPF(nn.Module):
             embedding = conv(embedding, batch)
 
         # predict the PIDs
-        preds_id = self.nn(embedding)
+        preds_id = self.nn_id(embedding)
 
-        return preds_id
+        # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
+        preds_momentum = self.nn_reg(embedding) + input_[:, 1:5]
+
+        pred_charge = self.nn_charge(embedding)
+
+        return preds_id, preds_momentum, pred_charge

@@ -1,6 +1,7 @@
 import multiprocessing
 import os.path as osp
 from glob import glob
+import tqdm
 
 import awkward as ak
 import numpy as np
@@ -35,6 +36,11 @@ def generate_examples(files):
 
             X1 = ak.to_numpy(X_track[iev])
             X2 = ak.to_numpy(X_cluster[iev])
+
+            X1[np.isnan(X1)] = 0.0
+            X1[np.isinf(X1)] = 0.0
+            X2[np.isnan(X2)] = 0.0
+            X2[np.isinf(X2)] = 0.0
 
             if len(X1) == 0 or len(X2) == 0:
                 continue
@@ -98,7 +104,7 @@ class PFGraphDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        raw_list = glob(osp.join(self.raw_dir, "*"))
+        raw_list = glob(osp.join(self.raw_dir, "*.parquet"))
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
         return sorted([raw_path.replace(self.raw_dir, ".") for raw_path in raw_list])
 
@@ -153,7 +159,7 @@ class PFGraphDataset(Dataset):
 
     def process_multiple_files(self, filenames, idx_file):
         datas = []
-        for fn in filenames:
+        for fn in tqdm.tqdm(filenames):
             x = self.process_single_file(fn)
             if x is None:
                 continue
@@ -227,3 +233,4 @@ if __name__ == "__main__":
         pfgraphdataset._processed_dir = args.processed_dir
 
     pfgraphdataset.process_parallel(args.num_files_merge, args.num_proc)
+    # pfgraphdataset.process(args.num_files_merge)
