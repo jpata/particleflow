@@ -19,6 +19,7 @@ test/__pycache__/
 *.ipynb_checkpoints
 
 *playground.py
+*playground.ipynb
 nohup.out
 
 *.pkl
