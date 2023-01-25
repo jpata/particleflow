@@ -5,8 +5,7 @@ import numpy as np
 import torch
 import torch_geometric
 from pyg_ssl.args import parse_args
-
-# from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
+from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
@@ -91,12 +90,8 @@ if __name__ == "__main__":
 
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
 
-        train_loader = torch_geometric.loader.DataLoader(
-            data_train_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=[device]
-        )
-        valid_loader = torch_geometric.loader.DataLoader(
-            data_valid_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=[device]
-        )
+        train_loader = torch_geometric.loader.DataLoader(data_train_VICReg, args.batch_size_VICReg)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid_VICReg, args.batch_size_VICReg)
 
         optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
 
@@ -120,12 +115,8 @@ if __name__ == "__main__":
         print(f"Will use {len(data_train_mlpf)} events for train")
         print(f"Will use {len(data_valid_mlpf)} events for valid")
 
-        train_loader = torch_geometric.loader.DataLoader(
-            data_train_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=[device]
-        )
-        valid_loader = torch_geometric.loader.DataLoader(
-            data_valid_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=[device]
-        )
+        train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
         if args.ssl:
 
@@ -159,18 +150,18 @@ if __name__ == "__main__":
                 FineTune_VICReg=args.FineTune_VICReg,
             )
 
-            # # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
-            # ret_ssl = evaluate(
-            #     device,
-            #     encoder,
-            #     decoder,
-            #     mlpf_ssl,
-            #     args.batch_size_mlpf,
-            #     "ssl",
-            #     outpath_ssl,
-            #     [data_valid_VICReg, data_valid_mlpf],
-            #     ["valid_dataset_VICReg", "valid_dataset_mlpf"],
-            # )
+            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_ssl = evaluate(
+                device,
+                encoder,
+                decoder,
+                mlpf_ssl,
+                args.batch_size_mlpf,
+                "ssl",
+                outpath_ssl,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+            )
 
         if args.native:
             input_ = (
@@ -207,19 +198,19 @@ if __name__ == "__main__":
                 FineTune_VICReg=False,
             )
 
-            # # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
-            # ret_native = evaluate(
-            #     device,
-            #     encoder,
-            #     decoder,
-            #     mlpf_native,
-            #     args.batch_size_mlpf,
-            #     "native",
-            #     outpath_native,
-            #     [data_valid_VICReg, data_valid_mlpf],
-            #     ["valid_dataset_VICReg", "valid_dataset_mlpf"],
-            # )
+            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_native = evaluate(
+                device,
+                encoder,
+                decoder,
+                mlpf_native,
+                args.batch_size_mlpf,
+                "native",
+                outpath_native,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+            )
 
-        # if args.ssl & args.native:
-        #     # plot multiplicity plot of both at the same time
-        #     make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
+        if args.ssl & args.native:
+            # plot multiplicity plot of both at the same time
+            make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)

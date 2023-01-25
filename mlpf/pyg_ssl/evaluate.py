@@ -1,5 +1,9 @@
+import os
 import pickle as pkl
+from pathlib import Path
 
+import awkward
+import fastjet
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,18 +11,12 @@ import sklearn
 import sklearn.metrics
 import torch
 import torch_geometric
-import vector
-import fastjet
-import awkward
 import tqdm
-import os
-from pathlib import Path
+import vector
+from jet_utils import build_dummy_array, match_two_jet_collections
+from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
 from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
-
-from jet_utils import match_two_jet_collections, build_dummy_array
-
-from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
 matplotlib.use("Agg")
 
