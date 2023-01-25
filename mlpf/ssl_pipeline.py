@@ -1,20 +1,15 @@
-import glob
-import os
 import os.path as osp
-import pickle as pkl
-import random
-import sys
 
 import matplotlib
 import numpy as np
 import torch
 import torch_geometric
 from pyg_ssl.args import parse_args
-from pyg_ssl.evaluate import evaluate, plot_conf_matrix
+from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
-from pyg_ssl.utils import load_VICReg, save_MLPF, save_VICReg
+from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
 from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
@@ -49,57 +44,14 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
 
     # load the clic dataset
-    if args.samples == -1:  # use all samples
-        samples = [
-            "gev380ee_pythia6_higgs_bbar_full201",
-            "gev380ee_pythia6_higgs_zz_4l_full201",
-            "gev380ee_pythia6_qcd_all_rfull201",
-            "gev380ee_pythia6_higgs_gamgam_full201",
-            "gev380ee_pythia6_ttbar_rfull201",
-            "gev380ee_pythia6_zpole_ee_rfull201",
-        ]
-    else:
-        samples = args.samples.split(",")
-
-    data = []
-    for sample in samples:
-        if sample not in os.listdir(args.dataset):
-            print(f"no processed files found for sample {sample}")
-            continue
-
-        files = glob.glob(f"{args.dataset}/{sample}/processed/*")
-        data_per_sample = []
-        for file in files:
-            data_per_sample += torch.load(f"{file}")
-
-        print(f"Number of events for sample {sample} is: {len(data_per_sample)}")
-        data += data_per_sample
-
-    # shuffle datafiles belonging to different samples
-    random.shuffle(data)
-
-    if len(data) == 0:
-        print("failed to load dataset, check --dataset path")
-        sys.exit(0)
-    else:
-        print(f"---> Total number of events at hand: {len(data)}")
-
-    data_VICReg = data[: round(0.9 * len(data))]
-    data_mlpf = data[round(0.9 * len(data)) :]
-    print(f"Will use {len(data_VICReg)} events for VICReg with an 80/20 split")
-    print(f"Will use {len(data_mlpf)} for mlpf with a 50/25/25 split")
+    data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf = data_split(args.dataset, args.data_split_mode)
 
     # setup the directory path to hold all models and plots
-    outpath = osp.join(args.outpath, args.model_prefix_VICReg)
+    outpath = osp.join(args.outpath, args.prefix_VICReg)
 
     # load a pre-trained VICReg model
     if args.load_VICReg:
-        (
-            encoder_state_dict,
-            encoder_model_kwargs,
-            decoder_state_dict,
-            decoder_model_kwargs,
-        ) = load_VICReg(device, outpath)
+        encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs = load_VICReg(device, outpath)
 
         encoder = ENCODER(**encoder_model_kwargs)
         decoder = DECODER(**decoder_model_kwargs)
@@ -126,33 +78,22 @@ if __name__ == "__main__":
             "output_dim": args.expand_dim,
         }
 
-        encoder = ENCODER(**encoder_model_kwargs)
-        decoder = DECODER(**decoder_model_kwargs)
+        encoder = ENCODER(**encoder_model_kwargs).to(device)
+        decoder = DECODER(**decoder_model_kwargs).to(device)
 
         print("Encoder", encoder)
         print("Decoder", decoder)
-        print(f"VICReg model name: {args.model_prefix_VICReg}")
+        print(f"VICReg model name: {args.prefix_VICReg}")
 
         # save model_kwargs and hyperparameters
-        save_VICReg(args, outpath, encoder_model_kwargs, decoder_model_kwargs)
+        save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs)
 
-        print("Training over {} epochs".format(args.n_epochs))
+        print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
 
-        data_train = data_VICReg[: int(0.8 * len(data))]
-        data_valid = data_VICReg[int(0.8 * len(data)) :]
+        train_loader = torch_geometric.loader.DataLoader(data_train_VICReg, args.batch_size_VICReg)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid_VICReg, args.batch_size_VICReg)
 
-        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
-
-        decoder = decoder.to(device)
-        encoder = encoder.to(device)
-
-        optimizer = torch.optim.SGD(
-            list(encoder.parameters()) + list(decoder.parameters()),
-            lr=args.lr,
-            momentum=0.9,
-            weight_decay=1.5e-4,
-        )
+        optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
 
         training_loop_VICReg(
             device,
@@ -160,7 +101,7 @@ if __name__ == "__main__":
             decoder,
             train_loader,
             valid_loader,
-            args.n_epochs,
+            args.n_epochs_VICReg,
             args.patience,
             optimizer,
             outpath,
@@ -170,54 +111,106 @@ if __name__ == "__main__":
         )
 
     if args.train_mlpf:
+        print("------> Progressing to MLPF trainings...")
+        print(f"Will use {len(data_train_mlpf)} events for train")
+        print(f"Will use {len(data_valid_mlpf)} events for valid")
 
-        data_train = data_mlpf[: round(0.5 * len(data_mlpf))]
-        data_valid = data_mlpf[round(0.5 * len(data_mlpf)) : round(0.75 * len(data_mlpf))]
-        data_test = data_mlpf[round(0.75 * len(data_mlpf)) :]
+        train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
+        valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
-        print(f"Will use {len(data_train)} events for train")
-        print(f"Will use {len(data_valid)} events for valid")
-        print(f"Will use {len(data_test)} events for test")
+        if args.ssl:
 
-        train_loader = torch_geometric.loader.DataLoader(data_train, args.batch_size)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid, args.batch_size)
+            mlpf_model_kwargs = {
+                "embedding_dim": encoder.conv[1].out_channels,
+                "width": args.width_mlpf,
+                "native_mlpf": False,
+            }
 
-        mlpf_model_kwargs = {
-            "input_dim": encoder.conv[1].out_channels,
-            "width": args.width_mlpf,
-        }
+            mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
+            print(mlpf_ssl)
+            print(f"MLPF model name: {args.prefix_mlpf}_ssl")
 
-        mlpf = MLPF(**mlpf_model_kwargs)
-        mlpf = mlpf.to(device)
-        print(mlpf)
-        print(f"MLPF model name: {args.model_prefix_mlpf}")
+            # make mlpf specific directory
+            outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
+            save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
-        # make mlpf specific directory
-        outpath = osp.join(f"{outpath}/MLPF/", args.model_prefix_mlpf)
-        save_MLPF(args, outpath, mlpf_model_kwargs)
+            print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
 
-        optimizer = torch.optim.SGD(mlpf.parameters(), lr=args.lr)
+            training_loop_mlpf(
+                device,
+                encoder,
+                mlpf_ssl,
+                train_loader,
+                valid_loader,
+                args.n_epochs_mlpf,
+                args.patience,
+                args.lr,
+                outpath_ssl,
+                mode="ssl",
+                FineTune_VICReg=args.FineTune_VICReg,
+            )
 
-        print("Training MLPF")
+            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_ssl = evaluate(
+                device,
+                encoder,
+                decoder,
+                mlpf_ssl,
+                args.batch_size_mlpf,
+                "ssl",
+                outpath_ssl,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+            )
 
-        training_loop_mlpf(
-            device,
-            encoder,
-            mlpf,
-            train_loader,
-            valid_loader,
-            args.n_epochs,
-            args.patience,
-            optimizer,
-            outpath,
-        )
+        if args.native:
+            input_ = (
+                max(CLUSTERS_X, TRACKS_X) + 1
+            )  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
+            mlpf_model_kwargs = {
+                "input_dim": input_,
+                "width": args.width_mlpf,
+                "native_mlpf": True,
+                "embedding_dim": args.embedding_dim,
+            }
 
-        # test
-        test_loader = torch_geometric.loader.DataLoader(data_test, args.batch_size)
+            mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
+            print(mlpf_native)
+            print(f"MLPF model name: {args.prefix_mlpf}_native")
 
-        conf_matrix = evaluate(device, encoder, decoder, mlpf, test_loader)
+            # make mlpf specific directory
+            outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
+            save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
-        plot_conf_matrix(conf_matrix, "SSL based MLPF", outpath)
+            print(f"- Training native MLPF over {args.n_epochs_mlpf} epochs")
 
-        with open(f"{outpath}/conf_matrix_test.pkl", "wb") as f:
-            pkl.dump(conf_matrix, f)
+            training_loop_mlpf(
+                device,
+                encoder,
+                mlpf_native,
+                train_loader,
+                valid_loader,
+                args.n_epochs_mlpf,
+                args.patience,
+                args.lr,
+                outpath_native,
+                mode="native",
+                FineTune_VICReg=False,
+            )
+
+            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            ret_native = evaluate(
+                device,
+                encoder,
+                decoder,
+                mlpf_native,
+                args.batch_size_mlpf,
+                "native",
+                outpath_native,
+                [data_valid_VICReg, data_valid_mlpf],
+                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+            )
+
+        if args.ssl & args.native:
+            # plot multiplicity plot of both at the same time
+            make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
