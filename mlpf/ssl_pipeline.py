@@ -92,10 +92,10 @@ if __name__ == "__main__":
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
 
         train_loader = torch_geometric.loader.DataLoader(
-            data_train_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=device
+            data_train_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=[device]
         )
         valid_loader = torch_geometric.loader.DataLoader(
-            data_valid_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=device
+            data_valid_VICReg, args.batch_size_VICReg, pin_memory=True, pin_memory_device=[device]
         )
 
         optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
@@ -121,10 +121,10 @@ if __name__ == "__main__":
         print(f"Will use {len(data_valid_mlpf)} events for valid")
 
         train_loader = torch_geometric.loader.DataLoader(
-            data_train_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=device
+            data_train_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=[device]
         )
         valid_loader = torch_geometric.loader.DataLoader(
-            data_valid_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=device
+            data_valid_mlpf, args.batch_size_mlpf, pin_memory=True, pin_memory_device=[device]
         )
 
         if args.ssl:
