@@ -11,10 +11,14 @@ import vector
 import fastjet
 import awkward
 import tqdm
+import os
+from pathlib import Path
 
 from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
 
 from jet_utils import match_two_jet_collections, build_dummy_array
+
+from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
 matplotlib.use("Agg")
 
@@ -61,6 +65,9 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
     decoder.eval()
     for j, data in enumerate(data_):
         print(f"Testing the {mode} model on the {save_as_[j]}")
+
+        this_out_path = "{}/{}/{}".format(outpath, mode, save_as_[j])
+        os.makedirs(this_out_path)
         test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
 
         npred, ngen, ncand = {}, {}, {}
@@ -195,7 +202,7 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                             "matched_jets": matched_jets,
                         }
                     ),
-                    "{}/pred_{}_{}.parquet".format(outpath, save_as_[j], i),
+                    "{}/pred_{}.parquet".format(this_out_path, i),
                 )
 
                 for batch_index in range(batch_size_mlpf):
@@ -213,6 +220,8 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
             npred_[save_as_[j]], ngen_[save_as_[j]], ncand_[save_as_[j]] = make_multiplicity_plots(
                 npred, ngen, ncand, outpath, mode, save_as_[j]
             )
+            yvals, _, _ = load_eval_data("{}/pred_*.parquet".format(this_out_path))
+            plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=save_as_[j])
 
     return npred_, ngen_, ncand_
 
