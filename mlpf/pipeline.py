@@ -144,6 +144,7 @@ def main():
 )
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
 @click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
+@click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-tf")
 def train(
     config,
     weights,
@@ -162,6 +163,7 @@ def train(
     batch_multiplier,
     num_cpus,
     seeds,
+    comet_exp_name,
 ):
 
     # tf.debugging.enable_check_numerics()
@@ -230,7 +232,7 @@ def train(
             logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
 
             experiment = OfflineExperiment(
-                project_name="particleflow-tf",
+                project_name=comet_exp_name,
                 auto_metric_logging=True,
                 auto_param_logging=True,
                 auto_histogram_weight_logging=True,
@@ -242,7 +244,7 @@ def train(
             logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
 
             experiment = Experiment(
-                project_name="particleflow-tf",
+                project_name=comet_exp_name,
                 auto_metric_logging=True,
                 auto_param_logging=True,
                 auto_histogram_weight_logging=True,
@@ -687,7 +689,7 @@ def raytune_build_model_and_train(
 )
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
 @click.option("--comet-online", help="use comet-ml online logging", is_flag=True)
-@click.option("--comet-exp-name", help="use comet-ml online logging", type=str, default="particleflow-raytune")
+@click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-raytune")
 def raytune(
     config,
     name,
