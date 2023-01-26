@@ -529,6 +529,7 @@ def raytune_build_model_and_train(
     name=None,
     seeds=False,
     comet_online=False,
+    comet_exp_name="particleflow-raytune",
 ):
     from collections import Counter
 
@@ -542,6 +543,7 @@ def raytune_build_model_and_train(
         np.random.seed(1234)
         tf.random.set_seed(1234)
 
+    config_file_path = full_config
     full_config, config_file_stem = parse_config(full_config)
 
     if config is not None:
@@ -550,7 +552,7 @@ def raytune_build_model_and_train(
     if comet_online:
         logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
         experiment = Experiment(
-            project_name="particleflow-tf",
+            project_name=comet_exp_name,
             auto_metric_logging=True,
             auto_param_logging=True,
             auto_histogram_weight_logging=True,
@@ -560,7 +562,7 @@ def raytune_build_model_and_train(
     else:
         logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
         experiment = OfflineExperiment(
-            project_name="particleflow-tf",
+            project_name=comet_exp_name,
             auto_metric_logging=True,
             auto_param_logging=True,
             auto_histogram_weight_logging=True,
@@ -568,6 +570,12 @@ def raytune_build_model_and_train(
             auto_histogram_activation_logging=False,
             offline_directory=tune.get_trial_dir() + "/cometml",
         )
+
+    if experiment:
+        experiment.set_name(tune.get_trial_dir())
+        experiment.log_code("mlpf/tfmodel/model.py")
+        experiment.log_code("mlpf/tfmodel/utils.py")
+        experiment.log_code(config_file_path)
 
     strategy, num_gpus, num_batches_multiplier = get_strategy()
     ds_train, ds_test, ds_val = get_train_test_val_datasets(full_config, num_batches_multiplier, ntrain, ntest)
@@ -679,6 +687,7 @@ def raytune_build_model_and_train(
 )
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
 @click.option("--comet-online", help="use comet-ml online logging", is_flag=True)
+@click.option("--comet-exp-name", help="use comet-ml online logging", type=str, default="particleflow-raytune")
 def raytune(
     config,
     name,
@@ -691,6 +700,7 @@ def raytune(
     ntest,
     seeds,
     comet_online,
+    comet_exp_name,
 ):
     import ray
     from ray import tune
@@ -745,6 +755,7 @@ def raytune(
             name=name,
             seeds=seeds,
             comet_online=comet_online,
+            comet_exp_name=comet_exp_name,
         ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},
