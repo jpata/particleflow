@@ -61,6 +61,10 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     # initialize loss counters
     losses = 0
 
+    epoch_loss_id = 0.0
+    epoch_loss_momentum = 0.0
+    epoch_loss_charge = 0.0
+
     for i, batch in enumerate(loader):
 
         if mode == "ssl":
@@ -86,15 +90,16 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
         target_charge = event_on_device.ygen[:, 0:1].to(dtype=torch.float32)
 
-        weights = compute_weights(device, target_ids, num_classes=6)  # to accomodate class imbalance
-        loss_id = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
+        loss_id = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids)  # for classifying PID
+
+        # for regression, mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
         loss_momentum = torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )  # for regressing p4
         loss_charge = torch.nn.functional.huber_loss(
             pred_charge * msk_true_particle, target_charge * msk_true_particle
-        )  # for regressing p4
+        )  # for regressing charge
         loss = loss_id + loss_momentum + loss_charge
 
         # update parameters
@@ -109,8 +114,17 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
 
         losses += loss.detach()
 
+        epoch_loss_id += loss_id.detach().cpu().item() / len(loader)
+        epoch_loss_momentum += loss_momentum.detach().cpu().item() / len(loader)
+        epoch_loss_charge += loss_charge.detach().cpu().item() / len(loader)
+
     losses = losses.cpu().item() / len(loader)
 
+    print(
+        "loss_id={:.2f} loss_momentum={:.2f} loss_charge={:.2f}".format(
+            epoch_loss_id, epoch_loss_momentum, epoch_loss_charge
+        )
+    )
     return losses
 
 
@@ -195,8 +209,8 @@ def training_loop_mlpf(
         )
 
         fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train)), losses_train, label="training")
-        ax.plot(range(len(losses_valid)), losses_valid, label="validation")
+        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(losses_train[-1]))
+        ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(losses_valid[-1]))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
         if mode == "ssl":
