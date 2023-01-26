@@ -1,6 +1,7 @@
 import os.path as osp
 
 import matplotlib
+import mplhep
 import numpy as np
 import torch
 import torch_geometric
@@ -13,7 +14,7 @@ from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_ML
 from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
-
+mplhep.set_style(mplhep.styles.CMS)
 
 """
 Developing a PyTorch Geometric semi-supervised (VICReg-based https://arxiv.org/abs/2105.04906) pipeline
@@ -41,7 +42,10 @@ if __name__ == "__main__":
 
     world_size = torch.cuda.device_count()
 
-    torch.backends.cudnn.benchmark = True
+    # our data size varies from batch to batch, because each set of N_batch events has a different number of particles
+    torch.backends.cudnn.benchmark = False
+
+    # torch.autograd.set_detect_anomaly(True)
 
     # load the clic dataset
     data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf = data_split(args.dataset, args.data_split_mode)

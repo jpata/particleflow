@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torch_geometric.nn.conv import GravNetConv
 
@@ -9,10 +10,12 @@ class MLPF(nn.Module):
         self,
         input_dim=34,
         width=126,
-        num_convs=2,
+        num_convs=3,
         k=8,
-        embedding_dim=34,
+        embedding_dim=128,
         native_mlpf=False,
+        propagate_dimensions=32,
+        space_dimensions=4,
     ):
         super(MLPF, self).__init__()
 
@@ -22,31 +25,41 @@ class MLPF(nn.Module):
         if native_mlpf:
             # embedding of the inputs that is necessary for native mlpf training
             self.nn0 = nn.Sequential(
-                nn.Linear(input_dim, 126),
+                nn.Linear(input_dim, width),
                 self.act(),
-                nn.Linear(126, 126),
+                nn.Linear(width, width),
                 self.act(),
-                nn.Linear(126, 126),
+                nn.Linear(width, width),
                 self.act(),
-                nn.Linear(126, embedding_dim),
+                nn.Linear(width, embedding_dim),
             )
 
         # GNN that uses the embeddings learnt by VICReg as the input features
-        self.conv = nn.ModuleList()
+        self.conv_id = nn.ModuleList()
+        self.conv_reg = nn.ModuleList()
         for i in range(num_convs):
-            self.conv.append(
+            self.conv_id.append(
                 GravNetConv(
                     embedding_dim,
                     embedding_dim,
-                    space_dimensions=4,
-                    propagate_dimensions=22,
+                    space_dimensions=space_dimensions,
+                    propagate_dimensions=propagate_dimensions,
+                    k=k,
+                )
+            )
+            self.conv_reg.append(
+                GravNetConv(
+                    embedding_dim,
+                    embedding_dim,
+                    space_dimensions=space_dimensions,
+                    propagate_dimensions=propagate_dimensions,
                     k=k,
                 )
             )
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = nn.Sequential(
-            nn.Linear(embedding_dim, width),
+            nn.Linear(num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -55,8 +68,9 @@ class MLPF(nn.Module):
             nn.Linear(width, NUM_CLASSES),
         )
 
+        # elementwise DNN for node momentum regression
         self.nn_reg = nn.Sequential(
-            nn.Linear(embedding_dim, width),
+            nn.Linear(num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -65,8 +79,9 @@ class MLPF(nn.Module):
             nn.Linear(width, 4),
         )
 
+        # elementwise DNN for node charge regression
         self.nn_charge = nn.Sequential(
-            nn.Linear(embedding_dim, width),
+            nn.Linear(num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -87,16 +102,27 @@ class MLPF(nn.Module):
         else:
             embedding = input_
 
+        embeddings_id = []
+        embeddings_reg = []
+
         # perform a series of graph convolutions
-        for num, conv in enumerate(self.conv):
-            embedding = conv(embedding, batch)
+        for num, conv in enumerate(self.conv_id):
+            conv_input = embedding if num == 0 else embeddings_id[-1]
+            embeddings_id.append(conv(conv_input, batch))
+
+        for num, conv in enumerate(self.conv_reg):
+            conv_input = embedding if num == 0 else embeddings_reg[-1]
+            embeddings_reg.append(conv(conv_input, batch))
+
+        embedding_id = torch.cat(embeddings_id, axis=-1)
+        embedding_reg = torch.cat(embeddings_reg, axis=-1)
 
         # predict the PIDs
-        preds_id = self.nn_id(embedding)
+        preds_id = self.nn_id(embedding_id)
 
         # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
-        preds_momentum = self.nn_reg(embedding) + input_[:, 1:5]
+        preds_momentum = self.nn_reg(embedding_reg) + input_[:, 1:5]
 
-        pred_charge = self.nn_charge(embedding)
+        pred_charge = self.nn_charge(embedding_reg)
 
         return preds_id, preds_momentum, pred_charge
