@@ -42,19 +42,22 @@ def parse_args():
     )
 
     # VICReg encoder architecture
-    parser.add_argument("--width_encoder", type=int, default=126, help="hidden dimension of the encoder")
-    parser.add_argument("--embedding_dim", type=int, default=34, help="encoded element dimension")
-    parser.add_argument("--num_convs", type=int, default=2, help="number of graph convolutions")
+    parser.add_argument("--width_encoder", type=int, default=128, help="hidden dimension of the encoder")
+    parser.add_argument("--embedding_dim_VICReg", type=int, default=34, help="encoded element dimension")
+
+    # VICReg decoder architecture
+    parser.add_argument("--width_decoder", type=int, default=128, help="hidden dimension of the decoder")
+    parser.add_argument("--expand_dim", type=int, default=256, help="dimension of the output of the decoder")
+
+    # MLPF architecture
+    parser.add_argument("--width_mlpf", type=int, default=256, help="hidden dimension of mlpf")
+    parser.add_argument("--embedding_dim_mlpf", type=int, default=128, help="first embedding of mlpf")
+
+    # shared architecture
+    parser.add_argument("--num_convs", type=int, default=3, help="number of graph convolutions")
     parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")
     parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
     parser.add_argument("--nearest", type=int, default=8, help="k nearest neighbors")
-
-    # VICReg decoder architecture
-    parser.add_argument("--width_decoder", type=int, default=126, help="hidden dimension of the decoder")
-    parser.add_argument("--expand_dim", type=int, default=200, help="dimension of the output of the decoder")
-
-    # MLPF architecture
-    parser.add_argument("--width_mlpf", type=int, default=126, help="hidden dimension of mlpf")
 
     args = parser.parse_args()
 

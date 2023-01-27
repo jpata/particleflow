@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     else:
         encoder_model_kwargs = {
+            "embedding_dim": args.embedding_dim_VICReg,
             "width": args.width_encoder,
-            "embedding_dim": args.embedding_dim,
             "num_convs": args.num_convs,
             "space_dim": args.space_dim,
             "propagate_dim": args.propagate_dim,
@@ -77,9 +77,9 @@ if __name__ == "__main__":
         }
 
         decoder_model_kwargs = {
-            "input_dim": args.embedding_dim,
-            "width": args.width_decoder,
+            "input_dim": args.embedding_dim_VICReg,
             "output_dim": args.expand_dim,
+            "width": args.width_decoder,
         }
 
         encoder = ENCODER(**encoder_model_kwargs).to(device)
@@ -122,11 +122,15 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
+        input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
+
         if args.ssl:
 
             mlpf_model_kwargs = {
-                "embedding_dim": encoder.conv[1].out_channels,
+                "input_dim": input_ + args.embedding_dim_VICReg,
+                "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
+                "num_convs": args.num_convs,
                 "native_mlpf": False,
             }
 
@@ -168,14 +172,13 @@ if __name__ == "__main__":
             )
 
         if args.native:
-            input_ = (
-                max(CLUSTERS_X, TRACKS_X) + 1
-            )  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
+
             mlpf_model_kwargs = {
                 "input_dim": input_,
+                "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
+                "num_convs": args.num_convs,
                 "native_mlpf": True,
-                "embedding_dim": args.embedding_dim,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)

@@ -74,8 +74,8 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
             # ENCODE
             embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-            tracks.x = embedding_tracks
-            clusters.x = embedding_clusters
+            tracks.x = torch.cat([tracks.x, embedding_tracks])
+            clusters.x = torch.cat([clusters.x, embedding_clusters])
 
             event = combine_PFelements(tracks, clusters)
 

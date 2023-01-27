@@ -9,30 +9,29 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
+        embedding_dim=128,
         width=126,
         num_convs=3,
-        k=8,
-        embedding_dim=128,
-        native_mlpf=False,
         propagate_dimensions=32,
         space_dimensions=4,
+        k=8,
+        native_mlpf=False,
     ):
         super(MLPF, self).__init__()
 
         self.act = nn.ELU
         self.native_mlpf = native_mlpf  # boolean that is true for native mlpf and false for ssl
 
-        if native_mlpf:
-            # embedding of the inputs that is necessary for native mlpf training
-            self.nn0 = nn.Sequential(
-                nn.Linear(input_dim, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, embedding_dim),
-            )
+        # embedding of the inputs
+        self.nn0 = nn.Sequential(
+            nn.Linear(input_dim, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, embedding_dim),
+        )
 
         # GNN that uses the embeddings learnt by VICReg as the input features
         self.conv_id = nn.ModuleList()
@@ -96,11 +95,7 @@ class MLPF(nn.Module):
         input_ = batch.x.float()
         batch = batch.batch
 
-        # if `native_mlpf` then use then embed the inputs first (otherwise VICReg provides the embeddings)
-        if self.native_mlpf:
-            embedding = self.nn0(input_)
-        else:
-            embedding = input_
+        embedding = self.nn0(input_)
 
         embeddings_id = []
         embeddings_reg = []

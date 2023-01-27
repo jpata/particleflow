@@ -89,8 +89,8 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                     embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
                     # use the learnt representation as your input as well as the global feature vector
-                    tracks.x = embedding_tracks
-                    clusters.x = embedding_clusters
+                    tracks.x = torch.cat([tracks.x, embedding_tracks])
+                    clusters.x = torch.cat([clusters.x, embedding_clusters])
 
                     event = combine_PFelements(tracks, clusters)
 
