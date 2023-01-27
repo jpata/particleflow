@@ -2,6 +2,7 @@ import json
 import math
 import pickle as pkl
 import time
+import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -65,7 +66,7 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     epoch_loss_momentum = 0.0
     epoch_loss_charge = 0.0
 
-    for i, batch in enumerate(loader):
+    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
         if mode == "ssl":
             # make transformation
@@ -209,10 +210,12 @@ def training_loop_mlpf(
         )
 
         fig, ax = plt.subplots()
+
         ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(losses_train[-1]))
         ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(losses_valid[-1]))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
+        ax.set_ylim(0.8 * losses_train[-1], 1.2 * losses_train[-1])
         if mode == "ssl":
             ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
         else:
