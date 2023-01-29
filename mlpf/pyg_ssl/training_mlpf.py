@@ -68,15 +68,17 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     for i, batch in enumerate(loader):
 
         if mode == "ssl":
-            # make transformation
+            # seperate PF-elements
             tracks, clusters = distinguish_PFelements(batch.to(device))
 
             # ENCODE
             embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-            tracks.x = torch.cat([tracks.x, embedding_tracks])
-            clusters.x = torch.cat([clusters.x, embedding_clusters])
+            # concat the inputs with embeddings
+            tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+            clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
 
+            # combine PF-elements
             event = combine_PFelements(tracks, clusters)
 
         elif mode == "native":

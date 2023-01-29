@@ -100,9 +100,6 @@ def distinguish_PFelements(batch):
 # conversly, function that combines the learned latent representations back into one Batch() object
 def combine_PFelements(tracks, clusters):
 
-    #     zero padding
-    #     clusters.x = torch.cat([clusters.x, torch.from_numpy(np.zeros([clusters.x.shape[0],TRACKS_X-CLUSTERS_X]))], axis=1)
-
     event = Batch(
         x=torch.cat([tracks.x, clusters.x]),
         ygen=torch.cat([tracks.ygen, clusters.ygen]),

@@ -16,7 +16,8 @@ import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
-from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
+from .utils import (CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements,
+                    distinguish_PFelements)
 
 matplotlib.use("Agg")
 
@@ -88,9 +89,9 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                     # ENCODE
                     embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-                    # use the learnt representation as your input as well as the global feature vector
-                    tracks.x = torch.cat([tracks.x, embedding_tracks])
-                    clusters.x = torch.cat([clusters.x, embedding_clusters])
+                    # concat the inputs with embeddings
+                    tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+                    clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
 
                     event = combine_PFelements(tracks, clusters)
 
