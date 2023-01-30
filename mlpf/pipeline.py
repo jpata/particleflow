@@ -60,6 +60,39 @@ def main():
     pass
 
 
+def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
+    try:
+        if comet_offline:
+            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
+            if outdir is None:
+                raise ValueError("Please specify am output directory when setting comet_offline to True")
+
+            experiment = OfflineExperiment(
+                project_name=comet_exp_name,
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+                offline_directory=outdir + "/cometml",
+            )
+        else:
+            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+
+            experiment = Experiment(
+                project_name=comet_exp_name,
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+            )
+    except Exception as e:
+        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
+        experiment = None
+    return experiment
+
+
 @main.command()
 @click.help_option("-h", "--help")
 @click.option("-c", "--config", help="configuration file", type=click.Path())
@@ -227,33 +260,7 @@ def train(
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
         shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
-    try:
-        if comet_offline:
-            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
-
-            experiment = OfflineExperiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-                offline_directory=outdir + "/cometml",
-            )
-        else:
-            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
-
-            experiment = Experiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-            )
-    except Exception as e:
-        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
-        experiment = None
+    experiment = create_comet_experiment(comet_exp_name, comet_offline=comet_offline, outdir=outdir)
 
     if experiment:
         experiment.set_name(outdir)
@@ -551,27 +558,7 @@ def raytune_build_model_and_train(
     if config is not None:
         full_config = set_raytune_search_parameters(search_space=config, config=full_config)
 
-    if comet_online:
-        logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
-        experiment = Experiment(
-            project_name=comet_exp_name,
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-        )
-    else:
-        logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
-        experiment = OfflineExperiment(
-            project_name=comet_exp_name,
-            auto_metric_logging=True,
-            auto_param_logging=True,
-            auto_histogram_weight_logging=True,
-            auto_histogram_gradient_logging=False,
-            auto_histogram_activation_logging=False,
-            offline_directory=tune.get_trial_dir() + "/cometml",
-        )
+    experiment = create_comet_experiment(comet_exp_name, comet_offline=(not comet_online), outdir=tune.get_trial_dir())
 
     if experiment:
         experiment.set_name(tune.get_trial_dir())
