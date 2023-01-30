@@ -17,7 +17,7 @@ from pyg_ssl.VICReg import DECODER, ENCODER
 
 
 matplotlib.use("Agg")
-mplhep.set_style(mplhep.styles.CMS)
+mplhep.style.use(mplhep.styles.CMS)
 
 """
 Developing a PyTorch Geometric semi-supervised (VICReg-based https://arxiv.org/abs/2105.04906) pipeline
@@ -162,7 +162,7 @@ if __name__ == "__main__":
             # )
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs)
-            mlpf_state_dict = torch.load(f"{outpath_ssl}/mlpf_ssl_best_epoch_weights.pth.pth", map_location=device)
+            mlpf_state_dict = torch.load(f"{outpath_ssl}/mlpf_ssl_best_epoch_weights.pth", map_location=device)
             mlpf_ssl.load_state_dict(mlpf_state_dict)
             mlpf_ssl = mlpf_ssl.to(device)
 
