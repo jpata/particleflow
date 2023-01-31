@@ -1397,7 +1397,7 @@ class PFNetTransformer(tf.keras.Model):
         num_layers_encoder=2,
         num_layers_decoder_reg=2,
         num_layers_decoder_cls=2,
-        hiddem_dim=256,
+        hidden_dim=256,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1410,7 +1410,7 @@ class PFNetTransformer(tf.keras.Model):
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        self.key_dim = hiddem_dim
+        self.key_dim = hidden_dim
 
         self.ffn = point_wise_feed_forward_network(
             self.key_dim,
