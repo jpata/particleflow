@@ -10,7 +10,7 @@ class MLPF(nn.Module):
         self,
         input_dim=34,
         width=126,
-        num_convs=3,
+        num_convs=5,
         k=8,
         embedding_dim=128,
         native_mlpf=False,
@@ -59,7 +59,7 @@ class MLPF(nn.Module):
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = nn.Sequential(
-            nn.Linear(num_convs * embedding_dim, width),
+            nn.Linear(input_dim + num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -70,7 +70,7 @@ class MLPF(nn.Module):
 
         # elementwise DNN for node momentum regression
         self.nn_reg = nn.Sequential(
-            nn.Linear(num_convs * embedding_dim, width),
+            nn.Linear(input_dim + num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -81,7 +81,7 @@ class MLPF(nn.Module):
 
         # elementwise DNN for node charge regression
         self.nn_charge = nn.Sequential(
-            nn.Linear(num_convs * embedding_dim, width),
+            nn.Linear(input_dim + num_convs * embedding_dim, width),
             self.act(),
             nn.Linear(width, width),
             self.act(),
@@ -114,8 +114,8 @@ class MLPF(nn.Module):
             conv_input = embedding if num == 0 else embeddings_reg[-1]
             embeddings_reg.append(conv(conv_input, batch))
 
-        embedding_id = torch.cat(embeddings_id, axis=-1)
-        embedding_reg = torch.cat(embeddings_reg, axis=-1)
+        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
+        embedding_reg = torch.cat([input_] + embeddings_reg, axis=-1)
 
         # predict the PIDs
         preds_id = self.nn_id(embedding_id)

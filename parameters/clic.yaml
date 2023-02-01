@@ -47,7 +47,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.00001
   num_epochs: 500
   dtype: float32
   trainable:
@@ -148,14 +148,14 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 5
+  num_graph_layers_reg: 5
   output_decoding:
     activation: elu
     regression_use_classification: yes
     dropout: 0.1
 
-    pt_as_correction: yes
+    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
