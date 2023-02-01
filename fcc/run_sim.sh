@@ -9,7 +9,6 @@ set -x
 env
 df -h
 
-WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
 OUTDIR=`pwd`
 PFDIR=/home/joosep/particleflow
 NEV=100
@@ -20,10 +19,14 @@ NUM=$1
 #SAMPLE=p8_ee_ZZ_fullhad_ecm365
 #SAMPLE=p8_ee_qcd_ecm365
 #SAMPLE=p8_ee_qcd_ecm380
-#SAMPLE=p8_ee_ZH_Htautau_ecm380
-SAMPLE=p8_ee_qcd_ecm380
+SAMPLE=p8_ee_ZH_Htautau_ecm380
+#SAMPLE=p8_ee_qcd_ecm380
+#SAMPLE=p8_ee_gg_ecm365
 
-mkdir -p $OUTDIR/$SAMPLE
+WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
+FULLOUTDIR=${OUTDIR}/${SAMPLE}_overlay365CDR
+
+mkdir -p $FULLOUTDIR
 
 mkdir -p $WORKDIR
 cd $WORKDIR
@@ -52,6 +55,6 @@ cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 #ddsim --steeringFile clic_steer.py --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml --enableGun --gun.distribution uniform --gun.particle pi- --gun.energy 10*GeV --outputFile piminus_10GeV_edm4hep.root --numberOfEvents $NEV &> log_step1_piminus.txt
 #k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input piminus_10GeV_edm4hep.root --PodioOutput.filename piminus_reco.root &> log_step2_piminus.txt
 
-cp reco_${SAMPLE}_${NUM}.root $OUTDIR/$SAMPLE/
+cp reco_${SAMPLE}_${NUM}.root $FULLOUTDIR/
 
 rm -Rf $WORKDIR
