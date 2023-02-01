@@ -59,6 +59,11 @@ def parse_args():
     parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
     parser.add_argument("--nearest", type=int, default=8, help="k nearest neighbors")
 
+    # flag to evaluate the mlpf models using fastjet
+    parser.add_argument(
+        "--evaluate_mlpf", dest="evaluate_mlpf", action="store_true", help="evaluates the mlpf models with fastjet"
+    )
+
     args = parser.parse_args()
 
     return args

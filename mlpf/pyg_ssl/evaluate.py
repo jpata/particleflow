@@ -3,7 +3,6 @@ import pickle as pkl
 from pathlib import Path
 
 import awkward
-import fastjet
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,12 +11,8 @@ import sklearn.metrics
 import torch
 import torch_geometric
 import tqdm
-import vector
-from jet_utils import build_dummy_array, match_two_jet_collections
-from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
-from .utils import (CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements,
-                    distinguish_PFelements)
+from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 
@@ -48,6 +43,10 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
 
 
 def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, data_, save_as_):
+    import fastjet
+    import vector
+    from jet_utils import build_dummy_array, match_two_jet_collections
+    from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
     jet_pt = 5.0

@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch_geometric
 from pyg_ssl.args import parse_args
-from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
@@ -137,47 +136,45 @@ if __name__ == "__main__":
                 "native_mlpf": False,
             }
 
-            # mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
-            # print(mlpf_ssl)
-            # print(f"MLPF model name: {args.prefix_mlpf}_ssl")
+            mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
+            print(mlpf_ssl)
+            print(f"MLPF model name: {args.prefix_mlpf}_ssl")
 
             # make mlpf specific directory
             outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
-            # save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
+            save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
-            # print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
+            print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
 
-            # training_loop_mlpf(
-            #     device,
-            #     encoder,
-            #     mlpf_ssl,
-            #     train_loader,
-            #     valid_loader,
-            #     args.n_epochs_mlpf,
-            #     args.patience,
-            #     args.lr,
-            #     outpath_ssl,
-            #     mode="ssl",
-            #     FineTune_VICReg=args.FineTune_VICReg,
-            # )
-
-            mlpf_ssl = MLPF(**mlpf_model_kwargs)
-            mlpf_state_dict = torch.load(f"{outpath_ssl}/mlpf_ssl_best_epoch_weights.pth", map_location=device)
-            mlpf_ssl.load_state_dict(mlpf_state_dict)
-            mlpf_ssl = mlpf_ssl.to(device)
-
-            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
-            ret_ssl = evaluate(
+            training_loop_mlpf(
                 device,
                 encoder,
-                decoder,
                 mlpf_ssl,
-                args.batch_size_mlpf,
-                "ssl",
+                train_loader,
+                valid_loader,
+                args.n_epochs_mlpf,
+                args.patience,
+                args.lr,
                 outpath_ssl,
-                [data_valid_VICReg, data_valid_mlpf],
-                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                mode="ssl",
+                FineTune_VICReg=args.FineTune_VICReg,
             )
+
+            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import evaluate
+
+                ret_ssl = evaluate(
+                    device,
+                    encoder,
+                    decoder,
+                    mlpf_ssl,
+                    args.batch_size_mlpf,
+                    "ssl",
+                    outpath_ssl,
+                    [data_valid_VICReg, data_valid_mlpf],
+                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                )
 
         if args.native:
 
@@ -214,18 +211,24 @@ if __name__ == "__main__":
             )
 
             # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
-            ret_native = evaluate(
-                device,
-                encoder,
-                decoder,
-                mlpf_native,
-                args.batch_size_mlpf,
-                "native",
-                outpath_native,
-                [data_valid_VICReg, data_valid_mlpf],
-                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
-            )
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import evaluate
+
+                ret_native = evaluate(
+                    device,
+                    encoder,
+                    decoder,
+                    mlpf_native,
+                    args.batch_size_mlpf,
+                    "native",
+                    outpath_native,
+                    [data_valid_VICReg, data_valid_mlpf],
+                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                )
 
         if args.ssl & args.native:
             # plot multiplicity plot of both at the same time
-            make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import make_multiplicity_plots_both
+
+                make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
