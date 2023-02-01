@@ -249,6 +249,8 @@ evaluation_datasets:
     batch_size: 50
     num_events: -1
 
+evaluation_jet_algo: ee_genkt_algorithm
+
 datasets:
   clic_edm_ttbar_pf:
     version: 1.0.0
