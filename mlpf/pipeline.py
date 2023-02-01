@@ -2,8 +2,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-from comet_ml import OfflineExperiment, Experiment  # isort:skip
-
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
@@ -30,7 +28,7 @@ from tfmodel.datasets.BaseDatasetFactory import (
     unpack_target,
 )
 from tfmodel.lr_finder import LRFinder
-from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks
+from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks, create_comet_experiment
 from tfmodel.utils import (
     create_experiment_dir,
     delete_all_but_best_checkpoint,
@@ -58,39 +56,6 @@ from tfmodel.utils_analysis import (
 @click.help_option("-h", "--help")
 def main():
     pass
-
-
-def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
-    try:
-        if comet_offline:
-            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
-            if outdir is None:
-                raise ValueError("Please specify am output directory when setting comet_offline to True")
-
-            experiment = OfflineExperiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-                offline_directory=outdir + "/cometml",
-            )
-        else:
-            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
-
-            experiment = Experiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-            )
-    except Exception as e:
-        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
-        experiment = None
-    return experiment
 
 
 @main.command()
@@ -175,7 +140,7 @@ def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
     type=int,
     default=None,
 )
-@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=1)
+@click.option("--num-cpus", help="number of CPU threads to use", type=int, default=None)
 @click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
 @click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-tf")
 def train(
@@ -539,6 +504,8 @@ def raytune_build_model_and_train(
     seeds=False,
     comet_online=False,
     comet_exp_name="particleflow-raytune",
+    nepochs=None,
+    num_cpus=None,
 ):
     from collections import Counter
 
@@ -553,7 +520,7 @@ def raytune_build_model_and_train(
         tf.random.set_seed(1234)
 
     config_file_path = full_config
-    full_config, config_file_stem = parse_config(full_config)
+    full_config, config_file_stem = parse_config(full_config, nepochs=nepochs)
 
     if config is not None:
         full_config = set_raytune_search_parameters(search_space=config, config=full_config)
@@ -566,7 +533,7 @@ def raytune_build_model_and_train(
         experiment.log_code("mlpf/tfmodel/utils.py")
         experiment.log_code(config_file_path)
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
     ds_train, ds_test, ds_val = get_train_test_val_datasets(full_config, num_batches_multiplier, ntrain, ntest)
 
     logging.info("num_train_steps", ds_train.num_steps())
@@ -584,6 +551,7 @@ def raytune_build_model_and_train(
         ds_val,
         comet_experiment=experiment,
         horovod_enabled=False,
+        is_hpo_run=True,
     )
 
     callbacks.append(optim_callbacks)
@@ -674,6 +642,12 @@ def raytune_build_model_and_train(
     help="override the number of testing steps",
     type=int,
 )
+@click.option(
+    "--nepochs",
+    default=None,
+    help="override the number of training epochs",
+    type=int,
+)
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
 @click.option("--comet-online", help="use comet-ml online logging", is_flag=True)
 @click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-raytune")
@@ -687,6 +661,7 @@ def raytune(
     resume,
     ntrain,
     ntest,
+    nepochs,
     seeds,
     comet_online,
     comet_exp_name,
@@ -745,6 +720,8 @@ def raytune(
             seeds=seeds,
             comet_online=comet_online,
             comet_exp_name=comet_exp_name,
+            nepochs=nepochs,
+            num_cpus=cpus,
         ),
         config=search_space,
         resources_per_trial={"cpu": cpus, "gpu": gpus},

@@ -21,9 +21,9 @@ def get_hp_str(result):
 
 def plot_ray_analysis(analysis, save=False, skip=0):
     to_plot = [
-        "adam_beta_1",
+        # "adam_beta_1",
         "charge_loss",
-        "cls_acc_unweighted",
+        # "cls_acc_unweighted",
         "cls_loss",
         "cos_phi_loss",
         "energy_loss",
@@ -33,8 +33,8 @@ def plot_ray_analysis(analysis, save=False, skip=0):
         "pt_loss",
         "sin_phi_loss",
         "val_charge_loss",
-        "val_cls_acc_unweighted",
-        "val_cls_acc_weighted",
+        # "val_cls_acc_unweighted",
+        # "val_cls_acc_weighted",
         "val_cls_loss",
         "val_cos_phi_loss",
         "val_energy_loss",
@@ -140,8 +140,8 @@ def get_top_k_df(analysis, k):
 
 def topk_summary_plot(analysis, k, save=False, save_dir=None):
     to_plot = [
-        "val_cls_acc_unweighted",
-        "val_cls_acc_weighted",
+        # "val_cls_acc_unweighted",
+        # "val_cls_acc_weighted",
         "val_cls_loss",
         "val_energy_loss",
         "val_loss",
@@ -173,8 +173,8 @@ def topk_summary_plot_v2(analysis, k, save=False, save_dir=None):
     to_plot = [
         "val_loss",
         "val_cls_loss",
-        "val_cls_acc_unweighted",
-        "val_cls_acc_weighted",
+        # "val_cls_acc_unweighted",
+        # "val_cls_acc_weighted",
     ]
 
     dd = get_top_k_df(analysis, k)
@@ -215,11 +215,11 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
                 [
                     "loss",
                     "cls_loss",
-                    "cls_acc_unweighted",
+                    # "cls_acc_unweighted",
                     "val_loss",
                     "val_cls_loss",
-                    "val_cls_acc_unweighted",
-                    "val_cls_acc_weighted",
+                    # "val_cls_acc_unweighted",
+                    # "val_cls_acc_weighted",
                 ]
             ],
             dd.filter(regex=("config/*")),
@@ -231,9 +231,9 @@ def summarize_top_k(analysis, k, save=False, save_dir=None):
     cm_red = sns.light_palette("red", as_cmap=True)
 
     max_is_better = [
-        "cls_acc_unweighted",
-        "val_cls_acc_weighted",
-        "val_cls_acc_unweighted",
+        # "cls_acc_unweighted",
+        # "val_cls_acc_weighted",
+        # "val_cls_acc_unweighted",
     ]
     min_is_better = ["loss", "cls_loss", "val_loss", "val_cls_loss"]
 
