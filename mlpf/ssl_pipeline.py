@@ -99,7 +99,8 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_VICReg, args.batch_size_VICReg)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_VICReg, args.batch_size_VICReg)
 
-        optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
+        # optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
+        optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
 
         training_loop_VICReg(
             device,
