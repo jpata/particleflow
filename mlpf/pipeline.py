@@ -2,6 +2,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 try:
     import horovod.tensorflow.keras as hvd
 except ModuleNotFoundError:
