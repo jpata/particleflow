@@ -15,11 +15,15 @@ from torch import Tensor
 from torch import nn
 from torch.nn import functional as F
 from .utils import combine_PFelements, distinguish_PFelements
+from torch.utils.tensorboard import SummaryWriter
 
 matplotlib.use("Agg")
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
+
+# keep track of the training step across epochs
+istep_global = 0
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
@@ -117,21 +121,22 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode):
+def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tb):
     with torch.no_grad():
         optimizer = None
         optimizer_VICReg = None
-        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb)
     return ret
 
 
-def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
     is_train = not (optimizer is None)
+    global istep_global
 
     loss_obj_id = FocalLoss(gamma=2.0)
 
@@ -177,20 +182,27 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         target_ids = event_on_device.ygen_id
 
         target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
-        target_charge = event_on_device.ygen[:, 0:1].to(dtype=torch.float32)
+        target_charge = (event_on_device.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
 
-        loss_id = loss_obj_id(pred_ids_one_hot, target_ids)
+        loss_id = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
         # loss_id_old = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids)  # for classifying PID
 
         # for regression, mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        loss_momentum = torch.nn.functional.huber_loss(
+        loss_momentum = 10 * torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )  # for regressing p4
-        loss_charge = torch.nn.functional.huber_loss(
-            pred_charge * msk_true_particle, target_charge * msk_true_particle
-        )  # for regressing charge
+
+        loss_charge = torch.nn.functional.cross_entropy(
+            pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        )  # for predicting charge
         loss = loss_id + loss_momentum + loss_charge
+
+        if is_train:
+            tb.add_scalar("batch/loss_id", loss_id.detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_momentum", loss_momentum.detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_charge", loss_charge.detach().cpu().item(), istep_global)
+            istep_global += 1
 
         # update parameters
         if is_train:
@@ -243,7 +255,9 @@ def training_loop_mlpf(
     best_val_loss = 99999.9
     stale_epochs = 0
 
-    optimizer = torch.optim.SGD(mlpf.parameters(), lr=lr)
+    tensorboard_writer = SummaryWriter(outpath)
+
+    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
     if FineTune_VICReg:
         print("Will finetune VICReg during mlpf training")
         optimizer_VICReg = torch.optim.SGD(mlpf.parameters(), lr=lr * 0.1)
@@ -259,12 +273,18 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
+        losses = train(
+            device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
+        )
+        tensorboard_writer.add_scalar("epoch/train_loss", losses, epoch)
         losses_train.append(losses)
 
         # validation step
-        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode)
+        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        tensorboard_writer.add_scalar("epoch/val_loss", losses, epoch)
         losses_valid.append(losses)
+
+        tensorboard_writer.flush()
 
         # early-stopping
         if losses < best_val_loss:

@@ -264,11 +264,11 @@ def data_split(dataset, data_split_mode):
         ttbar_files = glob.glob(f"{dataset}/p8_ee_tt_ecm365/processed/*")
 
         qcd_data = []
-        for file in qcd_files:
+        for file in list(qcd_files):
             qcd_data += torch.load(f"{file}")
 
         ttbar_data = []
-        for file in ttbar_files:
+        for file in list(ttbar_files):
             ttbar_data += torch.load(f"{file}")
 
         data_train_VICReg = qcd_data[: round(0.8 * len(qcd_data))]

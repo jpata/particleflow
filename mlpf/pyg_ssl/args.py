@@ -23,9 +23,10 @@ def parse_args():
     parser.add_argument("--ssl", dest="ssl", action="store_true", help="Train ssl-based MLPF")
     parser.add_argument("--native", dest="native", action="store_true", help="Train native")
 
-    parser.add_argument("--prefix_VICReg", type=str, default="VICReg_model", help="directory to hold the VICReg model")
+    parser.add_argument("--prefix_VICReg", type=str, default=None, help="directory to hold the VICReg model")
     parser.add_argument("--prefix_mlpf", type=str, default="MLPF_model", help="directory to hold the mlpf model")
     parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
+    parser.add_argument("--evaluate", default=False, action="store_true", help="Run model evaluation")
 
     # training hyperparameters
     parser.add_argument("--lmbd", type=float, default=0.01, help="the lambda term in the VICReg loss")
@@ -55,6 +56,7 @@ def parse_args():
 
     # MLPF architecture
     parser.add_argument("--width_mlpf", type=int, default=126, help="hidden dimension of mlpf")
+    parser.add_argument("--num_convs_mlpf", type=int, default=3, help="number of graph layers for mlpf")
 
     args = parser.parse_args()
 

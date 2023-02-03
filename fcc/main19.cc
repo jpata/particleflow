@@ -57,6 +57,8 @@ int main(int argc, char *argv[]) {
 
   // Average number of pileup events per signal event.
   double nPileupAvg = 10.0;
+  
+  // Shift each PU event by this time delta in time to mimic ee overlay
   double timeDelta = 0.5;
   
   Pythia8ToHepMC ToHepMC;
