@@ -308,6 +308,8 @@ def make_transformer(config, dtype):
         "num_layers_decoder_reg",
         "num_layers_decoder_cls",
         "hidden_dim",
+        "num_heads",
+        "num_random_features",
     ]
     kwargs = {}
     for par in parameters:
