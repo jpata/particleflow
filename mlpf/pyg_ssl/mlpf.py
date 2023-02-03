@@ -93,7 +93,7 @@ class MLPF(nn.Module):
                 nn.Linear(width, embedding_dim),
             )
 
-        self.conv_type = "attention"
+        self.conv_type = "gravnet"
         # GNN that uses the embeddings learnt by VICReg as the input features
         if self.conv_type == "gravnet":
             self.conv_id = nn.ModuleList()
