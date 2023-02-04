@@ -8,17 +8,18 @@ from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
 class GravNetLayer(nn.Module):
-    def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k):
+    def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
         super(GravNetLayer, self).__init__()
         self.conv1 = GravNetConv(
             embedding_dim, embedding_dim, space_dimensions=space_dimensions, propagate_dimensions=propagate_dimensions, k=k
         )
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
+        self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, batch_index):
         x_new, edge_index, edge_weight = self.conv1(x, batch_index)
         # possibly do something with edge index
-
+        x_new = self.dropout(x_new)
         x = self.norm1(x + x_new)
         return x
 
@@ -80,6 +81,7 @@ class MLPF(nn.Module):
 
         self.act = nn.ELU
         self.native_mlpf = native_mlpf  # boolean that is true for native mlpf and false for ssl
+        dropout = 0.3
 
         if native_mlpf:
             # embedding of the inputs that is necessary for native mlpf training
@@ -105,6 +107,7 @@ class MLPF(nn.Module):
                         space_dimensions,
                         propagate_dimensions,
                         k,
+                        dropout
                     )
                 )
                 self.conv_reg.append(
@@ -113,6 +116,7 @@ class MLPF(nn.Module):
                         space_dimensions,
                         propagate_dimensions,
                         k,
+                        dropout
                     )
                 )
         elif self.conv_type == "attention":
@@ -124,7 +128,6 @@ class MLPF(nn.Module):
                 self.conv_reg.append(SelfAttentionLayer(embedding_dim))
 
         decoding_dim = input_dim + num_convs * embedding_dim
-        dropout = 0.1
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
