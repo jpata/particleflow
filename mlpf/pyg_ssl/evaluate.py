@@ -48,7 +48,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
 
 def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, data_, save_as_):
 
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
     jet_pt = 5.0
     jet_match_dr = 0.1
 

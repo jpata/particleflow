@@ -1,5 +1,7 @@
 import os.path as osp
 
+import datetime
+import platform
 import matplotlib
 import mplhep
 import numpy as np
@@ -51,6 +53,8 @@ if __name__ == "__main__":
     data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf = data_split(args.dataset, args.data_split_mode)
 
     # setup the directory path to hold all models and plots
+    if args.prefix_VICReg is None:
+        args.prefix_VICReg = "pyg_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "." + platform.node()
     outpath = osp.join(args.outpath, args.prefix_VICReg)
 
     # load a pre-trained VICReg model
@@ -128,6 +132,9 @@ if __name__ == "__main__":
                 "embedding_dim": encoder.conv[1].out_channels,
                 "width": args.width_mlpf,
                 "native_mlpf": False,
+                "k": args.nearest,
+                "num_convs": args.num_convs_mlpf,
+                "dropout": args.dropout_mlpf,
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -155,17 +162,18 @@ if __name__ == "__main__":
             )
 
             # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
-            ret_ssl = evaluate(
-                device,
-                encoder,
-                decoder,
-                mlpf_ssl,
-                args.batch_size_mlpf,
-                "ssl",
-                outpath_ssl,
-                [data_valid_VICReg, data_valid_mlpf],
-                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
-            )
+            if args.evaluate:
+                ret_ssl = evaluate(
+                    device,
+                    encoder,
+                    decoder,
+                    mlpf_ssl,
+                    args.batch_size_mlpf,
+                    "ssl",
+                    outpath_ssl,
+                    [data_valid_VICReg, data_valid_mlpf],
+                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                )
 
         if args.native:
             input_ = (
@@ -176,6 +184,9 @@ if __name__ == "__main__":
                 "width": args.width_mlpf,
                 "native_mlpf": True,
                 "embedding_dim": args.embedding_dim,
+                "k": args.nearest,
+                "num_convs": args.num_convs_mlpf,
+                "dropout": args.dropout_mlpf,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
@@ -202,18 +213,19 @@ if __name__ == "__main__":
                 FineTune_VICReg=False,
             )
 
-            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
-            ret_native = evaluate(
-                device,
-                encoder,
-                decoder,
-                mlpf_native,
-                args.batch_size_mlpf,
-                "native",
-                outpath_native,
-                [data_valid_VICReg, data_valid_mlpf],
-                ["valid_dataset_VICReg", "valid_dataset_mlpf"],
-            )
+            if args.evaluate:
+                # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+                ret_native = evaluate(
+                    device,
+                    encoder,
+                    decoder,
+                    mlpf_native,
+                    args.batch_size_mlpf,
+                    "native",
+                    outpath_native,
+                    [data_valid_mlpf],
+                    ["valid_dataset_mlpf"],
+                )
 
         if args.ssl & args.native:
             # plot multiplicity plot of both at the same time
