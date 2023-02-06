@@ -97,7 +97,8 @@ def train(
     # initialize loss counters
     losses = 0
 
-    for j in range(5):
+    prp_ = 1
+    for j in range(prp_):
         for i, batch in enumerate(loader):
             # make transformation
             tracks, clusters = distinguish_PFelements(batch.to(device))
@@ -124,7 +125,7 @@ def train(
 
             losses += loss.detach()
 
-    losses = losses.cpu().item() / (len(loader) * 5)
+    losses = losses.cpu().item() / (len(loader) * prp_)
 
     return losses
 
