@@ -260,7 +260,7 @@ def training_loop_mlpf(
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
     if FineTune_VICReg:
         print("Will finetune VICReg during mlpf training")
-        optimizer_VICReg = torch.optim.Adam(encoder.parameters(), lr=lr * 0.1)
+        optimizer_VICReg = torch.optim.SGD(encoder.parameters(), lr=lr * 0.1)
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
