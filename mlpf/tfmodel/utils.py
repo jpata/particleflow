@@ -183,17 +183,18 @@ def get_num_gpus(envvar="CUDA_VISIBLE_DEVICES"):
     return num_gpus, gpus
 
 
-def get_strategy(num_cpus=1):
+def get_strategy(num_cpus=None):
 
     # Always use the correct number of threads that were requested
     if num_cpus == 1:
         logging.warning("num_cpus==1, using explicitly only one CPU thread")
 
-    os.environ["OMP_NUM_THREADS"] = str(num_cpus)
-    os.environ["TF_NUM_INTRAOP_THREADS"] = str(num_cpus)
-    os.environ["TF_NUM_INTEROP_THREADS"] = str(num_cpus)
-    tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
-    tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
+    if num_cpus:
+        os.environ["OMP_NUM_THREADS"] = str(num_cpus)
+        os.environ["TF_NUM_INTRAOP_THREADS"] = str(num_cpus)
+        os.environ["TF_NUM_INTEROP_THREADS"] = str(num_cpus)
+        tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
+        tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
     device = "cpu"
     if "CUDA_VISIBLE_DEVICES" in os.environ:
