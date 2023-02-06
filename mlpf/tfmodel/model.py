@@ -1309,14 +1309,15 @@ class KernelEncoder(tf.keras.layers.Layer):
         from .kernel_attention import KernelAttention
 
         self.key_dim = kwargs.pop("key_dim")
-        self.num_heads = 8
+        self.num_heads = kwargs.pop("num_heads")
+        self.num_random_features = kwargs.pop("num_random_features")
 
         self.attn = KernelAttention(
             feature_transform="elu",
             num_heads=self.num_heads,
             key_dim=self.key_dim,
             seed=SEED_KERNELATTENTION,
-            num_random_features=128,
+            num_random_features=self.num_random_features,
             name=kwargs.get("name") + "_attention",
             is_short_seq=False,
         )
@@ -1397,7 +1398,9 @@ class PFNetTransformer(tf.keras.Model):
         num_layers_encoder=2,
         num_layers_decoder_reg=2,
         num_layers_decoder_cls=2,
-        hiddem_dim=256,
+        hidden_dim=256,
+        num_heads=8,
+        num_random_features=128,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1405,10 +1408,12 @@ class PFNetTransformer(tf.keras.Model):
 
         if input_encoding == "cms":
             self.enc = InputEncodingCMS(num_input_classes)
+        elif input_encoding == "clic":
+            self.enc = InputEncodingCLIC(num_input_classes)
         elif input_encoding == "default":
             self.enc = InputEncoding(num_input_classes)
 
-        self.key_dim = hiddem_dim
+        self.key_dim = hidden_dim
 
         self.ffn = point_wise_feed_forward_network(
             self.key_dim,
@@ -1420,15 +1425,36 @@ class PFNetTransformer(tf.keras.Model):
 
         self.encoders = []
         for i in range(num_layers_encoder):
-            self.encoders.append(KernelEncoder(key_dim=self.key_dim, name="enc{}".format(i)))
+            self.encoders.append(
+                KernelEncoder(
+                    key_dim=self.key_dim,
+                    num_heads=num_heads,
+                    num_random_features=num_random_features,
+                    name="enc{}".format(i),
+                )
+            )
 
         self.decoders_cls = []
         for i in range(num_layers_decoder_reg):
-            self.decoders_cls.append(KernelEncoder(key_dim=self.key_dim, name="dec-cls-{}".format(i)))
+            self.decoders_cls.append(
+                KernelEncoder(
+                    key_dim=self.key_dim,
+                    num_heads=num_heads,
+                    num_random_features=num_random_features,
+                    name="dec-cls-{}".format(i),
+                )
+            )
 
         self.decoders_reg = []
         for i in range(num_layers_decoder_cls):
-            self.decoders_reg.append(KernelEncoder(key_dim=self.key_dim, name="dec-reg-{}".format(i)))
+            self.decoders_reg.append(
+                KernelEncoder(
+                    key_dim=self.key_dim,
+                    num_heads=num_heads,
+                    num_random_features=num_random_features,
+                    name="dec-reg-{}".format(i),
+                )
+            )
 
         self.queries = QueryLayer(self.key_dim)
 
