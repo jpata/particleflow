@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
+from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 from .utils import NUM_CLASSES
-from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
 class GravNetLayer(nn.Module):
@@ -73,7 +73,6 @@ class MLPF(nn.Module):
         width=126,
         num_convs=2,
         k=32,
-        embedding_dim=128,
         native_mlpf=False,
         propagate_dimensions=32,
         space_dimensions=4,

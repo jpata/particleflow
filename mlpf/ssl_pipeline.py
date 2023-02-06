@@ -1,7 +1,7 @@
-import os.path as osp
-
 import datetime
+import os.path as osp
 import platform
+
 import matplotlib
 import mplhep
 import numpy as np
@@ -137,7 +137,6 @@ if __name__ == "__main__":
                 "input_dim": input_ + args.embedding_dim_VICReg,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
-                "num_convs": args.num_convs,
                 "native_mlpf": False,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
@@ -190,7 +189,6 @@ if __name__ == "__main__":
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
-                "num_convs": args.num_convs,
                 "native_mlpf": True,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
