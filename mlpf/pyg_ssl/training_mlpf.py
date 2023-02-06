@@ -2,20 +2,18 @@ import json
 import math
 import pickle as pkl
 import time
-import tqdm
+from typing import Optional
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-from typing import Optional
-
 import torch
-from torch import Tensor
-from torch import nn
+import tqdm
+from torch import Tensor, nn
 from torch.nn import functional as F
-from .utils import combine_PFelements, distinguish_PFelements
 from torch.utils.tensorboard import SummaryWriter
+
+from .utils import combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 
@@ -257,8 +255,9 @@ def training_loop_mlpf(
     best_val_loss = 99999.9
     stale_epochs = 0
 
-    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
+    tensorboard_writer = SummaryWriter(outpath)
 
+    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
     if FineTune_VICReg:
         print("Will finetune VICReg during mlpf training")
         optimizer_VICReg = torch.optim.Adam(encoder.parameters(), lr=lr * 0.1)
