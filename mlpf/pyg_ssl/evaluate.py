@@ -48,7 +48,7 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
     from jet_utils import build_dummy_array, match_two_jet_collections
     from plotting.plot_utils import load_eval_data, plot_jet_ratio
 
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
     jet_pt = 5.0
     jet_match_dr = 0.1
 

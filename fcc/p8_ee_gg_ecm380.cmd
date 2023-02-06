@@ -16,8 +16,8 @@ Stat:showPartonLevel = off
 Beams:idA = 11                   ! first beam, e- = 11
 Beams:idB = -11                  ! second beam, e+ = -11
 
-! 4) Hard process : photon collisions at 365
-Beams:eCM = 365
+! 4) Hard process : photon collisions at 380
+Beams:eCM = 380
 PhotonCollision:gmgm2qqbar = on
 PhotonCollision:gmgm2ccbar = on
 PhotonCollision:gmgm2bbbar = on

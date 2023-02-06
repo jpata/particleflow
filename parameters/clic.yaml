@@ -148,14 +148,14 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 5
+  num_graph_layers_reg: 5
   output_decoding:
     activation: elu
     regression_use_classification: yes
     dropout: 0.1
 
-    pt_as_correction: yes
+    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -248,6 +248,8 @@ evaluation_datasets:
   clic_edm_ttbar_pf:
     batch_size: 50
     num_events: -1
+
+evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_pf:

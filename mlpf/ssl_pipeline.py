@@ -1,5 +1,7 @@
 import os.path as osp
 
+import datetime
+import platform
 import matplotlib
 import mplhep
 import numpy as np
@@ -53,6 +55,8 @@ if __name__ == "__main__":
     data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf = data_split(args.dataset, args.data_split_mode)
 
     # setup the directory path to hold all models and plots
+    if args.prefix_VICReg is None:
+        args.prefix_VICReg = "pyg_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "." + platform.node()
     outpath = osp.join(args.outpath, args.prefix_VICReg)
 
     # load a pre-trained VICReg model
@@ -135,6 +139,9 @@ if __name__ == "__main__":
                 "width": args.width_mlpf,
                 "num_convs": args.num_convs,
                 "native_mlpf": False,
+                "k": args.nearest,
+                "num_convs": args.num_convs_mlpf,
+                "dropout": args.dropout_mlpf,
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -185,6 +192,9 @@ if __name__ == "__main__":
                 "width": args.width_mlpf,
                 "num_convs": args.num_convs,
                 "native_mlpf": True,
+                "k": args.nearest,
+                "num_convs": args.num_convs_mlpf,
+                "dropout": args.dropout_mlpf,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)

@@ -276,6 +276,8 @@ validation_dataset: cms_pf_qcd_high_pt
 validation_batch_size: 5
 validation_num_events: 500
 
+evaluation_jet_algo: antikt_algorithm
+
 datasets:
   cms_pf_ttbar:
     version: 1.5.1

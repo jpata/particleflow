@@ -1,4 +1,5 @@
 import logging
+from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 try:
     import horovod.tensorflow.keras as hvd
@@ -58,6 +59,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         plot_freq=1,
         horovod_enabled=False,
         comet_experiment=None,
+        is_hpo_run=False,
     ):
         super(CustomCallback, self).__init__()
         self.plot_freq = plot_freq
@@ -66,6 +68,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         self.config = config
         self.horovod_enabled = horovod_enabled
         self.comet_experiment = comet_experiment
+        self.is_hpo_run = is_hpo_run
 
     def on_epoch_end(self, epoch, logs=None):
         if not self.horovod_enabled or hvd.rank() == 0:
@@ -79,6 +82,11 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
     # save the training logs (losses) for this epoch
     with open("{}/history_{}.json".format(self.outpath, epoch), "w") as fi:
         json.dump(logs, fi)
+
+    if self.is_hpo_run:
+        # comet does not log metrics automatically when running HPO using Ray Tune,
+        # hence doing it manually here
+        comet_experiment.log_metrics(logs, epoch=epoch)
 
     if self.plot_freq <= 0:
         return
@@ -141,6 +149,7 @@ def prepare_callbacks(
     num_cpus=None,
     num_gpus=None,
     train_samples=None,
+    is_hpo_run=False,
 ):
 
     callbacks = []
@@ -148,7 +157,7 @@ def prepare_callbacks(
     callbacks += [terminate_cb]
 
     if not horovod_enabled or hvd.rank() == 0:
-        callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled)
+        callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run)
 
     if benchmark_dir:
         if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
@@ -185,7 +194,7 @@ def prepare_callbacks(
     return callbacks
 
 
-def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled):
+def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run=False):
     callbacks = []
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
@@ -209,6 +218,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         plot_freq=config["callbacks"]["plot_freq"],
         horovod_enabled=horovod_enabled,
         comet_experiment=comet_experiment,
+        is_hpo_run=is_hpo_run,
     )
 
     callbacks += [cb]
@@ -285,14 +295,23 @@ def make_gnn_dense(config, dtype):
         met_output=config["loss"]["met_loss"] != "none",
         cls_output_as_logits=config["setup"].get("cls_output_as_logits", False),
         small_graph_opt=config["setup"].get("small_graph_opt", False),
-        **kwargs
+        **kwargs,
     )
 
     return model
 
 
 def make_transformer(config, dtype):
-    parameters = ["input_encoding", "output_decoding"]
+    parameters = [
+        "input_encoding",
+        "output_decoding",
+        "num_layers_encoder",
+        "num_layers_decoder_reg",
+        "num_layers_decoder_cls",
+        "hidden_dim",
+        "num_heads",
+        "num_random_features",
+    ]
     kwargs = {}
     for par in parameters:
         if par in config["parameters"].keys():
@@ -306,7 +325,7 @@ def make_transformer(config, dtype):
         event_set_output=config["loss"]["event_loss"] != "none",
         met_output=config["loss"]["met_loss"] != "none",
         cls_output_as_logits=config["setup"]["cls_output_as_logits"],
-        **kwargs
+        **kwargs,
     )
     return model
 
@@ -325,7 +344,12 @@ def eval_model(
 
     ibatch = 0
 
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    if config["evaluation_jet_algo"] == "ee_genkt_algorithm":
+        jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+    elif config["evaluation_jet_algo"] == "antikt_algorithm":
+        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    else:
+        raise KeyError("Unknown evaluation_jet_algo: {}".format(config["evaluation_jet_algo"]))
 
     for elem in tqdm(dataset, desc="Evaluating model"):
 
@@ -518,3 +542,36 @@ def make_focal_loss(config):
         )
 
     return loss
+
+
+def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
+    try:
+        if comet_offline:
+            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
+            if outdir is None:
+                raise ValueError("Please specify am output directory when setting comet_offline to True")
+
+            experiment = OfflineExperiment(
+                project_name=comet_exp_name,
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+                offline_directory=outdir + "/cometml",
+            )
+        else:
+            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
+
+            experiment = Experiment(
+                project_name=comet_exp_name,
+                auto_metric_logging=True,
+                auto_param_logging=True,
+                auto_histogram_weight_logging=True,
+                auto_histogram_gradient_logging=False,
+                auto_histogram_activation_logging=False,
+            )
+    except Exception as e:
+        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
+        experiment = None
+    return experiment

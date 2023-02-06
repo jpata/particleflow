@@ -2,18 +2,109 @@ import json
 import math
 import pickle as pkl
 import time
+import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
+from typing import Optional
+
+import torch
+from torch import Tensor
+from torch import nn
+from torch.nn import functional as F
 from .utils import combine_PFelements, distinguish_PFelements
+from torch.utils.tensorboard import SummaryWriter
 
 matplotlib.use("Agg")
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
+
+# keep track of the training step across epochs
+istep_global = 0
+
+
+# from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
+class FocalLoss(nn.Module):
+    """Focal Loss, as described in https://arxiv.org/abs/1708.02002.
+    It is essentially an enhancement to cross entropy loss and is
+    useful for classification tasks when there is a large class imbalance.
+    x is expected to contain raw, unnormalized scores for each class.
+    y is expected to contain class labels.
+    Shape:
+        - x: (batch_size, C) or (batch_size, C, d1, d2, ..., dK), K > 0.
+        - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
+    """
+
+    def __init__(
+        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
+    ):
+        """Constructor.
+        Args:
+            alpha (Tensor, optional): Weights for each class. Defaults to None.
+            gamma (float, optional): A constant, as described in the paper.
+                Defaults to 0.
+            reduction (str, optional): 'mean', 'sum' or 'none'.
+                Defaults to 'mean'.
+            ignore_index (int, optional): class label to ignore.
+                Defaults to -100.
+        """
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError('Reduction must be one of: "mean", "sum", "none".')
+
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none", ignore_index=ignore_index)
+
+    def __repr__(self):
+        arg_keys = ["alpha", "gamma", "ignore_index", "reduction"]
+        arg_vals = [self.__dict__[k] for k in arg_keys]
+        arg_strs = [f"{k}={v!r}" for k, v in zip(arg_keys, arg_vals)]
+        arg_str = ", ".join(arg_strs)
+        return f"{type(self).__name__}({arg_str})"
+
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        if x.ndim > 2:
+            # (N, C, d1, d2, ..., dK) --> (N * d1 * ... * dK, C)
+            c = x.shape[1]
+            x = x.permute(0, *range(2, x.ndim), 1).reshape(-1, c)
+            # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
+            y = y.view(-1)
+
+        unignored_mask = y != self.ignore_index
+        y = y[unignored_mask]
+        if len(y) == 0:
+            return torch.tensor(0.0)
+        x = x[unignored_mask]
+
+        # compute weighted cross entropy term: -alpha * log(pt)
+        # (alpha is already part of self.nll_loss)
+        log_p = F.log_softmax(x, dim=-1)
+        ce = self.nll_loss(log_p, y)
+
+        # get true class column from each row
+        all_rows = torch.arange(len(x))
+        log_pt = log_p[all_rows, y]
+
+        # compute focal term: (1 - pt)^gamma
+        pt = log_pt.exp()
+        focal_term = (1 - pt) ** self.gamma
+
+        # the full loss: -alpha * ((1 - pt)^gamma) * log(pt)
+        loss = focal_term * ce
+
+        if self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+
+        return loss
 
 
 def compute_weights(device, target_ids, num_classes):
@@ -30,21 +121,24 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode):
+def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tb):
     with torch.no_grad():
         optimizer = None
         optimizer_VICReg = None
-        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb)
     return ret
 
 
-def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
     is_train = not (optimizer is None)
+    global istep_global
+
+    loss_obj_id = FocalLoss(gamma=2.0)
 
     if is_train:
         print("---->Initiating a training run")
@@ -65,7 +159,7 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     epoch_loss_momentum = 0.0
     epoch_loss_charge = 0.0
 
-    for i, batch in enumerate(loader):
+    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
         if mode == "ssl":
             # seperate PF-elements
@@ -90,19 +184,27 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         target_ids = event_on_device.ygen_id
 
         target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
-        target_charge = event_on_device.ygen[:, 0:1].to(dtype=torch.float32)
+        target_charge = (event_on_device.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
 
-        loss_id = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids)  # for classifying PID
+        loss_id = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+        # loss_id_old = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids)  # for classifying PID
 
         # for regression, mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        loss_momentum = torch.nn.functional.huber_loss(
+        loss_momentum = 10 * torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )  # for regressing p4
-        loss_charge = torch.nn.functional.huber_loss(
-            pred_charge * msk_true_particle, target_charge * msk_true_particle
-        )  # for regressing charge
+
+        loss_charge = torch.nn.functional.cross_entropy(
+            pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        )  # for predicting charge
         loss = loss_id + loss_momentum + loss_charge
+
+        if is_train:
+            tb.add_scalar("batch/loss_id", loss_id.detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_momentum", loss_momentum.detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_charge", loss_charge.detach().cpu().item(), istep_global)
+            istep_global += 1
 
         # update parameters
         if is_train:
@@ -155,7 +257,7 @@ def training_loop_mlpf(
     best_val_loss = 99999.9
     stale_epochs = 0
 
-    optimizer = torch.optim.Adam(mlpf.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
 
     if FineTune_VICReg:
         print("Will finetune VICReg during mlpf training")
@@ -172,12 +274,18 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode)
+        losses = train(
+            device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
+        )
+        tensorboard_writer.add_scalar("epoch/train_loss", losses, epoch)
         losses_train.append(losses)
 
         # validation step
-        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode)
+        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        tensorboard_writer.add_scalar("epoch/val_loss", losses, epoch)
         losses_valid.append(losses)
+
+        tensorboard_writer.flush()
 
         # early-stopping
         if losses < best_val_loss:
@@ -212,10 +320,12 @@ def training_loop_mlpf(
         )
 
         fig, ax = plt.subplots()
+
         ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(losses_train[-1]))
         ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(losses_valid[-1]))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
+        ax.set_ylim(0.8 * losses_train[-1], 1.2 * losses_train[-1])
         if mode == "ssl":
             ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
         else:
