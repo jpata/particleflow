@@ -57,6 +57,7 @@ def parse_args():
     # MLPF architecture
     parser.add_argument("--width_mlpf", type=int, default=126, help="hidden dimension of mlpf")
     parser.add_argument("--num_convs_mlpf", type=int, default=3, help="number of graph layers for mlpf")
+    parser.add_argument("--dropout_mlpf", type=float, default=0.4, help="dropout for MLPF model")
 
     args = parser.parse_args()
 

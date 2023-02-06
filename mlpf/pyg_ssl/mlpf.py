@@ -76,12 +76,13 @@ class MLPF(nn.Module):
         native_mlpf=False,
         propagate_dimensions=32,
         space_dimensions=4,
+        dropout=0.4,
     ):
         super(MLPF, self).__init__()
 
         self.act = nn.ELU
         self.native_mlpf = native_mlpf  # boolean that is true for native mlpf and false for ssl
-        dropout = 0.3
+        self.dropout = dropout
 
         if native_mlpf:
             # embedding of the inputs that is necessary for native mlpf training
@@ -101,24 +102,8 @@ class MLPF(nn.Module):
             self.conv_id = nn.ModuleList()
             self.conv_reg = nn.ModuleList()
             for i in range(num_convs):
-                self.conv_id.append(
-                    GravNetLayer(
-                        embedding_dim,
-                        space_dimensions,
-                        propagate_dimensions,
-                        k,
-                        dropout
-                    )
-                )
-                self.conv_reg.append(
-                    GravNetLayer(
-                        embedding_dim,
-                        space_dimensions,
-                        propagate_dimensions,
-                        k,
-                        dropout
-                    )
-                )
+                self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
+                self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
         elif self.conv_type == "attention":
             self.conv_id = nn.ModuleList()
             self.conv_reg = nn.ModuleList()

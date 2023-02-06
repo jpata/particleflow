@@ -134,6 +134,7 @@ if __name__ == "__main__":
                 "native_mlpf": False,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
+                "dropout": args.droput_mlpf,
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -185,6 +186,7 @@ if __name__ == "__main__":
                 "embedding_dim": args.embedding_dim,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
+                "dropout": args.droput_mlpf,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
