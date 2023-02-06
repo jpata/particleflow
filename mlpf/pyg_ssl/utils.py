@@ -100,9 +100,6 @@ def distinguish_PFelements(batch):
 # conversly, function that combines the learned latent representations back into one Batch() object
 def combine_PFelements(tracks, clusters):
 
-    #     zero padding
-    #     clusters.x = torch.cat([clusters.x, torch.from_numpy(np.zeros([clusters.x.shape[0],TRACKS_X-CLUSTERS_X]))], axis=1)
-
     event = Batch(
         x=torch.cat([tracks.x, clusters.x]),
         ygen=torch.cat([tracks.ygen, clusters.ygen]),
@@ -167,12 +164,11 @@ def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_m
                 "lr": args.lr,
                 "batch_size_VICReg": args.batch_size_VICReg,
                 "width_encoder": args.width_encoder,
-                "embedding_dim": args.embedding_dim,
+                "embedding_dim": args.embedding_dim_VICReg,
                 "num_convs": args.num_convs,
                 "space_dim": args.space_dim,
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
-                "input_dim": args.embedding_dim,
                 "width_decoder": args.width_decoder,
                 "output_dim": args.expand_dim,
                 "lmbd": args.lmbd,
@@ -220,6 +216,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "lr": args.lr,
                 "batch_size_mlpf": args.batch_size_mlpf,
                 "width": args.width_mlpf,
+                "embedding_dim": args.embedding_dim_mlpf,
                 "num_convs": args.num_convs,
                 "space_dim": args.space_dim,
                 "propagate_dim": args.propagate_dim,

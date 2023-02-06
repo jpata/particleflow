@@ -1,22 +1,24 @@
-import os.path as osp
-
 import datetime
+import os.path as osp
 import platform
+
 import matplotlib
 import mplhep
 import numpy as np
 import torch
 import torch_geometric
 from pyg_ssl.args import parse_args
-from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
 from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
 from pyg_ssl.VICReg import DECODER, ENCODER
 
+# from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
+
+
 matplotlib.use("Agg")
-mplhep.set_style(mplhep.styles.CMS)
+mplhep.style.use(mplhep.styles.CMS)
 
 """
 Developing a PyTorch Geometric semi-supervised (VICReg-based https://arxiv.org/abs/2105.04906) pipeline
@@ -72,8 +74,8 @@ if __name__ == "__main__":
 
     else:
         encoder_model_kwargs = {
+            "embedding_dim": args.embedding_dim_VICReg,
             "width": args.width_encoder,
-            "embedding_dim": args.embedding_dim,
             "num_convs": args.num_convs,
             "space_dim": args.space_dim,
             "propagate_dim": args.propagate_dim,
@@ -81,9 +83,9 @@ if __name__ == "__main__":
         }
 
         decoder_model_kwargs = {
-            "input_dim": args.embedding_dim,
-            "width": args.width_decoder,
+            "input_dim": args.embedding_dim_VICReg,
             "output_dim": args.expand_dim,
+            "width": args.width_decoder,
         }
 
         encoder = ENCODER(**encoder_model_kwargs).to(device)
@@ -101,6 +103,7 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_VICReg, args.batch_size_VICReg)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_VICReg, args.batch_size_VICReg)
 
+        # optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
         optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
 
         training_loop_VICReg(
@@ -126,10 +129,13 @@ if __name__ == "__main__":
         train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
         valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
 
+        input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
+
         if args.ssl:
 
             mlpf_model_kwargs = {
-                "embedding_dim": encoder.conv[1].out_channels,
+                "input_dim": input_ + args.embedding_dim_VICReg,
+                "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
                 "native_mlpf": False,
                 "k": args.nearest,
@@ -162,7 +168,9 @@ if __name__ == "__main__":
             )
 
             # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
-            if args.evaluate:
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import evaluate
+
                 ret_ssl = evaluate(
                     device,
                     encoder,
@@ -176,14 +184,12 @@ if __name__ == "__main__":
                 )
 
         if args.native:
-            input_ = (
-                max(CLUSTERS_X, TRACKS_X) + 1
-            )  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
+
             mlpf_model_kwargs = {
                 "input_dim": input_,
+                "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
                 "native_mlpf": True,
-                "embedding_dim": args.embedding_dim,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
                 "dropout": args.dropout_mlpf,
@@ -213,8 +219,10 @@ if __name__ == "__main__":
                 FineTune_VICReg=False,
             )
 
-            if args.evaluate:
-                # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import evaluate
+
                 ret_native = evaluate(
                     device,
                     encoder,
@@ -223,10 +231,13 @@ if __name__ == "__main__":
                     args.batch_size_mlpf,
                     "native",
                     outpath_native,
-                    [data_valid_mlpf],
-                    ["valid_dataset_mlpf"],
+                    [data_valid_VICReg, data_valid_mlpf],
+                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
                 )
 
         if args.ssl & args.native:
             # plot multiplicity plot of both at the same time
-            make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
+            if args.evaluate_mlpf:
+                from pyg_ssl.evaluate import make_multiplicity_plots_both
+
+                make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)

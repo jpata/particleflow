@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
+from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 from .utils import NUM_CLASSES
-from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
 class GravNetLayer(nn.Module):
@@ -69,10 +69,10 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
+        embedding_dim=128,
         width=126,
         num_convs=2,
         k=32,
-        embedding_dim=128,
         native_mlpf=False,
         propagate_dimensions=32,
         space_dimensions=4,
@@ -84,17 +84,16 @@ class MLPF(nn.Module):
         self.native_mlpf = native_mlpf  # boolean that is true for native mlpf and false for ssl
         self.dropout = dropout
 
-        if native_mlpf:
-            # embedding of the inputs that is necessary for native mlpf training
-            self.nn0 = nn.Sequential(
-                nn.Linear(input_dim, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, embedding_dim),
-            )
+        # embedding of the inputs
+        self.nn0 = nn.Sequential(
+            nn.Linear(input_dim, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, width),
+            self.act(),
+            nn.Linear(width, embedding_dim),
+        )
 
         self.conv_type = "gravnet"
         # GNN that uses the embeddings learnt by VICReg as the input features
@@ -132,11 +131,7 @@ class MLPF(nn.Module):
         input_ = batch.x.float()
         batch_idx = batch.batch
 
-        # if `native_mlpf` then use then embed the inputs first (otherwise VICReg provides the embeddings)
-        if self.native_mlpf:
-            embedding = self.nn0(input_)
-        else:
-            embedding = input_
+        embedding = self.nn0(input_)
 
         embeddings_id = []
         embeddings_reg = []

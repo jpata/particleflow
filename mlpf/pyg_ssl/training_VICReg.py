@@ -97,34 +97,34 @@ def train(
     # initialize loss counters
     losses = 0
 
-    # print(len(loader))
-    for i, batch in enumerate(loader):
-        # make transformation
-        tracks, clusters = distinguish_PFelements(batch.to(device))
+    for j in range(5):
+        for i, batch in enumerate(loader):
+            # make transformation
+            tracks, clusters = distinguish_PFelements(batch.to(device))
 
-        # ENCODE
-        embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-        # POOLING
-        pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-        pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
-        # DECODE
-        out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
+            # ENCODE
+            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+            # POOLING
+            pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
+            pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
+            # DECODE
+            out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
-        # compute loss
-        loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
+            # compute loss
+            loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
 
-        # update parameters
-        if is_train:
-            for param in encoder.parameters():
-                param.grad = None
-            for param in decoder.parameters():
-                param.grad = None
-            loss.backward()
-            optimizer.step()
+            # update parameters
+            if is_train:
+                for param in encoder.parameters():
+                    param.grad = None
+                for param in decoder.parameters():
+                    param.grad = None
+                loss.backward()
+                optimizer.step()
 
-        losses += loss.detach()
+            losses += loss.detach()
 
-    losses = losses.cpu().item() / len(loader)
+    losses = losses.cpu().item() / (len(loader) * 5)
 
     return losses
 
