@@ -14,9 +14,6 @@ from pyg_ssl.training_VICReg import training_loop_VICReg
 from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
 from pyg_ssl.VICReg import DECODER, ENCODER
 
-# from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
-
-
 matplotlib.use("Agg")
 mplhep.style.use(mplhep.styles.CMS)
 
@@ -24,7 +21,7 @@ mplhep.style.use(mplhep.styles.CMS)
 Developing a PyTorch Geometric semi-supervised (VICReg-based https://arxiv.org/abs/2105.04906) pipeline
 for particleflow reconstruction on CLIC datasets.
 
-Author: Farouk Mokhtar
+Authors: Farouk Mokhtar, Joosep Pata.
 """
 
 
@@ -52,7 +49,9 @@ if __name__ == "__main__":
     # torch.autograd.set_detect_anomaly(True)
 
     # load the clic dataset
-    data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf = data_split(args.dataset, args.data_split_mode)
+    data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar = data_split(
+        args.dataset, args.data_split_mode
+    )
 
     # setup the directory path to hold all models and plots
     if args.prefix_VICReg is None:
@@ -100,8 +99,8 @@ if __name__ == "__main__":
 
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
 
-        train_loader = torch_geometric.loader.DataLoader(data_train_VICReg, args.batch_size_VICReg)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid_VICReg, args.batch_size_VICReg)
+        train_loader = torch_geometric.loader.DataLoader(data_VICReg_train, args.batch_size_VICReg)
+        valid_loader = torch_geometric.loader.DataLoader(data_VICReg_valid, args.batch_size_VICReg)
 
         # optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
         optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
@@ -123,11 +122,11 @@ if __name__ == "__main__":
 
     if args.train_mlpf:
         print("------> Progressing to MLPF trainings...")
-        print(f"Will use {len(data_train_mlpf)} events for train")
-        print(f"Will use {len(data_valid_mlpf)} events for valid")
+        print(f"Will use {len(data_mlpf_train)} events for train")
+        print(f"Will use {len(data_mlpf_valid)} events for valid")
 
-        train_loader = torch_geometric.loader.DataLoader(data_train_mlpf, args.batch_size_mlpf)
-        valid_loader = torch_geometric.loader.DataLoader(data_valid_mlpf, args.batch_size_mlpf)
+        train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.batch_size_mlpf)
+        valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.batch_size_mlpf)
 
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
@@ -167,7 +166,7 @@ if __name__ == "__main__":
                 FineTune_VICReg=args.FineTune_VICReg,
             )
 
-            # evaluate the ssl-based mlpf on both the VICReg validation and the mlpf validation datasets
+            # evaluate the ssl-based mlpf on both the QCD and TTbar samples
             if args.evaluate_mlpf:
                 from pyg_ssl.evaluate import evaluate
 
@@ -179,8 +178,7 @@ if __name__ == "__main__":
                     args.batch_size_mlpf,
                     "ssl",
                     outpath_ssl,
-                    [data_valid_VICReg, data_valid_mlpf],
-                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
                 )
 
         if args.native:
@@ -219,7 +217,7 @@ if __name__ == "__main__":
                 FineTune_VICReg=False,
             )
 
-            # evaluate the native mlpf on both the VICReg validation and the mlpf validation datasets
+            # evaluate the native mlpf on both the QCD and TTbar samples
             if args.evaluate_mlpf:
                 from pyg_ssl.evaluate import evaluate
 
@@ -231,8 +229,7 @@ if __name__ == "__main__":
                     args.batch_size_mlpf,
                     "native",
                     outpath_native,
-                    [data_valid_VICReg, data_valid_mlpf],
-                    ["valid_dataset_VICReg", "valid_dataset_mlpf"],
+                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
                 )
 
         if args.ssl & args.native:
