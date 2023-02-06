@@ -2,20 +2,18 @@ import json
 import math
 import pickle as pkl
 import time
-import tqdm
+from typing import Optional
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-from typing import Optional
-
 import torch
-from torch import Tensor
-from torch import nn
+import tqdm
+from torch import Tensor, nn
 from torch.nn import functional as F
-from .utils import combine_PFelements, distinguish_PFelements
 from torch.utils.tensorboard import SummaryWriter
+
+from .utils import combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 
@@ -162,15 +160,17 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
         if mode == "ssl":
-            # make transformation
+            # seperate PF-elements
             tracks, clusters = distinguish_PFelements(batch.to(device))
 
             # ENCODE
             embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-            tracks.x = embedding_tracks
-            clusters.x = embedding_clusters
+            # concat the inputs with embeddings
+            tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+            clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
 
+            # combine PF-elements
             event = combine_PFelements(tracks, clusters)
 
         elif mode == "native":
@@ -260,7 +260,7 @@ def training_loop_mlpf(
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
     if FineTune_VICReg:
         print("Will finetune VICReg during mlpf training")
-        optimizer_VICReg = torch.optim.SGD(mlpf.parameters(), lr=lr * 0.1)
+        optimizer_VICReg = torch.optim.SGD(encoder.parameters(), lr=lr * 0.1)
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
