@@ -344,7 +344,12 @@ def eval_model(
 
     ibatch = 0
 
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    if config["evaluation_jet_algo"] == "ee_genkt_algorithm":
+        jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+    elif config["evaluation_jet_algo"] == "antikt_algorithm":
+        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    else:
+        raise KeyError("Unknown evaluation_jet_algo: {}".format(config["evaluation_jet_algo"]))
 
     for elem in tqdm(dataset, desc="Evaluating model"):
 

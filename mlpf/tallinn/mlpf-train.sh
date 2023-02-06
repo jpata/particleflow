@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 1
+#SBATCH --gpus 2
 #SBATCH --mem-per-gpu=8G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
