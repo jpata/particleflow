@@ -148,7 +148,8 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         print("---->Initiating a validation run")
         mlpf.eval()
         loader = valid_loader
-        encoder.eval()
+        if optimizer_VICReg:
+            encoder.eval()
 
     # initialize loss counters
     losses = 0
@@ -264,7 +265,10 @@ def training_loop_mlpf(
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
-
+    
+    # set VICReg to evaluation mode
+    encoder.eval()
+    
     for epoch in range(n_epochs):
         t0 = time.time()
 
