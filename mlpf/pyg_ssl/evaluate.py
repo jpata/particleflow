@@ -42,7 +42,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
-def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, data_, save_as_):
+def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, samples):
     import fastjet
     import vector
     from jet_utils import build_dummy_array, match_two_jet_collections
@@ -61,10 +61,10 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
     mlpf.eval()
     encoder.eval()
     decoder.eval()
-    for j, data in enumerate(data_):
-        print(f"Testing the {mode} model on the {save_as_[j]}")
+    for sample, data in samples.items():
+        print(f"Testing the {mode} model on the {sample}")
 
-        this_out_path = "{}/{}/{}".format(outpath, mode, save_as_[j])
+        this_out_path = f"{outpath}/{mode}/{sample}"
         os.makedirs(this_out_path)
         test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
 
@@ -168,7 +168,12 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                     pred_cls = awkward.from_iter(pred_cls)
                     pred_p4 = vector.awk(
                         awkward.zip(
-                            {"pt": pred_p4[:, :, 0], "eta": pred_p4[:, :, 1], "phi": pred_p4[:, :, 2], "e": pred_p4[:, :, 3]}
+                            {
+                                "pt": pred_p4[:, :, 0],
+                                "eta": pred_p4[:, :, 1],
+                                "phi": pred_p4[:, :, 2],
+                                "e": pred_p4[:, :, 3],
+                            }
                         )
                     )
 
@@ -200,7 +205,7 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                             "matched_jets": matched_jets,
                         }
                     ),
-                    "{}/pred_{}.parquet".format(this_out_path, i),
+                    f"{this_out_path}/pred_{i}.parquet",
                 )
 
                 for batch_index in range(batch_size_mlpf):
@@ -214,12 +219,12 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, dat
                         ngen[class_].append((target == id_).sum().item())
                         ncand[class_].append((cand == id_).sum().item())
 
-            make_conf_matrix(conf_matrix, outpath, mode, save_as_[j])
-            npred_[save_as_[j]], ngen_[save_as_[j]], ncand_[save_as_[j]] = make_multiplicity_plots(
-                npred, ngen, ncand, outpath, mode, save_as_[j]
+            make_conf_matrix(conf_matrix, outpath, mode, sample)
+            npred_[sample], ngen_[sample], ncand_[sample] = make_multiplicity_plots(
+                npred, ngen, ncand, outpath, mode, sample
             )
-            yvals, _, _ = load_eval_data("{}/pred_*.parquet".format(this_out_path))
-            plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=save_as_[j])
+            yvals, _, _ = load_eval_data(f"{this_out_path}/pred_*.parquet")
+            plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=sample)
 
     return npred_, ngen_, ncand_
 
