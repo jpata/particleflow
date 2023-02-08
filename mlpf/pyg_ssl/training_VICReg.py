@@ -97,34 +97,33 @@ def train(
     # initialize loss counters
     losses = 0
 
-    for j in range(5):
-        for i, batch in enumerate(loader):
-            # make transformation
-            tracks, clusters = distinguish_PFelements(batch.to(device))
+    for i, batch in enumerate(loader):
+        # make transformation
+        tracks, clusters = distinguish_PFelements(batch.to(device))
 
-            # ENCODE
-            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-            # POOLING
-            pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-            pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
-            # DECODE
-            out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
+        # ENCODE
+        embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+        # POOLING
+        pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
+        pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
+        # DECODE
+        out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
-            # compute loss
-            loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
+        # compute loss
+        loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
 
-            # update parameters
-            if is_train:
-                for param in encoder.parameters():
-                    param.grad = None
-                for param in decoder.parameters():
-                    param.grad = None
-                loss.backward()
-                optimizer.step()
+        # update parameters
+        if is_train:
+            for param in encoder.parameters():
+                param.grad = None
+            for param in decoder.parameters():
+                param.grad = None
+            loss.backward()
+            optimizer.step()
 
-            losses += loss.detach()
+        losses += loss.detach()
 
-    losses = losses.cpu().item() / (len(loader) * 5)
+    losses = losses.cpu().item() / (len(loader))
 
     return losses
 
@@ -171,7 +170,7 @@ def training_loop_VICReg(
             break
 
         # training step
-        losses = train(
+        losses_t = train(
             device,
             encoder,
             decoder,
@@ -183,10 +182,10 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_train.append(losses)
+        losses_train.append(losses_t)
 
         # validation step
-        losses = validation_run(
+        losses_v = validation_run(
             device,
             encoder,
             decoder,
@@ -197,12 +196,14 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_valid.append(losses)
+        losses_valid.append(losses_v)
 
         # if (epoch % 4) == 0:
         # early-stopping
-        if losses < best_val_loss:
-            best_val_loss = losses
+        if losses_v < best_val_loss:
+            best_val_loss = losses_v
+            best_train_loss = losses_t
+
             stale_epochs = 0
 
             try:
@@ -238,8 +239,8 @@ def training_loop_VICReg(
         )
 
         fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train)), losses_train, label="training")
-        ax.plot(range(len(losses_valid)), losses_valid, label="validation")
+        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
+        ax.plot(range(len(losses_valid)), losses_valid, label="training ({:.2f})".format(best_val_loss))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
         ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)

@@ -34,26 +34,26 @@ def parse_args():
     parser.add_argument("--v", type=float, default=0.1, help="the nu term in the VICReg loss")
     parser.add_argument("--n_epochs_mlpf", type=int, default=3, help="number of training epochs for mlpf")
     parser.add_argument("--n_epochs_VICReg", type=int, default=3, help="number of training epochs for VICReg")
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--batch_size_mlpf", type=int, default=500, help="number of events to process at once")
-    parser.add_argument("--batch_size_VICReg", type=int, default=10000, help="number of events to process at once")
-    parser.add_argument("--patience", type=int, default=30, help="patience before early stopping")
+    parser.add_argument("--batch_size_VICReg", type=int, default=2000, help="number of events to process at once")
+    parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
     parser.add_argument(
         "--FineTune_VICReg", dest="FineTune_VICReg", action="store_true", help="FineTune VICReg during MLPFtraining"
     )
 
     # VICReg encoder architecture
-    parser.add_argument("--width_encoder", type=int, default=128, help="hidden dimension of the encoder")
-    parser.add_argument("--embedding_dim_VICReg", type=int, default=34, help="encoded element dimension")
+    parser.add_argument("--width_encoder", type=int, default=256, help="hidden dimension of the encoder")
+    parser.add_argument("--embedding_dim_VICReg", type=int, default=256, help="encoded element dimension")
     parser.add_argument("--num_convs", type=int, default=3, help="number of graph convolutions")
 
     # VICReg decoder architecture
-    parser.add_argument("--width_decoder", type=int, default=128, help="hidden dimension of the decoder")
-    parser.add_argument("--expand_dim", type=int, default=256, help="dimension of the output of the decoder")
+    parser.add_argument("--width_decoder", type=int, default=256, help="hidden dimension of the decoder")
+    parser.add_argument("--expand_dim", type=int, default=512, help="dimension of the output of the decoder")
 
     # MLPF architecture
-    parser.add_argument("--width_mlpf", type=int, default=126, help="hidden dimension of mlpf")
-    parser.add_argument("--embedding_dim_mlpf", type=int, default=128, help="first embedding of mlpf")
+    parser.add_argument("--width_mlpf", type=int, default=256, help="hidden dimension of mlpf")
+    parser.add_argument("--embedding_dim_mlpf", type=int, default=256, help="first embedding of mlpf")
     parser.add_argument("--num_convs_mlpf", type=int, default=3, help="number of graph layers for mlpf")
     parser.add_argument("--dropout_mlpf", type=float, default=0.4, help="dropout for MLPF model")
 

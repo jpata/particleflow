@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
-from pyg_ssl.gravnet import GravNetConv  # also returns edge index
+from torch_geometric.nn.conv import GravNetConv  # also returns edge index
 
 from .utils import NUM_CLASSES
+
+# from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
 class GravNetLayer(nn.Module):
@@ -17,8 +19,9 @@ class GravNetLayer(nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, batch_index):
-        x_new, edge_index, edge_weight = self.conv1(x, batch_index)
         # possibly do something with edge index
+        # x_new, edge_index, edge_weight = self.conv1(x, batch_index)
+        x_new = self.conv1(x, batch_index)
         x_new = self.dropout(x_new)
         x = self.norm1(x + x_new)
         return x

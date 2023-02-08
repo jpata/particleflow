@@ -234,71 +234,82 @@ def data_split(dataset, data_split_mode):
     Depending on the data split mode chosen, the function returns different data splits.
 
     Choices for data_split_mode
-        1. `quick`: uses only 1 datafile for quick debugging. Nothing interesting there.
-        2. `domain_adaptation`: uses the following split schema.
-            - Sample1: VicReg training domain, "data", e.g. 80% of QCD events
-            - Sample2: supervised training domain, "MC", e.g. 80% of ttbar events
-            - Sample3: validation in the supervised training domain: 20% of ttbar events
-            - Sample4, validation in the other domain: 20% of QCD events
-        3. `mix`: uses a mix of all samples.
+        1. `quick`: uses only 1 datafile of each sample for quick debugging. Nothing interesting there.
+        2. `domain_adaptation`: uses QCD samples to train/validate VICReg and TTbar samples to train/validate MLPF.
+        3. `mix`: uses a mix of both QCD and TTbar samples to train/validate VICReg and MLPF.
 
     Returns (each as a list)
-        data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf
+        data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar
 
     """
-    print(f"Will use data split mode `{data_split_mode}`.")
+    print(f"Will use data split mode `{data_split_mode}`")
 
     if data_split_mode == "quick":
-        data = torch.load(f"{dataset}/p8_ee_ZH_Htautau_ecm380/processed/data_0.pt")
-        data_train_VICReg = data[: round(0.8 * len(data))]
-        data_valid_VICReg = data[: round(0.8 * len(data))]
-        data_train_mlpf = data_train_VICReg
-        data_valid_mlpf = data_valid_VICReg
+        data_qcd = torch.load(f"{dataset}/p8_ee_qcd_ecm365/processed/data_0.pt")
+        data_ttbar = torch.load(f"{dataset}/p8_ee_tt_ecm365/processed/data_0.pt")
 
-    elif data_split_mode == "domain_adaptation":
+        data_test_qcd = data_qcd[: round(0.1 * len(data_qcd))]
+        data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
 
+        data_VICReg_train = data_test_qcd + data_test_ttbar
+        data_VICReg_valid = data_test_qcd + data_test_ttbar
+
+        data_mlpf_train = data_test_qcd + data_test_ttbar
+        data_mlpf_valid = data_test_qcd + data_test_ttbar
+
+    else:  # actual meaningful data splits
+        # load the qcd and ttbar samples seperately
         qcd_files = glob.glob(f"{dataset}/p8_ee_qcd_ecm365/processed/*")
         ttbar_files = glob.glob(f"{dataset}/p8_ee_tt_ecm365/processed/*")
 
-        qcd_data = []
+        data_qcd = []
         for file in list(qcd_files):
-            qcd_data += torch.load(f"{file}")
+            data_qcd += torch.load(f"{file}")
 
-        ttbar_data = []
+        data_ttbar = []
         for file in list(ttbar_files):
-            ttbar_data += torch.load(f"{file}")
+            data_ttbar += torch.load(f"{file}")
 
-        data_train_VICReg = qcd_data[: round(0.8 * len(qcd_data))]
-        data_valid_VICReg = qcd_data[round(0.8 * len(qcd_data)) :]
-        data_train_mlpf = qcd_data[: round(0.8 * len(ttbar_data))]
-        data_valid_mlpf = qcd_data[round(0.8 * len(ttbar_data)) :]
+        # use 10% of each sample for testing
+        data_test_qcd = data_qcd[: round(0.1 * len(data_qcd))]
+        data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
 
-    elif data_split_mode == "mix":
+        # label remaining data as `rem`
+        rem_qcd = data_qcd[round(0.1 * len(data_qcd)) :]
+        rem_ttbar = data_ttbar[round(0.1 * len(data_qcd)) :]
 
-        data = []
-        for sample in ["p8_ee_qcd_ecm365", "p8_ee_tt_ecm365"]:
+        if data_split_mode == "domain_adaptation":
+            """
+            use QCD samples for VICReg with an 80-20 split.
+            use TTbar samples for MLPF with an 80-20 split.
+            """
+            data_VICReg_train = rem_qcd[: round(0.8 * len(rem_qcd))]
+            data_VICReg_valid = rem_qcd[round(0.8 * len(rem_qcd)) :]
 
-            files = glob.glob(f"{dataset}/{sample}/processed/*")
-            data_per_sample = []
-            for file in files:
-                data_per_sample += torch.load(f"{file}")
+            data_mlpf_train = rem_ttbar[: round(0.8 * len(rem_ttbar))]
+            data_mlpf_valid = rem_ttbar[round(0.8 * len(rem_ttbar)) :]
 
-            data += data_per_sample
+        elif data_split_mode == "mix":
+            """
+            use (80% of QCD + 80% of TTbar) samples for VICReg with a 90-10 split.
+            use (20% of QCD + 20% of TTbar) samples for MLPF with a 90-10 split.
+            """
+            data_VICReg = rem_qcd[: round(0.8 * len(rem_qcd))] + rem_ttbar[: round(0.8 * len(rem_ttbar))]
+            data_mlpf = rem_qcd[round(0.8 * len(rem_qcd)) :] + rem_ttbar[round(0.8 * len(rem_ttbar)) :]
 
-        # shuffle datafiles belonging to different samples
-        random.shuffle(data)
+            # shuffle the samples after mixing (not super necessary since the DataLoaders will shuffle anyway)
+            random.shuffle(data_VICReg)
+            random.shuffle(data_mlpf)
 
-        data_VICReg = data[: round(0.9 * len(data))]
-        data_mlpf = data[round(0.9 * len(data)) :]
+            data_VICReg_train = data_VICReg[: round(0.9 * len(data_VICReg))]
+            data_VICReg_valid = data_VICReg[round(0.9 * len(data_VICReg)) :]
 
-        data_train_VICReg = data_VICReg[: round(0.8 * len(data_VICReg))]
-        data_valid_VICReg = data_VICReg[round(0.8 * len(data_VICReg)) :]
-        data_train_mlpf = data_mlpf[: round(0.8 * len(data_mlpf))]
-        data_valid_mlpf = data_mlpf[round(0.8 * len(data_mlpf)) :]
+            data_mlpf_train = data_mlpf[: round(0.9 * len(data_mlpf))]
+            data_mlpf_valid = data_mlpf[round(0.9 * len(data_mlpf)) :]
 
-    print(f"Will use {len(data_train_VICReg)} events to train VICReg")
-    print(f"Will use {len(data_valid_VICReg)} events to validate VICReg")
-    print(f"Will use {len(data_train_mlpf)} events to train MLPF")
-    print(f"Will use {len(data_valid_mlpf)} events to validate MLPF")
+    print(f"Will use {len(data_VICReg_train)} events to train VICReg")
+    print(f"Will use {len(data_VICReg_valid)} events to validate VICReg")
+    print(f"Will use {len(data_mlpf_train)} events to train MLPF")
+    print(f"Will use {len(data_mlpf_valid)} events to validate MLPF")
 
-    return data_train_VICReg, data_valid_VICReg, data_train_mlpf, data_valid_mlpf
+    return data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar
