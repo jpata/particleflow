@@ -12,8 +12,7 @@ import torch
 import torch_geometric
 import tqdm
 
-from .utils import (CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements,
-                    distinguish_PFelements)
+from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 

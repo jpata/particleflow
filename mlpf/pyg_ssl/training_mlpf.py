@@ -265,10 +265,10 @@ def training_loop_mlpf(
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
-    
+
     # set VICReg to evaluation mode
     encoder.eval()
-    
+
     for epoch in range(n_epochs):
         t0 = time.time()
 
