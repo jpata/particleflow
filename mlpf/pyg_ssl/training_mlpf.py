@@ -148,7 +148,8 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         print("---->Initiating a validation run")
         mlpf.eval()
         loader = valid_loader
-        encoder.eval()
+        if optimizer_VICReg:
+            encoder.eval()
 
     # initialize loss counters
     losses = 0
@@ -265,6 +266,9 @@ def training_loop_mlpf(
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
 
+    # set VICReg to evaluation mode
+    encoder.eval()
+
     for epoch in range(n_epochs):
         t0 = time.time()
 
@@ -273,22 +277,24 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses = train(
+        losses_t = train(
             device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
         )
-        tensorboard_writer.add_scalar("epoch/train_loss", losses, epoch)
-        losses_train.append(losses)
+        tensorboard_writer.add_scalar("epoch/train_loss", losses_t, epoch)
+        losses_train.append(losses_t)
 
         # validation step
-        losses = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
-        tensorboard_writer.add_scalar("epoch/val_loss", losses, epoch)
-        losses_valid.append(losses)
+        losses_v = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        tensorboard_writer.add_scalar("epoch/val_loss", losses_v, epoch)
+        losses_valid.append(losses_v)
 
         tensorboard_writer.flush()
 
         # early-stopping
-        if losses < best_val_loss:
-            best_val_loss = losses
+        if losses_v < best_val_loss:
+            best_val_loss = losses_v
+            best_train_loss = losses_t
+
             stale_epochs = 0
 
             try:
@@ -320,8 +326,8 @@ def training_loop_mlpf(
 
         fig, ax = plt.subplots()
 
-        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(losses_train[-1]))
-        ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(losses_valid[-1]))
+        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
+        ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(best_val_loss))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
         ax.set_ylim(0.8 * losses_train[-1], 1.2 * losses_train[-1])
