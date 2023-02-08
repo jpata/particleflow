@@ -170,7 +170,7 @@ def training_loop_VICReg(
             break
 
         # training step
-        losses = train(
+        losses_t = train(
             device,
             encoder,
             decoder,
@@ -182,10 +182,10 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_train.append(losses)
+        losses_train.append(losses_t)
 
         # validation step
-        losses = validation_run(
+        losses_v = validation_run(
             device,
             encoder,
             decoder,
@@ -196,12 +196,14 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_valid.append(losses)
+        losses_valid.append(losses_v)
 
         # if (epoch % 4) == 0:
         # early-stopping
-        if losses < best_val_loss:
-            best_val_loss = losses
+        if losses_v < best_val_loss:
+            best_val_loss = losses_v
+            best_train_loss = losses_t
+
             stale_epochs = 0
 
             try:
@@ -237,8 +239,8 @@ def training_loop_VICReg(
         )
 
         fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train)), losses_train, label="training")
-        ax.plot(range(len(losses_valid)), losses_valid, label="validation")
+        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
+        ax.plot(range(len(losses_valid)), losses_valid, label="training ({:.2f})".format(best_val_loss))
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
         ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
