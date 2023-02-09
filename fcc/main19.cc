@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
 
   // Background generator instances copies settings and particle data.
   Pythia pythiaPileup;
-  pythiaPileup.readFile("p8_ee_gg_ecm380.cmd");
+  pythiaPileup.readFile("card_pu.cmd");
   pythiaPileup.readString(seedStr.c_str());
   pythiaPileup.init();
 
