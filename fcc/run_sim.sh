@@ -45,7 +45,9 @@ ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --outputFile out_sim_edm4hep.root \
       --steeringFile clic_steer.py \
       --inputFiles out.hepmc \
-      --numberOfEvents $NEV
+      --numberOfEvents $NEV \
+      --random.seed $NUM
+
 k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root
 cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 
