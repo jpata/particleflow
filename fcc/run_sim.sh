@@ -12,18 +12,21 @@ df -h
 OUTDIR=`pwd`
 PFDIR=/home/joosep/particleflow
 NEV=100
-NUM=$1
+
+NUM=$1 #random seed
+SAMPLE=$2 #main card
+PU=$3 #pu card
 
 #SAMPLE=p8_ee_Z_Ztautau_ecm125
-SAMPLE=p8_ee_tt_ecm365
+#SAMPLE=p8_ee_tt_ecm365
 #SAMPLE=p8_ee_ZZ_fullhad_ecm365
-#SAMPLE=p8_ee_qcd_ecm365
+#SAMPLE=p8_ee_Zqq_ecm365
 #SAMPLE=p8_ee_qcd_ecm380
 #SAMPLE=p8_ee_ZH_Htautau_ecm380
 #SAMPLE=p8_ee_qcd_ecm380
 #SAMPLE=p8_ee_gg_ecm365
+#PU=p8_ee_gg_ecm365
 
-PU=p8_ee_gg_ecm365
 
 WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
 FULLOUTDIR=${OUTDIR}/${SAMPLE}_PU10
@@ -62,4 +65,4 @@ cp out_reco_edm4hep.root reco_${SAMPLE}_${NUM}.root
 
 cp reco_${SAMPLE}_${NUM}.root $FULLOUTDIR/
 
-rm -Rf $WORKDIR/*.root
+rm -Rf $WORKDIR
