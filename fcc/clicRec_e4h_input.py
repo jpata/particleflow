@@ -8,7 +8,7 @@ algList = []
 
 
 CONSTANTS = {
-    "BCReco": "380GeV",
+    "BCReco": "3TeV",
 }
 
 parseConstants(CONSTANTS)
@@ -88,7 +88,7 @@ Config = MarlinProcessorWrapper("Config")
 Config.OutputLevel = WARNING
 Config.ProcessorType = "CLICRecoConfig"
 Config.Parameters = {
-    "BeamCal": ["380GeV"],
+    "BeamCal": ["3TeV"],
     "BeamCalChoices": ["3TeV", "380GeV"],
     "Overlay": ["False"],
     "OverlayChoices": [
