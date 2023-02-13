@@ -154,9 +154,7 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
     # initialize loss counters
     losses = 0
 
-    epoch_loss_id = 0.0
-    epoch_loss_momentum = 0.0
-    epoch_loss_charge = 0.0
+    epoch_loss_id, epoch_loss_momentum, epoch_loss_charge = 0.0, 0.0, 0.0
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
@@ -166,26 +164,22 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
             X = batch.to(device)
 
         if mode == "ssl":
+            # seperate PF-elements
+            tracks, clusters = distinguish_PFelements(X)
+
+            # ENCODE
             if multi_gpu:
                 event = []
-                for x in X:
-                    # seperate PF-elements
-                    tracks, clusters = distinguish_PFelements(x)
-
-                    # ENCODE
-                    embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+                for tracks_, clusters_ in (tracks, clusters):
+                    embedding_tracks, embedding_clusters = encoder(tracks_, clusters_)
 
                     # concat the inputs with embeddings
-                    tracks.x = torch.cat([x.x[x.x[:, 0] == 1], embedding_tracks], axis=1)
-                    clusters.x = torch.cat([x.x[x.x[:, 0] == 2], embedding_clusters], axis=1)
+                    tracks_.x = torch.cat([tracks_.x, embedding_tracks], axis=1)
+                    clusters_.x = torch.cat([clusters_.x, embedding_clusters], axis=1)
 
-                    event.append(combine_PFelements(tracks, clusters))
-
+                    event.append(combine_PFelements(tracks_, clusters_))
             else:
-                tracks, clusters = distinguish_PFelements(X)
-
                 embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-
                 tracks.x = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
                 clusters.x = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
 

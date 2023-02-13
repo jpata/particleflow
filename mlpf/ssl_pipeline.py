@@ -11,7 +11,8 @@ from pyg_ssl.args import parse_args
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
-from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
+from pyg_ssl.utils import (CLUSTERS_X, TRACKS_X, data_split, load_VICReg,
+                           save_MLPF, save_VICReg)
 from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
@@ -156,9 +157,6 @@ if __name__ == "__main__":
             save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
             if multi_gpu:
-                encoder = torch_geometric.nn.DataParallel(encoder)
-                encoder.to(device)
-
                 mlpf_ssl = torch_geometric.nn.DataParallel(mlpf_ssl)
                 mlpf_ssl.to(device)
 
@@ -215,9 +213,6 @@ if __name__ == "__main__":
             save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
             if multi_gpu:
-                encoder = torch_geometric.nn.DataParallel(encoder)
-                encoder.to(device)
-
                 mlpf_native = torch_geometric.nn.DataParallel(mlpf_native)
                 mlpf_native.to(device)
 
