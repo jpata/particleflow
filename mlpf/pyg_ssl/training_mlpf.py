@@ -177,14 +177,14 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
                     tracks_.x = torch.cat([tracks_.x, embedding_tracks], axis=1)
                     clusters_.x = torch.cat([clusters_.x, embedding_clusters], axis=1)
 
-                    event.append(combine_PFelements(tracks_, clusters_))
+                    event.append(combine_PFelements(tracks_, clusters_, multi_gpu))
             else:
                 embedding_tracks, embedding_clusters = encoder(tracks, clusters)
                 tracks.x = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
                 clusters.x = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
 
                 # combine PF-elements
-                event = combine_PFelements(tracks, clusters)
+                event = combine_PFelements(tracks, clusters, multi_gpu)
 
         elif mode == "native":
             event = X

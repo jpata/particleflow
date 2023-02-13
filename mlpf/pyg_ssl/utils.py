@@ -129,13 +129,13 @@ def distinguish_PFelements(event):
 
 
 # conversly, function that combines the learned latent representations back into one Batch() object
-def combine_PFelements(tracks, clusters):
+def combine_PFelements(tracks, clusters, multi_gpu):
     """
     Function that takes tracks~Batch() and clusters~Batch() and combines them into a single event~Batch().
     In case of multigpu trainings, the tracks and clusters will each be a list of Batch() objects and must be iterated over.
     """
 
-    if isinstance(tracks, list):  # for multigpu instances
+    if multi_gpu:
         event = []
         for i in range(len(tracks)):
             event.append(
