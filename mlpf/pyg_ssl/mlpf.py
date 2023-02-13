@@ -151,28 +151,20 @@ class MLPF(nn.Module):
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding if num == 0 else embeddings_id[-1]
 
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
+                input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
+                out_padded = conv(input_padded, ~mask)
+                out_padded = out_padded * mask.unsqueeze(-1)
 
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
-
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
                 embeddings_id.append(out_stacked)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding if num == 0 else embeddings_reg[-1]
 
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
+                input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
+                out_padded = conv(input_padded, ~mask)
+                out_padded = out_padded * mask.unsqueeze(-1)
 
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
-
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
                 embeddings_reg.append(out_stacked)
 
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
