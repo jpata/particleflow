@@ -68,46 +68,98 @@ CLASS_NAMES_CLIC_LATEX = [
 NUM_CLASSES = len(CLASS_NAMES_CLIC_LATEX)
 
 
-# function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
-def distinguish_PFelements(batch):
+#
+def distinguish_PFelements(event):
+    """
+    Function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters.
+    In case of multigpu trainings, the event will be a list of Batch() objects, and must be handled differently.
+    """
 
     track_id = 1
     cluster_id = 2
 
-    tracks = Batch(
-        x=batch.x[batch.x[:, 0] == track_id][:, 1:].float()[
-            :, :TRACKS_X
-        ],  # remove the first input feature which is not needed anymore
-        ygen=batch.ygen[batch.x[:, 0] == track_id],
-        ygen_id=batch.ygen_id[batch.x[:, 0] == track_id],
-        ycand=batch.ycand[batch.x[:, 0] == track_id],
-        ycand_id=batch.ycand_id[batch.x[:, 0] == track_id],
-        batch=batch.batch[batch.x[:, 0] == track_id],
-    )
-    clusters = Batch(
-        x=batch.x[batch.x[:, 0] == cluster_id][:, 1:].float()[
-            :, :CLUSTERS_X
-        ],  # remove the first input feature which is not needed anymore
-        ygen=batch.ygen[batch.x[:, 0] == cluster_id],
-        ygen_id=batch.ygen_id[batch.x[:, 0] == cluster_id],
-        ycand=batch.ycand[batch.x[:, 0] == cluster_id],
-        ycand_id=batch.ycand_id[batch.x[:, 0] == cluster_id],
-        batch=batch.batch[batch.x[:, 0] == cluster_id],
-    )
+    if isinstance(event, list):  # for multigpu instances
+        tracks, clusters = [], []
+        for ev in event:
+            tracks.append(
+                Batch(
+                    x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
+                        :, :TRACKS_X
+                    ],  # remove the first input feature which is not needed anymore
+                    ygen=ev.ygen[ev.x[:, 0] == track_id],
+                    ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
+                    ycand=ev.ycand[ev.x[:, 0] == track_id],
+                    ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
+                    batch=ev.batch[ev.x[:, 0] == track_id],
+                )
+            )
+            clusters.append(
+                Batch(
+                    x=ev.x[ev.x[:, 0] == cluster_id][:, 1:].float()[
+                        :, :CLUSTERS_X
+                    ],  # remove the first input feature which is not needed anymore
+                    ygen=ev.ygen[ev.x[:, 0] == cluster_id],
+                    ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
+                    ycand=ev.ycand[ev.x[:, 0] == cluster_id],
+                    ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
+                    batch=ev.batch[ev.x[:, 0] == cluster_id],
+                )
+            )
+    else:
+        tracks = Batch(
+            x=event.x[event.x[:, 0] == track_id][:, 1:].float()[
+                :, :TRACKS_X
+            ],  # remove the first input feature which is not needed anymore
+            ygen=event.ygen[event.x[:, 0] == track_id],
+            ygen_id=event.ygen_id[event.x[:, 0] == track_id],
+            ycand=event.ycand[event.x[:, 0] == track_id],
+            ycand_id=event.ycand_id[event.x[:, 0] == track_id],
+            batch=event.batch[event.x[:, 0] == track_id],
+        )
+        clusters = Batch(
+            x=event.x[event.x[:, 0] == cluster_id][:, 1:].float()[
+                :, :CLUSTERS_X
+            ],  # remove the first input feature which is not needed anymore
+            ygen=event.ygen[event.x[:, 0] == cluster_id],
+            ygen_id=event.ygen_id[event.x[:, 0] == cluster_id],
+            ycand=event.ycand[event.x[:, 0] == cluster_id],
+            ycand_id=event.ycand_id[event.x[:, 0] == cluster_id],
+            batch=event.batch[event.x[:, 0] == cluster_id],
+        )
+
     return tracks, clusters
 
 
 # conversly, function that combines the learned latent representations back into one Batch() object
 def combine_PFelements(tracks, clusters):
+    """
+    Function that takes tracks~Batch() and clusters~Batch() and combines them into a single event~Batch().
+    In case of multigpu trainings, the tracks and clusters will each be a list of Batch() objects and must be iterated over.
+    """
 
-    event = Batch(
-        x=torch.cat([tracks.x, clusters.x]),
-        ygen=torch.cat([tracks.ygen, clusters.ygen]),
-        ygen_id=torch.cat([tracks.ygen_id, clusters.ygen_id]),
-        ycand=torch.cat([tracks.ycand, clusters.ycand]),
-        ycand_id=torch.cat([tracks.ycand_id, clusters.ycand_id]),
-        batch=torch.cat([tracks.batch, clusters.batch]),
-    )
+    if isinstance(tracks, list):  # for multigpu instances
+        event = []
+        for i in range(len(tracks)):
+            event.append(
+                Batch(
+                    x=torch.cat([tracks[i].x, clusters[i].x]),
+                    ygen=torch.cat([tracks[i].ygen, clusters[i].ygen]),
+                    ygen_id=torch.cat([tracks[i].ygen_id, clusters[i].ygen_id]),
+                    ycand=torch.cat([tracks[i].ycand, clusters[i].ycand]),
+                    ycand_id=torch.cat([tracks[i].ycand_id, clusters[i].ycand_id]),
+                    batch=torch.cat([tracks[i].batch, clusters[i].batch]),
+                )
+            )
+
+    else:
+        event = Batch(
+            x=torch.cat([tracks.x, clusters.x]),
+            ygen=torch.cat([tracks.ygen, clusters.ygen]),
+            ygen_id=torch.cat([tracks.ygen_id, clusters.ygen_id]),
+            ycand=torch.cat([tracks.ycand, clusters.ycand]),
+            ycand_id=torch.cat([tracks.ycand_id, clusters.ycand_id]),
+            batch=torch.cat([tracks.batch, clusters.batch]),
+        )
 
     return event
 
