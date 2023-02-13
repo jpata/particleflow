@@ -81,6 +81,7 @@ def distinguish_PFelements(event):
     if isinstance(event, list):  # for multigpu instances
         tracks, clusters = [], []
         for ev in event:
+            print(ev)
             tracks.append(
                 Batch(
                     x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
