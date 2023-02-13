@@ -119,15 +119,15 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, mode, tb):
+def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tb):
     with torch.no_grad():
         optimizer = None
         optimizer_VICReg = None
-        ret = train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb)
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb)
     return ret
 
 
-def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -154,47 +154,31 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
     # initialize loss counters
     losses = 0
 
-    epoch_loss_id, epoch_loss_momentum, epoch_loss_charge = 0.0, 0.0, 0.0
+    epoch_loss_id = 0.0
+    epoch_loss_momentum = 0.0
+    epoch_loss_charge = 0.0
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
-        if multi_gpu:
-            X = batch
-        else:
-            X = batch.to(device)
-
         if mode == "ssl":
             # seperate PF-elements
-            tracks, clusters = distinguish_PFelements(X)
+            tracks, clusters = distinguish_PFelements(batch.to(device))
 
             # ENCODE
-            if multi_gpu:
-                event = []
-                for (tracks_, clusters_) in zip(tracks, clusters):
-                    embedding_tracks, embedding_clusters = encoder(tracks_.to(0), clusters_.to(0))
+            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
 
-                    # concat the inputs with embeddings
-                    tracks_.x = torch.cat([tracks_.x, embedding_tracks], axis=1)
-                    clusters_.x = torch.cat([clusters_.x, embedding_clusters], axis=1)
+            # concat the inputs with embeddings
+            tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+            clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
 
-                    event.append(combine_PFelements(tracks_, clusters_, multi_gpu))
-            else:
-                embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-                tracks.x = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
-                clusters.x = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
-
-                # combine PF-elements
-                event = combine_PFelements(tracks, clusters, multi_gpu)
+            # combine PF-elements
+            event = combine_PFelements(tracks, clusters)
 
         elif mode == "native":
-            event = X
+            event = batch.to(device)
 
         # make mlpf forward pass
-        if multi_gpu:
-            event_on_device = event.to(device)
-        else:
-            event_on_device = event
-
+        event_on_device = event.to(device)
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event_on_device)
         target_ids = event_on_device.ygen_id
 
@@ -248,7 +232,7 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
 
 
 def training_loop_mlpf(
-    device, multi_gpu, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode, FineTune_VICReg
+    device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode, FineTune_VICReg
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -281,10 +265,10 @@ def training_loop_mlpf(
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
-
+    
     # set VICReg to evaluation mode
     encoder.eval()
-
+    
     for epoch in range(n_epochs):
         t0 = time.time()
 
@@ -294,22 +278,13 @@ def training_loop_mlpf(
 
         # training step
         losses_t = train(
-            device,
-            multi_gpu,
-            encoder,
-            mlpf,
-            train_loader,
-            valid_loader,
-            optimizer,
-            optimizer_VICReg,
-            mode,
-            tensorboard_writer,
+            device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
         )
         tensorboard_writer.add_scalar("epoch/train_loss", losses_t, epoch)
         losses_train.append(losses_t)
 
         # validation step
-        losses_v = validation_run(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        losses_v = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
         tensorboard_writer.add_scalar("epoch/val_loss", losses_v, epoch)
         losses_valid.append(losses_v)
 

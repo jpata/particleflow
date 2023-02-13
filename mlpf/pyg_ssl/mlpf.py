@@ -130,7 +130,6 @@ class MLPF(nn.Module):
 
     def forward(self, batch):
 
-        print("forward pass", batch)
         # unfold the Batch object
         input_ = batch.x.float()
         batch_idx = batch.batch

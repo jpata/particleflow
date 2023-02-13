@@ -11,8 +11,7 @@ from pyg_ssl.args import parse_args
 from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
-from pyg_ssl.utils import (CLUSTERS_X, TRACKS_X, data_split, load_VICReg,
-                           save_MLPF, save_VICReg)
+from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
 from pyg_ssl.VICReg import DECODER, ENCODER
 
 matplotlib.use("Agg")
@@ -43,7 +42,6 @@ if __name__ == "__main__":
     args = parse_args()
 
     world_size = torch.cuda.device_count()
-    multi_gpu = world_size > 1
 
     # our data size varies from batch to batch, because each set of N_batch events has a different number of particles
     torch.backends.cudnn.benchmark = False
@@ -127,12 +125,8 @@ if __name__ == "__main__":
         print(f"Will use {len(data_mlpf_train)} events for train")
         print(f"Will use {len(data_mlpf_valid)} events for valid")
 
-        if multi_gpu:
-            train_loader = torch_geometric.loader.DataListLoader(data_mlpf_train, args.batch_size_mlpf)
-            valid_loader = torch_geometric.loader.DataListLoader(data_mlpf_valid, args.batch_size_mlpf)
-        else:
-            train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.batch_size_mlpf)
-            valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.batch_size_mlpf)
+        train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.batch_size_mlpf)
+        valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.batch_size_mlpf)
 
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
@@ -156,15 +150,10 @@ if __name__ == "__main__":
             outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
             save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
-            if multi_gpu:
-                mlpf_ssl = torch_geometric.nn.DataParallel(mlpf_ssl)
-                mlpf_ssl.to(device)
-
             print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
 
             training_loop_mlpf(
                 device,
-                multi_gpu,
                 encoder,
                 mlpf_ssl,
                 train_loader,
@@ -212,17 +201,10 @@ if __name__ == "__main__":
             outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
             save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
-            if multi_gpu:
-                mlpf_native = torch_geometric.nn.DataParallel(mlpf_native)
-                mlpf_native.to(device)
-
-                print(f"Will use {world_size} gpus")
-
             print(f"- Training native MLPF over {args.n_epochs_mlpf} epochs")
 
             training_loop_mlpf(
                 device,
-                multi_gpu,
                 encoder,
                 mlpf_native,
                 train_loader,
