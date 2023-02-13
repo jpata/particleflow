@@ -91,7 +91,6 @@ def distinguish_PFelements(event):
                     ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
                     ycand=ev.ycand[ev.x[:, 0] == track_id],
                     ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
-                    batch=ev.batch[ev.x[:, 0] == track_id],
                 )
             )
             clusters.append(
@@ -103,7 +102,6 @@ def distinguish_PFelements(event):
                     ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
                     ycand=ev.ycand[ev.x[:, 0] == cluster_id],
                     ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
-                    batch=ev.batch[ev.x[:, 0] == cluster_id],
                 )
             )
     else:
@@ -148,7 +146,6 @@ def combine_PFelements(tracks, clusters):
                     ygen_id=torch.cat([tracks[i].ygen_id, clusters[i].ygen_id]),
                     ycand=torch.cat([tracks[i].ycand, clusters[i].ycand]),
                     ycand_id=torch.cat([tracks[i].ycand_id, clusters[i].ycand_id]),
-                    batch=torch.cat([tracks[i].batch, clusters[i].batch]),
                 )
             )
 
@@ -159,7 +156,6 @@ def combine_PFelements(tracks, clusters):
             ygen_id=torch.cat([tracks.ygen_id, clusters.ygen_id]),
             ycand=torch.cat([tracks.ycand, clusters.ycand]),
             ycand_id=torch.cat([tracks.ycand_id, clusters.ycand_id]),
-            batch=torch.cat([tracks.batch, clusters.batch]),
         )
 
     return event
