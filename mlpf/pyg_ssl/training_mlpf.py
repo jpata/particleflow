@@ -167,19 +167,20 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
 
         if mode == "ssl":
             # seperate PF-elements
-            tracks, clusters = distinguish_PFelements(X)
+            tracks_and_clusters = distinguish_PFelements(X)
 
             # ENCODE
-            embedding_tracks, embedding_clusters = encoder([tracks, clusters])
+            embedding_tracks, embedding_clusters = encoder(tracks_and_clusters)
 
             # concat the inputs with embeddings
             if multi_gpu:
-                for i in range(len(X)):
+                tracks, clusters = [], []
+                for i in range(len(embedding_tracks)):
                     tracks[i].x = torch.cat([X[i].x[X[i].x[:, 0] == 1], embedding_tracks[i]], axis=1)
                     clusters[i].x = torch.cat([X[i].x[X[i].x[:, 0] == 2], embedding_clusters[i]], axis=1)
             else:
-                tracks.x = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
-                clusters.x = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
+                tracks = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
 
             # combine PF-elements
             event = combine_PFelements(tracks, clusters)
