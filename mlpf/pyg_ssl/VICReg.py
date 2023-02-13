@@ -53,7 +53,9 @@ class ENCODER(nn.Module):
                 )
             )
 
-    def forward(self, tracks, clusters):
+    def forward(self, X):
+        tracks = X[0]
+        clusters = X[1]
 
         embedding_tracks = self.nn1(tracks.x.float())
         embedding_clusters = self.nn2(clusters.x.float())

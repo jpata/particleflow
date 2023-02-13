@@ -170,7 +170,7 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
             tracks, clusters = distinguish_PFelements(X)
 
             # ENCODE
-            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+            embedding_tracks, embedding_clusters = encoder([tracks, clusters])
 
             # concat the inputs with embeddings
             if multi_gpu:
