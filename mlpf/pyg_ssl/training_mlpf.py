@@ -170,7 +170,7 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
             # ENCODE
             if multi_gpu:
                 event = []
-                for tracks_, clusters_ in (tracks, clusters):
+                for (tracks_, clusters_) in zip(tracks, clusters):
                     embedding_tracks, embedding_clusters = encoder(tracks_, clusters_)
 
                     # concat the inputs with embeddings
