@@ -171,7 +171,7 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
             if multi_gpu:
                 event = []
                 for (tracks_, clusters_) in zip(tracks, clusters):
-                    embedding_tracks, embedding_clusters = encoder(tracks_, clusters_)
+                    embedding_tracks, embedding_clusters = encoder(tracks_.device(0), clusters_.device(0))
 
                     # concat the inputs with embeddings
                     tracks_.x = torch.cat([tracks_.x, embedding_tracks], axis=1)
