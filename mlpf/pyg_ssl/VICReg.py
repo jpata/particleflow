@@ -53,15 +53,15 @@ class ENCODER(nn.Module):
                 )
             )
 
-    def forward(self, X):
+    def forward(self, tracks, clusters):
 
-        embedding_tracks = self.nn1(X.tracks_x.float())
-        embedding_clusters = self.nn2(X.clusters_x.float())
+        embedding_tracks = self.nn1(tracks.x.float())
+        embedding_clusters = self.nn2(clusters.x.float())
 
         # perform a series of graph convolutions
         for num, conv in enumerate(self.conv):
-            embedding_tracks = conv(embedding_tracks, X.tracks_batch)
-            embedding_clusters = conv(embedding_clusters, X.clusters_batch)
+            embedding_tracks = conv(embedding_tracks, tracks.batch)
+            embedding_clusters = conv(embedding_clusters, clusters.batch)
 
         return embedding_tracks, embedding_clusters
 

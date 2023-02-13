@@ -166,24 +166,31 @@ def train(device, multi_gpu, encoder, mlpf, train_loader, valid_loader, optimize
             X = batch.to(device)
 
         if mode == "ssl":
-            # seperate PF-elements
-            tracks_and_clusters = distinguish_PFelements(X)
-
-            # ENCODE
-            embedding_tracks, embedding_clusters = encoder(tracks_and_clusters)
-
-            # concat the inputs with embeddings
             if multi_gpu:
-                tracks, clusters = [], []
-                for i in range(len(embedding_tracks)):
-                    tracks[i].x = torch.cat([X[i].x[X[i].x[:, 0] == 1], embedding_tracks[i]], axis=1)
-                    clusters[i].x = torch.cat([X[i].x[X[i].x[:, 0] == 2], embedding_clusters[i]], axis=1)
-            else:
-                tracks = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
-                clusters = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
+                event = []
+                for x in X:
+                    # seperate PF-elements
+                    tracks, clusters = distinguish_PFelements(x)
 
-            # combine PF-elements
-            event = combine_PFelements(tracks, clusters)
+                    # ENCODE
+                    embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+
+                    # concat the inputs with embeddings
+                    tracks.x = torch.cat([x.x[x.x[:, 0] == 1], embedding_tracks], axis=1)
+                    clusters.x = torch.cat([x.x[x.x[:, 0] == 2], embedding_clusters], axis=1)
+
+                    event.append(combine_PFelements(tracks, clusters))
+
+            else:
+                tracks, clusters = distinguish_PFelements(X)
+
+                embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+
+                tracks.x = torch.cat([X.x[X.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters.x = torch.cat([X.x[X.x[:, 0] == 2], embedding_clusters], axis=1)
+
+                # combine PF-elements
+                event = combine_PFelements(tracks, clusters)
 
         elif mode == "native":
             event = X

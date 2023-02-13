@@ -79,91 +79,91 @@ def distinguish_PFelements(event):
     cluster_id = 2
 
     if isinstance(event, list):  # for multigpu instances
-        # tracks, clusters = [], []
-        out = []
+        tracks, clusters = [], []
+        # out = []
         for ev in event:
-            # tracks.append(
-            #     Batch(
-            #         x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
-            #             :, :TRACKS_X
-            #         ],  # remove the first input feature which is not needed anymore
-            #         ygen=ev.ygen[ev.x[:, 0] == track_id],
-            #         ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
-            #         ycand=ev.ycand[ev.x[:, 0] == track_id],
-            #         ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
-            #     )
-            # )
-            # clusters.append(
-            #     Batch(
-            #         x=ev.x[ev.x[:, 0] == cluster_id][:, 1:].float()[
-            #             :, :CLUSTERS_X
-            #         ],  # remove the first input feature which is not needed anymore
-            #         ygen=ev.ygen[ev.x[:, 0] == cluster_id],
-            #         ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
-            #         ycand=ev.ycand[ev.x[:, 0] == cluster_id],
-            #         ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
-            #     )
-            # )
-            out.append(
+            tracks.append(
                 Batch(
-                    tracks_x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
+                    x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
                         :, :TRACKS_X
                     ],  # remove the first input feature which is not needed anymore
-                    tracks_ygen=ev.ygen[ev.x[:, 0] == track_id],
-                    tracks_ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
-                    tracks_ycand=ev.ycand[ev.x[:, 0] == track_id],
-                    tracks_ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
-                    clusters_x=ev.x[ev.x[:, 0] == cluster_id][:, 1:].float()[
-                        :, :CLUSTERS_X
-                    ],  # remove the first input feature which is not needed anymore
-                    clusters_ygen=ev.ygen[ev.x[:, 0] == cluster_id],
-                    clusters_ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
-                    clusters_ycand=ev.ycand[ev.x[:, 0] == cluster_id],
-                    clusters_ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
+                    ygen=ev.ygen[ev.x[:, 0] == track_id],
+                    ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
+                    ycand=ev.ycand[ev.x[:, 0] == track_id],
+                    ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
                 )
             )
+            clusters.append(
+                Batch(
+                    x=ev.x[ev.x[:, 0] == cluster_id][:, 1:].float()[
+                        :, :CLUSTERS_X
+                    ],  # remove the first input feature which is not needed anymore
+                    ygen=ev.ygen[ev.x[:, 0] == cluster_id],
+                    ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
+                    ycand=ev.ycand[ev.x[:, 0] == cluster_id],
+                    ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
+                )
+            )
+            # out.append(
+            #     Batch(
+            #         tracks_x=ev.x[ev.x[:, 0] == track_id][:, 1:].float()[
+            #             :, :TRACKS_X
+            #         ],  # remove the first input feature which is not needed anymore
+            #         tracks_ygen=ev.ygen[ev.x[:, 0] == track_id],
+            #         tracks_ygen_id=ev.ygen_id[ev.x[:, 0] == track_id],
+            #         tracks_ycand=ev.ycand[ev.x[:, 0] == track_id],
+            #         tracks_ycand_id=ev.ycand_id[ev.x[:, 0] == track_id],
+            #         clusters_x=ev.x[ev.x[:, 0] == cluster_id][:, 1:].float()[
+            #             :, :CLUSTERS_X
+            #         ],  # remove the first input feature which is not needed anymore
+            #         clusters_ygen=ev.ygen[ev.x[:, 0] == cluster_id],
+            #         clusters_ygen_id=ev.ygen_id[ev.x[:, 0] == cluster_id],
+            #         clusters_ycand=ev.ycand[ev.x[:, 0] == cluster_id],
+            #         clusters_ycand_id=ev.ycand_id[ev.x[:, 0] == cluster_id],
+            #     )
+            # )
     else:
-        # tracks = Batch(
-        #     x=event.x[event.x[:, 0] == track_id][:, 1:].float()[
-        #         :, :TRACKS_X
-        #     ],  # remove the first input feature which is not needed anymore
-        #     ygen=event.ygen[event.x[:, 0] == track_id],
-        #     ygen_id=event.ygen_id[event.x[:, 0] == track_id],
-        #     ycand=event.ycand[event.x[:, 0] == track_id],
-        #     ycand_id=event.ycand_id[event.x[:, 0] == track_id],
-        #     batch=event.batch[event.x[:, 0] == track_id],
-        # )
-        # clusters = Batch(
-        #     x=event.x[event.x[:, 0] == cluster_id][:, 1:].float()[
-        #         :, :CLUSTERS_X
-        #     ],  # remove the first input feature which is not needed anymore
-        #     ygen=event.ygen[event.x[:, 0] == cluster_id],
-        #     ygen_id=event.ygen_id[event.x[:, 0] == cluster_id],
-        #     ycand=event.ycand[event.x[:, 0] == cluster_id],
-        #     ycand_id=event.ycand_id[event.x[:, 0] == cluster_id],
-        #     batch=event.batch[event.x[:, 0] == cluster_id],
-        # )
-
-        out = Batch(
-            tracks_x=event.x[event.x[:, 0] == track_id][:, 1:].float()[
+        tracks = Batch(
+            x=event.x[event.x[:, 0] == track_id][:, 1:].float()[
                 :, :TRACKS_X
             ],  # remove the first input feature which is not needed anymore
-            tracks_ygen=event.ygen[event.x[:, 0] == track_id],
-            tracks_ygen_id=event.ygen_id[event.x[:, 0] == track_id],
-            tracks_ycand=event.ycand[event.x[:, 0] == track_id],
-            tracks_ycand_id=event.ycand_id[event.x[:, 0] == track_id],
-            tracks_batch=event.batch[event.x[:, 0] == track_id],
-            clusters_x=event.x[event.x[:, 0] == cluster_id][:, 1:].float()[
+            ygen=event.ygen[event.x[:, 0] == track_id],
+            ygen_id=event.ygen_id[event.x[:, 0] == track_id],
+            ycand=event.ycand[event.x[:, 0] == track_id],
+            ycand_id=event.ycand_id[event.x[:, 0] == track_id],
+            batch=event.batch[event.x[:, 0] == track_id],
+        )
+        clusters = Batch(
+            x=event.x[event.x[:, 0] == cluster_id][:, 1:].float()[
                 :, :CLUSTERS_X
             ],  # remove the first input feature which is not needed anymore
-            clusters_ygen=event.ygen[event.x[:, 0] == cluster_id],
-            clusters_ygen_id=event.ygen_id[event.x[:, 0] == cluster_id],
-            clusters_ycand=event.ycand[event.x[:, 0] == cluster_id],
-            clusters_ycand_id=event.ycand_id[event.x[:, 0] == cluster_id],
-            clusters_batch=event.batch[event.x[:, 0] == cluster_id],
+            ygen=event.ygen[event.x[:, 0] == cluster_id],
+            ygen_id=event.ygen_id[event.x[:, 0] == cluster_id],
+            ycand=event.ycand[event.x[:, 0] == cluster_id],
+            ycand_id=event.ycand_id[event.x[:, 0] == cluster_id],
+            batch=event.batch[event.x[:, 0] == cluster_id],
         )
+    return tracks, clusters
+    # out = Batch(
+    #     tracks_x=event.x[event.x[:, 0] == track_id][:, 1:].float()[
+    #         :, :TRACKS_X
+    #     ],  # remove the first input feature which is not needed anymore
+    #     tracks_ygen=event.ygen[event.x[:, 0] == track_id],
+    #     tracks_ygen_id=event.ygen_id[event.x[:, 0] == track_id],
+    #     tracks_ycand=event.ycand[event.x[:, 0] == track_id],
+    #     tracks_ycand_id=event.ycand_id[event.x[:, 0] == track_id],
+    #     tracks_batch=event.batch[event.x[:, 0] == track_id],
+    #     clusters_x=event.x[event.x[:, 0] == cluster_id][:, 1:].float()[
+    #         :, :CLUSTERS_X
+    #     ],  # remove the first input feature which is not needed anymore
+    #     clusters_ygen=event.ygen[event.x[:, 0] == cluster_id],
+    #     clusters_ygen_id=event.ygen_id[event.x[:, 0] == cluster_id],
+    #     clusters_ycand=event.ycand[event.x[:, 0] == cluster_id],
+    #     clusters_ycand_id=event.ycand_id[event.x[:, 0] == cluster_id],
+    #     clusters_batch=event.batch[event.x[:, 0] == cluster_id],
+    # )
 
-    return out
+    # return out
 
 
 # conversly, function that combines the learned latent representations back into one Batch() object
