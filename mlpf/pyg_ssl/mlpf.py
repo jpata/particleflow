@@ -28,7 +28,7 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=32, num_heads=4, width=128):
+    def __init__(self, embedding_dim=32, num_heads=4, width=128, dropout=0.2):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, 8, batch_first=True)
@@ -37,6 +37,7 @@ class SelfAttentionLayer(nn.Module):
         self.seq = torch.nn.Sequential(
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
+        self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):
 
@@ -44,6 +45,7 @@ class SelfAttentionLayer(nn.Module):
         x = self.norm0(x)
         x = x + self.seq(x)
         x = self.norm1(x)
+        x = self.dropout(x)
         return x
 
 
@@ -98,7 +100,7 @@ class MLPF(nn.Module):
             nn.Linear(width, embedding_dim),
         )
 
-        self.conv_type = "gravnet"
+        self.conv_type = "attention"
         # GNN that uses the embeddings learnt by VICReg as the input features
         if self.conv_type == "gravnet":
             self.conv_id = nn.ModuleList()
