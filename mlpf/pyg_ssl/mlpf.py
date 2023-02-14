@@ -42,8 +42,10 @@ class SelfAttentionLayer(nn.Module):
     def forward(self, x, mask):
 
         x = x + self.mha(x, x, x, key_padding_mask=mask)[0]
+        x = x * (~mask.unsqueeze(-1))
         x = self.norm0(x)
         x = x + self.seq(x)
+        x = x * (~mask.unsqueeze(-1))
         x = self.norm1(x)
         x = self.dropout(x)
         return x
@@ -152,21 +154,17 @@ class MLPF(nn.Module):
         elif self.conv_type == "attention":
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding if num == 0 else embeddings_id[-1]
-
                 input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
                 out_padded = conv(input_padded, ~mask)
-                out_padded = out_padded * mask.unsqueeze(-1)
-
                 out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
+                assert out_stacked.shape[0] == conv_input.shape[0]
                 embeddings_id.append(out_stacked)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding if num == 0 else embeddings_reg[-1]
-
                 input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
                 out_padded = conv(input_padded, ~mask)
-                out_padded = out_padded * mask.unsqueeze(-1)
-
                 out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
+                assert out_stacked.shape[0] == conv_input.shape[0]
                 embeddings_reg.append(out_stacked)
 
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
