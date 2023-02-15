@@ -108,6 +108,10 @@ class PFGraphDataset(Dataset):
         print("PFGraphDataset nfiles={}".format(len(raw_list)))
         return sorted([raw_path.replace(self.raw_dir, ".") for raw_path in raw_list])
 
+    @property
+    def raw_dir(self):
+        return self.processed_dir.replace("processed", "raw")
+
     def _download(self):
         pass
 

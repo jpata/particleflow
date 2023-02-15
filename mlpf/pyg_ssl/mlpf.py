@@ -28,7 +28,7 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=32, num_heads=4, width=128):
+    def __init__(self, embedding_dim=32, num_heads=4, width=128, dropout=0.2):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, 8, batch_first=True)
@@ -37,13 +37,17 @@ class SelfAttentionLayer(nn.Module):
         self.seq = torch.nn.Sequential(
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
+        self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):
 
         x = x + self.mha(x, x, x, key_padding_mask=mask)[0]
+        x = x * (~mask.unsqueeze(-1))
         x = self.norm0(x)
         x = x + self.seq(x)
+        x = x * (~mask.unsqueeze(-1))
         x = self.norm1(x)
+        x = self.dropout(x)
         return x
 
 
@@ -150,29 +154,17 @@ class MLPF(nn.Module):
         elif self.conv_type == "attention":
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding if num == 0 else embeddings_id[-1]
-
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
-
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
-
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
+                out_padded = conv(input_padded, ~mask)
+                out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
+                assert out_stacked.shape[0] == conv_input.shape[0]
                 embeddings_id.append(out_stacked)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding if num == 0 else embeddings_reg[-1]
-
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
-
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
-
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
+                out_padded = conv(input_padded, ~mask)
+                out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
+                assert out_stacked.shape[0] == conv_input.shape[0]
                 embeddings_reg.append(out_stacked)
 
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)

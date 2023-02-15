@@ -17,5 +17,9 @@ Beams:eCM = 365                    ! CM energy of collision
 PartonLevel:ISR = on
 PartonLevel:FSR = on
 
-! 3) Hard process : tt at 365 GeV
-Top:ffbar2ttbar(s:gmZ) = on
+! s-channel gamma/Z 
+WeakSingleBoson:ffbar2ffbar(s:gmZ) = on
+23:onMode   = off
+23:onIfAny = 1 2 3 4 5 6
+22:onMode = off
+22:onIfAny = 1 2 3 4 5 6
