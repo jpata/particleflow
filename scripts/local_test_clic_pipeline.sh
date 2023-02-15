@@ -18,11 +18,6 @@ python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_2.root
 
 tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar
 
-# #run the clic data validation notebook
-# cd notebooks
-# papermill --inject-output-path --log-output -p path ../data/clic/gev380ee_pythia6_ttbar_rfull201/ clic.ipynb ./out.ipynb
-# cd ..
-
 # #Train, evaluate and make plots
 python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
 python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
