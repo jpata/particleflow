@@ -209,7 +209,7 @@ def set_raytune_search_parameters(search_space, config):
         config["parameters"]["output_decoding"]["phi_hidden_dim"] = search_space["out_hidden_dim"]
         config["parameters"]["output_decoding"]["energy_hidden_dim"] = search_space["out_hidden_dim"]
 
-    if "hidden_dim" in search_space.keys():
+    if "out_num_layers" in search_space.keys():
         config["parameters"]["output_decoding"]["id_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["charge_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["pt_num_layers"] = search_space["out_num_layers"]
