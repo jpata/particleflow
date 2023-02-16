@@ -18,7 +18,7 @@ np.seterr(divide="ignore", invalid="ignore")
 
 
 # VICReg loss function
-def criterion(x, y, device="cuda", lmbd=25, u=25, v=1, epsilon=1e-3):
+def criterion(x, y, device="cuda", lmbd=25, epsilon=1e-3):
     bs = x.size(0)
     emb = x.size(1)
 
@@ -33,9 +33,7 @@ def criterion(x, y, device="cuda", lmbd=25, u=25, v=1, epsilon=1e-3):
     crossCorMat = (xNorm.T @ yNorm) / bs
     cross_loss = (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd).pow(2).sum()
 
-    loss = u * var_loss + v * invar_loss + cross_loss
-
-    return loss
+    return var_loss, invar_loss, cross_loss
 
 
 @torch.no_grad()
@@ -95,9 +93,11 @@ def train(
         loader = valid_loader
 
     # initialize loss counters
-    losses = 0
+    losses = 0.0
+    var_losses, invar_losses, cross_losses = 0.0, 0.0, 0.0
 
     for i, batch in enumerate(loader):
+        print(i)
         # make transformation
         tracks, clusters = distinguish_PFelements(batch.to(device))
 
@@ -110,7 +110,8 @@ def train(
         out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
 
         # compute loss
-        loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
+        var_loss, invar_loss, cross_loss = criterion(out_tracks, out_clusters, device, lmbd)
+        loss = u * var_loss + v * invar_loss + cross_loss
 
         # update parameters
         if is_train:
@@ -122,10 +123,17 @@ def train(
             optimizer.step()
 
         losses += loss.detach()
-
+        var_losses += var_loss.detach()
+        invar_losses += invar_loss.detach()
+        cross_losses += cross_loss.detach()
+        if i == 3:
+            break
     losses = losses.cpu().item() / (len(loader))
+    var_losses = var_losses.cpu().item() / (len(loader))
+    invar_losses = invar_losses.cpu().item() / (len(loader))
+    cross_losses = cross_losses.cpu().item() / (len(loader))
 
-    return losses
+    return losses, var_losses, invar_losses, cross_losses
 
 
 def training_loop_VICReg(
@@ -157,9 +165,10 @@ def training_loop_VICReg(
 
     t0_initial = time.time()
 
-    losses_train, losses_valid = [], []
+    losses_train_tot, losses_train_var, losses_train_invar, losses_train_cross = [], [], [], []
+    losses_valid_tot, losses_valid_var, losses_valid_invar, losses_valid_cross = [], [], [], []
 
-    best_val_loss = 99999.9
+    best_val_loss_tot, best_val_loss_var, best_val_loss_invar, best_val_cross = 99999.9, 99999.9, 99999.9, 99999.9
     stale_epochs = 0
 
     for epoch in range(n_epochs):
@@ -170,7 +179,7 @@ def training_loop_VICReg(
             break
 
         # training step
-        losses_t = train(
+        losses_t_tot, losses_t_var, losses_t_invar, losses_t_cross = train(
             device,
             encoder,
             decoder,
@@ -182,10 +191,13 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_train.append(losses_t)
+        losses_train_tot.append(losses_t_tot)
+        losses_train_var.append(losses_t_var)
+        losses_train_invar.append(losses_t_invar)
+        losses_train_cross.append(losses_t_cross)
 
         # validation step
-        losses_v = validation_run(
+        losses_v_tot, losses_v_var, losses_v_invar, losses_v_cross = validation_run(
             device,
             encoder,
             decoder,
@@ -196,13 +208,28 @@ def training_loop_VICReg(
             v,
         )
 
-        losses_valid.append(losses_v)
+        losses_valid_tot.append(losses_v_tot)
+        losses_valid_var.append(losses_v_var)
+        losses_valid_invar.append(losses_v_invar)
+        losses_valid_cross.append(losses_v_cross)
 
-        # if (epoch % 4) == 0:
+        # save the lowest value of each component of the loss to print it on the legend of the loss plots
+        if losses_v_var < best_val_loss_var:
+            best_val_loss_var = losses_v_var
+            best_train_loss_var = losses_t_var
+
+        if losses_v_invar < best_val_loss_invar:
+            best_val_loss_invar = losses_v_invar
+            best_train_loss_invar = losses_t_invar
+
+        if losses_v_cross < best_val_cross:
+            best_val_loss_cross = losses_v_cross
+            best_train_loss_cross = losses_t_cross
+
         # early-stopping
-        if losses_v < best_val_loss:
-            best_val_loss = losses_v
-            best_train_loss = losses_t
+        if losses_v_tot < best_val_loss_tot:
+            best_val_loss_tot = losses_v_tot
+            best_train_loss_tot = losses_t_tot
 
             stale_epochs = 0
 
@@ -231,25 +258,68 @@ def training_loop_VICReg(
 
         print(
             f"epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_train[epoch], 4)} "
-            + f"valid_loss={round(losses_valid[epoch], 4)} "
+            + f"train_loss={round(losses_train_tot[epoch], 4)} "
+            + f"valid_loss={round(losses_valid_tot[epoch], 4)} "
             + f"stale={stale_epochs} "
             + f"time={round((t1-t0)/60, 2)}m "
             + f"eta={round(eta, 1)}m"
         )
 
+        # make total loss plot
         fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
-        ax.plot(range(len(losses_valid)), losses_valid, label="training ({:.2f})".format(best_val_loss))
+        ax.plot(range(len(losses_train_tot)), losses_train_tot, label="training ({:.2f})".format(best_train_loss_tot))
+        ax.plot(range(len(losses_valid_tot)), losses_valid_tot, label="validation ({:.2f})".format(best_val_loss_tot))
         ax.set_xlabel("Epochs")
-        ax.set_ylabel("Loss")
+        ax.set_ylabel("Total Loss")
         ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/VICReg_loss.pdf")
+        plt.savefig(f"{outpath}/VICReg_loss_tot.pdf")
 
-        with open(f"{outpath}/VICReg_loss_train.pkl", "wb") as f:
-            pkl.dump(losses_train, f)
-        with open(f"{outpath}/VICReg_loss_valid.pkl", "wb") as f:
-            pkl.dump(losses_valid, f)
+        with open(f"{outpath}/VICReg_loss_train_tot.pkl", "wb") as f:
+            pkl.dump(losses_train_tot, f)
+        with open(f"{outpath}/VICReg_loss_valid_tot.pkl", "wb") as f:
+            pkl.dump(losses_valid_tot, f)
+
+        # make variance loss plot
+        fig, ax = plt.subplots()
+        ax.plot(range(len(losses_train_var)), losses_train_var, label="training ({:.2f})".format(best_train_loss_var))
+        ax.plot(range(len(losses_valid_var)), losses_valid_var, label="validation ({:.2f})".format(best_val_loss_var))
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Variance Loss")
+        ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
+        plt.savefig(f"{outpath}/VICReg_loss_var.pdf")
+
+        with open(f"{outpath}/VICReg_loss_train_var.pkl", "wb") as f:
+            pkl.dump(losses_train_var, f)
+        with open(f"{outpath}/VICReg_loss_valid_var.pkl", "wb") as f:
+            pkl.dump(losses_valid_var, f)
+
+        # make invariance loss plot
+        fig, ax = plt.subplots()
+        ax.plot(range(len(losses_train_invar)), losses_train_invar, label="training ({:.2f})".format(best_train_loss_invar))
+        ax.plot(range(len(losses_valid_invar)), losses_valid_invar, label="validation ({:.2f})".format(best_val_loss_invar))
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Invariance Loss")
+        ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
+        plt.savefig(f"{outpath}/VICReg_loss_invar.pdf")
+
+        with open(f"{outpath}/VICReg_loss_train_invar.pkl", "wb") as f:
+            pkl.dump(losses_train_invar, f)
+        with open(f"{outpath}/VICReg_loss_valid_invar.pkl", "wb") as f:
+            pkl.dump(losses_valid_invar, f)
+
+        # make covariance loss plot
+        fig, ax = plt.subplots()
+        ax.plot(range(len(losses_train_cross)), losses_train_cross, label="training ({:.2f})".format(best_train_loss_cross))
+        ax.plot(range(len(losses_valid_cross)), losses_valid_cross, label="validation ({:.2f})".format(best_val_loss_cross))
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Covariance Loss")
+        ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
+        plt.savefig(f"{outpath}/VICReg_loss_cov.pdf")
+
+        with open(f"{outpath}/VICReg_loss_train_cov.pkl", "wb") as f:
+            pkl.dump(losses_train_cross, f)
+        with open(f"{outpath}/VICReg_loss_valid_cov.pkl", "wb") as f:
+            pkl.dump(losses_valid_cross, f)
 
     print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

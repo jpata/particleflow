@@ -152,13 +152,10 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
             encoder.eval()
 
     # initialize loss counters
-    losses = 0
-
-    epoch_loss_id = 0.0
-    epoch_loss_momentum = 0.0
-    epoch_loss_charge = 0.0
+    epoch_loss_total, epoch_loss_id, epoch_loss_momentum, epoch_loss_charge = 0.0, 0.0, 0.0, 0.0
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+        print(i)
 
         if mode == "ssl":
             # seperate PF-elements
@@ -215,20 +212,23 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
             loss.backward()
             optimizer.step()
 
-        losses += loss.detach()
-
-        epoch_loss_id += loss_id.detach().cpu().item() / len(loader)
-        epoch_loss_momentum += loss_momentum.detach().cpu().item() / len(loader)
-        epoch_loss_charge += loss_charge.detach().cpu().item() / len(loader)
-
-    losses = losses.cpu().item() / len(loader)
+        epoch_loss_total += loss.detach()
+        epoch_loss_id += loss_id.detach()
+        epoch_loss_momentum += loss_momentum.detach()
+        epoch_loss_charge += loss_charge.detach()
+        if i == 3:
+            break
+    epoch_loss_total = epoch_loss_total.cpu().item() / len(loader)
+    epoch_loss_id = epoch_loss_id.cpu().item() / len(loader)
+    epoch_loss_momentum = epoch_loss_momentum.cpu().item() / len(loader)
+    epoch_loss_charge = epoch_loss_charge.cpu().item() / len(loader)
 
     print(
         "loss_id={:.2f} loss_momentum={:.2f} loss_charge={:.2f}".format(
             epoch_loss_id, epoch_loss_momentum, epoch_loss_charge
         )
     )
-    return losses
+    return epoch_loss_total, epoch_loss_id, epoch_loss_momentum
 
 
 def training_loop_mlpf(
@@ -251,9 +251,10 @@ def training_loop_mlpf(
 
     t0_initial = time.time()
 
-    losses_train, losses_valid = [], []
+    losses_train_tot, losses_train_id, losses_train_momentum = [], [], []
+    losses_valid_tot, losses_valid_id, losses_valid_momentum = [], [], []
 
-    best_val_loss = 99999.9
+    best_val_loss_tot, best_val_loss_id, best_val_loss_momentum = 99999.9, 99999.9, 99999.9
     stale_epochs = 0
 
     tensorboard_writer = SummaryWriter(outpath)
@@ -265,10 +266,10 @@ def training_loop_mlpf(
     else:
         print("Will fix VICReg during mlpf training")
         optimizer_VICReg = None
-    
+
     # set VICReg to evaluation mode
     encoder.eval()
-    
+
     for epoch in range(n_epochs):
         t0 = time.time()
 
@@ -277,23 +278,37 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses_t = train(
+        losses_t_tot, losses_t_id, losses_t_momentum = train(
             device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
         )
-        tensorboard_writer.add_scalar("epoch/train_loss", losses_t, epoch)
-        losses_train.append(losses_t)
+        tensorboard_writer.add_scalar("epoch/train_loss", losses_t_tot, epoch)
+        losses_train_tot.append(losses_t_tot)
+        losses_train_id.append(losses_t_id)
+        losses_train_momentum.append(losses_t_momentum)
 
         # validation step
-        losses_v = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
-        tensorboard_writer.add_scalar("epoch/val_loss", losses_v, epoch)
-        losses_valid.append(losses_v)
+        losses_v_tot, losses_v_id, losses_v_momentum = validation_run(
+            device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer
+        )
+        tensorboard_writer.add_scalar("epoch/val_loss", losses_v_tot, epoch)
+        losses_valid_tot.append(losses_v_tot)
+        losses_valid_id.append(losses_v_id)
+        losses_valid_momentum.append(losses_v_momentum)
 
         tensorboard_writer.flush()
 
+        if losses_v_id < best_val_loss_id:
+            best_val_loss_id = losses_v_id
+            best_train_loss_id = losses_t_id
+
+        if losses_v_momentum < best_val_loss_momentum:
+            best_val_loss_momentum = losses_v_momentum
+            best_train_loss_momentum = losses_t_momentum
+
         # early-stopping
-        if losses_v < best_val_loss:
-            best_val_loss = losses_v
-            best_train_loss = losses_t
+        if losses_v_tot < best_val_loss_tot:
+            best_val_loss_tot = losses_v_tot
+            best_train_loss_tot = losses_t_tot
 
             stale_epochs = 0
 
@@ -317,30 +332,71 @@ def training_loop_mlpf(
 
         print(
             f"epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_train[epoch], 4)} "
-            + f"valid_loss={round(losses_valid[epoch], 4)} "
+            + f"train_loss={round(losses_train_tot[epoch], 4)} "
+            + f"valid_loss={round(losses_valid_tot[epoch], 4)} "
             + f"stale={stale_epochs} "
             + f"time={round((t1-t0)/60, 2)}m "
             + f"eta={round(eta, 1)}m"
         )
 
+        # make total loss plot
         fig, ax = plt.subplots()
-
-        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
-        ax.plot(range(len(losses_valid)), losses_valid, label="validation ({:.2f})".format(best_val_loss))
+        ax.plot(range(len(losses_train_tot)), losses_train_tot, label="training ({:.2f})".format(best_train_loss_tot))
+        ax.plot(range(len(losses_valid_tot)), losses_valid_tot, label="validation ({:.2f})".format(best_val_loss_tot))
         ax.set_xlabel("Epochs")
-        ax.set_ylabel("Loss")
-        ax.set_ylim(0.8 * losses_train[-1], 1.2 * losses_train[-1])
+        ax.set_ylabel("Total Loss")
+        ax.set_ylim(0.8 * losses_train_tot[-1], 1.2 * losses_train_tot[-1])
         if mode == "ssl":
             ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
         else:
             ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/mlpf_loss.pdf")
+        plt.savefig(f"{outpath}/mlpf_loss_tot.pdf")
+        with open(f"{outpath}/mlpf_{mode}_loss_train_tot.pkl", "wb") as f:
+            pkl.dump(losses_train_tot, f)
+        with open(f"{outpath}/mlpf_{mode}_loss_valid_tot.pkl", "wb") as f:
+            pkl.dump(losses_valid_tot, f)
 
-        with open(f"{outpath}/mlpf_{mode}_loss_train.pkl", "wb") as f:
-            pkl.dump(losses_train, f)
-        with open(f"{outpath}/mlpf_{mode}_loss_valid.pkl", "wb") as f:
-            pkl.dump(losses_valid, f)
+        # make loss id plot
+        fig, ax = plt.subplots()
+        ax.plot(range(len(losses_train_id)), losses_train_id, label="training ({:.2f})".format(best_train_loss_id))
+        ax.plot(range(len(losses_valid_id)), losses_valid_id, label="validation ({:.2f})".format(best_val_loss_id))
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Classification Loss")
+        ax.set_ylim(0.8 * losses_train_id[-1], 1.2 * losses_train_id[-1])
+        if mode == "ssl":
+            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+        else:
+            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
+        plt.savefig(f"{outpath}/mlpf_loss_id.pdf")
+        with open(f"{outpath}/mlpf_{mode}_loss_train_id.pkl", "wb") as f:
+            pkl.dump(losses_train_id, f)
+        with open(f"{outpath}/mlpf_{mode}_loss_valid_id.pkl", "wb") as f:
+            pkl.dump(losses_valid_id, f)
+
+        # make loss momentum plot
+        fig, ax = plt.subplots()
+        ax.plot(
+            range(len(losses_train_momentum)),
+            losses_train_momentum,
+            label="training ({:.2f})".format(best_train_loss_momentum),
+        )
+        ax.plot(
+            range(len(losses_valid_momentum)),
+            losses_valid_momentum,
+            label="validation ({:.2f})".format(best_val_loss_momentum),
+        )
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Regression Loss")
+        ax.set_ylim(0.8 * losses_train_momentum[-1], 1.2 * losses_train_momentum[-1])
+        if mode == "ssl":
+            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+        else:
+            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
+        plt.savefig(f"{outpath}/mlpf_loss_momentum.pdf")
+        with open(f"{outpath}/mlpf_{mode}_loss_train_momentum.pkl", "wb") as f:
+            pkl.dump(losses_train_momentum, f)
+        with open(f"{outpath}/mlpf_{mode}_loss_valid_momentum.pkl", "wb") as f:
+            pkl.dump(losses_valid_momentum, f)
 
         print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")
