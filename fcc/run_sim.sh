@@ -25,9 +25,9 @@ mkdir -p $FULLOUTDIR
 mkdir -p $WORKDIR
 cd $WORKDIR
 
-cp $PFDIR/fcc/main ./
+#cp $PFDIR/fcc/main ./
 cp $PFDIR/fcc/${SAMPLE}.cmd card.cmd
-cp $PFDIR/fcc/${PU}.cmd card_pu.cmd
+#cp $PFDIR/fcc/${PU}.cmd card_pu.cmd
 cp $PFDIR/fcc/pythia.py ./
 cp $PFDIR/fcc/clic_steer.py ./
 cp -R $PFDIR/fcc/PandoraSettings ./
