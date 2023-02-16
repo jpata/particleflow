@@ -155,7 +155,6 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
     epoch_loss_total, epoch_loss_id, epoch_loss_momentum, epoch_loss_charge = 0.0, 0.0, 0.0, 0.0
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        print(i)
 
         if mode == "ssl":
             # seperate PF-elements
@@ -216,8 +215,7 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         epoch_loss_id += loss_id.detach()
         epoch_loss_momentum += loss_momentum.detach()
         epoch_loss_charge += loss_charge.detach()
-        if i == 3:
-            break
+
     epoch_loss_total = epoch_loss_total.cpu().item() / len(loader)
     epoch_loss_id = epoch_loss_id.cpu().item() / len(loader)
     epoch_loss_momentum = epoch_loss_momentum.cpu().item() / len(loader)

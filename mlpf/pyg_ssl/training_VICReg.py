@@ -97,7 +97,7 @@ def train(
     var_losses, invar_losses, cross_losses = 0.0, 0.0, 0.0
 
     for i, batch in enumerate(loader):
-        print(i)
+
         # make transformation
         tracks, clusters = distinguish_PFelements(batch.to(device))
 
@@ -126,8 +126,7 @@ def train(
         var_losses += var_loss.detach()
         invar_losses += invar_loss.detach()
         cross_losses += cross_loss.detach()
-        if i == 3:
-            break
+
     losses = losses.cpu().item() / (len(loader))
     var_losses = var_losses.cpu().item() / (len(loader))
     invar_losses = invar_losses.cpu().item() / (len(loader))
