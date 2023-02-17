@@ -251,11 +251,22 @@ def data_split(dataset, data_split_mode):
         data_test_qcd = data_qcd[: round(0.1 * len(data_qcd))]
         data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
 
-        data_VICReg_train = data_test_qcd + data_test_ttbar
-        data_VICReg_valid = data_test_qcd + data_test_ttbar
+        # label remaining data as `rem`
+        rem_qcd = data_qcd[round(0.1 * len(data_qcd)) :]
+        rem_ttbar = data_ttbar[round(0.1 * len(data_qcd)) :]
 
-        data_mlpf_train = data_test_qcd + data_test_ttbar
-        data_mlpf_valid = data_test_qcd + data_test_ttbar
+        data_VICReg = rem_qcd[: round(0.8 * len(rem_qcd))] + rem_ttbar[: round(0.8 * len(rem_ttbar))]
+        data_mlpf = rem_qcd[round(0.8 * len(rem_qcd)) :] + rem_ttbar[round(0.8 * len(rem_ttbar)) :]
+
+        # shuffle the samples after mixing (not super necessary since the DataLoaders will shuffle anyway)
+        random.shuffle(data_VICReg)
+        random.shuffle(data_mlpf)
+
+        data_VICReg_train = data_VICReg[: round(0.9 * len(data_VICReg))]
+        data_VICReg_valid = data_VICReg[round(0.9 * len(data_VICReg)) :]
+
+        data_mlpf_train = data_mlpf[: round(0.9 * len(data_mlpf))]
+        data_mlpf_valid = data_mlpf[round(0.9 * len(data_mlpf)) :]
 
     else:  # actual meaningful data splits
         # load the qcd and ttbar samples seperately
