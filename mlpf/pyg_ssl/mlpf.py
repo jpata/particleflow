@@ -76,16 +76,18 @@ class MLPF(nn.Module):
         width=126,
         num_convs=2,
         k=32,
-        native_mlpf=False,
         propagate_dimensions=32,
         space_dimensions=4,
         dropout=0.4,
+        ssl=False,
+        VICReg_embedding_dim=0,
     ):
         super(MLPF, self).__init__()
 
         self.act = nn.ELU
-        self.native_mlpf = native_mlpf  # boolean that is true for native mlpf and false for ssl
         self.dropout = dropout
+        self.input_dim = input_dim
+        self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
 
         # embedding of the inputs
         self.nn0 = nn.Sequential(
@@ -114,7 +116,10 @@ class MLPF(nn.Module):
                 self.conv_id.append(SelfAttentionLayer(embedding_dim))
                 self.conv_reg.append(SelfAttentionLayer(embedding_dim))
 
-        decoding_dim = input_dim + num_convs * embedding_dim
+        if ssl:
+            decoding_dim = input_dim + num_convs * embedding_dim + VICReg_embedding_dim
+        else:
+            decoding_dim = input_dim + num_convs * embedding_dim
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
@@ -131,7 +136,12 @@ class MLPF(nn.Module):
     def forward(self, batch):
 
         # unfold the Batch object
-        input_ = batch.x.float()
+        if self.ssl:
+            input_ = batch.x.float()[:, : self.input_dim]
+            VICReg_embeddings = batch.x.float()[:, self.input_dim :]
+        else:
+            input_ = batch.x.float()
+
         batch_idx = batch.batch
 
         embedding = self.nn0(input_)
@@ -175,12 +185,18 @@ class MLPF(nn.Module):
                 out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
                 embeddings_reg.append(out_stacked)
 
-        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
+        if self.ssl:
+            embedding_id = torch.cat([input_] + embeddings_id + [VICReg_embeddings], axis=-1)
+        else:
+            embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
 
         # predict the PIDs
         preds_id = self.nn_id(embedding_id)
 
-        embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
+        if self.ssl:
+            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id] + [VICReg_embeddings], axis=-1)
+        else:
+            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
         preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]

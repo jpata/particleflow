@@ -133,13 +133,14 @@ if __name__ == "__main__":
         if args.ssl:
 
             mlpf_model_kwargs = {
-                "input_dim": input_ + args.embedding_dim_VICReg,
+                "input_dim": input_,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
-                "native_mlpf": False,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
                 "dropout": args.dropout_mlpf,
+                "ssl": True,
+                "VICReg_embedding_dim": args.embedding_dim_VICReg
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -187,10 +188,10 @@ if __name__ == "__main__":
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "width": args.width_mlpf,
-                "native_mlpf": True,
                 "k": args.nearest,
                 "num_convs": args.num_convs_mlpf,
                 "dropout": args.dropout_mlpf,
+                "ssl": False,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
