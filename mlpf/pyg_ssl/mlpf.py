@@ -116,10 +116,10 @@ class MLPF(nn.Module):
                 self.conv_id.append(SelfAttentionLayer(embedding_dim))
                 self.conv_reg.append(SelfAttentionLayer(embedding_dim))
 
+        # TODO: fix `decoding_dim` to account for num_convs=0
+        decoding_dim = input_dim + num_convs * embedding_dim
         if ssl:
-            decoding_dim = input_dim + num_convs * embedding_dim + VICReg_embedding_dim
-        else:
-            decoding_dim = input_dim + num_convs * embedding_dim
+            decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
@@ -185,6 +185,7 @@ class MLPF(nn.Module):
                 out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
                 embeddings_reg.append(out_stacked)
 
+        # TODO: fix `embeddings_id` to account for num_convs=0
         if self.ssl:
             embedding_id = torch.cat([input_] + embeddings_id + [VICReg_embeddings], axis=-1)
         else:
