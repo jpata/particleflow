@@ -309,7 +309,7 @@ MyConformalTracking.Parameters = {
         "InnerTrackerEndcapHitsRelations",
         "OuterTrackerEndcapHitsRelations",
     ],
-    "RetryTooManyTracks": ["false"],
+    "RetryTooManyTracks": ["true"],
     "SiTrackCollectionName": ["SiTracksCT"],
     "SortTreeResults": ["true"],
     "Steps": [
@@ -524,7 +524,7 @@ MyConformalTracking.Parameters = {
         "BuildNewTracks",
     ],
     "ThetaRange": ["0.05"],
-    "TooManyTracks": ["100000"],
+    "TooManyTracks": ["400000"],
     "TrackerHitCollectionNames": [
         "VXDTrackerHits",
         "VXDEndcapTrackerHits",

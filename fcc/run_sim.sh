@@ -1,6 +1,7 @@
 #!/bin/bash
-#SBATCH -p LocalQ
-#SBATCH --mem-per-cpu=7G
+#SBATCH -p main
+#SBATCH -x comp-e-[001-042],comp-d-[001-128],comp-s-[001-042],comp-u-[001-128],comp-r-003
+#SBATCH --mem-per-cpu=4G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
 set -e
@@ -9,13 +10,13 @@ set -x
 env
 df -h
 
-OUTDIR=`pwd`
+OUTDIR=/local/joosep/clic_edm4hep_2023_02_21/
 PFDIR=/home/joosep/particleflow
 NEV=100
 
 NUM=$1 #random seed
 SAMPLE=$2 #main card
-PU=$3 #pu card
+#PU=$3 #pu card
 
 WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
 FULLOUTDIR=${OUTDIR}/${SAMPLE}
@@ -34,7 +35,7 @@ cp -R $PFDIR/fcc/PandoraSettings ./
 cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
 
 #without PU
-source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
+source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc11.2.0-opt/csapx/setup.sh
 k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd
 
 #with PU (needs double checking)
