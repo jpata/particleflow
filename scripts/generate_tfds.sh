@@ -30,12 +30,11 @@ $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR
 wait
 
 # CLIC
-export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep
-$CMD mlpf/heptfds/clic_pf_edm4hep/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qcd.log &
+export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_21
+$CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
-$CMD mlpf/heptfds/clic_pf_edm4hep/zh_htautau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh_htautau.log &
-$CMD mlpf/heptfds/clic_pf/zzfullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zzfullhad.log &
 wait
 
+# Delphes
 $CMD mlpf/heptfds/delphes_pf/delphes_pf &> logs/tfds_delphes.log &
 wait

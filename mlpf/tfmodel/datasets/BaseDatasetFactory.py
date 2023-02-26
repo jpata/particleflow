@@ -28,7 +28,7 @@ def unpack_target_cms(y, num_output_classes, config):
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
-        "charge": y[..., 1:2],
+        "charge": tf.one_hot(tf.cast(y[..., 1]+1, tf.int32), 3), #-1, 0, 1 -> 0, 1, 2
         "pt": pt,
         "eta": eta,
         "sin_phi": sin_phi,
@@ -63,7 +63,7 @@ def unpack_target_clic(y, num_output_classes, config):
 
     ret = {
         "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
-        "charge": y[..., 1:2],
+        "charge": tf.one_hot(tf.cast(y[..., 1]+1, tf.int32), 3), #-1, 0, 1 -> 0, 1, 2
         "pt": pt,
         "eta": eta,
         "sin_phi": sin_phi,

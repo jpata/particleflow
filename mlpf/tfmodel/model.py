@@ -785,7 +785,7 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout,
         )
         self.ffn_charge = point_wise_feed_forward_network(
-            1,
+            3,
             charge_hidden_dim,
             "ffn_charge",
             num_layers=charge_num_layers,

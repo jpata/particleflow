@@ -17,24 +17,24 @@ dataset:
 loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
-  eta_loss_coef: 1.0
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
-  energy_loss_coef: 1.0
+  pt_loss_coef: 10.0
+  eta_loss_coef: 10.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 10.0
+  charge_loss:
+    type: BinaryCrossentropy
+    from_logits: yes
   energy_loss:
     type: Huber
   pt_loss:
     type: Huber
   sin_phi_loss:
     type: Huber
-    delta: 0.1
   cos_phi_loss:
     type: Huber
-    delta: 0.1
   eta_loss:
     type: Huber
-    delta: 0.1
   event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
   event_loss_coef: 0.0
   met_loss: none
@@ -47,7 +47,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.00005
   num_epochs: 500
   dtype: float32
   trainable:
@@ -236,9 +236,7 @@ train_test_datasets:
     batch_per_gpu: 1
     datasets:
       - clic_edm_ttbar_pf
-      - clic_edm_zz_fullhad_pf
-      - clic_edm_qcd_pf
-      - clic_edm_zh_htautau_pf
+      - clic_edm_qq_pf
 
 validation_dataset: clic_edm_ttbar_pf
 validation_batch_size: 50
@@ -253,18 +251,10 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_pf:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:
-  clic_edm_zz_fullhad_pf:
-    version: 1.0.0
-    data_dir:
-    manual_dir:
-  clic_edm_qcd_pf:
-    version: 1.0.0
-    data_dir:
-    manual_dir:
-  clic_edm_zh_htautau_pf:
-    version: 1.0.0
+  clic_edm_qq_pf:
+    version: 1.1.0
     data_dir:
     manual_dir:

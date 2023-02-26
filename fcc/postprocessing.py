@@ -609,6 +609,7 @@ def get_feature_matrix(feature_dict, features):
 if __name__ == "__main__":
 
     fn = sys.argv[1]
+    ofn = sys.argv[2]
     fi = uproot.open(fn)
     
     arrs = fi["events"]
@@ -756,4 +757,4 @@ if __name__ == "__main__":
         ret.append(this_ev)
 
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
-    awkward.to_parquet(ret, fn.replace(".root", ".parquet"))
+    awkward.to_parquet(ret, ofn)
