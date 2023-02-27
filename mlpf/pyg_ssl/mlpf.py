@@ -47,25 +47,47 @@ class SelfAttentionLayer(nn.Module):
         return x
 
 
-def ffn(input_dim, output_dim, width, act, dropout):
-    return nn.Sequential(
-        nn.Linear(input_dim, width),
-        act(),
-        torch.nn.LayerNorm(width),
-        nn.Dropout(dropout),
-        nn.Linear(width, width),
-        act(),
-        torch.nn.LayerNorm(width),
-        nn.Dropout(dropout),
-        nn.Linear(width, width),
-        act(),
-        torch.nn.LayerNorm(width),
-        nn.Dropout(dropout),
-        nn.Linear(width, width),
-        act(),
-        torch.nn.LayerNorm(width),
-        nn.Linear(width, output_dim),
-    )
+def ffn(input_dim, output_dim, width, act, dropout, ssl):
+    if ssl:
+        return nn.Sequential(
+            nn.Linear(input_dim, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Linear(width, output_dim),
+        )
+    else:
+        return nn.Sequential(
+            nn.Linear(input_dim, width),
+            act(),
+            nn.Linear(input_dim, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Dropout(dropout),
+            nn.Linear(width, width),
+            act(),
+            torch.nn.LayerNorm(width),
+            nn.Linear(width, output_dim),
+        )
 
 
 class MLPF(nn.Module):
@@ -123,16 +145,16 @@ class MLPF(nn.Module):
             decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
+        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout, ssl)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
+        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout, ssl)
 
     def forward(self, batch):
 
