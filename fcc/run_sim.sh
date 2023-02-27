@@ -10,7 +10,7 @@ set -x
 env
 df -h
 
-OUTDIR=/local/joosep/clic_edm4hep_2023_02_21/
+OUTDIR=/local/joosep/clic_edm4hep_2023_02_27/
 PFDIR=/home/joosep/particleflow
 NEV=100
 
@@ -33,6 +33,9 @@ cp $PFDIR/fcc/pythia.py ./
 cp $PFDIR/fcc/clic_steer.py ./
 cp -R $PFDIR/fcc/PandoraSettings ./
 cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
+
+echo "Random:seed=${NUM}" >> card.cmd
+cat card.cmd
 
 #without PU
 source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc11.2.0-opt/csapx/setup.sh

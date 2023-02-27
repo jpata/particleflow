@@ -30,7 +30,7 @@ $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR
 wait
 
 # CLIC
-export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_21
+export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_27
 $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
 wait

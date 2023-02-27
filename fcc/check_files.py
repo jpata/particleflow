@@ -1,7 +1,7 @@
 import os
 
 #check for file presence in this path
-outpath = "/local/joosep/clic_edm4hep_2023_02_21/"
+outpath = "/local/joosep/clic_edm4hep_2023_02_27/"
 
 #pythia card, start seed, end seed
 samples = [

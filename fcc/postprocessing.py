@@ -8,7 +8,9 @@ import glob
 import networkx as nx
 import tqdm
 import numba
+import os
 import sys
+import multiprocessing
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -135,7 +137,7 @@ def hits_to_features(hit_data, iev, coll, feats):
         feat_arr[sdcoll][:] = 2
     return awkward.Record(feat_arr)
 
-def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev):
+def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
     feats = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
     
     hit_idx_global = 0
@@ -222,7 +224,7 @@ def gen_to_features(prop_data, iev):
         "energy": gen_arr["energy"],
         })
 
-def genparticle_track_adj(sitrack_links):
+def genparticle_track_adj(sitrack_links, iev):
     trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0"]["SiTracksMCTruthLink#0.index"][iev]
     trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1"]["SiTracksMCTruthLink#1.index"][iev]
     trk_to_gen_w = sitrack_links["SiTracksMCTruthLink"]["SiTracksMCTruthLink.weight"][iev]
@@ -340,13 +342,13 @@ def filter_adj(adj, all_to_filtered):
             ws_new.append(w)
     return np.array(i0s_new), np.array(i1s_new), np.array(ws_new)
 
-def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev):
+def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
     gen_features = gen_to_features(prop_data, iev)
-    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev)
+    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
-    genparticle_to_track = genparticle_track_adj(sitrack_links)
+    genparticle_to_track = genparticle_track_adj(sitrack_links, iev)
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
@@ -606,10 +608,8 @@ def get_feature_matrix(feature_dict, features):
     feats = np.array(feats)
     return feats.T
 
-if __name__ == "__main__":
+def process_one_file(fn, ofn):
 
-    fn = sys.argv[1]
-    ofn = sys.argv[2]
     fi = uproot.open(fn)
     
     arrs = fi["events"]
@@ -650,7 +650,7 @@ if __name__ == "__main__":
         })
 
         #get the genparticles and the links between genparticles and tracks/clusters
-        gpdata = get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev)
+        gpdata = get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs)
 
         #find the reconstructable genparticles and associate them to the best track/cluster
         gpdata_cleaned, gp_to_obj = assign_genparticles_to_obj_and_merge(gpdata)
@@ -758,3 +758,33 @@ if __name__ == "__main__":
 
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
+
+def process_all_files():
+    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
+    outp = "/local/joosep/mlpf/clic_edm4hep_2023_02_27/"
+    samps = [
+        "p8_ee_qq_ecm380",
+        "p8_ee_tt_ecm380",
+        "p8_ee_ZH_Htautau_ecm380"
+    ]
+
+    pool = multiprocessing.Pool(12)
+
+    for samp in samps:
+        inpath_samp = inp + samp
+        outpath_samp = outp + samp
+        infiles = list(glob.glob(inpath_samp + "/*.root"))
+        if not os.path.isdir(outpath_samp):
+            os.makedirs(outpath_samp)
+
+        args = []
+        for inf in infiles:
+            of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
+            args.append((inf, of))
+        pool.starmap(process_one_file, args)
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        process_all_files()
+    else:
+        process_one_file(sys.argv[1], sys.argv[2])
