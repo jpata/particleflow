@@ -87,36 +87,37 @@ class MLPF(nn.Module):
         self.act = nn.ELU
         self.dropout = dropout
         self.input_dim = input_dim
+        self.num_convs = num_convs
         self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
 
         # embedding of the inputs
-        self.nn0 = nn.Sequential(
-            nn.Linear(input_dim, width),
-            self.act(),
-            nn.Linear(width, width),
-            self.act(),
-            nn.Linear(width, width),
-            self.act(),
-            nn.Linear(width, embedding_dim),
-        )
+        if num_convs != 0:
+            self.nn0 = nn.Sequential(
+                nn.Linear(input_dim, width),
+                self.act(),
+                nn.Linear(width, width),
+                self.act(),
+                nn.Linear(width, width),
+                self.act(),
+                nn.Linear(width, embedding_dim),
+            )
 
-        self.conv_type = "gravnet"
-        # GNN that uses the embeddings learnt by VICReg as the input features
-        if self.conv_type == "gravnet":
-            self.conv_id = nn.ModuleList()
-            self.conv_reg = nn.ModuleList()
-            for i in range(num_convs):
-                self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
-                self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
-        elif self.conv_type == "attention":
-            self.conv_id = nn.ModuleList()
-            self.conv_reg = nn.ModuleList()
+            self.conv_type = "gravnet"
+            # GNN that uses the embeddings learnt by VICReg as the input features
+            if self.conv_type == "gravnet":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                for i in range(num_convs):
+                    self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
+                    self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
+            elif self.conv_type == "attention":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
 
-            for i in range(num_convs):
-                self.conv_id.append(SelfAttentionLayer(embedding_dim))
-                self.conv_reg.append(SelfAttentionLayer(embedding_dim))
+                for i in range(num_convs):
+                    self.conv_id.append(SelfAttentionLayer(embedding_dim))
+                    self.conv_reg.append(SelfAttentionLayer(embedding_dim))
 
-        # TODO: fix `decoding_dim` to account for num_convs=0
         decoding_dim = input_dim + num_convs * embedding_dim
         if ssl:
             decoding_dim += VICReg_embedding_dim
@@ -144,48 +145,48 @@ class MLPF(nn.Module):
 
         batch_idx = batch.batch
 
-        embedding = self.nn0(input_)
-
         embeddings_id = []
         embeddings_reg = []
 
-        if self.conv_type == "gravnet":
-            # perform a series of graph convolutions
-            for num, conv in enumerate(self.conv_id):
-                conv_input = embedding if num == 0 else embeddings_id[-1]
-                embeddings_id.append(conv(conv_input, batch_idx))
-            for num, conv in enumerate(self.conv_reg):
-                conv_input = embedding if num == 0 else embeddings_reg[-1]
-                embeddings_reg.append(conv(conv_input, batch_idx))
-        elif self.conv_type == "attention":
-            for num, conv in enumerate(self.conv_id):
-                conv_input = embedding if num == 0 else embeddings_id[-1]
+        if self.num_convs != 0:
+            embedding = self.nn0(input_)
 
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
+            if self.conv_type == "gravnet":
+                # perform a series of graph convolutions
+                for num, conv in enumerate(self.conv_id):
+                    conv_input = embedding if num == 0 else embeddings_id[-1]
+                    embeddings_id.append(conv(conv_input, batch_idx))
+                for num, conv in enumerate(self.conv_reg):
+                    conv_input = embedding if num == 0 else embeddings_reg[-1]
+                    embeddings_reg.append(conv(conv_input, batch_idx))
+            elif self.conv_type == "attention":
+                for num, conv in enumerate(self.conv_id):
+                    conv_input = embedding if num == 0 else embeddings_id[-1]
 
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
+                    input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
+                    input_nested = torch.nested.nested_tensor(input_list)
+                    input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
+                    mask = input_padded[:, :, 0] == 0.0
 
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
-                embeddings_id.append(out_stacked)
-            for num, conv in enumerate(self.conv_reg):
-                conv_input = embedding if num == 0 else embeddings_reg[-1]
+                    out_padded = conv(input_padded, mask)
+                    out_padded = out_padded * (~mask.unsqueeze(-1))
 
-                input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
-                input_nested = torch.nested.nested_tensor(input_list)
-                input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
-                mask = input_padded[:, :, 0] == 0.0
+                    out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                    embeddings_id.append(out_stacked)
+                for num, conv in enumerate(self.conv_reg):
+                    conv_input = embedding if num == 0 else embeddings_reg[-1]
 
-                out_padded = conv(input_padded, mask)
-                out_padded = out_padded * (~mask.unsqueeze(-1))
+                    input_list = list(torch_geometric.utils.unbatch(conv_input, batch_idx))
+                    input_nested = torch.nested.nested_tensor(input_list)
+                    input_padded = torch.nested.to_padded_tensor(input_nested, 0.0)
+                    mask = input_padded[:, :, 0] == 0.0
 
-                out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
-                embeddings_reg.append(out_stacked)
+                    out_padded = conv(input_padded, mask)
+                    out_padded = out_padded * (~mask.unsqueeze(-1))
 
-        # TODO: fix `embeddings_id` to account for num_convs=0
+                    out_stacked = torch.cat([out_padded[i][~mask[i]] for i in range(out_padded.shape[0])])
+                    embeddings_reg.append(out_stacked)
+
         if self.ssl:
             embedding_id = torch.cat([input_] + embeddings_id + [VICReg_embeddings], axis=-1)
         else:
