@@ -73,7 +73,7 @@ def ffn(input_dim, output_dim, width, act, dropout, ssl):
             act(),
             torch.nn.LayerNorm(width),
             nn.Dropout(dropout),
-            nn.Linear(input_dim, width),
+            nn.Linear(width, width),
             act(),
             torch.nn.LayerNorm(width),
             nn.Dropout(dropout),
