@@ -103,14 +103,15 @@ def train(
 
         # ENCODE
         embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-        # POOLING
-        pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-        pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
         # DECODE
-        out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
+        out_tracks, out_clusters = decoder(embedding_tracks, embedding_clusters)
+
+        # POOLING
+        pooled_tracks = global_mean_pool(out_tracks, tracks.batch)
+        pooled_clusters = global_mean_pool(out_clusters, clusters.batch)
 
         # compute loss
-        var_loss, invar_loss, cross_loss = criterion(out_tracks, out_clusters, device, lmbd)
+        var_loss, invar_loss, cross_loss = criterion(pooled_tracks, pooled_clusters, device, lmbd)
         loss = u * var_loss + v * invar_loss + cross_loss
 
         # update parameters
