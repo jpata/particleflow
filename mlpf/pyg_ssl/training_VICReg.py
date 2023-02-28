@@ -1,3 +1,4 @@
+import json
 import pickle as pkl
 import time
 
@@ -126,11 +127,11 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
             loss_["Total"].backward()
             optimizer.step()
 
+        print(f'debug: tot={loss_["Total"]} - {loss_["Invariance"]} - {loss_["Variance"]} - {loss_["Covariance"]}')
+
         # accumulate the loss to make plots
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach().cpu().item() / (len(loader))
-
-        print(f'debug: tot={losses["Total"]} - {losses["Invariance"]} - {losses["Variance"]} - {losses["Covariance"]}')
 
         # if i == 10:
         #     break
@@ -192,10 +193,12 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
                 best_train_loss[loss] = losses_t[loss]
 
                 if loss == "Total":  # for early-stopping purposes
-                    stale_epochs, best_epoch = 0, epoch
+                    stale_epochs = 0
 
                     # save the model
                     torch.save(vicreg.state_dict(), f"{outpath}/VICReg_best_epoch_weights.pth")
+                    with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:  # dump best epoch
+                        json.dump({"best_epoch": epoch}, fp)
                 else:
                     stale_epochs += 1
 
@@ -225,7 +228,14 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
             )
             ax.set_xlabel("Epochs")
             ax.set_ylabel(f"{loss} Loss")
-            ax.legend(title=f"VICReg - best epoch is {best_epoch}", loc="best", title_fontsize=20, fontsize=15)
+            ax.legend(
+                title=r"VICReg - ($\lambda={} - \mu={} - \nu={}$))".format(
+                    loss_hparams["lmbd"], loss_hparams["mu"], loss_hparams["nu"]
+                ),
+                loc="best",
+                title_fontsize=20,
+                fontsize=15,
+            )
             plt.savefig(f"{outpath}/VICReg_loss_{loss}.pdf")
 
         with open(f"{outpath}/VICReg_losses_train.pkl", "wb") as f:
@@ -234,6 +244,7 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
             pkl.dump(losses_v, f)
 
         plt.tight_layout()
+        plt.close()
 
     print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

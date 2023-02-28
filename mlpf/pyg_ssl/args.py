@@ -29,9 +29,9 @@ def parse_args():
     parser.add_argument("--evaluate", default=False, action="store_true", help="Run model evaluation")
 
     # training hyperparameters
-    parser.add_argument("--lmbd", type=float, default=0.01, help="the lambda term in the VICReg loss")
+    parser.add_argument("--lmbd", type=float, default=0.1, help="the lambda term in the VICReg loss")
     parser.add_argument("--mu", type=float, default=0.1, help="the mu term in the VICReg loss")
-    parser.add_argument("--nu", type=float, default=0.1, help="the nu term in the VICReg loss")
+    parser.add_argument("--nu", type=float, default=1e-7, help="the nu term in the VICReg loss")
     parser.add_argument("--n_epochs_mlpf", type=int, default=3, help="number of training epochs for mlpf")
     parser.add_argument("--n_epochs_VICReg", type=int, default=3, help="number of training epochs for VICReg")
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
