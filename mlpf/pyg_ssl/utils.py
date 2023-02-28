@@ -114,16 +114,15 @@ def combine_PFelements(tracks, clusters):
 
 def load_VICReg(device, outpath):
 
-    encoder_state_dict = torch.load(f"{outpath}/encoder_best_epoch_weights.pth", map_location=device)
-    decoder_state_dict = torch.load(f"{outpath}/decoder_best_epoch_weights.pth", map_location=device)
-
     print("Loading a previously trained model..")
+    vicreg_state_dict = torch.load(f"{outpath}/encoder_best_epoch_weights.pth", map_location=device)
+
     with open(f"{outpath}/encoder_model_kwargs.pkl", "rb") as f:
         encoder_model_kwargs = pkl.load(f)
     with open(f"{outpath}/decoder_model_kwargs.pkl", "rb") as f:
         decoder_model_kwargs = pkl.load(f)
 
-    return encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs
+    return vicreg_state_dict, encoder_model_kwargs, decoder_model_kwargs
 
 
 def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs):
@@ -172,8 +171,8 @@ def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_m
                 "width_decoder": args.width_decoder,
                 "output_dim": args.expand_dim,
                 "lmbd": args.lmbd,
-                "u": args.u,
-                "v": args.v,
+                "mu": args.mu,
+                "nu": args.nu,
                 "num_encoder_parameters": num_encoder_parameters,
                 "num_decoder_parameters": num_decoder_parameters,
             },

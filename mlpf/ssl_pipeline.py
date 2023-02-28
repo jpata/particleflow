@@ -12,7 +12,7 @@ from pyg_ssl.mlpf import MLPF
 from pyg_ssl.training_mlpf import training_loop_mlpf
 from pyg_ssl.training_VICReg import training_loop_VICReg
 from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
-from pyg_ssl.VICReg import DECODER, ENCODER
+from pyg_ssl.VICReg import DECODER, ENCODER, VICReg
 
 matplotlib.use("Agg")
 mplhep.style.use(mplhep.styles.CMS)
@@ -28,20 +28,18 @@ Authors: Farouk Mokhtar, Joosep Pata.
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
-# define the global base device
+# define the global base device(s)
 if torch.cuda.device_count():
     device = torch.device("cuda:0")
     print(f"Will use {torch.cuda.get_device_name(device)}")
 else:
     device = "cpu"
     print("Will use cpu")
-
+multi_gpu = torch.cuda.device_count() > 1
 
 if __name__ == "__main__":
 
     args = parse_args()
-
-    world_size = torch.cuda.device_count()
 
     # our data size varies from batch to batch, because each set of N_batch events has a different number of particles
     torch.backends.cudnn.benchmark = False
@@ -60,16 +58,13 @@ if __name__ == "__main__":
 
     # load a pre-trained VICReg model
     if args.load_VICReg:
-        encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs = load_VICReg(device, outpath)
+        vicreg_state_dict, encoder_model_kwargs, decoder_model_kwargs = load_VICReg(device, outpath)
 
-        encoder = ENCODER(**encoder_model_kwargs)
-        decoder = DECODER(**decoder_model_kwargs)
+        vicreg_encoder = ENCODER(**encoder_model_kwargs)
+        vicreg_decoder = DECODER(**decoder_model_kwargs)
 
-        encoder.load_state_dict(encoder_state_dict)
-        decoder.load_state_dict(decoder_state_dict)
-
-        decoder = decoder.to(device)
-        encoder = encoder.to(device)
+        vicreg = VICReg(vicreg_encoder, vicreg_decoder)
+        vicreg.to(device)
 
     else:
         encoder_model_kwargs = {
@@ -87,37 +82,38 @@ if __name__ == "__main__":
             "width": args.width_decoder,
         }
 
-        encoder = ENCODER(**encoder_model_kwargs).to(device)
-        decoder = DECODER(**decoder_model_kwargs).to(device)
+        vicreg_encoder = ENCODER(**encoder_model_kwargs)
+        vicreg_decoder = DECODER(**decoder_model_kwargs)
+        vicreg = VICReg(vicreg_encoder, vicreg_decoder)
+        vicreg.to(device)
 
-        print("Encoder", encoder)
-        print("Decoder", decoder)
+        print(vicreg)
         print(f"VICReg model name: {args.prefix_VICReg}")
 
         # save model_kwargs and hyperparameters
-        save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs)
+        save_VICReg(args, outpath, vicreg_encoder, encoder_model_kwargs, vicreg_decoder, decoder_model_kwargs)
+
+        if multi_gpu:
+            vicreg = torch_geometric.nn.DataParallel(vicreg)
+            train_loader = torch_geometric.loader.DataListLoader(data_VICReg_train, args.batch_size_VICReg)
+            valid_loader = torch_geometric.loader.DataListLoader(data_VICReg_valid, args.batch_size_VICReg)
+        else:
+            train_loader = torch_geometric.loader.DataLoader(data_VICReg_train, args.batch_size_VICReg)
+            valid_loader = torch_geometric.loader.DataLoader(data_VICReg_valid, args.batch_size_VICReg)
+
+        optimizer = torch.optim.SGD(vicreg.parameters(), lr=args.lr)
 
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
-
-        train_loader = torch_geometric.loader.DataLoader(data_VICReg_train, args.batch_size_VICReg)
-        valid_loader = torch_geometric.loader.DataLoader(data_VICReg_valid, args.batch_size_VICReg)
-
-        # optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
-        optimizer = torch.optim.SGD(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr)
-
         training_loop_VICReg(
+            multi_gpu,
             device,
-            encoder,
-            decoder,
-            train_loader,
-            valid_loader,
+            vicreg,
+            {"train": train_loader, "valid": valid_loader},
             args.n_epochs_VICReg,
             args.patience,
             optimizer,
+            {"lmbd": args.lmbd, "mu": args.mu, "nu": args.nu},
             outpath,
-            args.lmbd,
-            args.u,
-            args.v,
         )
 
     if args.train_mlpf:
@@ -140,7 +136,7 @@ if __name__ == "__main__":
                 "num_convs": args.num_convs_mlpf,
                 "dropout": args.dropout_mlpf,
                 "ssl": True,
-                "VICReg_embedding_dim": args.embedding_dim_VICReg
+                "VICReg_embedding_dim": args.embedding_dim_VICReg,
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -155,7 +151,7 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                encoder,
+                vicreg_encoder,
                 mlpf_ssl,
                 train_loader,
                 valid_loader,
@@ -173,8 +169,7 @@ if __name__ == "__main__":
 
                 ret_ssl = evaluate(
                     device,
-                    encoder,
-                    decoder,
+                    vicreg_encoder,
                     mlpf_ssl,
                     args.batch_size_mlpf,
                     "ssl",
@@ -206,7 +201,7 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                encoder,
+                vicreg_encoder,
                 mlpf_native,
                 train_loader,
                 valid_loader,
@@ -224,8 +219,7 @@ if __name__ == "__main__":
 
                 ret_native = evaluate(
                     device,
-                    encoder,
-                    decoder,
+                    vicreg_encoder,
                     mlpf_native,
                     args.batch_size_mlpf,
                     "native",
@@ -233,9 +227,9 @@ if __name__ == "__main__":
                     {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
                 )
 
-        if args.ssl & args.native:
-            # plot multiplicity plot of both at the same time
-            if args.evaluate_mlpf:
-                from pyg_ssl.evaluate import make_multiplicity_plots_both
+        # if args.ssl & args.native:
+        #     # plot multiplicity plot of both at the same time
+        #     if args.evaluate_mlpf:
+        #         from pyg_ssl.evaluate import make_multiplicity_plots_both
 
-                make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
+        #         make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
