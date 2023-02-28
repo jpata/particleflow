@@ -133,8 +133,8 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach().cpu().item() / (len(loader))
 
-        # if i == 10:
-        #     break
+        if i == 10:
+            break
 
     return losses
 
@@ -188,19 +188,23 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
 
         # save the lowest value of each component of the loss to print it on the legend of the loss plots
         for loss in losses_of_interest:
-            if losses_v[loss] < best_val_loss[loss]:
-                best_val_loss[loss] = losses_v[loss]
-                best_train_loss[loss] = losses_t[loss]
+            if loss == "Total":
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
-                if loss == "Total":  # for early-stopping purposes
+                    # for early-stopping purposes
                     stale_epochs = 0
-
                     # save the model
                     torch.save(vicreg.state_dict(), f"{outpath}/VICReg_best_epoch_weights.pth")
                     with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:  # dump best epoch
                         json.dump({"best_epoch": epoch}, fp)
                 else:
                     stale_epochs += 1
+            else:
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
         t1 = time.time()
 
@@ -229,7 +233,7 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
             ax.set_xlabel("Epochs")
             ax.set_ylabel(f"{loss} Loss")
             ax.legend(
-                title=r"VICReg - ($\lambda={} - \mu={} - \nu={}$))".format(
+                title=r"VICReg - ($\lambda={} - \mu={} - \nu={}$)".format(
                     loss_hparams["lmbd"], loss_hparams["mu"], loss_hparams["nu"]
                 ),
                 loc="best",
