@@ -131,6 +131,8 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach().cpu().item() / (len(loader))
 
+        print(f'debug: tot={losses["Total"]} - {losses["Invariance"]} - {losses["Variance"]} - {losses["Covariance"]}')
+
         if i == 10:
             break
 
