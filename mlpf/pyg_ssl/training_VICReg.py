@@ -191,13 +191,13 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
                 best_val_loss[loss] = losses_v[loss]
                 best_train_loss[loss] = losses_t[loss]
 
-            if loss == "Total":  # for early-stopping purposes
-                stale_epochs, best_epoch = 0, epoch
+                if loss == "Total":  # for early-stopping purposes
+                    stale_epochs, best_epoch = 0, epoch
 
-                # save the model
-                torch.save(vicreg.state_dict(), f"{outpath}/VICReg_best_epoch_weights.pth")
-            else:
-                stale_epochs += 1
+                    # save the model
+                    torch.save(vicreg.state_dict(), f"{outpath}/VICReg_best_epoch_weights.pth")
+                else:
+                    stale_epochs += 1
 
         t1 = time.time()
 
