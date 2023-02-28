@@ -44,7 +44,7 @@ def off_diagonal(x):
 
 
 # VICReg loss function
-def criterion(tracks, clusters):
+def criterion(tracks, clusters, loss_hparams):
     """Based on the pytorch pseudocode presented at the paper in Appendix A."""
     loss_ = {}
 
@@ -53,11 +53,13 @@ def criterion(tracks, clusters):
 
     # invariance loss
     loss_["Invariance"] = F.mse_loss(tracks, clusters)
+    loss_["Invariance"] *= loss_hparams["lmbd"]
 
     # variance loss
     std_tracks = torch.sqrt(tracks.var(dim=0) + 1e-04)
     std_clusters = torch.sqrt(clusters.var(dim=0) + 1e-04)
     loss_["Variance"] = torch.mean(F.relu(1 - std_tracks)) + torch.mean(F.relu(1 - std_clusters))
+    loss_["Variance"] *= loss_hparams["mu"]
 
     # covariance loss
     tracks = tracks - tracks.mean(dim=0)
@@ -67,6 +69,7 @@ def criterion(tracks, clusters):
 
     # loss_["Covariance"] = ( sum_off_diagonal(cov_tracks.pow_(2)) + sum_off_diagonal(cov_clusters.pow_(2)) ) / D
     loss_["Covariance"] = off_diagonal(cov_tracks).pow_(2).sum().div(D) + off_diagonal(cov_clusters).pow_(2).sum().div(D)
+    loss_["Covariance"] *= loss_hparams["nu"]
 
     return loss_
 
@@ -113,12 +116,8 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
         embedding_tracks, embedding_clusters = vicreg(X)
 
         # compute loss
-        loss_ = criterion(embedding_tracks, embedding_clusters)
-        loss_["Total"] = (
-            (loss_hparams["lmbd"] * loss_["Invariance"])
-            + (loss_hparams["mu"] * loss_["Variance"])
-            + (loss_hparams["nu"] * loss_["Covariance"])
-        )
+        loss_ = criterion(embedding_tracks, embedding_clusters, loss_hparams)
+        loss_["Total"] = loss_["Invariance"] + loss_["Variance"] + loss_["Covariance"]
 
         # update parameters
         if is_train:
