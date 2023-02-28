@@ -87,9 +87,6 @@ if __name__ == "__main__":
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
         vicreg.to(device)
 
-        print(vicreg)
-        print(f"VICReg model name: {args.prefix_VICReg}")
-
         # save model_kwargs and hyperparameters
         save_VICReg(args, outpath, vicreg_encoder, encoder_model_kwargs, vicreg_decoder, decoder_model_kwargs)
 
@@ -103,6 +100,8 @@ if __name__ == "__main__":
 
         optimizer = torch.optim.SGD(vicreg.parameters(), lr=args.lr)
 
+        print(vicreg)
+        print(f"VICReg model name: {args.prefix_VICReg}")
         print(f"Training VICReg over {args.n_epochs_VICReg} epochs")
         training_loop_VICReg(
             multi_gpu,
