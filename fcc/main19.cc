@@ -9,6 +9,8 @@
 #include "Pythia8/Pythia.h"
 #include "Pythia8Plugins/HepMC3.h"
 #include <string>
+#include <cstdlib>
+
 using namespace Pythia8;
 
 //==========================================================================
@@ -48,15 +50,15 @@ int main(int argc, char *argv[]) {
   // Number of signal events to generate.
   int nEvent = 100;
 
-  if (argc != 2) {
-    std::cerr << "./main SEED" << std::endl;
+  if (argc != 3) {
+    std::cerr << "./main SEED NPU" << std::endl;
     return 1;
   }
   
   std::string seedStr = std::string("Random:seed = ").append(std::string(argv[1]));
 
   // Average number of pileup events per signal event.
-  double nPileupAvg = 10.0;
+  double nPileupAvg = atoi(argv[2]);
   
   // Shift each PU event by this time delta in time to mimic ee overlay
   double timeDelta = 0.5;

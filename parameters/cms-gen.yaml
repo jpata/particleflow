@@ -34,6 +34,9 @@ loss:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
+  charge_loss:
+    type: BinaryCrossentropy
+    from_logits: yes
   energy_loss:
     type: MeanSquaredLogarithmicError
   pt_loss:
