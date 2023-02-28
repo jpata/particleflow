@@ -132,8 +132,8 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
 
         print(f'debug: tot={losses["Total"]} - {losses["Invariance"]} - {losses["Variance"]} - {losses["Covariance"]}')
 
-        if i == 10:
-            break
+        # if i == 10:
+        #     break
 
     return losses
 
