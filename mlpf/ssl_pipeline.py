@@ -64,6 +64,7 @@ if __name__ == "__main__":
         vicreg_decoder = DECODER(**decoder_model_kwargs)
 
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
+        vicreg.load_state_dict(vicreg_state_dict)
         vicreg.to(device)
 
     else:
@@ -92,11 +93,11 @@ if __name__ == "__main__":
 
         if multi_gpu:
             vicreg = torch_geometric.nn.DataParallel(vicreg)
-            train_loader = torch_geometric.loader.DataListLoader(data_VICReg_train, args.batch_size_VICReg)
-            valid_loader = torch_geometric.loader.DataListLoader(data_VICReg_valid, args.batch_size_VICReg)
+            train_loader = torch_geometric.loader.DataListLoader(data_VICReg_train, args.bs_VICReg)
+            valid_loader = torch_geometric.loader.DataListLoader(data_VICReg_valid, args.bs_VICReg)
         else:
-            train_loader = torch_geometric.loader.DataLoader(data_VICReg_train, args.batch_size_VICReg)
-            valid_loader = torch_geometric.loader.DataLoader(data_VICReg_valid, args.batch_size_VICReg)
+            train_loader = torch_geometric.loader.DataLoader(data_VICReg_train, args.bs_VICReg)
+            valid_loader = torch_geometric.loader.DataLoader(data_VICReg_valid, args.bs_VICReg)
 
         optimizer = torch.optim.SGD(vicreg.parameters(), lr=args.lr)
 
@@ -120,8 +121,8 @@ if __name__ == "__main__":
         print(f"Will use {len(data_mlpf_train)} events for train")
         print(f"Will use {len(data_mlpf_valid)} events for valid")
 
-        train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.batch_size_mlpf)
-        valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.batch_size_mlpf)
+        train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.bs_mlpf)
+        valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.bs_mlpf)
 
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
@@ -150,7 +151,6 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                vicreg_encoder,
                 mlpf_ssl,
                 train_loader,
                 valid_loader,
@@ -158,8 +158,7 @@ if __name__ == "__main__":
                 args.patience,
                 args.lr,
                 outpath_ssl,
-                mode="ssl",
-                FineTune_VICReg=args.FineTune_VICReg,
+                vicreg_encoder,
             )
 
             # evaluate the ssl-based mlpf on both the QCD and TTbar samples
@@ -170,7 +169,7 @@ if __name__ == "__main__":
                     device,
                     vicreg_encoder,
                     mlpf_ssl,
-                    args.batch_size_mlpf,
+                    args.bs_mlpf,
                     "ssl",
                     outpath_ssl,
                     {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
@@ -200,7 +199,6 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                vicreg_encoder,
                 mlpf_native,
                 train_loader,
                 valid_loader,
@@ -208,8 +206,6 @@ if __name__ == "__main__":
                 args.patience,
                 args.lr,
                 outpath_native,
-                mode="native",
-                FineTune_VICReg=False,
             )
 
             # evaluate the native mlpf on both the QCD and TTbar samples
@@ -220,7 +216,7 @@ if __name__ == "__main__":
                     device,
                     vicreg_encoder,
                     mlpf_native,
-                    args.batch_size_mlpf,
+                    args.bs_mlpf,
                     "native",
                     outpath_native,
                     {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
