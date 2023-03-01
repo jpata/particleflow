@@ -7,75 +7,83 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool
-
-from .utils import distinguish_PFelements
 
 matplotlib.use("Agg")
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
+# # VICReg loss function
+# def criterion(x, y, device="cuda", lmbd=25, epsilon=1e-3):
+#     bs = x.size(0)
+#     emb = x.size(1)
+
+#     std_x = torch.sqrt(x.var(dim=0) + epsilon)
+#     std_y = torch.sqrt(y.var(dim=0) + epsilon)
+#     var_loss = torch.mean(F.relu(1 - std_x)) + torch.mean(F.relu(1 - std_y))
+
+#     invar_loss = F.mse_loss(x, y)
+
+#     xNorm = (x - x.mean(0)) / x.std(0)
+#     yNorm = (y - y.mean(0)) / y.std(0)
+#     crossCorMat = (xNorm.T @ yNorm) / bs
+#     cross_loss = (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd).pow(2).sum()
+
+#     return var_loss, invar_loss, cross_loss
+
+
+def sum_off_diagonal(M):
+    """Sums the off-diagonal elements of a square matrix M."""
+    return M.sum() - torch.diagonal(M).sum()
+
+
+def off_diagonal(x):
+    """Copied from VICReg paper github https://github.com/facebookresearch/vicreg/"""
+    n, m = x.shape
+    assert n == m
+    return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+
 
 # VICReg loss function
-def criterion(x, y, device="cuda", lmbd=25, u=25, v=1, epsilon=1e-3):
-    bs = x.size(0)
-    emb = x.size(1)
+def criterion(tracks, clusters, loss_hparams):
+    """Based on the pytorch pseudocode presented at the paper in Appendix A."""
+    loss_ = {}
 
-    std_x = torch.sqrt(x.var(dim=0) + epsilon)
-    std_y = torch.sqrt(y.var(dim=0) + epsilon)
-    var_loss = torch.mean(F.relu(1 - std_x)) + torch.mean(F.relu(1 - std_y))
+    N = tracks.size(0)  # batch size
+    D = tracks.size(1)  # dim of representations
 
-    invar_loss = F.mse_loss(x, y)
+    # invariance loss
+    loss_["Invariance"] = F.mse_loss(tracks, clusters)
+    loss_["Invariance"] *= loss_hparams["lmbd"]
 
-    xNorm = (x - x.mean(0)) / x.std(0)
-    yNorm = (y - y.mean(0)) / y.std(0)
-    crossCorMat = (xNorm.T @ yNorm) / bs
-    cross_loss = (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd).pow(2).sum()
+    # variance loss
+    std_tracks = torch.sqrt(tracks.var(dim=0) + 1e-04)
+    std_clusters = torch.sqrt(clusters.var(dim=0) + 1e-04)
+    loss_["Variance"] = torch.mean(F.relu(1 - std_tracks)) + torch.mean(F.relu(1 - std_clusters))
+    loss_["Variance"] *= loss_hparams["mu"]
 
-    loss = u * var_loss + v * invar_loss + cross_loss
+    # covariance loss
+    tracks = tracks - tracks.mean(dim=0)
+    clusters = clusters - clusters.mean(dim=0)
+    cov_tracks = (tracks.T @ tracks) / (N - 1)
+    cov_clusters = (clusters.T @ clusters) / (N - 1)
 
-    return loss
+    # loss_["Covariance"] = ( sum_off_diagonal(cov_tracks.pow_(2)) + sum_off_diagonal(cov_clusters.pow_(2)) ) / D
+    loss_["Covariance"] = off_diagonal(cov_tracks).pow_(2).sum().div(D) + off_diagonal(cov_clusters).pow_(2).sum().div(D)
+    loss_["Covariance"] *= loss_hparams["nu"]
+
+    return loss_
 
 
 @torch.no_grad()
-def validation_run(
-    device,
-    encoder,
-    decoder,
-    train_loader,
-    valid_loader,
-    lmbd,
-    u,
-    v,
-):
+def validation_run(multi_gpu, device, vicreg, loaders, loss_hparams):
     with torch.no_grad():
         optimizer = None
-        ret = train(
-            device,
-            encoder,
-            decoder,
-            train_loader,
-            valid_loader,
-            optimizer,
-            lmbd,
-            u,
-            v,
-        )
+        ret = train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams)
     return ret
 
 
-def train(
-    device,
-    encoder,
-    decoder,
-    train_loader,
-    valid_loader,
-    optimizer,
-    lmbd,
-    u,
-    v,
-):
+def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -85,81 +93,82 @@ def train(
 
     if is_train:
         print("---->Initiating a training run")
-        encoder.train()
-        decoder.train()
-        loader = train_loader
+        vicreg.train()
+        loader = loaders["train"]
     else:
         print("---->Initiating a validation run")
-        encoder.eval()
-        decoder.eval()
-        loader = valid_loader
+        vicreg.eval()
+        loader = loaders["valid"]
 
     # initialize loss counters
-    losses = 0
+    losses_of_interest = ["Total", "Invariance", "Variance", "Covariance"]
+    losses = {}
+    for loss in losses_of_interest:
+        losses[loss] = 0.0
 
     for i, batch in enumerate(loader):
-        # make transformation
-        tracks, clusters = distinguish_PFelements(batch.to(device))
 
-        # ENCODE
-        embedding_tracks, embedding_clusters = encoder(tracks, clusters)
-        # POOLING
-        pooled_tracks = global_mean_pool(embedding_tracks, tracks.batch)
-        pooled_clusters = global_mean_pool(embedding_clusters, clusters.batch)
-        # DECODE
-        out_tracks, out_clusters = decoder(pooled_tracks, pooled_clusters)
+        if multi_gpu:
+            X = batch
+        else:
+            X = batch.to(device)
+
+        # run VICReg forward pass to get the embeddings
+        embedding_tracks, embedding_clusters = vicreg(X)
 
         # compute loss
-        loss = criterion(out_tracks, out_clusters, device, lmbd, u, v)
+        loss_ = criterion(embedding_tracks, embedding_clusters, loss_hparams)
+        loss_["Total"] = loss_["Invariance"] + loss_["Variance"] + loss_["Covariance"]
 
         # update parameters
         if is_train:
-            for param in encoder.parameters():
+            for param in vicreg.parameters():
                 param.grad = None
-            for param in decoder.parameters():
-                param.grad = None
-            loss.backward()
+            loss_["Total"].backward()
             optimizer.step()
 
-        losses += loss.detach()
+        print(f'debug: tot={loss_["Total"]} - {loss_["Invariance"]} - {loss_["Variance"]} - {loss_["Covariance"]}')
 
-    losses = losses.cpu().item() / (len(loader))
+        # accumulate the loss to make plots
+        for loss in losses_of_interest:
+            losses[loss] += loss_[loss].detach()
+
+        # if i == 2:
+        #     break
+
+    for loss in losses_of_interest:
+        losses[loss] = losses[loss].cpu().item() / (len(loader))
 
     return losses
 
 
-def training_loop_VICReg(
-    device,
-    encoder,
-    decoder,
-    train_loader,
-    valid_loader,
-    n_epochs,
-    patience,
-    optimizer,
-    outpath,
-    lmbd,
-    u,
-    v,
-):
+def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience, optimizer, loss_hparams, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        encoder: the encoder part of VICReg
-        decoder: the decoder part of VICReg
-        train_loader: a pytorch Dataloader for training
-        valid_loader: a pytorch Dataloader for validation
-        patience: number of stale epochs allowed before stopping the training
-        optimizer: optimizer to use for training (by default: Adam)
+        multi_gpu: flag to indicate if there's more than 1 gpu available to use.
+        device: "cpu" or "cuda".
+        vicreg: the VICReg model composed of an Encoder/Decoder.
+        loaders: a dict() object with keys "train" and "valid", each refering to a pytorch Dataloader.
+        patience: number of stale epochs allowed before stopping the training.
+        optimizer: optimizer to use for training (by default SGD which proved more stable).
+        loss_hparams: a dict() object with keys "lmbd", "u", "v" containing loss hyperparameters.
         outpath: path to store the model weights and training plots
     """
 
     t0_initial = time.time()
 
-    losses_train, losses_valid = [], []
+    losses_of_interest = ["Total", "Invariance", "Variance", "Covariance"]
 
-    best_val_loss = 99999.9
+    best_val_loss, best_train_loss = {}, {}
+    losses = {}
+    losses["train"], losses["valid"] = {}, {}
+    for loss in losses_of_interest:
+        best_val_loss[loss] = 9999999.9
+        losses["train"][loss] = []
+        losses["valid"][loss] = []
+
     stale_epochs = 0
 
     for epoch in range(n_epochs):
@@ -170,58 +179,44 @@ def training_loop_VICReg(
             break
 
         # training step
-        losses_t = train(
-            device,
-            encoder,
-            decoder,
-            train_loader,
-            valid_loader,
-            optimizer,
-            lmbd,
-            u,
-            v,
-        )
+        losses_t = train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams)
 
-        losses_train.append(losses_t)
+        for loss in losses_of_interest:
+            losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v = validation_run(
-            device,
-            encoder,
-            decoder,
-            train_loader,
-            valid_loader,
-            lmbd,
-            u,
-            v,
-        )
+        losses_v = validation_run(multi_gpu, device, vicreg, loaders, loss_hparams)
 
-        losses_valid.append(losses_v)
+        for loss in losses_of_interest:
+            losses["valid"][loss].append(losses_v[loss])
 
-        # if (epoch % 4) == 0:
-        # early-stopping
-        if losses_v < best_val_loss:
-            best_val_loss = losses_v
-            best_train_loss = losses_t
+        # save the lowest value of each component of the loss to print it on the legend of the loss plots
+        for loss in losses_of_interest:
+            if loss == "Total":
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
-            stale_epochs = 0
+                    # save the model differently if the model was wrapped with DataParallel
+                    if multi_gpu:
+                        state_dict = vicreg.module.state_dict()
+                    else:
+                        state_dict = vicreg.state_dict()
 
-            try:
-                encoder_state_dict = encoder.module.state_dict()
-            except AttributeError:
-                encoder_state_dict = encoder.state_dict()
-            try:
-                decoder_state_dict = decoder.module.state_dict()
-            except AttributeError:
-                decoder_state_dict = decoder.state_dict()
+                    torch.save(state_dict, f"{outpath}/VICReg_best_epoch_weights.pth")
 
-            torch.save(encoder_state_dict, f"{outpath}/encoder_best_epoch_weights.pth")
-            torch.save(decoder_state_dict, f"{outpath}/decoder_best_epoch_weights.pth")
+                    # dump best epoch
+                    with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:
+                        json.dump({"best_epoch": epoch}, fp)
 
-            with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:  # dump best epoch
-                json.dump({"best_epoch": epoch}, fp)
-        else:
-            stale_epochs += 1
+                    # for early-stopping purposes
+                    stale_epochs = 0
+                else:
+                    stale_epochs += 1
+            else:
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
         t1 = time.time()
 
@@ -231,25 +226,39 @@ def training_loop_VICReg(
 
         print(
             f"epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_train[epoch], 4)} "
-            + f"valid_loss={round(losses_valid[epoch], 4)} "
+            + f"train_loss={round(losses_t['Total'], 4)} "
+            + f"valid_loss={round(losses_v['Total'], 4)} "
             + f"stale={stale_epochs} "
             + f"time={round((t1-t0)/60, 2)}m "
             + f"eta={round(eta, 1)}m"
         )
 
-        fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train)), losses_train, label="training ({:.2f})".format(best_train_loss))
-        ax.plot(range(len(losses_valid)), losses_valid, label="training ({:.2f})".format(best_val_loss))
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel("Loss")
-        ax.legend(title="VICReg", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/VICReg_loss.pdf")
+        for loss in losses_of_interest:
+            # make total loss plot
+            fig, ax = plt.subplots()
+            ax.plot(
+                range(len(losses["train"][loss])), losses["train"][loss], label=f"training ({best_train_loss[loss]:.4f})"
+            )
+            ax.plot(
+                range(len(losses["valid"][loss])), losses["valid"][loss], label=f"validation ({best_val_loss[loss]:.4f})"
+            )
+            ax.set_xlabel("Epochs")
+            ax.set_ylabel(f"{loss} Loss")
+            ax.legend(
+                title=r"VICReg - ($\lambda={} - \mu={} - \nu={}$)".format(
+                    loss_hparams["lmbd"], loss_hparams["mu"], loss_hparams["nu"]
+                ),
+                loc="best",
+                title_fontsize=20,
+                fontsize=15,
+            )
+            plt.savefig(f"{outpath}/VICReg_loss_{loss}.pdf")
 
-        with open(f"{outpath}/VICReg_loss_train.pkl", "wb") as f:
-            pkl.dump(losses_train, f)
-        with open(f"{outpath}/VICReg_loss_valid.pkl", "wb") as f:
-            pkl.dump(losses_valid, f)
+        with open(f"{outpath}/VICReg_losses.pkl", "wb") as f:
+            pkl.dump(losses, f)
+
+        plt.tight_layout()
+        plt.close()
 
     print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")
