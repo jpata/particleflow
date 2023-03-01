@@ -283,6 +283,11 @@ def data_split(dataset, data_split_mode):
         frac_qq_train = round(0.8 * len(rem_qq))
         frac_tt_train = round(0.8 * len(rem_ttbar))
 
+        assert frac_qq_train > 0
+        assert frac_qq_test > 0
+        assert frac_tt_train > 0
+        assert frac_tt_test > 0
+
         if data_split_mode == "domain_adaptation":
             """
             use remaining qq samples for VICReg with an 80-20 train-val split.

@@ -13,8 +13,8 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm
 
 cd ../..
 
-python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1.root
-python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_2.root
+python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1.root data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_1.parquet
+python3 fcc/postprocessing.py data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_2.root data/p8_ee_tt_ecm365/reco_p8_ee_tt_ecm365_2.parquet
 
 tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar
 
