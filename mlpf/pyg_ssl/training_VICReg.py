@@ -131,10 +131,13 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
 
         # accumulate the loss to make plots
         for loss in losses_of_interest:
-            losses[loss] += loss_[loss].detach().cpu().item() / (len(loader))
+            losses[loss] += loss_[loss].detach()
 
         if i == 10:
             break
+
+    for loss in losses_of_interest:
+        losses[loss] += losses[loss].cpu().item() / (len(loader))
 
     return losses
 
