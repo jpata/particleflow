@@ -26,8 +26,8 @@ SAMPLE_LABEL_CMS = {
 }
 
 pid_to_text = {
-    211: r"charged hadrons ($\pi^\pm$, ...)",
-    130: r"neutral hadrons (K, ...)",
+    211: r"ch. had.",
+    130: r"n. had.",
     1: r"HF hadron (EM)",
     2: r"HF hadron (HAD)",
     11: r"$e^{\pm}$",

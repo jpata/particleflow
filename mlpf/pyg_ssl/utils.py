@@ -280,41 +280,48 @@ def data_split(dataset, data_split_mode):
             data_ttbar += torch.load(f"{file}")
 
         # use 10% of each sample for testing
-        data_test_qcd = data_qcd[: round(0.1 * len(data_qcd))]
-        data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
+        frac_qcd_test = round(0.1 * len(data_qcd))
+        frac_tt_test = round(0.1 * len(data_ttbar))
+        data_test_qcd = data_qcd[:frac_qcd_test]
+        data_test_ttbar = data_ttbar[:frac_tt_test]
 
         # label remaining data as `rem`
-        rem_qcd = data_qcd[round(0.1 * len(data_qcd)) :]
-        rem_ttbar = data_ttbar[round(0.1 * len(data_qcd)) :]
+        rem_qcd = data_qcd[frac_qcd_test:]
+        rem_ttbar = data_ttbar[frac_tt_test:]
+
+        frac_qcd_train = round(0.8 * len(rem_qcd))
+        frac_tt_train = round(0.8 * len(rem_ttbar))
 
         if data_split_mode == "domain_adaptation":
             """
-            use QCD samples for VICReg with an 80-20 split.
-            use TTbar samples for MLPF with an 80-20 split.
+            use remaining QCD samples for VICReg with an 80-20 train-val split.
+            use remaining TTbar samples for MLPF with an 80-20 train-val split.
             """
-            data_VICReg_train = rem_qcd[: round(0.8 * len(rem_qcd))]
-            data_VICReg_valid = rem_qcd[round(0.8 * len(rem_qcd)) :]
+            data_VICReg_train = rem_qcd[:frac_qcd_train]
+            data_VICReg_valid = rem_qcd[frac_qcd_train:]
 
-            data_mlpf_train = rem_ttbar[: round(0.8 * len(rem_ttbar))]
-            data_mlpf_valid = rem_ttbar[round(0.8 * len(rem_ttbar)) :]
+            data_mlpf_train = rem_ttbar[:frac_tt_train]
+            data_mlpf_valid = rem_ttbar[frac_tt_train:]
 
         elif data_split_mode == "mix":
             """
-            use (80% of QCD + 80% of TTbar) samples for VICReg with a 90-10 split.
-            use (20% of QCD + 20% of TTbar) samples for MLPF with a 90-10 split.
+            use (80% of QCD + 80% of remaining TTbar) samples for VICReg with a 90-10 train-val split.
+            use (20% of QCD + 20% of remaining TTbar) samples for MLPF with a 90-10 train-val split.
             """
-            data_VICReg = rem_qcd[: round(0.8 * len(rem_qcd))] + rem_ttbar[: round(0.8 * len(rem_ttbar))]
-            data_mlpf = rem_qcd[round(0.8 * len(rem_qcd)) :] + rem_ttbar[round(0.8 * len(rem_ttbar)) :]
+            data_VICReg = rem_qcd[:frac_qcd_train] + rem_ttbar[:frac_tt_train]
+            data_mlpf = rem_qcd[frac_qcd_train:] + rem_ttbar[frac_tt_train:]
 
             # shuffle the samples after mixing (not super necessary since the DataLoaders will shuffle anyway)
             random.shuffle(data_VICReg)
             random.shuffle(data_mlpf)
 
-            data_VICReg_train = data_VICReg[: round(0.9 * len(data_VICReg))]
-            data_VICReg_valid = data_VICReg[round(0.9 * len(data_VICReg)) :]
+            frac_VICReg_train = round(0.9 * len(data_VICReg))
+            data_VICReg_train = data_VICReg[:frac_VICReg_train]
+            data_VICReg_valid = data_VICReg[frac_VICReg_train:]
 
-            data_mlpf_train = data_mlpf[: round(0.9 * len(data_mlpf))]
-            data_mlpf_valid = data_mlpf[round(0.9 * len(data_mlpf)) :]
+            frac_mlpf_train = round(0.9 * len(data_mlpf))
+            data_mlpf_train = data_mlpf[:frac_mlpf_train]
+            data_mlpf_valid = data_mlpf[frac_mlpf_train:]
 
     print(f"Will use {len(data_VICReg_train)} events to train VICReg")
     print(f"Will use {len(data_VICReg_valid)} events to validate VICReg")
