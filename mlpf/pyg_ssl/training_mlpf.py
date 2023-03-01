@@ -122,12 +122,11 @@ def compute_weights(device, target_ids, num_classes):
 def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tb):
     with torch.no_grad():
         optimizer = None
-        optimizer_VICReg = None
-        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb)
+        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb)
     return ret
 
 
-def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tb):
+def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -142,17 +141,16 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         print("---->Initiating a training run")
         mlpf.train()
         loader = train_loader
-        if optimizer_VICReg:
-            encoder.train()
     else:
         print("---->Initiating a validation run")
         mlpf.eval()
         loader = valid_loader
-        if optimizer_VICReg:
-            encoder.eval()
 
     # initialize loss counters
-    epoch_loss_total, epoch_loss_id, epoch_loss_momentum, epoch_loss_charge = 0.0, 0.0, 0.0, 0.0
+    losses_of_interest = ["Total", "Classification", "Regression", "Charge"]
+    losses = {}
+    for loss in losses_of_interest:
+        losses[loss] = 0.0
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
@@ -181,91 +179,81 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, optimize
         target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
         target_charge = (event_on_device.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
 
-        loss_id = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-        # loss_id_old = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids)  # for classifying PID
-
-        # for regression, mask the loss in cases there is no true particle
+        loss_ = {}
+        # for CLASSIFYING PID
+        loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+        # REGRESSING p4: mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        loss_momentum = 10 * torch.nn.functional.huber_loss(
+        loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-        )  # for regressing p4
-
-        loss_charge = torch.nn.functional.cross_entropy(
+        )
+        # PREDICTING CHARGE
+        loss_["Charge"] = torch.nn.functional.cross_entropy(
             pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-        )  # for predicting charge
-        loss = loss_id + loss_momentum + loss_charge
+        )
+        # TOTAL LOSS
+        loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
         if is_train:
-            tb.add_scalar("batch/loss_id", loss_id.detach().cpu().item(), istep_global)
-            tb.add_scalar("batch/loss_momentum", loss_momentum.detach().cpu().item(), istep_global)
-            tb.add_scalar("batch/loss_charge", loss_charge.detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_id", loss_["Classification"].detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_momentum", loss_["Regression"].detach().cpu().item(), istep_global)
+            tb.add_scalar("batch/loss_charge", loss_["Charge"].detach().cpu().item(), istep_global)
             istep_global += 1
 
         # update parameters
         if is_train:
             for param in mlpf.parameters():
                 param.grad = None
-            if optimizer_VICReg:
-                for param in encoder.parameters():
-                    param.grad = None
-            loss.backward()
+            loss_["Total"].backward()
             optimizer.step()
 
-        epoch_loss_total += loss.detach()
-        epoch_loss_id += loss_id.detach()
-        epoch_loss_momentum += loss_momentum.detach()
-        epoch_loss_charge += loss_charge.detach()
+        for loss in losses_of_interest:
+            losses[loss] += loss_[loss].detach()
 
-    epoch_loss_total = epoch_loss_total.cpu().item() / len(loader)
-    epoch_loss_id = epoch_loss_id.cpu().item() / len(loader)
-    epoch_loss_momentum = epoch_loss_momentum.cpu().item() / len(loader)
-    epoch_loss_charge = epoch_loss_charge.cpu().item() / len(loader)
+        # if i == 2:
+        #     break
+
+    for loss in losses_of_interest:
+        losses[loss] = losses[loss].cpu().item() / (len(loader))
 
     print(
         "loss_id={:.2f} loss_momentum={:.2f} loss_charge={:.2f}".format(
-            epoch_loss_id, epoch_loss_momentum, epoch_loss_charge
+            losses["Classification"], losses["Regression"], losses["Charge"]
         )
     )
-    return epoch_loss_total, epoch_loss_id, epoch_loss_momentum
+
+    return losses
 
 
-def training_loop_mlpf(
-    device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode, FineTune_VICReg
-):
+def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        encoder: the encoder part of VICReg
-        mlpf: the mlpf downstream task
-        train_loader: a pytorch Dataloader for training
-        valid_loader: a pytorch Dataloader for validation
-        patience: number of stale epochs allowed before stopping the training
-        lr: lr to use for training
-        outpath: path to store the model weights and training plots
-        mode: can be either `ssl` or `native`
-        FineTune_VICReg: if `True` will finetune VICReg with a lr that is 10% of the MLPF lr
+        encoder: the encoder part of VICReg.
+        mlpf: the mlpf downstream task.
+        train_loader: a pytorch Dataloader for training.
+        valid_loader: a pytorch Dataloader for validation.
+        patience: number of stale epochs allowed before stopping the training.
+        lr: lr to use for training.
+        outpath: path to store the model weights and training plots.
+        mode: can be either `ssl` or `native`.
     """
 
     t0_initial = time.time()
 
-    losses_train_tot, losses_train_id, losses_train_momentum = [], [], []
-    losses_valid_tot, losses_valid_id, losses_valid_momentum = [], [], []
+    losses_of_interest = ["Total", "Classification", "Regression"]
 
-    best_val_loss_tot, best_val_loss_id, best_val_loss_momentum = 99999.9, 99999.9, 99999.9
+    losses = {}
+    losses["train"], losses["valid"], best_val_loss, best_train_loss = {}, {}, {}, {}
+    for loss in losses_of_interest:
+        losses["train"][loss], losses["valid"][loss] = [], []
+        best_val_loss[loss] = 99999.9
+
     stale_epochs = 0
-
     tensorboard_writer = SummaryWriter(outpath)
 
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
-    if FineTune_VICReg:
-        print("Will finetune VICReg during mlpf training")
-        optimizer_VICReg = torch.optim.SGD(encoder.parameters(), lr=lr * 0.1)
-    else:
-        print("Will fix VICReg during mlpf training")
-        optimizer_VICReg = None
-
-    # set VICReg to evaluation mode
     encoder.eval()
 
     for epoch in range(n_epochs):
@@ -276,51 +264,39 @@ def training_loop_mlpf(
             break
 
         # training step
-        losses_t_tot, losses_t_id, losses_t_momentum = train(
-            device, encoder, mlpf, train_loader, valid_loader, optimizer, optimizer_VICReg, mode, tensorboard_writer
-        )
-        tensorboard_writer.add_scalar("epoch/train_loss", losses_t_tot, epoch)
-        losses_train_tot.append(losses_t_tot)
-        losses_train_id.append(losses_t_id)
-        losses_train_momentum.append(losses_t_momentum)
+        losses_t = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tensorboard_writer)
+        tensorboard_writer.add_scalar("epoch/train_loss", losses_t["Total"], epoch)
+        for loss in losses_of_interest:
+            losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v_tot, losses_v_id, losses_v_momentum = validation_run(
-            device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer
-        )
-        tensorboard_writer.add_scalar("epoch/val_loss", losses_v_tot, epoch)
-        losses_valid_tot.append(losses_v_tot)
-        losses_valid_id.append(losses_v_id)
-        losses_valid_momentum.append(losses_v_momentum)
+        losses_v = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        tensorboard_writer.add_scalar("epoch/val_loss", losses_v["Total"], epoch)
+        for loss in losses_of_interest:
+            losses["valid"][loss].append(losses_v[loss])
 
         tensorboard_writer.flush()
 
-        if losses_v_id < best_val_loss_id:
-            best_val_loss_id = losses_v_id
-            best_train_loss_id = losses_t_id
+        # save the lowest value of each component of the loss to print it on the legend of the loss plots
+        for loss in losses_of_interest:
+            if loss == "Total":
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
-        if losses_v_momentum < best_val_loss_momentum:
-            best_val_loss_momentum = losses_v_momentum
-            best_train_loss_momentum = losses_t_momentum
+                    # save the model
+                    torch.save(mlpf.state_dict(), f"{outpath}/mlpf_{mode}_best_epoch_weights.pth")
+                    with open(f"{outpath}/mlpf_{mode}_best_epoch.json", "w") as fp:  # dump best epoch
+                        json.dump({"best_epoch": epoch}, fp)
 
-        # early-stopping
-        if losses_v_tot < best_val_loss_tot:
-            best_val_loss_tot = losses_v_tot
-            best_train_loss_tot = losses_t_tot
-
-            stale_epochs = 0
-
-            try:
-                mlpf_state_dict = mlpf.module.state_dict()
-            except AttributeError:
-                mlpf_state_dict = mlpf.state_dict()
-
-            torch.save(mlpf_state_dict, f"{outpath}/mlpf_{mode}_best_epoch_weights.pth")
-
-            with open(f"{outpath}/mlpf_{mode}_best_epoch.json", "w") as fp:  # dump best epoch
-                json.dump({"best_epoch": epoch}, fp)
-        else:
-            stale_epochs += 1
+                    # for early-stopping purposes
+                    stale_epochs = 0
+                else:
+                    stale_epochs += 1
+            else:
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
         t1 = time.time()
 
@@ -330,71 +306,37 @@ def training_loop_mlpf(
 
         print(
             f"epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_train_tot[epoch], 4)} "
-            + f"valid_loss={round(losses_valid_tot[epoch], 4)} "
+            + f"train_loss={round(losses_t['Total'], 4)} "
+            + f"valid_loss={round(losses_v['Total'], 4)} "
             + f"stale={stale_epochs} "
             + f"time={round((t1-t0)/60, 2)}m "
             + f"eta={round(eta, 1)}m"
         )
 
-        # make total loss plot
-        fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train_tot)), losses_train_tot, label="training ({:.2f})".format(best_train_loss_tot))
-        ax.plot(range(len(losses_valid_tot)), losses_valid_tot, label="validation ({:.2f})".format(best_val_loss_tot))
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel("Total Loss")
-        ax.set_ylim(0.8 * losses_train_tot[-1], 1.2 * losses_train_tot[-1])
-        if mode == "ssl":
-            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
-        else:
-            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/mlpf_loss_tot.pdf")
-        with open(f"{outpath}/mlpf_{mode}_loss_train_tot.pkl", "wb") as f:
-            pkl.dump(losses_train_tot, f)
-        with open(f"{outpath}/mlpf_{mode}_loss_valid_tot.pkl", "wb") as f:
-            pkl.dump(losses_valid_tot, f)
+        # make loss plots
+        for loss in losses_of_interest:
+            fig, ax = plt.subplots()
+            ax.plot(
+                range(len(losses["train"][loss])),
+                losses["train"][loss],
+                label="training ({:.3f})".format(best_train_loss["Total"]),
+            )
+            ax.plot(
+                range(len(losses["valid"][loss])),
+                losses["valid"][loss],
+                label="validation ({:.3f})".format(best_val_loss["Total"]),
+            )
+            ax.set_xlabel("Epochs")
+            ax.set_ylabel(f"{loss} Loss")
+            ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
+            if mode == "ssl":
+                ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+            else:
+                ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
+            plt.savefig(f"{outpath}/mlpf_loss_tot.pdf")
 
-        # make loss id plot
-        fig, ax = plt.subplots()
-        ax.plot(range(len(losses_train_id)), losses_train_id, label="training ({:.2f})".format(best_train_loss_id))
-        ax.plot(range(len(losses_valid_id)), losses_valid_id, label="validation ({:.2f})".format(best_val_loss_id))
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel("Classification Loss")
-        ax.set_ylim(0.8 * losses_train_id[-1], 1.2 * losses_train_id[-1])
-        if mode == "ssl":
-            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
-        else:
-            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/mlpf_loss_id.pdf")
-        with open(f"{outpath}/mlpf_{mode}_loss_train_id.pkl", "wb") as f:
-            pkl.dump(losses_train_id, f)
-        with open(f"{outpath}/mlpf_{mode}_loss_valid_id.pkl", "wb") as f:
-            pkl.dump(losses_valid_id, f)
-
-        # make loss momentum plot
-        fig, ax = plt.subplots()
-        ax.plot(
-            range(len(losses_train_momentum)),
-            losses_train_momentum,
-            label="training ({:.2f})".format(best_train_loss_momentum),
-        )
-        ax.plot(
-            range(len(losses_valid_momentum)),
-            losses_valid_momentum,
-            label="validation ({:.2f})".format(best_val_loss_momentum),
-        )
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel("Regression Loss")
-        ax.set_ylim(0.8 * losses_train_momentum[-1], 1.2 * losses_train_momentum[-1])
-        if mode == "ssl":
-            ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
-        else:
-            ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-        plt.savefig(f"{outpath}/mlpf_loss_momentum.pdf")
-        with open(f"{outpath}/mlpf_{mode}_loss_train_momentum.pkl", "wb") as f:
-            pkl.dump(losses_train_momentum, f)
-        with open(f"{outpath}/mlpf_{mode}_loss_valid_momentum.pkl", "wb") as f:
-            pkl.dump(losses_valid_momentum, f)
+        with open(f"{outpath}/mlpf_{mode}_losses.pkl", "wb") as f:
+            pkl.dump(losses, f)
 
         print("----------------------------------------------------------")
     print(f"Done with training. Total training time is {round((time.time() - t0_initial)/60,3)}min")

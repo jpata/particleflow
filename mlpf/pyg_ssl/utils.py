@@ -115,7 +115,7 @@ def combine_PFelements(tracks, clusters):
 def load_VICReg(device, outpath):
 
     print("Loading a previously trained model..")
-    vicreg_state_dict = torch.load(f"{outpath}/encoder_best_epoch_weights.pth", map_location=device)
+    vicreg_state_dict = torch.load(f"{outpath}/vicreg_best_epoch_weights.pth", map_location=device)
 
     with open(f"{outpath}/encoder_model_kwargs.pkl", "rb") as f:
         encoder_model_kwargs = pkl.load(f)
@@ -161,7 +161,7 @@ def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_m
                 "data_split_mode": args.data_split_mode,
                 "n_epochs": args.n_epochs_VICReg,
                 "lr": args.lr,
-                "batch_size_VICReg": args.batch_size_VICReg,
+                "bs_VICReg": args.bs_VICReg,
                 "width_encoder": args.width_encoder,
                 "embedding_dim": args.embedding_dim_VICReg,
                 "num_convs": args.num_convs,
@@ -213,7 +213,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "data_split_mode": args.data_split_mode,
                 "n_epochs": args.n_epochs_mlpf,
                 "lr": args.lr,
-                "batch_size_mlpf": args.batch_size_mlpf,
+                "bs_mlpf": args.bs_mlpf,
                 "width": args.width_mlpf,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "num_convs": args.num_convs,
@@ -221,7 +221,6 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
                 "mode": mode,
-                "FineTune_VICReg": args.FineTune_VICReg,
                 "num_mlpf_parameters": num_mlpf_parameters,
             },
             fp,

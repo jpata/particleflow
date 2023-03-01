@@ -133,11 +133,11 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach()
 
-        if i == 10:
-            break
+        # if i == 10:
+        #     break
 
     for loss in losses_of_interest:
-        losses[loss] += losses[loss].cpu().item() / (len(loader))
+        losses[loss] = losses[loss].cpu().item() / (len(loader))
 
     return losses
 
@@ -148,7 +148,8 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
 
     Args:
         multi_gpu: flag to indicate if there's more than 1 gpu available to use.
-        encoder: the VICReg model composed of an Ecnoder/Decoder.
+        device: "cpu" or "cuda".
+        vicreg: the VICReg model composed of an Encoder/Decoder.
         loaders: a dict() object with keys "train" and "valid", each refering to a pytorch Dataloader.
         patience: number of stale epochs allowed before stopping the training.
         optimizer: optimizer to use for training (by default SGD which proved more stable).
@@ -196,12 +197,20 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
                     best_val_loss[loss] = losses_v[loss]
                     best_train_loss[loss] = losses_t[loss]
 
+                    # save the model differently if the model was wrapped with DataParallel
+                    if multi_gpu:
+                        state_dict = vicreg.module.state_dict()
+                    else:
+                        state_dict = vicreg.state_dict()
+
+                    torch.save(state_dict, f"{outpath}/VICReg_best_epoch_weights.pth")
+
+                    # dump best epoch
+                    with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:
+                        json.dump({"best_epoch": epoch}, fp)
+
                     # for early-stopping purposes
                     stale_epochs = 0
-                    # save the model
-                    torch.save(vicreg.state_dict(), f"{outpath}/VICReg_best_epoch_weights.pth")
-                    with open(f"{outpath}/VICReg_best_epoch.json", "w") as fp:  # dump best epoch
-                        json.dump({"best_epoch": epoch}, fp)
                 else:
                     stale_epochs += 1
             else:
@@ -245,10 +254,8 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
             )
             plt.savefig(f"{outpath}/VICReg_loss_{loss}.pdf")
 
-        with open(f"{outpath}/VICReg_losses_train.pkl", "wb") as f:
-            pkl.dump(losses_t, f)
-        with open(f"{outpath}/VICReg_losses_valid.pkl", "wb") as f:
-            pkl.dump(losses_v, f)
+        with open(f"{outpath}/VICReg_losses.pkl", "wb") as f:
+            pkl.dump(losses, f)
 
         plt.tight_layout()
         plt.close()

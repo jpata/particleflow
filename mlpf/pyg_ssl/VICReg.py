@@ -12,8 +12,8 @@ class VICReg(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
 
-    # function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
     def distinguish_PFelements(self, batch):
+        """Takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters."""
 
         track_id = 1
         cluster_id = 2
@@ -58,8 +58,9 @@ class VICReg(nn.Module):
         return pooled_tracks, pooled_clusters
 
 
-# define the Encoder that learns latent representations of tracks and clusters
 class ENCODER(nn.Module):
+    """The Encoder part of VICReg which attempts to learns useful latent representations of tracks and clusters."""
+
     def __init__(
         self,
         width=126,
@@ -119,8 +120,10 @@ class ENCODER(nn.Module):
         return embedding_tracks, embedding_clusters
 
 
-# define the decoder that expands the latent representations of tracks and clusters
 class DECODER(nn.Module):
+    """The Decoder part of VICReg which attempts to expand the learned latent representations
+    of tracks and clusters into a space where a loss can be computed."""
+
     def __init__(
         self,
         input_dim=34,
