@@ -42,7 +42,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
-def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, samples):
+def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
     import fastjet
     import vector
     from jet_utils import build_dummy_array, match_two_jet_collections
@@ -60,7 +60,6 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, sam
 
     mlpf.eval()
     encoder.eval()
-    decoder.eval()
     for sample, data in samples.items():
         print(f"Testing the {mode} model on the {sample}")
 
@@ -74,7 +73,6 @@ def evaluate(device, encoder, decoder, mlpf, batch_size_mlpf, mode, outpath, sam
 
         mlpf.eval()
         encoder.eval()
-        decoder.eval()
 
         conf_matrix = np.zeros((6, 6))
         with torch.no_grad():
