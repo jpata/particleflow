@@ -152,6 +152,7 @@ if __name__ == "__main__":
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
             print(mlpf_ssl)
             print(f"MLPF model name: {args.prefix_mlpf}_ssl")
+            print(f"Will use VICReg model {args.prefix_VICReg}")
 
             # make mlpf specific directory
             outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
