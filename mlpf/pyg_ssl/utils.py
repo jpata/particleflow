@@ -115,7 +115,7 @@ def combine_PFelements(tracks, clusters):
 def load_VICReg(device, outpath):
 
     print("Loading a previously trained model..")
-    vicreg_state_dict = torch.load(f"{outpath}/vicreg_best_epoch_weights.pth", map_location=device)
+    vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
 
     with open(f"{outpath}/encoder_model_kwargs.pkl", "rb") as f:
         encoder_model_kwargs = pkl.load(f)
