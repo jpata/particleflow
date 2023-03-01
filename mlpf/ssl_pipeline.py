@@ -151,7 +151,6 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                vicreg_encoder,
                 mlpf_ssl,
                 train_loader,
                 valid_loader,
@@ -159,7 +158,7 @@ if __name__ == "__main__":
                 args.patience,
                 args.lr,
                 outpath_ssl,
-                mode="ssl",
+                vicreg_encoder,
             )
 
             # evaluate the ssl-based mlpf on both the QCD and TTbar samples
@@ -200,7 +199,6 @@ if __name__ == "__main__":
 
             training_loop_mlpf(
                 device,
-                vicreg_encoder,
                 mlpf_native,
                 train_loader,
                 valid_loader,
@@ -208,7 +206,6 @@ if __name__ == "__main__":
                 args.patience,
                 args.lr,
                 outpath_native,
-                mode="native",
             )
 
             # evaluate the native mlpf on both the QCD and TTbar samples

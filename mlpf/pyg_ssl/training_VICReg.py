@@ -133,7 +133,7 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach()
 
-        # if i == 10:
+        # if i == 2:
         #     break
 
     for loss in losses_of_interest:

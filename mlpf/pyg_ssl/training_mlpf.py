@@ -119,14 +119,14 @@ def compute_weights(device, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tb):
+def validation_run(device, mlpf, train_loader, valid_loader, tb, ssl_encoder):
     with torch.no_grad():
         optimizer = None
-        ret = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb)
+        ret = train(device, mlpf, train_loader, valid_loader, optimizer, tb, ssl_encoder)
     return ret
 
 
-def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb):
+def train(device, mlpf, train_loader, valid_loader, optimizer, tb, ssl_encoder=None):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -154,12 +154,12 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
 
-        if mode == "ssl":
+        if ssl_encoder is not None:
             # seperate PF-elements
             tracks, clusters = distinguish_PFelements(batch.to(device))
 
             # ENCODE
-            embedding_tracks, embedding_clusters = encoder(tracks, clusters)
+            embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
 
             # concat the inputs with embeddings
             tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
@@ -168,7 +168,7 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb
             # combine PF-elements
             event = combine_PFelements(tracks, clusters)
 
-        elif mode == "native":
+        else:
             event = batch.to(device)
 
         # make mlpf forward pass
@@ -225,12 +225,11 @@ def train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tb
     return losses
 
 
-def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, mode):
+def training_loop_mlpf(device, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath, ssl_encoder=None):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        encoder: the encoder part of VICReg.
         mlpf: the mlpf downstream task.
         train_loader: a pytorch Dataloader for training.
         valid_loader: a pytorch Dataloader for validation.
@@ -238,6 +237,7 @@ def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epoc
         lr: lr to use for training.
         outpath: path to store the model weights and training plots.
         mode: can be either `ssl` or `native`.
+        ssl_encoder: the encoder part of VICReg. If None is provided then the function will run a supervised training.
     """
 
     t0_initial = time.time()
@@ -254,7 +254,13 @@ def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epoc
     tensorboard_writer = SummaryWriter(outpath)
 
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
-    encoder.eval()
+
+    if ssl_encoder is not None:
+        mode = "ssl"
+        ssl_encoder.eval()
+    else:
+        mode = "native"
+    print(f"Will launch a {mode} training of MLPF.")
 
     for epoch in range(n_epochs):
         t0 = time.time()
@@ -264,13 +270,13 @@ def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epoc
             break
 
         # training step
-        losses_t = train(device, encoder, mlpf, train_loader, valid_loader, optimizer, mode, tensorboard_writer)
+        losses_t = train(device, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer, ssl_encoder)
         tensorboard_writer.add_scalar("epoch/train_loss", losses_t["Total"], epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v = validation_run(device, encoder, mlpf, train_loader, valid_loader, mode, tensorboard_writer)
+        losses_v = validation_run(device, mlpf, train_loader, valid_loader, tensorboard_writer, ssl_encoder)
         tensorboard_writer.add_scalar("epoch/val_loss", losses_v["Total"], epoch)
         for loss in losses_of_interest:
             losses["valid"][loss].append(losses_v[loss])
@@ -333,7 +339,7 @@ def training_loop_mlpf(device, encoder, mlpf, train_loader, valid_loader, n_epoc
                 ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
             else:
                 ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-            plt.savefig(f"{outpath}/mlpf_loss_tot.pdf")
+            plt.savefig(f"{outpath}/mlpf_{mode}_loss_tot.pdf")
 
         with open(f"{outpath}/mlpf_{mode}_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
