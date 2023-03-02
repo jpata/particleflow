@@ -12,7 +12,7 @@ import torch
 import torch_geometric
 import tqdm
 
-from .utils import CLASS_NAMES_CLIC_LATEX, NUM_CLASSES, combine_PFelements, distinguish_PFelements
+from .utils import combine_PFelements, distinguish_PFelements
 
 matplotlib.use("Agg")
 
@@ -26,6 +26,7 @@ CLASS_TO_ID = {
     "electron": 4,
     "muon": 5,
 }
+CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
 
 
 def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
@@ -191,7 +192,7 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
                 conf_matrix += sklearn.metrics.confusion_matrix(
                     target_ids.detach().cpu(),
                     pred_ids.detach().cpu(),
-                    labels=range(NUM_CLASSES),
+                    labels=range(len(CLASS_NAMES_CLIC_LATEX)),
                 )
 
                 awkward.to_parquet(
@@ -223,7 +224,8 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
             )
             yvals, _, _ = load_eval_data(f"{this_out_path}/pred_*.parquet")
             plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=sample)
-
+            # if i == 2:
+            #     break
     return npred_, ngen_, ncand_
 
 

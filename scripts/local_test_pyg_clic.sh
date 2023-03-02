@@ -37,6 +37,6 @@ for sample in ../../data/clic_edm4hep/* ; do
 done
 echo -----------------------
 
-# run an ssl training of mlpf
+# run a supervised training of mlpf on CLIC dataset
 cd ../
-python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl
+python pyg_pipeline.py --dataset CLIC --prefix MLPF_test

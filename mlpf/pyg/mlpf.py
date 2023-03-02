@@ -4,8 +4,6 @@ import torch_geometric
 import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv  # also returns edge index
 
-from .utils import NUM_CLASSES
-
 # from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
@@ -100,6 +98,7 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
+        NUM_CLASSES=8,
         embedding_dim=128,
         width=126,
         num_convs=2,
@@ -109,6 +108,7 @@ class MLPF(nn.Module):
         dropout=0.4,
         ssl=False,
         VICReg_embedding_dim=0,
+        dataset="",
     ):
         super(MLPF, self).__init__()
 
@@ -117,6 +117,7 @@ class MLPF(nn.Module):
         self.input_dim = input_dim
         self.num_convs = num_convs
         self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
+        self.dataset = dataset
 
         # embedding of the inputs
         if num_convs != 0:
@@ -156,7 +157,11 @@ class MLPF(nn.Module):
         # elementwise DNN for node momentum regression
         self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
         self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        if self.dataset == "CLIC":
+            out = 1
+        else:
+            out = 2
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, out, width, self.act, dropout, ssl)  # 2 outputs because sphi, cphi
         self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
@@ -216,13 +221,17 @@ class MLPF(nn.Module):
         else:
             embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
-        # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
+        # predict the 4-momentum, add it to the (pt, eta, sphi, cphi, E) of the PFelement
         preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]
         preds_eta = self.nn_eta(embedding_reg) + input_[:, 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:4]
-        preds_energy = self.nn_energy(embedding_reg) + input_[:, 4:5]
-        preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
+        if self.dataset == "CLIC":
+            preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:4]
+            preds_energy = self.nn_energy(embedding_reg) + input_[:, 4:5]
+        else:
+            preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:5]
+            preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
 
+        preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
 
         return preds_id, preds_momentum, pred_charge

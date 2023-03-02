@@ -4,11 +4,11 @@ import pickle as pkl
 import platform
 
 import torch
-from pyg_ssl.args import parse_args
-from pyg_ssl.evaluate import evaluate, make_multiplicity_plots_both
-from pyg_ssl.mlpf import MLPF
-from pyg_ssl.utils import data_split, load_VICReg
-from pyg_ssl.VICReg import DECODER, ENCODER
+from pyg.mlpf import MLPF
+from pyg.ssl.args import parse_args
+from pyg.ssl.evaluate import evaluate
+from pyg.ssl.utils import data_split, load_VICReg
+from pyg.ssl.VICReg import DECODER, ENCODER, VICReg
 
 if __name__ == "__main__":
     import sys
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # load the clic dataset
-    _, _, _, _, data_test_qcd, data_test_ttbar = data_split(args.dataset, args.data_split_mode)
+    _, _, _, _, data_test_qcd, data_test_ttbar = data_split(args.data_path + "/clic_edm4hep/", args.data_split_mode)
 
     # setup the directory path to hold all models and plots
     if args.prefix_VICReg is None:
@@ -34,25 +34,32 @@ if __name__ == "__main__":
     outpath = osp.join(args.outpath, args.prefix_VICReg)
 
     # load a pre-trained VICReg model
-    encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs = load_VICReg(device, outpath)
+    vicreg_state_dict, encoder_model_kwargs, decoder_model_kwargs = load_VICReg(device, outpath)
 
-    encoder = ENCODER(**encoder_model_kwargs)
-    decoder = DECODER(**decoder_model_kwargs)
+    vicreg_encoder = ENCODER(**encoder_model_kwargs)
+    vicreg_decoder = DECODER(**decoder_model_kwargs)
 
-    encoder.load_state_dict(encoder_state_dict)
-    decoder.load_state_dict(decoder_state_dict)
+    vicreg = VICReg(vicreg_encoder, vicreg_decoder)
+    # because model was saved using dataparallel
+    from collections import OrderedDict
 
-    decoder = decoder.to(device)
-    encoder = encoder.to(device)
+    new_state_dict = OrderedDict()
+    for k, v in vicreg_state_dict.items():
+        name = k[7:]  # remove module.
+        new_state_dict[name] = v
+    vicreg_state_dict = new_state_dict
+
+    vicreg.load_state_dict(vicreg_state_dict)
+    vicreg.to(device)
 
     # load a pre-trained MLPF model
     if args.ssl:
-        outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
+        outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix}_ssl")
 
         print("Loading a previously trained ssl model..")
-        mlpf_ssl_state_dict = torch.load(f"{outpath_ssl}/mlpf_ssl_best_epoch_weights.pth", map_location=device)
+        mlpf_ssl_state_dict = torch.load(f"{outpath_ssl}/best_epoch_weights.pth", map_location=device)
 
-        with open(f"{outpath_ssl}/mlpf_model_kwargs.pkl", "rb") as f:
+        with open(f"{outpath_ssl}/model_kwargs.pkl", "rb") as f:
             mlpf_model_kwargs = pkl.load(f)
 
         mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
@@ -60,10 +67,9 @@ if __name__ == "__main__":
 
         ret_ssl = evaluate(
             device,
-            encoder,
-            decoder,
+            vicreg_encoder,
             mlpf_ssl,
-            args.batch_size_mlpf,
+            args.bs,
             "ssl",
             outpath_ssl,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
@@ -73,9 +79,9 @@ if __name__ == "__main__":
         outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
 
         print("Loading a previously trained ssl model..")
-        mlpf_native_state_dict = torch.load(f"{outpath_native}/mlpf_native_best_epoch_weights.pth", map_location=device)
+        mlpf_native_state_dict = torch.load(f"{outpath_native}/best_epoch_weights.pth", map_location=device)
 
-        with open(f"{outpath_native}/mlpf_model_kwargs.pkl", "rb") as f:
+        with open(f"{outpath_native}/model_kwargs.pkl", "rb") as f:
             mlpf_model_kwargs = pkl.load(f)
 
         mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
@@ -83,14 +89,15 @@ if __name__ == "__main__":
 
         ret_native = evaluate(
             device,
-            encoder,
-            decoder,
+            vicreg_encoder,
             mlpf_native,
-            args.batch_size_mlpf,
+            args.bs_mlpf,
             "native",
             outpath_native,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
         )
 
-    if args.ssl & args.native:
-        make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
+    # if args.ssl & args.native:
+    #     from pyg.ssl.evaluate import make_multiplicity_plots_both
+
+    #     make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)

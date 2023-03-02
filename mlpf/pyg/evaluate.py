@@ -5,8 +5,9 @@ import matplotlib
 import numpy as np
 import torch
 import torch_geometric
+from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
 
-from .utils import Y_FEATURES
+from .utils import CLASS_LABELS, Y_FEATURES
 
 matplotlib.use("Agg")
 
@@ -25,7 +26,7 @@ def one_hot_embedding(labels, num_classes):
     return y[labels]
 
 
-def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
+def make_predictions(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl_encoder=None):
     """
     Runs inference on the qcd test dataset to evaluate performance.
     Saves the predictions as .pt files.
@@ -37,55 +38,66 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
         model: pytorch model
         file_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method
     """
+    num_classes = len(CLASS_LABELS[dataset])  # we have 6 classes for delphes and 9 for cms
 
     ti = time.time()
 
-    t0, tf = time.time(), 0
-
     ibatch = 0
+    tf_0, tf_f = time.time(), 0
     for num, file in enumerate(file_loader):
-        print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s")
-        tf = tf + (time.time() - t0)
+        if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
+            print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
+            tf_f = tf_f + (time.time() - tf_0)
+            file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
-        file = [x for t in file for x in t]  # unpack the list of tuples to a list
+        tf = 0
+        for i, batch in enumerate(file):
 
-        loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
+            if ssl_encoder is not None:
+                # seperate PF-elements
+                tracks, clusters = distinguish_PFelements(batch.to(rank))
+                # ENCODE
+                embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
+                # concat the inputs with embeddings
+                tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
+                # combine PF-elements
+                event = combine_PFelements(tracks, clusters).to(rank)
 
-        t = 0
-        for i, batch in enumerate(loader):
+            else:
+                event = batch.to(rank)
 
             t0 = time.time()
-            pred_ids_one_hot, pred_p4 = model(batch.to(rank))
-            t1 = time.time()
-            # print(
-            #     f"batch {i}/{len(loader)}, "
-            #     f"forward pass on rank {rank} = {round(t1 - t0, 3)}s, "
-            #     f"for batch with {batch.num_nodes} nodes"
-            # )
-            t = t + (t1 - t0)
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            tf = tf + (time.time() - t0)
+
+            pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True)
+            pred_p4 = torch.cat([pred_charge, pred_momentum], axis=-1)
+
+            target_ids = event.ygen_id
+            target_p4 = event.ygen.to(dtype=torch.float32)
+            cand_ids = event.ycand_id
+            cand_p4 = event.ycand.to(dtype=torch.float32)
 
             # zero pad the events to use the same plotting scripts as the tf pipeline
             padded_num_elem_size = 6400
 
             # must zero pad each event individually so must unpack the batches
-            pred_ids_one_hot_list = []
-            pred_p4_list = []
+            pred_ids_one_hot_list, pred_p4_list = [], []
             for z in range(batch_size):
                 pred_ids_one_hot_list.append(pred_ids_one_hot[batch.batch == z])
                 pred_p4_list.append(pred_p4[batch.batch == z])
 
-            X = []
-            Y_pid = []
-            Y_p4 = []
+            X, Y_pid, Y_p4 = [], [], []
             batch_list = batch.to_data_list()
             for j, event in enumerate(batch_list):
                 vars = {
                     "X": event.x.detach().to("cpu"),
-                    "ygen": event.ygen.detach().to("cpu"),
-                    "ycand": event.ycand.detach().to("cpu"),
+                    "ygen": target_p4.detach().to("cpu"),
+                    "ycand": cand_p4.detach().to("cpu"),
                     "pred_p4": pred_p4_list[j].detach().to("cpu"),
-                    "gen_ids_one_hot": one_hot_embedding(event.ygen_id.detach().to("cpu"), num_classes),
-                    "cand_ids_one_hot": one_hot_embedding(event.ycand_id.detach().to("cpu"), num_classes),
+                    "gen_ids_one_hot": one_hot_embedding(target_ids.detach().to("cpu"), num_classes),
+                    "cand_ids_one_hot": one_hot_embedding(cand_ids.detach().to("cpu"), num_classes),
                     "pred_ids_one_hot": pred_ids_one_hot_list[j].detach().to("cpu"),
                 }
 
@@ -138,16 +150,14 @@ def make_predictions(rank, model, file_loader, batch_size, num_classes, PATH):
         # if num == 2:
         #     break
 
-        print(f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s")
+        print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
 
         t0 = time.time()
 
-    print(f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s")
-
-    print(f"Time taken to make predictions on rank {rank} is: {round(((time.time() - ti) / 60), 2)} min")
+    print(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def postprocess_predictions(pred_path):
+def postprocess_predictions(dataset, pred_path):
     """
     Loads all the predictions .pt files and combines them after some necessary processing to make plots.
     Saves the processed predictions.
@@ -178,7 +188,7 @@ def postprocess_predictions(pred_path):
     yvals["cand_cls"] = Y_pids[:, 1, :, :].numpy()
     yvals["pred_cls"] = Y_pids[:, 2, :, :].numpy()
 
-    for feat, key in enumerate(Y_FEATURES):
+    for feat, key in enumerate(Y_FEATURES[dataset][1:]):  # skip the PDG
         yvals[f"gen_{key}"] = Y_p4s[:, 0, :, feat].unsqueeze(-1).numpy()
         yvals[f"cand_{key}"] = Y_p4s[:, 1, :, feat].unsqueeze(-1).numpy()
         yvals[f"pred_{key}"] = Y_p4s[:, 2, :, feat].unsqueeze(-1).numpy()
@@ -196,7 +206,8 @@ def postprocess_predictions(pred_path):
     msk_X_f = X_f[:, 0] != 0
 
     for val in ["gen", "cand", "pred"]:
-        yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
+        if dataset != "CLIC":  # TODO: remove
+            yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
         yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(
             yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1
         )  # cz for some reason keepdims doesn't work

@@ -252,7 +252,9 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
                 title_fontsize=20,
                 fontsize=15,
             )
+            plt.tight_layout()
             plt.savefig(f"{outpath}/VICReg_loss_{loss}.pdf")
+            plt.close()
 
         with open(f"{outpath}/VICReg_losses.pkl", "wb") as f:
             pkl.dump(losses, f)

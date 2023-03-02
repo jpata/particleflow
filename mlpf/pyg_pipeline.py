@@ -7,15 +7,14 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import torch_geometric
 from pyg.args import parse_args
-from pyg.cms.cms_plots import make_plots_cms
-from pyg.cms.cms_utils import X_FEATURES_CMS
-from pyg.delphes.delphes_utils import X_FEATURES_DELPHES
 from pyg.evaluate import make_predictions, postprocess_predictions
-from pyg.model import MLPF
+from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
+from pyg.plotting import make_plots
 from pyg.training import training_loop
-from pyg.utils import load_model, make_file_loaders, save_model
+from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -58,227 +57,160 @@ def setup(rank, world_size):
 
 
 def cleanup():
-    """
-    Necessary function that destroys the spawned process group at the end.
-    """
+    """Necessary function that destroys the spawned process group at the end."""
 
     dist.destroy_process_group()
 
 
-def run_demo(demo_fn, world_size, args, dataset, model, num_classes, outpath):
+def run_demo(demo_fn, world_size, args, dataset, model, outpath):
     """
     Necessary function that spawns a process group of size=world_size processes to run demo_fn()
     on each gpu device that will be indexed by 'rank'.
 
     Args:
-    demo_fn: function you wish to run on each gpu
-    world_size: number of gpus available
-    mode: 'train' or 'inference'
+    demo_fn: function you wish to run on each gpu.
+    world_size: number of gpus available.
     """
-
-    # mp.set_start_method('forkserver')
 
     mp.spawn(
         demo_fn,
-        args=(world_size, args, dataset, model, num_classes, outpath),
+        args=(world_size, args, dataset, model, outpath),
         nprocs=world_size,
         join=True,
     )
 
 
-def train_ddp(rank, world_size, args, dataset, model, num_classes, outpath):
+def train(rank, world_size, args, data, model, outpath):
     """
-    A train_ddp() function that will be passed as a demo_fn to run_demo() to
-    perform training over multiple gpus using DDP.
+    A function that may be passed as a demo_fn to run_demo() to perform training over
+    multiple gpus using DDP in case there are multiple gpus available (world_size > 1)
 
-    It divides and distributes the training dataset appropriately, copies the model,
-    wraps the model with DDP on each device to allow synching of gradients,
-    and finally, invokes the training_loop() to run synchronized training among devices.
+        . It divides and distributes the training dataset appropriately.
+        . Copies the model on each gpu.
+        . Wraps the model with DDP on each gpu to allow synching of gradients.
+        . Invokes the training_loop() to run synchronized training among gpus.
+
+    If there are NO multiple gpus available, the function should run fine
+    and use the available device for training.
     """
 
-    setup(rank, world_size)
-
-    print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
+    if world_size > 1:
+        setup(rank, world_size)
+    else:  # hack in case there's no multigpu
+        rank = 0
+        world_size = 1
 
     # give each gpu a subset of the data
     hyper_train = int(args.n_train / world_size)
     hyper_valid = int(args.n_valid / world_size)
 
-    train_dataset = torch.utils.data.Subset(
-        dataset,
-        np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train),
-    )
+    train_dataset = torch.utils.data.Subset(data, np.arange(start=rank * hyper_train, stop=(rank + 1) * hyper_train))
     valid_dataset = torch.utils.data.Subset(
-        dataset,
-        np.arange(
-            start=args.n_train + rank * hyper_valid,
-            stop=args.n_train + (rank + 1) * hyper_valid,
-        ),
+        data, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
     )
 
-    # construct file loaders
-    file_loader_train = make_file_loaders(
-        world_size,
-        train_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
-    file_loader_valid = make_file_loaders(
-        world_size,
-        valid_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
+    if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
+        file_loader_train = make_file_loaders(world_size, train_dataset)
+        file_loader_valid = make_file_loaders(world_size, valid_dataset)
+    else:  # construct pyg DataLoaders directly
+        file_loader_train = torch_geometric.loader.DataLoader(train_dataset, args.bs)
+        file_loader_valid = torch_geometric.loader.DataLoader(valid_dataset, args.bs)
 
-    # copy the model to the GPU with id=rank
-    print(f"Copying the model on rank {rank}..")
-    model = model.to(rank)
+    print("-----------------------------")
+    if world_size > 1:
+        print(f"Running training on rank {rank}: {torch.cuda.get_device_name(rank)}")
+        print(f"Copying the model on rank {rank}..")
+        model = model.to(rank)
+        model = DDP(model, device_ids=[rank])
+    else:
+        if torch.cuda.device_count():
+            rank = torch.device("cuda:0")
+        else:
+            rank = "cpu"
+        print(f"Running training on {rank}")
+        model = model.to(rank)
     model.train()
-    ddp_model = DDP(model, device_ids=[rank])
-
-    optimizer = torch.optim.Adam(ddp_model.parameters(), lr=args.lr)
 
     training_loop(
         rank,
-        args.data,
-        ddp_model,
+        model,
         file_loader_train,
         file_loader_valid,
-        args.batch_size,
+        args.bs,
         args.n_epochs,
         args.patience,
-        optimizer,
-        args.alpha,
-        args.target,
-        num_classes,
+        args.lr,
         outpath,
     )
 
-    cleanup()
+    if world_size > 1:
+        cleanup()
 
 
-def inference_ddp(rank, world_size, args, dataset, model, num_classes, PATH):
+def inference(rank, world_size, args, data, model, PATH):
     """
-    An inference_ddp() function that will be passed as a demo_fn to run_demo()
-    to perform inference over multiple gpus using DDP.
+    A function that may be passed as a demo_fn to run_demo() to perform inference over
+    multiple gpus using DDP in case there are multiple gpus available (world_size > 1)
 
-    It divides and distributes the testing dataset appropriately, copies the model,
-    and wraps the model with DDP on each device.
+        . It divides and distributes the testing dataset appropriately.
+        . Copies the model on each gpu.
+        . Wraps the model with DDP on each gpu to allow synching of gradients.
+        . Runs inference
+
+    If there are NO multiple gpus available, the function should run fine
+    and use the available device for inference.
     """
 
-    setup(rank, world_size)
-
-    print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
+    if world_size > 1:
+        setup(rank, world_size)
+    else:  # hack in case there's no multigpu
+        rank = 0
+        world_size = 1
 
     # give each gpu a subset of the data
     hyper_test = int(args.n_test / world_size)
 
-    test_dataset = torch.utils.data.Subset(
-        dataset,
-        np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test),
-    )
+    test_dataset = torch.utils.data.Subset(data, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
 
-    # construct data loaders
-    file_loader_test = make_file_loaders(
-        world_size,
-        test_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
+    if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
+        file_loader_test = make_file_loaders(world_size, test_dataset)
+    else:  # construct pyg DataLoaders directly
+        file_loader_test = torch_geometric.loader.DataLoader(test_dataset, args.bs)
 
-    # copy the model to the GPU with id=rank
-    print(f"Copying the model on rank {rank}..")
-    model = model.to(rank)
-    model.eval()
-    ddp_model = DDP(model, device_ids=[rank])
-
-    make_predictions(rank, ddp_model, file_loader_test, args.batch_size, num_classes, PATH)
-
-    cleanup()
-
-
-def train(device, world_size, args, dataset, model, num_classes, outpath):
-    """
-    A train() function that will load the training dataset and start a
-    training_loop on a single device (cuda or cpu).
-    """
-
-    if device == "cpu":
-        print("Running training on cpu")
+    if world_size > 1:
+        print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
+        print(f"Copying the model on rank {rank}..")
+        model = model.to(rank)
+        model = DDP(model, device_ids=[rank])
     else:
-        print(f"Running training on: {torch.cuda.get_device_name(device)}")
-        device = device.index
-
-    train_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_train))
-    valid_dataset = torch.utils.data.Subset(
-        dataset,
-        np.arange(start=args.n_train, stop=args.n_train + args.n_valid),
-    )
-
-    # construct file loaders
-    file_loader_train = make_file_loaders(
-        world_size,
-        train_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
-    file_loader_valid = make_file_loaders(
-        world_size,
-        valid_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
-
-    # move the model to the device (cuda or cpu)
-    model = model.to(device)
-    model.train()
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
-    training_loop(
-        device,
-        args.data,
-        model,
-        file_loader_train,
-        file_loader_valid,
-        args.batch_size,
-        args.n_epochs,
-        args.patience,
-        optimizer,
-        args.alpha,
-        args.target,
-        num_classes,
-        outpath,
-    )
-
-
-def inference(device, world_size, args, dataset, model, num_classes, PATH):
-    """
-    An inference() function that will load the testing dataset and start running inference
-    on a single device (cuda or cpu).
-    """
-
-    if device == "cpu":
-        print("Running inference on cpu")
-    else:
-        print(f"Running inference on: {torch.cuda.get_device_name(device)}")
-        device = device.index
-
-    test_dataset = torch.utils.data.Subset(dataset, np.arange(start=0, stop=args.n_test))
-
-    # construct data loaders
-    file_loader_test = make_file_loaders(
-        world_size,
-        test_dataset,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-    )
-
-    # copy the model to the GPU with id=rank
-    model = model.to(device)
+        if torch.cuda.device_count():
+            rank = torch.device("cuda:0")
+        else:
+            rank = "cpu"
+        print(f"Running inference on {rank}")
+        model = model.to(rank)
     model.eval()
 
-    make_predictions(device, model, file_loader_test, args.batch_size, num_classes, PATH)
+    make_predictions(rank, args.dataset, model, file_loader_test, args.bs, PATH)
+
+    if world_size > 1:
+        cleanup()
+
+
+def load_data(data_path, dataset, sample):
+    """Loads the appropriate sample for a given dataset."""
+    dict_ = {
+        "CMS": {
+            "TTbar": f"{data_path}/cms/TTbar_14TeV_TuneCUETP8M1_cfi/",
+            "QCD": f"{data_path}/cms/QCDForPF_13TeV_TuneCUETP8M1_cfi/",
+        },
+        "DELPHES": {"TTbar": f"{data_path}/delphes/pythia8_ttbar/", "QCD": f"{data_path}/delphes/pythia8_qcd/"},
+        "CLIC": {
+            "TTbar": f"{data_path}/clic_edm4hep/p8_ee_tt_ecm365/",
+            "QCD": f"{data_path}/clic_edm4hep/p8_ee_qcd_ecm365/",
+        },
+    }
+    return PFGraphDataset(dict_[dataset][sample], dataset)
 
 
 if __name__ == "__main__":
@@ -288,98 +220,84 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
 
     torch.backends.cudnn.benchmark = True
-
-    # retrieve the dimensions of the PF-elements & PF-candidates to set the input/output dimension of the model
-    if args.data == "delphes":
-        input_dim = len(X_FEATURES_DELPHES)
-        num_classes = 6  # we have 6 classes/pids for delphes
-    elif args.data == "cms":
-        input_dim = len(X_FEATURES_CMS)
-        num_classes = 9  # we have 9 classes/pids for cms (including taus)
-    output_dim_p4 = 6  # "charge, pt, eta, sin_phi, cos_phi, energy
-
-    outpath = osp.join(args.outpath, args.model_prefix)
-
+    outpath = osp.join(args.outpath, args.prefix)
+    print(torch.load("../data/clic_edm4hep/p8_ee_qcd_ecm365/processed/data_0.pt"))
     # load a pre-trained specified model, otherwise, instantiate and train a new model
     if args.load:
-        state_dict, model_kwargs, outpath = load_model(device, outpath, args.model_prefix, args.load_epoch)
+        state_dict, model_kwargs = load_mlpf(device, outpath)
 
         model = MLPF(**model_kwargs)
         model.load_state_dict(state_dict)
 
     else:
         model_kwargs = {
-            "input_dim": input_dim,
-            "num_classes": num_classes,
-            "output_dim_p4": output_dim_p4,
+            "input_dim": len(X_FEATURES[args.dataset]),
+            "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
             "embedding_dim": args.embedding_dim,
-            "hidden_dim1": args.hidden_dim1,
-            "hidden_dim2": args.hidden_dim2,
+            "width": args.width,
             "num_convs": args.num_convs,
-            "space_dim": args.space_dim,
-            "propagate_dim": args.propagate_dim,
             "k": args.nearest,
+            "propagate_dimensions": args.propagate_dim,
+            "space_dimensions": args.space_dim,
+            "dropout": args.dropout,
+            "dataset": args.dataset,  # TODO: remove
         }
 
         model = MLPF(**model_kwargs)
 
         # save model_kwargs and hyperparameters
-        save_model(args, args.model_prefix, outpath, model_kwargs)
+        save_mlpf(args, outpath, model, model_kwargs)
 
         print(model)
-        print(args.model_prefix)
+        print(args.prefix)
 
-        print("Training over {} epochs".format(args.n_epochs))
+        print(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset.")
+
+        # load the ttbar data for training/validation
+        data = load_data(args.data_path, args.dataset, "TTbar")
 
         # run the training using DDP if more than one gpu is available
-        dataset = PFGraphDataset(args.dataset, args.data)
-
-        if world_size >= 2:
+        if world_size > 1:
             run_demo(
-                train_ddp,
+                train,
                 world_size,
                 args,
-                dataset,
+                data,
                 model,
-                num_classes,
                 outpath,
             )
         else:
-            train(device, world_size, args, dataset, model, num_classes, outpath)
+            train(device, world_size, args, data, model, outpath)
 
-        # load the best epoch state
-        state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
-        model.load_state_dict(state_dict)
+    # load the best epoch state
+    best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
+    state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
+    model.load_state_dict(state_dict)
 
-    # specify which epoch/state to load to run the inference and make plots
-    if args.load and args.load_epoch != -1:
-        epoch_to_load = args.load_epoch
-    else:
-        epoch_to_load = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
-
-    PATH = f"{outpath}/testing_epoch_{epoch_to_load}_{args.sample}/"
+    # prepare for inference and plotting
+    PATH = f"{outpath}/testing_epoch_{best_epoch}_{args.sample}/"
     pred_path = f"{PATH}/predictions/"
     plot_path = f"{PATH}/plots/"
 
-    # run the inference
     if args.make_predictions:
+        print(f"Will run inference on the {args.dataset} {args.sample} sample.")
 
         if not os.path.exists(PATH):
             os.makedirs(PATH)
         if not os.path.exists(pred_path):
             os.makedirs(pred_path)
 
-        # run the inference using DDP if more than one gpu is available
-        dataset_test = PFGraphDataset(args.dataset_test, args.data)
+        # load the qcd data for testing
+        data = load_data(args.data_path, args.dataset, args.sample)
 
-        if world_size >= 2:
+        # run the inference using DDP if more than one gpu is available
+        if world_size > 1:
             run_demo(
-                inference_ddp,
+                inference,
                 world_size,
                 args,
-                dataset_test,
+                data,
                 model,
-                num_classes,
                 PATH,
             )
         else:
@@ -387,19 +305,14 @@ if __name__ == "__main__":
                 device,
                 world_size,
                 args,
-                dataset_test,
+                data,
                 model,
-                num_classes,
                 PATH,
             )
 
-        postprocess_predictions(pred_path)
+        postprocess_predictions(args.dataset, pred_path)
 
     # load the predictions and make plots (must have ran make_predictions before)
     if args.make_plots:
-
-        if not osp.isdir(plot_path):
-            os.makedirs(plot_path)
-
-        if args.data == "cms":
-            make_plots_cms(pred_path, plot_path, args.sample)
+        print(f"Will make plots of the {args.dataset} {args.sample} sample.")
+        make_plots(pred_path, plot_path, args.dataset, args.sample)

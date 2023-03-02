@@ -53,23 +53,9 @@ X_FEATURES_CL = [
 CLUSTERS_X = len(X_FEATURES_CL) - 1  # remove the `type` feature
 TRACKS_X = len(X_FEATURES_TRK) - 1  # remove the `type` feature
 
-# define regression output
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "phi", "energy"]
 
-# define classification output
-CLASS_NAMES_CLIC_LATEX = [
-    "none",
-    "chhad",
-    "nhad",
-    r"$\gamma$",
-    r"$e^\pm$",
-    r"$\mu^\pm$",
-]
-NUM_CLASSES = len(CLASS_NAMES_CLIC_LATEX)
-
-
-# function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
 def distinguish_PFelements(batch):
+    """Takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters."""
 
     track_id = 1
     cluster_id = 2
@@ -97,8 +83,9 @@ def distinguish_PFelements(batch):
     return tracks, clusters
 
 
-# conversly, function that combines the learned latent representations back into one Batch() object
 def combine_PFelements(tracks, clusters):
+    """Takes two Batch() objects represeting the learned latent representation of
+    tracks and the clusters and combines them under a single event~Batch()."""
 
     event = Batch(
         x=torch.cat([tracks.x, clusters.x]),
