@@ -220,8 +220,9 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
 
     torch.backends.cudnn.benchmark = True
+
     outpath = osp.join(args.outpath, args.prefix)
-    print(torch.load("../data/clic_edm4hep/p8_ee_qcd_ecm365/processed/data_0.pt"))
+
     # load a pre-trained specified model, otherwise, instantiate and train a new model
     if args.load:
         state_dict, model_kwargs = load_mlpf(device, outpath)

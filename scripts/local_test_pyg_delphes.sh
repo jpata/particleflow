@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# download and process the datasets under particleflow/data/clic_edm4hep/
+# download and process the datasets under particleflow/data/delphes/
 rm -Rf data/delphes/pythia8_ttbar
 rm -Rf data/delphes/pythia8_qcd
 
@@ -31,7 +31,7 @@ mkdir -p pythia8_qcd/processed
 # process the raw datafiles
 cd ../../mlpf/pyg/
 echo -----------------------
-for sample in ../../data/clic_edm4hep/* ; do
+for sample in ../../data/delphes/* ; do
   echo Processing $sample sample
   python3 PFGraphDataset.py --data DELPHES --dataset $sample \
     --processed_dir $sample/processed --num-files-merge 100 --num-proc 1
