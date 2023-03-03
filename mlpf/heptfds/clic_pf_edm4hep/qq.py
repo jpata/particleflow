@@ -20,10 +20,11 @@ _CITATION = """
 
 
 class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.1.0")
+    VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
-        "1.1.0": "update stats, move to 380 GeV, sin/cos phi separately",
+        "1.1.0": "update stats, move to 380 GeV",
+        "1.2.0": "sin cos as separate features",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./

@@ -4,7 +4,6 @@ dataset:
   schema: delphes
   target_particles: gen
   num_input_features: 12
-  num_output_features: 7
   #(none=0, track=1, cluster=2)
   num_input_classes: 3
   #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5)

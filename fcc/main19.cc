@@ -4,7 +4,7 @@
 // Please respect the MCnet Guidelines, see GUIDELINES for details.
 
 // Modified by Joosep Pata to keep only PU
-//g++ main19.cc -o main -I/home/joosep/pythia8308/include -I/home/joosep/HepMC3/hepmc3-install/include/ -L/home/joosep/HepMC3/hepmc3-install/lib/ -O2 -std=c++11 -pedantic -W -Wall -Wshadow -fPIC -pthread  -L/home/joosep/pythia8308/lib -Wl,-rpath,/home/joosep/pythia8308/lib -lpythia8 -ldl -lHepMC3
+//g++ main19.cc -o main -I/home/joosep/pythia8308/include -I/home/joosep/HepMC3/hepmc3-install/include/ -L/home/joosep/HepMC3/hepmc3-install/lib/ -O2 -std=c++11 -pedantic -W -Wall -Wshadow -fPIC -pthread  -L/home/joosep/pythia8309/lib -Wl,-rpath,/home/joosep/pythia8309/lib -lpythia8 -ldl -lHepMC3
 
 #include "Pythia8/Pythia.h"
 #include "Pythia8Plugins/HepMC3.h"
@@ -78,58 +78,45 @@ int main(int argc, char *argv[]) {
   pythiaPileup.readString(seedStr.c_str());
   pythiaPileup.init();
 
-  // One object where all individual events are to be collected.
-  Event sumEvent;
-
   // Loop over events.
   for (int iEvent = 0; iEvent < nEvent; ++iEvent) {
-
     HepMC3::GenEvent geneve;
-
-    // Generate a signal event. Copy this event into sumEvent.
-    if (!pythiaSignal.next()) continue;
-    sumEvent = pythiaSignal.event;
-    bool fill_result = ToHepMC.fill_next_event(pythiaSignal, &geneve);
-    if (!fill_result) {
-      std::cerr << "Error converting to HepMC" << std::endl;
-      return 1;
-    }
 
     // Select the number of pileup events to generate.
     int nPileup = poisson(nPileupAvg, pythiaPileup.rndm);
+    
+    // create a random index permutation from [0, nPileup)
+    std::vector<int> puVectorInds;
+    for (int npu=0; npu<nPileup; npu++) {
+      puVectorInds.push_back(npu); 
+    }
+    pythiaPileup.rndm.shuffle(puVectorInds);
 
     // Generate a number of pileup events. Add them to sumEvent.
     for (int iPileup = 0; iPileup < nPileup; ++iPileup) {
-      pythiaPileup.next();
-      fill_result = ToHepMC.fill_next_event(pythiaPileup, &geneve);
+     
+      //generate a signal event if the permutation value is 0, otherwise generate a pileup event 
+      auto& pythiaSigOrPU = (puVectorInds[iPileup] == 0) ? pythiaSignal : pythiaPileup;
+      pythiaSigOrPU.next();
+
+      for (int iPtcl=0; iPtcl < pythiaSigOrPU.event.size(); iPtcl++) {
+        auto& ptcl = pythiaSigOrPU.event[iPtcl];
+        double timeOffset = iPileup * timeDelta;
+        ptcl.vProd(ptcl.xProd(), ptcl.yProd(), ptcl.zProd(), ptcl.tProd()+timeOffset);
+      }
+
+      bool fill_result = ToHepMC.fill_next_event(pythiaSigOrPU, &geneve);
       if (!fill_result) {
         std::cerr << "Error converting to HepMC" << std::endl;
         return 1;
       }
-      for (int iPtcl=0; iPtcl < pythiaPileup.event.size(); iPtcl++) {
-        auto& ptcl = pythiaPileup.event[iPtcl];
-        double timeOffset = iPileup * timeDelta;
-        ptcl.vProd(ptcl.xProd(), ptcl.yProd(), ptcl.zProd(), ptcl.tProd()+timeOffset);
-      }
-      sumEvent += pythiaPileup.event;
     }
 
-    std::cout << "hepmc=" << geneve.particles().size() << " pythia=" << sumEvent.size() << std::endl;
+    std::cout << "hepmc=" << geneve.particles().size() << std::endl;
     ToHepMC.output().write_event(geneve);
-    
-    // List first few events.
-    if (iEvent < 5) {
-      std::cout << "sumEvent" << std::endl;
-      sumEvent.list();
-    }
 
-
-  // End of event loop
   }
-
-  // Statistics. Histograms.
-  pythiaSignal.stat();
-  pythiaPileup.stat();
+  // End of event loop
 
   return 0;
 }

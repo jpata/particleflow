@@ -22,13 +22,13 @@ particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e
 #arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 #so we can easily use them in skip connections
 track_feature_order = [
-    "type", "pt", "eta", "phi", "p",
+    "type", "pt", "eta", "sin_phi", "cos_phi", "p",
     "chi2", "ndf", "dEdx", "dEdxError",
     "radiusOfInnermostHit", "tanLambda", "D0", "omega",
     "Z0", "time"
 ]
 cluster_feature_order = [
-    "type", "et", "eta", "phi", "energy",
+    "type", "et", "eta", "sin_phi", "cos_phi", "energy",
     "position.x", "position.y", "position.z", "iTheta",
     "energy_ecal", "energy_hcal", "energy_other", "num_hits",
     "sigma_x", "sigma_y", "sigma_z"
@@ -296,6 +296,9 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
 
     #override cluster type with 1
     ret["type"] = 2*np.ones(n_cl, dtype=np.float32)
+    
+    ret["sin_phi"] = np.sin(ret["phi"])
+    ret["cos_phi"] = np.cos(ret["phi"])
 
     return awkward.Record(ret)
 
@@ -324,6 +327,9 @@ def track_to_features(prop_data, iev):
     eta = awkward.to_numpy(-np.log(tt, where=tt>0))
     eta[tt<=0] = 0.0
     ret["eta"] = eta
+
+    ret["sin_phi"] = np.sin(ret["phi"])
+    ret["cos_phi"] = np.cos(ret["phi"])
 
     #override track type with 1
     ret["type"] = 1*np.ones(n_tr, dtype=np.float32)

@@ -4,7 +4,6 @@ dataset:
   schema: cms
   target_particles: gen
   num_input_features: 41
-  num_output_features: 7
 #       NONE = 0,
 #       TRACK = 1,
 #       PS1 = 2,

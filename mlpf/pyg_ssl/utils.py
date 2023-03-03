@@ -18,7 +18,8 @@ X_FEATURES_TRK = [
     "type",
     "pt",
     "eta",
-    "phi",
+    "sin_phi",
+    "cos_phi",
     "p",
     "chi2",
     "ndf",
@@ -35,7 +36,8 @@ X_FEATURES_CL = [
     "type",
     "et",
     "eta",
-    "phi",
+    "sin_phi",
+    "cos_phi",
     "energy",
     "position.x",
     "position.y",
@@ -54,7 +56,7 @@ CLUSTERS_X = len(X_FEATURES_CL) - 1  # remove the `type` feature
 TRACKS_X = len(X_FEATURES_TRK) - 1  # remove the `type` feature
 
 # define regression output
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "phi", "energy"]
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 # define classification output
 CLASS_NAMES_CLIC_LATEX = [

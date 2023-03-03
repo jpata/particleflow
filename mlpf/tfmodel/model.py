@@ -873,7 +873,7 @@ class OutputDecoding(tf.keras.Model):
             orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-        elif self.schema == "delphes":
+        elif self.schema == "delphes" or self.schema == "clic":
             orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
