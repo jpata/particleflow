@@ -250,8 +250,8 @@ def data_split(dataset, data_split_mode):
         data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
 
         # label remaining data as `rem`
-        rem_qcd = data_qcd[round(0.1 * len(data_qcd)) :]
-        rem_ttbar = data_ttbar[round(0.1 * len(data_qcd)) :]
+        rem_qcd = data_qq[round(0.1 * len(data_qq)) :]
+        rem_ttbar = data_ttbar[round(0.1 * len(data_qq)) :]
 
         data_VICReg = rem_qcd[: round(0.8 * len(rem_qcd))] + rem_ttbar[: round(0.8 * len(rem_ttbar))]
         data_mlpf = rem_qcd[round(0.8 * len(rem_qcd)) :] + rem_ttbar[round(0.8 * len(rem_ttbar)) :]
