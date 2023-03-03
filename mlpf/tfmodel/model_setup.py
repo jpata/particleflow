@@ -365,8 +365,8 @@ def eval_model(
 
         ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
         ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
-        ygen["charge"] = tf.math.argmax(ygen["charge"], axis=-1) - 1
-        ycand["charge"] = tf.math.argmax(ycand["charge"], axis=-1) - 1
+        ygen["charge"] = tf.math.argmax(ygen["charge"], axis=-1, keepdims=True) - 1
+        ycand["charge"] = tf.math.argmax(ycand["charge"], axis=-1, keepdims=True) - 1
 
         # in the delphes dataset, the pt is only defined for charged PFCandidates
         # and energy only for the neutral PFCandidates.

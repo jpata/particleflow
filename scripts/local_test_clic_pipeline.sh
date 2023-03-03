@@ -3,9 +3,9 @@ set -e
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
 
-rm -Rf data/p8_ee_tt_ecm365
-mkdir -p data/p8_ee_tt_ecm365
-cd data/p8_ee_tt_ecm365
+rm -Rf data/p8_ee_tt_ecm380
+mkdir -p data/p8_ee_tt_ecm380
+cd data/p8_ee_tt_ecm380
 
 #download some test data
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.root
