@@ -202,7 +202,7 @@ def load_data(data_path, dataset, sample):
     dict_ = {
         "CMS": {
             "TTbar": f"{data_path}/cms/TTbar_14TeV_TuneCUETP8M1_cfi/",
-            "QCD": f"{data_path}/cms/QCDForPF_13TeV_TuneCUETP8M1_cfi/",
+            "QCD": f"{data_path}/cms/QCDForPF_14TeV_TuneCUETP8M1_cfi/",
         },
         "DELPHES": {"TTbar": f"{data_path}/delphes/pythia8_ttbar/", "QCD": f"{data_path}/delphes/pythia8_qcd/"},
         "CLIC": {
