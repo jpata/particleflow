@@ -6,18 +6,9 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-def unpack_target(y, num_output_classes, config):
-    if config["dataset"]["schema"] == "cms" or config["dataset"]["schema"] == "delphes":
-        return unpack_target_cms(y, num_output_classes, config)
-    elif config["dataset"]["schema"] == "clic":
-        return unpack_target_clic(y, num_output_classes, config)
-    else:
-        raise Exception("Unknown schema: {}".format(config["dataset"]["schema"]))
-
-
 # Unpacks a flat target array along the feature axis to a feature dict
 # the feature order is defined in the data prep stage
-def unpack_target_cms(y, num_output_classes, config):
+def unpack_target(y, num_output_classes, config):
     msk_pid = tf.cast(y[..., 0:1] != 0, tf.float32)
 
     pt = y[..., 2:3] * msk_pid
@@ -38,41 +29,6 @@ def unpack_target_cms(y, num_output_classes, config):
 
     if config["loss"]["event_loss"] != "none":
         jet_idx = y[..., 7:8] * msk_pid
-        pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx, msk_pid], axis=-1)
-        ret["pt_e_eta_phi"] = pt_e_eta_phi
-
-    if config["loss"]["met_loss"] != "none":
-        px = pt * cos_phi
-        py = pt * sin_phi
-        met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
-        ret["met"] = met
-
-    return ret
-
-
-def unpack_target_clic(y, num_output_classes, config):
-    msk_pid = tf.cast(y[..., 0:1] != 0, tf.float32)
-
-    pt = y[..., 2:3] * msk_pid
-    eta = y[..., 3:4] * msk_pid
-    phi = y[..., 4:5] * msk_pid
-    energy = y[..., 5:6] * msk_pid
-
-    sin_phi = tf.math.sin(phi) * msk_pid
-    cos_phi = tf.math.cos(phi) * msk_pid
-
-    ret = {
-        "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
-        "charge": tf.one_hot(tf.cast(y[..., 1] + 1, tf.int32), 3),  # -1, 0, 1 -> 0, 1, 2
-        "pt": pt,
-        "eta": eta,
-        "sin_phi": sin_phi,
-        "cos_phi": cos_phi,
-        "energy": energy,
-    }
-
-    if config["loss"]["event_loss"] != "none":
-        jet_idx = y[..., 6:7] * msk_pid
         pt_e_eta_phi = tf.concat([pt, energy, eta, sin_phi, cos_phi, jet_idx, msk_pid], axis=-1)
         ret["pt_e_eta_phi"] = pt_e_eta_phi
 

@@ -156,7 +156,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node momentum regression
         self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
         self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout, ssl)
         self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
@@ -219,8 +219,8 @@ class MLPF(nn.Module):
         # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
         preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]
         preds_eta = self.nn_eta(embedding_reg) + input_[:, 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:4]
-        preds_energy = self.nn_energy(embedding_reg) + input_[:, 4:5]
+        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:5]
+        preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
 
         pred_charge = self.nn_charge(embedding_reg)
