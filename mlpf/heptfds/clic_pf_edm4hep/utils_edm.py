@@ -40,7 +40,7 @@ X_FEATURES_CL = [
     "sigma_z",
 ]
 
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "phi", "energy", "jet_idx"]
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 labels = [0, 211, 130, 22, 11, 13]
 
 
@@ -134,7 +134,9 @@ def generate_examples(files):
 
             pt = ygen[valid, Y_FEATURES.index("pt")]
             eta = ygen[valid, Y_FEATURES.index("eta")]
-            phi = ygen[valid, Y_FEATURES.index("phi")]
+            sin_phi = ygen[valid, Y_FEATURES.index("sin_phi")]
+            cos_phi = ygen[valid, Y_FEATURES.index("cos_phi")]
+            phi = np.arctan2(sin_phi, cos_phi)
             energy = ygen[valid, Y_FEATURES.index("energy")]
             vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "energy": energy}))
 

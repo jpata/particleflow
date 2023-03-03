@@ -17,7 +17,7 @@ track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
 #the feature matrices will be saved in this order
-particle_feature_order = ["PDG", "charge", "pt", "eta", "phi", "energy"]
+particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 #arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 #so we can easily use them in skip connections
@@ -514,7 +514,8 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         "charge": gpdata.gen_features["charge"][mask_gp_unmatched],
         "pt": pt_arr[mask_gp_unmatched],
         "eta": eta_arr[mask_gp_unmatched],
-        "phi": phi_arr[mask_gp_unmatched],
+        "sin_phi": np.sin(phi_arr[mask_gp_unmatched]),
+        "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
     }
     assert((np.sum(gen_features_new["energy"])-np.sum(gpdata.gen_features["energy"])) < 1e-2)
@@ -645,7 +646,8 @@ def process_one_file(fn, ofn):
             "charge": reco_arr["charge"],
             "pt": reco_arr["pt"],
             "eta": reco_arr["eta"],
-            "phi": reco_arr["phi"],
+            "sin_phi": np.sin(reco_arr["phi"]),
+            "cos_phi": np.cos(reco_arr["phi"]),
             "energy": reco_arr["energy"]
         })
 
@@ -720,11 +722,11 @@ def process_one_file(fn, ofn):
 
         #all initial gen/reco particle energy must be reconstructable
         assert(abs(
-            np.sum(gps_track[:, 5]) + np.sum(gps_cluster[:, 5]) - np.sum(gpdata_cleaned.gen_features["energy"])
+            np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])
             ) < 1e-2)
 
         assert(abs(
-            np.sum(rps_track[:, 5]) + np.sum(rps_cluster[:, 5]) - np.sum(reco_features["energy"])
+            np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])
             ) < 1e-2)
 
 

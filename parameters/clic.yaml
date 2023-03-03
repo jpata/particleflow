@@ -9,8 +9,6 @@ dataset:
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
   num_output_classes: 6
-  #(pt, eta, phi, E)
-  num_momentum_outputs: 4
   cls_weight_by_pt: no
   reg_weight_by_pt: no
 

@@ -114,16 +114,15 @@ def combine_PFelements(tracks, clusters):
 
 def load_VICReg(device, outpath):
 
-    encoder_state_dict = torch.load(f"{outpath}/encoder_best_epoch_weights.pth", map_location=device)
-    decoder_state_dict = torch.load(f"{outpath}/decoder_best_epoch_weights.pth", map_location=device)
-
     print("Loading a previously trained model..")
+    vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
+
     with open(f"{outpath}/encoder_model_kwargs.pkl", "rb") as f:
         encoder_model_kwargs = pkl.load(f)
     with open(f"{outpath}/decoder_model_kwargs.pkl", "rb") as f:
         decoder_model_kwargs = pkl.load(f)
 
-    return encoder_state_dict, encoder_model_kwargs, decoder_state_dict, decoder_model_kwargs
+    return vicreg_state_dict, encoder_model_kwargs, decoder_model_kwargs
 
 
 def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_model_kwargs):
@@ -162,7 +161,7 @@ def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_m
                 "data_split_mode": args.data_split_mode,
                 "n_epochs": args.n_epochs_VICReg,
                 "lr": args.lr,
-                "batch_size_VICReg": args.batch_size_VICReg,
+                "bs_VICReg": args.bs_VICReg,
                 "width_encoder": args.width_encoder,
                 "embedding_dim": args.embedding_dim_VICReg,
                 "num_convs": args.num_convs,
@@ -172,8 +171,8 @@ def save_VICReg(args, outpath, encoder, encoder_model_kwargs, decoder, decoder_m
                 "width_decoder": args.width_decoder,
                 "output_dim": args.expand_dim,
                 "lmbd": args.lmbd,
-                "u": args.u,
-                "v": args.v,
+                "mu": args.mu,
+                "nu": args.nu,
                 "num_encoder_parameters": num_encoder_parameters,
                 "num_decoder_parameters": num_decoder_parameters,
             },
@@ -214,7 +213,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "data_split_mode": args.data_split_mode,
                 "n_epochs": args.n_epochs_mlpf,
                 "lr": args.lr,
-                "batch_size_mlpf": args.batch_size_mlpf,
+                "bs_mlpf": args.bs_mlpf,
                 "width": args.width_mlpf,
                 "embedding_dim": args.embedding_dim_mlpf,
                 "num_convs": args.num_convs,
@@ -222,7 +221,6 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
                 "propagate_dim": args.propagate_dim,
                 "k": args.nearest,
                 "mode": mode,
-                "FineTune_VICReg": args.FineTune_VICReg,
                 "num_mlpf_parameters": num_mlpf_parameters,
             },
             fp,
@@ -251,11 +249,22 @@ def data_split(dataset, data_split_mode):
         data_test_qq = data_qq[: round(0.1 * len(data_qq))]
         data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
 
-        data_VICReg_train = data_test_qq + data_test_ttbar
-        data_VICReg_valid = data_test_qq + data_test_ttbar
+        # label remaining data as `rem`
+        rem_qcd = data_qcd[round(0.1 * len(data_qcd)) :]
+        rem_ttbar = data_ttbar[round(0.1 * len(data_qcd)) :]
 
-        data_mlpf_train = data_test_qq + data_test_ttbar
-        data_mlpf_valid = data_test_qq + data_test_ttbar
+        data_VICReg = rem_qcd[: round(0.8 * len(rem_qcd))] + rem_ttbar[: round(0.8 * len(rem_ttbar))]
+        data_mlpf = rem_qcd[round(0.8 * len(rem_qcd)) :] + rem_ttbar[round(0.8 * len(rem_ttbar)) :]
+
+        # shuffle the samples after mixing (not super necessary since the DataLoaders will shuffle anyway)
+        random.shuffle(data_VICReg)
+        random.shuffle(data_mlpf)
+
+        data_VICReg_train = data_VICReg[: round(0.9 * len(data_VICReg))]
+        data_VICReg_valid = data_VICReg[round(0.9 * len(data_VICReg)) :]
+
+        data_mlpf_train = data_mlpf[: round(0.9 * len(data_mlpf))]
+        data_mlpf_valid = data_mlpf[round(0.9 * len(data_mlpf)) :]
 
     else:  # actual meaningful data splits
         # load the qq and ttbar samples seperately
