@@ -16,7 +16,7 @@ cd ../..
 python3 fcc/postprocessing.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.parquet
 python3 fcc/postprocessing.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.parquet
 
-tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar
+tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar --manual_dir data
 
 # #Train, evaluate and make plots
 python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
