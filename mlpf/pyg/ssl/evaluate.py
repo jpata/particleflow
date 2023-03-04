@@ -1,4 +1,5 @@
 import os
+import os.path as osp
 import pickle as pkl
 from pathlib import Path
 
@@ -65,7 +66,10 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
         print(f"Testing the {mode} model on the {sample}")
 
         this_out_path = f"{outpath}/{mode}/{sample}"
-        os.makedirs(this_out_path)
+
+        if not osp.isdir(this_out_path):
+            os.makedirs(this_out_path)
+
         test_loader = torch_geometric.loader.DataLoader(data, batch_size_mlpf)
 
         npred, ngen, ncand = {}, {}, {}
