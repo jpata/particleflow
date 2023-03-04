@@ -76,7 +76,7 @@ if __name__ == "__main__":
         )
 
     if args.native:
-        outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
+        outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix}_native")
 
         print("Loading a previously trained ssl model..")
         mlpf_native_state_dict = torch.load(f"{outpath_native}/best_epoch_weights.pth", map_location=device)
