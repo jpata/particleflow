@@ -91,7 +91,7 @@ if __name__ == "__main__":
             device,
             vicreg_encoder,
             mlpf_native,
-            args.bs_mlpf,
+            args.bs,
             "native",
             outpath_native,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
