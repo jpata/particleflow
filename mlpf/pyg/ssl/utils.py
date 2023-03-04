@@ -314,5 +314,7 @@ def data_split(dataset, data_split_mode):
     print(f"Will use {len(data_VICReg_valid)} events to validate VICReg")
     print(f"Will use {len(data_mlpf_train)} events to train MLPF")
     print(f"Will use {len(data_mlpf_valid)} events to validate MLPF")
+    print(f"Will use {len(data_test_ttbar)} events to test MLPF on TTbar")
+    print(f"Will use {len(data_test_qcd)} events to test MLPF on QCD")
 
     return data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar
