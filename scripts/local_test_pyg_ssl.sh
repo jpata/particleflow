@@ -39,4 +39,4 @@ echo -----------------------
 
 # run an ssl training of mlpf
 cd ../
-python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl
+python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl --n_train=1 --n_valid=1 --n_test=1

@@ -39,4 +39,4 @@ echo -----------------------
 
 # run a supervised training of mlpf on CLIC dataset
 cd ../
-python pyg_pipeline.py --dataset CLIC --prefix MLPF_test
+python pyg_pipeline.py --dataset CLIC --prefix MLPF_test --n_train=1 --n_valid=1 --n_test=1

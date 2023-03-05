@@ -40,4 +40,4 @@ echo -----------------------
 # run a supervised training of mlpf on CMS dataset
 cd ../
 # cd mlpf/
-python pyg_pipeline.py --dataset CMS --prefix MLPF_test --overwrite
+python pyg_pipeline.py --dataset CMS --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1
