@@ -33,7 +33,7 @@ echo -----------------------
 for sample in ../../data/cms/* ; do
   echo Processing $sample sample
   python3 PFGraphDataset.py --data CMS --dataset $sample \
-    --processed_dir $sample/processed --num-proc 1
+    --processed_dir $sample/processed --num-files-merge=1 --num-proc 1
 done
 echo -----------------------
 
