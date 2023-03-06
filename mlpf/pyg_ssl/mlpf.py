@@ -28,7 +28,7 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=32, num_heads=4, width=128, dropout=0.2):
+    def __init__(self, embedding_dim=128, num_heads=4, width=128, dropout=0.1):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, 8, batch_first=True)
@@ -41,13 +41,10 @@ class SelfAttentionLayer(nn.Module):
 
     def forward(self, x, mask):
 
-        x = x + self.mha(x, x, x, key_padding_mask=mask)[0]
-        x = x * (~mask.unsqueeze(-1))
-        x = self.norm0(x)
-        x = x + self.seq(x)
-        x = x * (~mask.unsqueeze(-1))
-        x = self.norm1(x)
+        x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
+        x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
+        x = x * (~mask.unsqueeze(-1))
         return x
 
 
@@ -156,7 +153,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node momentum regression
         self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
         self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout, ssl)
         self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
@@ -216,13 +213,12 @@ class MLPF(nn.Module):
         else:
             embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
-        # predict the 4-momentum, add it to the (pt, eta, phi, E) of the PFelement
+        # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
+        # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
         preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]
         preds_eta = self.nn_eta(embedding_reg) + input_[:, 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:4]
-        preds_energy = self.nn_energy(embedding_reg) + input_[:, 4:5]
+        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:5]
+        preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
-
         pred_charge = self.nn_charge(embedding_reg)
-
         return preds_id, preds_momentum, pred_charge

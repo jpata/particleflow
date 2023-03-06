@@ -178,7 +178,6 @@ def train(device, mlpf, train_loader, valid_loader, optimizer, tb, ssl_encoder=N
 
         target_momentum = event_on_device.ygen[:, 1:].to(dtype=torch.float32)
         target_charge = (event_on_device.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
-
         loss_ = {}
         # for CLASSIFYING PID
         loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)

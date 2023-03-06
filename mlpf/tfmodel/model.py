@@ -785,7 +785,7 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout,
         )
         self.ffn_charge = point_wise_feed_forward_network(
-            1,
+            3,  # -1, 0, 1
             charge_hidden_dim,
             "ffn_charge",
             num_layers=charge_num_layers,
@@ -873,7 +873,7 @@ class OutputDecoding(tf.keras.Model):
             orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-        elif self.schema == "delphes":
+        elif self.schema == "delphes" or self.schema == "clic":
             orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
             orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
             orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
