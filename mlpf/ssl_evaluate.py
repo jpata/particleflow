@@ -44,7 +44,7 @@ if __name__ == "__main__":
     try:
         vicreg.load_state_dict(vicreg_state_dict)
     except RuntimeError:
-        # because model was saved using dataparallel
+        # if the mlpf model was saved using torch.nn.DataParallel()
         from collections import OrderedDict
 
         new_state_dict = OrderedDict()
@@ -100,8 +100,3 @@ if __name__ == "__main__":
             outpath_native,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
         )
-
-    # if args.ssl & args.native:
-    #     from pyg.ssl.evaluate import make_multiplicity_plots_both
-
-    #     make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)

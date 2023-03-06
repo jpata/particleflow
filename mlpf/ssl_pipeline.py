@@ -68,14 +68,18 @@ if __name__ == "__main__":
 
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
 
-        # # because model was saved using dataparallel
-        # from collections import OrderedDict
+        try:
+            vicreg.load_state_dict(vicreg_state_dict)
+        except RuntimeError:
+            # if the mlpf model was saved using torch.nn.DataParallel()
+            from collections import OrderedDict
 
-        # new_state_dict = OrderedDict()
-        # for k, v in vicreg_state_dict.items():
-        #     name = k[7:]  # remove module.
-        #     new_state_dict[name] = v
-        # vicreg_state_dict = new_state_dict
+            new_state_dict = OrderedDict()
+            for k, v in vicreg_state_dict.items():
+                name = k[7:]  # remove module.
+                new_state_dict[name] = v
+            vicreg_state_dict = new_state_dict
+            vicreg.load_state_dict(vicreg_state_dict)
 
         vicreg.load_state_dict(vicreg_state_dict)
         vicreg.to(device)
@@ -222,24 +226,3 @@ if __name__ == "__main__":
                 args.lr,
                 outpath_native,
             )
-
-            # evaluate the native mlpf on both the QCD and TTbar samples
-            if args.evaluate_mlpf:
-                from pyg.ssl.evaluate import evaluate
-
-                ret_native = evaluate(
-                    device,
-                    vicreg_encoder,
-                    mlpf_native,
-                    args.bs,
-                    "native",
-                    outpath_native,
-                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
-                )
-
-        # if args.ssl & args.native:
-        #     # plot multiplicity plot of both at the same time
-        #     if args.evaluate_mlpf:
-        #         from pyg_ssl.evaluate import make_multiplicity_plots_both
-
-        #         make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)

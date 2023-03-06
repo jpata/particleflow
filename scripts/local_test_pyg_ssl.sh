@@ -1,20 +1,20 @@
 #!/bin/bash
 set -e
 
-# download and process the datasets under particleflow/data/clic_edm4hep/
+# download and process the datasets under particleflow/data/clic_edm4hep_2023_02_27/
 rm -Rf data/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380
 rm -Rf data/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380
 
 mkdir -p data/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/raw/
 mkdir -p data/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/raw/
 
-# download some ttbar test data
+# download some TTbar sample test data
 cd data/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/raw/
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.parquet
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.parquet
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_3.parquet
 
-# download some qcd test data
+# download some QCD sample test data
 cd ../../p8_ee_qq_ecm380/raw/
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_100001.parquet
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_100002.parquet
@@ -37,4 +37,4 @@ echo -----------------------
 
 # run an ssl training of mlpf
 cd ../
-python ssl_pipeline.py --data_split_mode mix --data_path ../data/clic_edm4hep_2023_02_27 --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl
+python ssl_pipeline.py --data_path ../data/clic_edm4hep_2023_02_27/ --data_split_mode mix --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl

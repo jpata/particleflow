@@ -31,7 +31,7 @@ To download and process the full CLIC dataset:
 ```bash
 ./get_data_clic.sh
 ```
-This script will download and process the data under a directory called `data/clic_edm4hep` under `particleflow`.
+This script will download and process the data under a directory called `data/clic_edm4hep_2023_02_27` under `particleflow`.
 
 
 # Supervised training
@@ -41,20 +41,18 @@ The training script for either CMS, DELPHES or CLIC dataset is the same.
 For example:
 ```bash
 cd ../
-python -u pyg_pipeline.py --dataset=${dataset} --data_path=${data_path} --outpath=${outpath} --model_prefix=${model_prefix}
+python -u pyg_pipeline.py --dataset=${dataset} --data_path=${data_path} --outpath=${outpath} --prefix=${model_prefix}
 ```
 where:
 - dataset: `CMS` or `DELPHES` or `CLIC`.
-- data_path: path to dataset (by default: `../data`)
-- outpath: path to store the experiment (by default: `../experiments`)
-- model_prefix: the name of the model which will be the name of the directory that holds the results.
+- data_path: path to the samples (e.g. `../data/cms/`)
+- outpath: path to store the experiment (by default: `../experiments`).
+- prefix: the name of the model which will be the name of the directory that holds the results.
 
-Add the following arguments to load a pre-trained model, run inference and make plots for evaluation.
+Adding the arguments `--make_predictions --make_plots` will run inference and make plots for evaluation.
 
-```bash
-cd ../
-python -u pyg_pipeline.py --load --make_predictions --make_plots
-```
+Adding the argument `--load` will load a model instead of training from scratch.
+
 
 # Self supervised training
 
@@ -78,6 +76,12 @@ python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test
 To train an mlpf via an ssl approach using the pre-trained VICReg model:
 ```bash
 cd ../
-python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --load_VICReg --prefix_mlpf MLPF_test --train_mlpf --ssl
+python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --load_VICReg --prefix MLPF_test --train_mlpf --ssl
 ```
 You can also add the argument `--native` to train a native (supervised) version of mlpf for comparisons with ssl.
+
+To evaluate the MLPF model(s):
+```bash
+cd ../
+python ssl_evaluate.py --data_split_mode mix --prefix_VICReg VICReg_test --load_VICReg --prefix MLPF_test --ssl --native
+```

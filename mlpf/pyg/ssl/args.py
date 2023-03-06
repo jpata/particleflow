@@ -12,7 +12,7 @@ def parse_args():
 
     # directory containing datafiles
     parser.add_argument("--dataset", type=str, default="CLIC", help="currently only CLIC is supported")
-    parser.add_argument("--data_path", type=str, default="../data/", help="dataset path")
+    parser.add_argument("--data_path", type=str, default="../data/", help="path which contains the CLIC samples")
     parser.add_argument("--n_train", type=int, default=-1, help="number of files to use for training")
     parser.add_argument("--n_valid", type=int, default=-1, help="number of data files to use for validation")
     parser.add_argument("--n_test", type=int, default=-1, help="number of data files to use for testing")
@@ -59,11 +59,6 @@ def parse_args():
     parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")
     parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
     parser.add_argument("--nearest", type=int, default=32, help="k nearest neighbors")
-
-    # flag to evaluate the mlpf models using fastjet
-    parser.add_argument(
-        "--evaluate_mlpf", dest="evaluate_mlpf", action="store_true", help="evaluates the mlpf models with fastjet"
-    )
 
     args = parser.parse_args()
 

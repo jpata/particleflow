@@ -201,14 +201,11 @@ def load_data(data_path, dataset, sample):
     """Loads the appropriate sample for a given dataset."""
     dict_ = {
         "CMS": {
-            "TTbar": f"{data_path}/cms/TTbar_14TeV_TuneCUETP8M1_cfi/",
-            "QCD": f"{data_path}/cms/QCDForPF_14TeV_TuneCUETP8M1_cfi/",
+            "TTbar": f"{data_path}/TTbar_14TeV_TuneCUETP8M1_cfi/",
+            "QCD": f"{data_path}/QCDForPF_14TeV_TuneCUETP8M1_cfi/",
         },
-        "DELPHES": {"TTbar": f"{data_path}/delphes/pythia8_ttbar/", "QCD": f"{data_path}/delphes/pythia8_qcd/"},
-        "CLIC": {
-            "TTbar": f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380//",
-            "QCD": f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380//",
-        },
+        "DELPHES": {"TTbar": f"{data_path}/pythia8_ttbar/", "QCD": f"{data_path}/pythia8_qcd/"},
+        "CLIC": {"TTbar": f"{data_path}/p8_ee_tt_ecm380//", "QCD": f"{data_path}/p8_ee_qq_ecm380//"},
     }
     return PFGraphDataset(dict_[dataset][sample], dataset)
 
@@ -312,7 +309,7 @@ if __name__ == "__main__":
 
         postprocess_predictions(args.dataset, pred_path)
 
-    # load the predictions and make plots (must have ran make_predictions before)
+    # load the predictions and make plots (must run make_predictions() beforehand)
     if args.make_plots:
         print(f"Will make plots of the {args.dataset} {args.sample} sample.")
         make_plots(pred_path, plot_path, args.dataset, args.sample)

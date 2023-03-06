@@ -37,4 +37,4 @@ echo -----------------------
 
 # run a supervised training of mlpf on CLIC dataset
 cd ../
-python pyg_pipeline.py --dataset CLIC --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1
+python pyg_pipeline.py --dataset CLIC --data_path ../data/clic_edm4hep_2023_02_27/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1
