@@ -220,10 +220,10 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             for loss in losses_of_interest:
                 losses[loss] += loss_[loss].detach()
 
-            if i == 2:
-                break
-        if num == 2:
-            break
+        #     if i == 2:
+        #         break
+        # if num == 2:
+        #     break
 
         print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
 
