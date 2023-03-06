@@ -232,8 +232,8 @@ def data_split(data_path, data_split_mode):
     print(f"Will use data split mode `{data_split_mode}`")
 
     if data_split_mode == "quick":
-        data_qq = torch.load(f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/processed/data_0.pt")
-        data_ttbar = torch.load(f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/processed/data_0.pt")
+        data_qq = torch.load(f"{data_path}/p8_ee_qq_ecm380/processed/data_0.pt")
+        data_ttbar = torch.load(f"{data_path}/p8_ee_tt_ecm380/processed/data_0.pt")
 
         data_test_qq = data_qq[: round(0.1 * len(data_qq))]
         data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
@@ -257,8 +257,8 @@ def data_split(data_path, data_split_mode):
 
     else:  # actual meaningful data splits
         # load the qq and ttbar samples seperately
-        qq_files = glob.glob(f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/processed/*")
-        ttbar_files = glob.glob(f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380/processed/*")
+        qq_files = glob.glob(f"{data_path}/p8_ee_qq_ecm380/processed/*")
+        ttbar_files = glob.glob(f"{data_path}/p8_ee_tt_ecm380/processed/*")
 
         data_qq = []
         for file in list(qq_files):

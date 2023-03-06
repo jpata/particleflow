@@ -37,4 +37,4 @@ echo -----------------------
 
 # run an ssl training of mlpf
 cd ../
-python ssl_pipeline.py --data_split_mode mix --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl
+python ssl_pipeline.py --data_split_mode mix --data_path ../data/clic_edm4hep_2023_02_27 --prefix_VICReg VICReg_test --prefix MLPF_test --num_convs=0 --train_mlpf --ssl
