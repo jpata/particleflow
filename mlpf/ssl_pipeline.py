@@ -180,20 +180,6 @@ if __name__ == "__main__":
                 vicreg_encoder,
             )
 
-            # evaluate the ssl-based mlpf on both the QCD and TTbar samples
-            if args.evaluate_mlpf:
-                from pyg.ssl.evaluate import evaluate
-
-                ret_ssl = evaluate(
-                    device,
-                    vicreg_encoder,
-                    mlpf_ssl,
-                    args.bs,
-                    "ssl",
-                    outpath_ssl,
-                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
-                )
-
         if args.native:
 
             mlpf_model_kwargs = {
