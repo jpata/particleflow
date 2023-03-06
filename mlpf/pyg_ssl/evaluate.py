@@ -33,11 +33,11 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
         "cls_id": arr_id,
         "pt": arr_p4[:, 1],
         "eta": arr_p4[:, 2],
-        "phi": arr_p4[:, 3],
-        "energy": arr_p4[:, 4],
+        "sin_phi": arr_p4[:, 3],
+        "cos_phi": arr_p4[:, 4],
+        "energy": arr_p4[:, 5],
     }
-    ret["sin_phi"] = np.sin(ret["phi"])
-    ret["cos_phi"] = np.cos(ret["phi"])
+    ret["phi"] = np.arctan2(ret["sin_phi"], ret["cos_phi"])
     ret = awkward.from_iter([{k: ret[k][batch_ids == b] for k in ret.keys()} for b in np.unique(batch_ids)])
     return ret
 
@@ -97,6 +97,7 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
 
                 # make mlpf forward pass
                 pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.to(device))
+                pred_charge = torch.argmax(pred_charge, axis=-1).unsqueeze(axis=-1) - 1
 
                 pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
                 target_ids = event.ygen_id
