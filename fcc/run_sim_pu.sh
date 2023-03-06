@@ -10,41 +10,34 @@ set -x
 env
 df -h
 
-OUTDIR=/local/joosep/clic_edm4hep_2023_02_27/
+OUTDIR=/local/joosep/clic_edm4hep_2023_03_03/
 PFDIR=/home/joosep/particleflow
 NEV=100
+NPU=10
 
 NUM=$1 #random seed
 SAMPLE=$2 #main card
-#PU=$3 #pu card
+PU=$3 #pu card
 
 WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
-FULLOUTDIR=${OUTDIR}/${SAMPLE}
+FULLOUTDIR=${OUTDIR}/${SAMPLE}_PU$NPU
 
 mkdir -p $FULLOUTDIR
 
 mkdir -p $WORKDIR
 cd $WORKDIR
 
-#cp $PFDIR/fcc/main ./
 cp $PFDIR/fcc/${SAMPLE}.cmd card.cmd
-#cp $PFDIR/fcc/${PU}.cmd card_pu.cmd
+cp $PFDIR/fcc/${PU}.cmd card_pu.cmd
 cp $PFDIR/fcc/pythia.py ./
 cp $PFDIR/fcc/clic_steer.py ./
 cp -R $PFDIR/fcc/PandoraSettings ./
 cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
+cp -R $PFDIR/fcc/main ./
 
-echo "Random:seed=${NUM}" >> card.cmd
-cat card.cmd
-
-#without PU
-source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc11.2.0-opt/csapx/setup.sh
-k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd
-
-#with PU (needs double checking)
-#LD_LIBRARY_PATH=/home/joosep/HepMC3/hepmc3-install/lib/:/home/joosep/pythia8308/lib/ ./main $NUM
-#mv pythia.hepmc out.hepmc
-#source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
+singularity exec -B /scratch --env LD_LIBRARY_PATH=/home/joosep/pythia8309/lib/:/home/joosep/HepMC3/hepmc3-install/lib/ /home/software/singularity/base.simg $WORKDIR/main $NUM $NPU
+mv pythia.hepmc out.hepmc
+source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
 
 ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --outputFile out_sim_edm4hep.root \
