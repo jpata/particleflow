@@ -105,7 +105,6 @@ class MLPF(nn.Module):
         dropout=0.4,
         ssl=False,
         VICReg_embedding_dim=0,
-        dataset="",
     ):
         super(MLPF, self).__init__()
 
@@ -114,7 +113,6 @@ class MLPF(nn.Module):
         self.input_dim = input_dim
         self.num_convs = num_convs
         self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
-        self.dataset = dataset
 
         # embedding of the inputs
         if num_convs != 0:

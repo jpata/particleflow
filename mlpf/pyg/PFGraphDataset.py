@@ -7,9 +7,13 @@ import sys
 from glob import glob
 
 import awkward as ak
+
+# import fastjet
 import numpy as np
 import torch
 import tqdm
+
+# import vector
 from numpy.lib.recfunctions import append_fields
 
 # from numpy.lib.recfunctions import append_fields
@@ -32,10 +36,23 @@ def prepare_data_cms(fn):
     """
     from utils import CLASS_LABELS, X_FEATURES
 
+    Y_FEATURES = [
+        "typ_idx",
+        "charge",
+        "pt",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "e",
+        # "jet_idx",
+    ]
     # ELEM_NAMES = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
     ELEM_LABELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     # prepare jet definition and min jet pt for clustering gen jets
+    # jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+    # min_jet_pt = 5.0  # GeV
+
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
     elif fn.endswith(".pkl.bz2"):
@@ -90,13 +107,66 @@ def prepare_data_cms(fn):
             axis=-1,
         )
         ygen_flat = np.stack(
-            [ygen[k].view(np.float32).data for k in ["charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
+            [ygen[k].view(np.float32).data for k in Y_FEATURES],
             axis=-1,
         )
         ycand_flat = np.stack(
-            [ycand[k].view(np.float32).data for k in ["charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
+            [ycand[k].view(np.float32).data for k in Y_FEATURES],
             axis=-1,
         )
+
+        # # take care of outliers
+        # # Xelem_flat[np.isnan(Xelem_flat)] = 0
+        # # Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+        # # ygen_flat[np.isnan(ygen_flat)] = 0
+        # # ygen_flat[np.abs(ygen_flat) > 1e4] = 0
+        # # ycand_flat[np.isnan(ycand_flat)] = 0
+        # # ycand_flat[np.abs(ycand_flat) > 1e4] = 0
+
+        # X = Xelem_flat
+        # ycand = ycand_flat
+        # ygen = ygen_flat
+
+        # # prepare gen candidates for clustering
+        # cls_id = ygen[..., 0]
+        # valid = cls_id != 0
+        # # save mapping of index after masking -> index before masking as numpy array
+        # # inspired from:
+        # # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+        # cumsum = np.cumsum(valid) - 1
+        # _, index_mapping = np.unique(cumsum, return_index=True)
+
+        # pt = ygen[valid, Y_FEATURES.index("pt")]
+        # eta = ygen[valid, Y_FEATURES.index("eta")]
+        # phi = np.arctan2(
+        #     ygen[valid, Y_FEATURES.index("sin_phi")],
+        #     ygen[valid, Y_FEATURES.index("cos_phi")],
+        # )
+        # e = ygen[valid, Y_FEATURES.index("e")]
+        # vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+
+        # # cluster jets, sort jet indices in descending order by pt
+        # cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+        # jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
+        # sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+        # # retrieve corresponding indices of constituents
+        # constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+
+        # # add index information to ygen and ycand
+        # # index jets in descending order by pt starting from 1:
+        # # 0 is null (unclustered),
+        # # 1 is 1st highest-pt jet,
+        # # 2 is 2nd highest-pt jet, ...
+        # for jet_idx in sorted_jet_idx:
+        #     jet_constituents = [
+        #         index_mapping[idx] for idx in constituent_idx[jet_idx]
+        #     ]  # map back to constituent index *before* masking
+        #     ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+        #     ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+
+        # print("X", X.shape)
+        # print("ygen", ygen.shape)
+        # print("ycand", ycand.shape)
 
         d = Data(
             x=torch.tensor(Xelem_flat),

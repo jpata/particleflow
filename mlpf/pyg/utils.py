@@ -98,8 +98,9 @@ X_FEATURES = {
     "CLIC": [
         "type",
         "pt | et",
-        "eta | eta",
-        "phi | phi",
+        "eta",
+        "sin_phi",
+        "cos_phi",
         "p | energy",
         "chi2 | position.x",
         "ndf | position.y",
@@ -134,7 +135,7 @@ Y_FEATURES = {
         "cos_phi",
         "energy",
     ],
-    "CLIC": ["PDG", "charge", "pt", "eta", "phi", "energy"],  # TODO: make sphi and cphi
+    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
 }
 
 

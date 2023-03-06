@@ -206,8 +206,8 @@ def load_data(data_path, dataset, sample):
         },
         "DELPHES": {"TTbar": f"{data_path}/delphes/pythia8_ttbar/", "QCD": f"{data_path}/delphes/pythia8_qcd/"},
         "CLIC": {
-            "TTbar": f"{data_path}/clic_edm4hep/p8_ee_tt_ecm365/",
-            "QCD": f"{data_path}/clic_edm4hep/p8_ee_qcd_ecm365/",
+            "TTbar": f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_tt_ecm380//",
+            "QCD": f"{data_path}/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380//",
         },
     }
     return PFGraphDataset(dict_[dataset][sample], dataset)
@@ -241,7 +241,6 @@ if __name__ == "__main__":
             "propagate_dimensions": args.propagate_dim,
             "space_dimensions": args.space_dim,
             "dropout": args.dropout,
-            "dataset": args.dataset,  # TODO: remove
         }
 
         model = MLPF(**model_kwargs)

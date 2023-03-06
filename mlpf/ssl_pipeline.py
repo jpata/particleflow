@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     # load the clic dataset
     data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar = data_split(
-        args.data_path + "/clic_edm4hep/", args.data_split_mode
+        args.data_path, args.data_split_mode
     )
 
     # setup the directory path to hold all models and plots
@@ -148,7 +148,6 @@ if __name__ == "__main__":
                 "num_convs": args.num_convs,
                 "k": args.nearest,
                 "dropout": args.dropout,
-                "dataset": "CLIC",
                 "ssl": True,
                 "VICReg_embedding_dim": args.embedding_dim_VICReg,
             }
@@ -200,7 +199,6 @@ if __name__ == "__main__":
                 "num_convs": args.num_convs,
                 "k": args.nearest,
                 "dropout": args.dropout,
-                "dataset": "CLIC",
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
