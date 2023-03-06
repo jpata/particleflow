@@ -28,7 +28,6 @@ mkdir -p QCDForPF_14TeV_TuneCUETP8M1_cfi/processed
 
 # process the raw datafiles
 cd ../../mlpf/pyg/
-cd mlpf/pyg/
 echo -----------------------
 for sample in ../../data/cms/* ; do
   echo Processing $sample sample
