@@ -7,12 +7,13 @@ import mplhep
 import numpy as np
 import torch
 import torch_geometric
-from pyg_ssl.args import parse_args
-from pyg_ssl.mlpf import MLPF
-from pyg_ssl.training_mlpf import training_loop_mlpf
-from pyg_ssl.training_VICReg import training_loop_VICReg
-from pyg_ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_MLPF, save_VICReg
-from pyg_ssl.VICReg import DECODER, ENCODER, VICReg
+from pyg.mlpf import MLPF
+from pyg.ssl.args import parse_args
+from pyg.ssl.training_VICReg import training_loop_VICReg
+from pyg.ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_VICReg
+from pyg.ssl.VICReg import DECODER, ENCODER, VICReg
+from pyg.training import training_loop
+from pyg.utils import save_mlpf
 
 matplotlib.use("Agg")
 mplhep.style.use(mplhep.styles.CMS)
@@ -41,14 +42,15 @@ if __name__ == "__main__":
 
     args = parse_args()
 
+    world_size = torch.cuda.device_count()
+
     # our data size varies from batch to batch, because each set of N_batch events has a different number of particles
     torch.backends.cudnn.benchmark = False
-
     # torch.autograd.set_detect_anomaly(True)
 
     # load the clic dataset
     data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qcd, data_test_ttbar = data_split(
-        args.dataset, args.data_split_mode
+        args.data_path, args.data_split_mode
     )
 
     # setup the directory path to hold all models and plots
@@ -65,14 +67,18 @@ if __name__ == "__main__":
 
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
 
-        # because model was saved using dataparallel
-        from collections import OrderedDict
+        try:
+            vicreg.load_state_dict(vicreg_state_dict)
+        except RuntimeError:
+            # if the mlpf model was saved using torch.nn.DataParallel()
+            from collections import OrderedDict
 
-        new_state_dict = OrderedDict()
-        for k, v in vicreg_state_dict.items():
-            name = k[7:]  # remove module.
-            new_state_dict[name] = v
-        vicreg_state_dict = new_state_dict
+            new_state_dict = OrderedDict()
+            for k, v in vicreg_state_dict.items():
+                name = k[7:]  # remove module.
+                new_state_dict[name] = v
+            vicreg_state_dict = new_state_dict
+            vicreg.load_state_dict(vicreg_state_dict)
 
         vicreg.load_state_dict(vicreg_state_dict)
         vicreg.to(device)
@@ -81,7 +87,7 @@ if __name__ == "__main__":
         encoder_model_kwargs = {
             "embedding_dim": args.embedding_dim_VICReg,
             "width": args.width_encoder,
-            "num_convs": args.num_convs,
+            "num_convs": args.num_convs_VICReg,
             "space_dim": args.space_dim,
             "propagate_dim": args.propagate_dim,
             "k": args.nearest,
@@ -131,8 +137,8 @@ if __name__ == "__main__":
         print(f"Will use {len(data_mlpf_train)} events for train")
         print(f"Will use {len(data_mlpf_valid)} events for valid")
 
-        train_loader = torch_geometric.loader.DataLoader(data_mlpf_train, args.bs_mlpf)
-        valid_loader = torch_geometric.loader.DataLoader(data_mlpf_valid, args.bs_mlpf)
+        train_loader = [torch_geometric.loader.DataLoader(data_mlpf_train, args.bs)]
+        valid_loader = [torch_geometric.loader.DataLoader(data_mlpf_valid, args.bs)]
 
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
@@ -140,102 +146,68 @@ if __name__ == "__main__":
 
             mlpf_model_kwargs = {
                 "input_dim": input_,
-                "embedding_dim": args.embedding_dim_mlpf,
-                "width": args.width_mlpf,
+                "embedding_dim": args.embedding_dim,
+                "width": args.width,
+                "num_convs": args.num_convs,
                 "k": args.nearest,
-                "num_convs": args.num_convs_mlpf,
-                "dropout": args.dropout_mlpf,
+                "dropout": args.dropout,
                 "ssl": True,
                 "VICReg_embedding_dim": args.embedding_dim_VICReg,
             }
 
             mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
             print(mlpf_ssl)
-            print(f"MLPF model name: {args.prefix_mlpf}_ssl")
+            print(f"MLPF model name: {args.prefix}_ssl")
             print(f"Will use VICReg model {args.prefix_VICReg}")
 
             # make mlpf specific directory
-            outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_ssl")
-            save_MLPF(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
+            outpath_ssl = osp.join(f"{outpath}/MLPF/", f"{args.prefix}_ssl")
+            save_mlpf(args, outpath_ssl, mlpf_ssl, mlpf_model_kwargs, mode="ssl")
 
-            print(f"- Training ssl based MLPF over {args.n_epochs_mlpf} epochs")
+            print(f"- Training ssl based MLPF over {args.n_epochs} epochs")
 
-            training_loop_mlpf(
+            training_loop(
                 device,
                 mlpf_ssl,
                 train_loader,
                 valid_loader,
-                args.n_epochs_mlpf,
+                args.bs,
+                args.n_epochs,
                 args.patience,
                 args.lr,
                 outpath_ssl,
                 vicreg_encoder,
             )
 
-            # evaluate the ssl-based mlpf on both the QCD and TTbar samples
-            if args.evaluate_mlpf:
-                from pyg_ssl.evaluate import evaluate
-
-                ret_ssl = evaluate(
-                    device,
-                    vicreg_encoder,
-                    mlpf_ssl,
-                    args.bs_mlpf,
-                    "ssl",
-                    outpath_ssl,
-                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
-                )
-
         if args.native:
 
             mlpf_model_kwargs = {
                 "input_dim": input_,
-                "embedding_dim": args.embedding_dim_mlpf,
-                "width": args.width_mlpf,
+                "embedding_dim": args.embedding_dim,
+                "width": args.width,
+                "num_convs": args.num_convs,
                 "k": args.nearest,
-                "num_convs": args.num_convs_mlpf,
-                "dropout": args.dropout_mlpf,
-                "ssl": False,
+                "dropout": args.dropout,
             }
 
             mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
             print(mlpf_native)
-            print(f"MLPF model name: {args.prefix_mlpf}_native")
+            print(f"MLPF model name: {args.prefix}_native")
 
             # make mlpf specific directory
-            outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix_mlpf}_native")
-            save_MLPF(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
+            outpath_native = osp.join(f"{outpath}/MLPF/", f"{args.prefix}_native")
+            save_mlpf(args, outpath_native, mlpf_native, mlpf_model_kwargs, mode="native")
 
-            print(f"- Training native MLPF over {args.n_epochs_mlpf} epochs")
+            print(f"- Training native MLPF over {args.n_epochs} epochs")
 
-            training_loop_mlpf(
+            training_loop(
                 device,
                 mlpf_native,
                 train_loader,
                 valid_loader,
-                args.n_epochs_mlpf,
+                args.bs,
+                args.n_epochs,
                 args.patience,
                 args.lr,
                 outpath_native,
             )
-
-            # evaluate the native mlpf on both the QCD and TTbar samples
-            if args.evaluate_mlpf:
-                from pyg_ssl.evaluate import evaluate
-
-                ret_native = evaluate(
-                    device,
-                    vicreg_encoder,
-                    mlpf_native,
-                    args.bs_mlpf,
-                    "native",
-                    outpath_native,
-                    {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
-                )
-
-        # if args.ssl & args.native:
-        #     # plot multiplicity plot of both at the same time
-        #     if args.evaluate_mlpf:
-        #         from pyg_ssl.evaluate import make_multiplicity_plots_both
-
-        #         make_multiplicity_plots_both(ret_ssl, ret_native, outpath_ssl)
