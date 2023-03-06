@@ -1,16 +1,17 @@
 import json
 import math
-import os
+import pickle as pkl
 import time
+from typing import Optional
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
-import sklearn.metrics
 import torch
 import torch_geometric
-from pyg import CLASS_NAMES_CMS, plot_confusion_matrix
-
-from .utils import make_plot_from_lists
+from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
+from torch import Tensor, nn
+from torch.nn import functional as F
 
 matplotlib.use("Agg")
 
@@ -18,13 +19,98 @@ matplotlib.use("Agg")
 np.seterr(divide="ignore", invalid="ignore")
 
 
-def compute_weights(rank, target_ids, num_classes):
+# keep track of the training step across epochs
+istep_global = 0
+
+
+# from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
+class FocalLoss(nn.Module):
+    """Focal Loss, as described in https://arxiv.org/abs/1708.02002.
+    It is essentially an enhancement to cross entropy loss and is
+    useful for classification tasks when there is a large class imbalance.
+    x is expected to contain raw, unnormalized scores for each class.
+    y is expected to contain class labels.
+    Shape:
+        - x: (batch_size, C) or (batch_size, C, d1, d2, ..., dK), K > 0.
+        - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
+    """
+
+    def __init__(
+        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
+    ):
+        """Constructor.
+        Args:
+            alpha (Tensor, optional): Weights for each class. Defaults to None.
+            gamma (float, optional): A constant, as described in the paper.
+                Defaults to 0.
+            reduction (str, optional): 'mean', 'sum' or 'none'.
+                Defaults to 'mean'.
+            ignore_index (int, optional): class label to ignore.
+                Defaults to -100.
+        """
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError('Reduction must be one of: "mean", "sum", "none".')
+
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none", ignore_index=ignore_index)
+
+    def __repr__(self):
+        arg_keys = ["alpha", "gamma", "ignore_index", "reduction"]
+        arg_vals = [self.__dict__[k] for k in arg_keys]
+        arg_strs = [f"{k}={v!r}" for k, v in zip(arg_keys, arg_vals)]
+        arg_str = ", ".join(arg_strs)
+        return f"{type(self).__name__}({arg_str})"
+
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        if x.ndim > 2:
+            # (N, C, d1, d2, ..., dK) --> (N * d1 * ... * dK, C)
+            c = x.shape[1]
+            x = x.permute(0, *range(2, x.ndim), 1).reshape(-1, c)
+            # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
+            y = y.view(-1)
+
+        unignored_mask = y != self.ignore_index
+        y = y[unignored_mask]
+        if len(y) == 0:
+            return torch.tensor(0.0)
+        x = x[unignored_mask]
+
+        # compute weighted cross entropy term: -alpha * log(pt)
+        # (alpha is already part of self.nll_loss)
+        log_p = F.log_softmax(x, dim=-1)
+        ce = self.nll_loss(log_p, y)
+
+        # get true class column from each row
+        all_rows = torch.arange(len(x))
+        log_pt = log_p[all_rows, y]
+
+        # compute focal term: (1 - pt)^gamma
+        pt = log_pt.exp()
+        focal_term = (1 - pt) ** self.gamma
+
+        # the full loss: -alpha * ((1 - pt)^gamma) * log(pt)
+        loss = focal_term * ce
+
+        if self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+
+        return loss
+
+
+def compute_weights(device, target_ids, num_classes):
     """
     computes necessary weights to accomodate class imbalance in the loss function
     """
 
     vs, cs = torch.unique(target_ids, return_counts=True)
-    weights = torch.zeros(num_classes).to(device=rank)
+    weights = torch.zeros(num_classes).to(device=device)
     for k, v in zip(vs, cs):
         weights[k] = 1.0 / math.sqrt(float(v))
     # weights[2] = weights[2] * 3  # emphasize nhadrons
@@ -32,17 +118,7 @@ def compute_weights(rank, target_ids, num_classes):
 
 
 @torch.no_grad()
-def validation_run(
-    rank,
-    model,
-    train_loader,
-    valid_loader,
-    batch_size,
-    alpha,
-    target_type,
-    num_classes,
-    outpath,
-):
+def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None):
     with torch.no_grad():
         optimizer = None
         ret = train(
@@ -52,174 +128,158 @@ def validation_run(
             valid_loader,
             batch_size,
             optimizer,
-            alpha,
-            target_type,
-            num_classes,
-            outpath,
+            ssl_encoder,
         )
     return ret
 
 
-def train(
-    rank,
-    model,
-    train_loader,
-    valid_loader,
-    batch_size,
-    optimizer,
-    alpha,
-    target_type,
-    num_classes,
-    outpath,
-):
+def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
     is_train = not (optimizer is None)
+    global istep_global
+
+    loss_obj_id = FocalLoss(gamma=2.0)
+
+    is_train = not (optimizer is None)
 
     if is_train:
         print(f"---->Initiating a training run on rank {rank}")
-        model.train()
+        mlpf.train()
         file_loader = train_loader
     else:
         print(f"---->Initiating a validation run rank {rank}")
-        model.eval()
+        mlpf.eval()
         file_loader = valid_loader
 
     # initialize loss counters
-    losses_clf, losses_reg, losses_tot = 0, 0, 0
+    losses_of_interest = ["Total", "Classification", "Regression", "Charge"]
+    losses = {}
+    for loss in losses_of_interest:
+        losses[loss] = 0.0
 
-    # setup confusion matrix
-    conf_matrix = np.zeros((num_classes, num_classes))
-
-    t0, tf = time.time(), 0
+    tf_0, tf_f = time.time(), 0
     for num, file in enumerate(file_loader):
-        print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - t0, 3)}s")
-        tf = tf + (time.time() - t0)
+        if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
+            print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
+            tf_f = tf_f + (time.time() - tf_0)
+            file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
-        file = [x for t in file for x in t]  # unpack the list of tuples to a list
+        tf = 0
+        for i, batch in enumerate(file):
 
-        loader = torch_geometric.loader.DataLoader(file, batch_size=batch_size)
+            if ssl_encoder is not None:
+                # seperate PF-elements
+                tracks, clusters = distinguish_PFelements(batch.to(rank))
+                # ENCODE
+                embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
+                # concat the inputs with embeddings
+                tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
+                # combine PF-elements
+                event = combine_PFelements(tracks, clusters).to(rank)
 
-        t = 0
-        for i, batch in enumerate(loader):
+            else:
+                event = batch.to(rank)
 
-            # run forward pass
+            # make mlpf forward pass
             t0 = time.time()
-            pred_ids_one_hot, pred_p4 = model(batch.to(rank))
-            t1 = time.time()
-            t = t + (t1 - t0)
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            tf = tf + (time.time() - t0)
 
-            # define the target
-            if target_type == "gen":
-                target_p4 = batch.ygen
-                target_ids = batch.ygen_id
-            elif target_type == "cand":
-                target_p4 = batch.ycand
-                target_ids = batch.ycand_id
+            target_ids = event.ygen_id
 
-            # revert one hot encoding for the predictions
-            pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
+            target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
+            target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
 
-            # define some useful masks
-            # msk = (pred_ids != 0) & (target_ids != 0)
-            msk2 = (pred_ids != 0) & (pred_ids == target_ids)
+            loss_ = {}
+            # for CLASSIFYING PID
+            loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+            # REGRESSING p4: mask the loss in cases there is no true particle
+            msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+            )
+            # PREDICTING CHARGE
+            loss_["Charge"] = torch.nn.functional.cross_entropy(
+                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+            )
+            # TOTAL LOSS
+            loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
-            # compute the loss
-            weights = compute_weights(rank, target_ids, num_classes)  # to accomodate class imbalance
-            loss_clf = torch.nn.functional.cross_entropy(pred_ids_one_hot, target_ids, weight=weights)  # for classifying PID
-            loss_reg = torch.nn.functional.mse_loss(
-                pred_p4[msk2], target_p4[msk2]
-            )  # for regressing p4 # TODO: add mse weights for scales to match? huber?
-
-            loss_tot = loss_clf + (alpha * loss_reg)
-
+            # update parameters
             if is_train:
-                for param in model.parameters():
-                    # better than calling optimizer.zero_grad()
-                    # according to https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+                for param in mlpf.parameters():
                     param.grad = None
-                loss_tot.backward()
+                loss_["Total"].backward()
                 optimizer.step()
 
-            losses_clf = losses_clf + loss_clf.detach()
-            losses_reg = losses_reg + loss_reg.detach()
-            losses_tot = losses_tot + loss_tot.detach()
+            for loss in losses_of_interest:
+                losses[loss] += loss_[loss].detach()
 
-            conf_matrix += sklearn.metrics.confusion_matrix(
-                target_ids.detach().cpu(),
-                pred_ids.detach().cpu(),
-                labels=range(num_classes),
-            )
+        print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
 
-        #     if i == 2:
-        #         break
-        # if num == 2:
-        #     break
+    for loss in losses_of_interest:
+        losses[loss] = losses[loss].cpu().item() / (len(file) * (len(file_loader)))
 
-        print(f"Average inference time per batch on rank {rank} is {round((t / len(loader)), 3)}s")
+    print(
+        "loss_id={:.4f} loss_momentum={:.4f} loss_charge={:.4f}".format(
+            losses["Classification"], losses["Regression"], losses["Charge"]
+        )
+    )
 
-        t0 = time.time()
-
-    print(f"Average time to load a file on rank {rank} is {round((tf / len(file_loader)), 3)}s")
-
-    losses_clf = losses_clf / (len(loader) * len(file_loader))
-    losses_reg = losses_reg / (len(loader) * len(file_loader))
-    losses_tot = losses_tot / (len(loader) * len(file_loader))
-
-    losses = {
-        "losses_clf": losses_clf.cpu().item(),
-        "losses_reg": losses_reg.cpu().item(),
-        "losses_tot": losses_tot.cpu().item(),
-    }
-
-    conf_matrix = conf_matrix / conf_matrix.sum(axis=1)[:, np.newaxis]
-
-    return losses, conf_matrix
+    return losses
 
 
 def training_loop(
     rank,
-    data,
-    model,
+    mlpf,
     train_loader,
     valid_loader,
     batch_size,
     n_epochs,
     patience,
-    optimizer,
-    alpha,
-    target,
-    num_classes,
+    lr,
     outpath,
+    ssl_encoder=None,
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
     Args:
-        rank: int representing the gpu device id, or str=='cpu' (both work, trust me)
-        data: data sepecification ('cms' or 'delphes')
-        model: a pytorch model wrapped by DistributedDataParallel (DDP)
-        dataset: a PFGraphDataset object
-        train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method
-        valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method
-        patience: number of stale epochs allowed before stopping the training
-        optimizer: optimizer to use for training (by default: Adam)
-        alpha: the hyperparameter controlling the classification vs regression task balance
-        target: 'gen' or 'cand' training
-        num_classes: number of particle candidate classes to predict (6 for delphes, 9 for cms)
-        outpath: path to store the model weights and training plots
+        rank: int representing the gpu device id, or str=='cpu' (both work, trust me).
+        mlpf: a pytorch model wrapped by DistributedDataParallel (DDP).
+        train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method.
+        valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method.
+        patience: number of stale epochs allowed before stopping the training.
+        lr: lr to use for training.
+        outpath: path to store the model weights and training plots.
+        ssl_encoder: the encoder part of VICReg. If None is provided then the function will run a supervised training.
     """
 
     t0_initial = time.time()
 
-    losses_clf_train, losses_reg_train, losses_tot_train = [], [], []
-    losses_clf_valid, losses_reg_valid, losses_tot_valid = [], [], []
+    losses_of_interest = ["Total", "Classification", "Regression"]
 
-    best_val_loss = 99999.9
+    losses = {}
+    losses["train"], losses["valid"], best_val_loss, best_train_loss = {}, {}, {}, {}
+    for loss in losses_of_interest:
+        losses["train"][loss], losses["valid"][loss] = [], []
+        best_val_loss[loss] = 99999.9
+
     stale_epochs = 0
+
+    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
+
+    if ssl_encoder is not None:
+        mode = "ssl"
+        ssl_encoder.eval()
+    else:
+        mode = "native"
+    print(f"Will launch a {mode} training of MLPF.")
 
     for epoch in range(n_epochs):
         t0 = time.time()
@@ -229,57 +289,40 @@ def training_loop(
             break
 
         # training step
-        model.train()
-        losses, conf_matrix_train = train(
-            rank,
-            model,
-            train_loader,
-            valid_loader,
-            batch_size,
-            optimizer,
-            alpha,
-            target,
-            num_classes,
-            outpath,
-        )
-
-        losses_clf_train.append(losses["losses_clf"])
-        losses_reg_train.append(losses["losses_reg"])
-        losses_tot_train.append(losses["losses_tot"])
+        losses_t = train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder)
+        for loss in losses_of_interest:
+            losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        model.eval()
-        losses, conf_matrix_val = validation_run(
-            rank,
-            model,
-            train_loader,
-            valid_loader,
-            batch_size,
-            alpha,
-            target,
-            num_classes,
-            outpath,
-        )
+        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, ssl_encoder)
+        for loss in losses_of_interest:
+            losses["valid"][loss].append(losses_v[loss])
 
-        losses_clf_valid.append(losses["losses_clf"])
-        losses_reg_valid.append(losses["losses_reg"])
-        losses_tot_valid.append(losses["losses_tot"])
+        # save the lowest value of each component of the loss to print it on the legend of the loss plots
+        for loss in losses_of_interest:
+            if loss == "Total":
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
-        # early-stopping
-        if losses["losses_tot"] < best_val_loss:
-            best_val_loss = losses["losses_tot"]
-            stale_epochs = 0
+                    # save the model
+                    try:
+                        state_dict = mlpf.module.state_dict()
+                    except AttributeError:
+                        state_dict = mlpf.state_dict()
+                    torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
 
-            try:
-                state_dict = model.module.state_dict()
-            except AttributeError:
-                state_dict = model.state_dict()
-            torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
+                    with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
+                        json.dump({"best_epoch": epoch}, fp)
 
-            with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
-                json.dump({"best_epoch": epoch}, fp)
-        else:
-            stale_epochs += 1
+                    # for early-stopping purposes
+                    stale_epochs = 0
+                else:
+                    stale_epochs += 1
+            else:
+                if losses_v[loss] < best_val_loss[loss]:
+                    best_val_loss[loss] = losses_v[loss]
+                    best_train_loss[loss] = losses_t[loss]
 
         t1 = time.time()
 
@@ -289,80 +332,38 @@ def training_loop(
 
         print(
             f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_tot_train[epoch], 4)} "
-            + f"valid_loss={round(losses_tot_valid[epoch], 4)} "
+            + f"train_loss={round(losses_t['Total'], 4)} "
+            + f"valid_loss={round(losses_v['Total'], 4)} "
             + f"stale={stale_epochs} "
             + f"time={round((t1-t0)/60, 2)}m "
             + f"eta={round(eta, 1)}m"
         )
 
-        # save the model's weights
-        try:
-            state_dict = model.module.state_dict()
-        except AttributeError:
-            state_dict = model.state_dict()
-        torch.save(state_dict, f"{outpath}/epoch_{epoch}_weights.pth")
-
-        # create directory to hold training plots
-        if not os.path.exists(outpath + "/training_plots/"):
-            os.makedirs(outpath + "/training_plots/")
-
-        # make confusion matrix plots
-        cm_path = outpath + "/training_plots/confusion_matrix_plots/"
-        if not os.path.exists(cm_path):
-            os.makedirs(cm_path)
-
-        if data == "delphes":
-            target_names = ["none", "ch.had", "n.had", "g", "el", "mu"]
-        elif data == "cms":
-            target_names = CLASS_NAMES_CMS
-
-        plot_confusion_matrix(
-            conf_matrix_train,
-            target_names,
-            epoch + 1,
-            cm_path,
-            f"epoch_{str(epoch)}_cmTrain",
-        )
-        plot_confusion_matrix(
-            conf_matrix_val,
-            target_names,
-            epoch + 1,
-            cm_path,
-            f"epoch_{str(epoch)}_cmValid",
-        )
-
         # make loss plots
-        make_plot_from_lists(
-            "Classification loss",
-            "Epochs",
-            "Loss",
-            "loss_clf",
-            [losses_clf_train, losses_clf_valid],
-            ["training", "validation"],
-            ["clf_losses_train", "clf_losses_valid"],
-            outpath + "/training_plots/losses/",
-        )
-        make_plot_from_lists(
-            "Regression loss",
-            "Epochs",
-            "Loss",
-            "loss_reg",
-            [losses_reg_train, losses_reg_valid],
-            ["training", "validation"],
-            ["reg_losses_train", "reg_losses_valid"],
-            outpath + "/training_plots/losses/",
-        )
-        make_plot_from_lists(
-            "Total loss",
-            "Epochs",
-            "Loss",
-            "loss_tot",
-            [losses_tot_train, losses_tot_valid],
-            ["training", "validation"],
-            ["tot_losses_train", "tot_losses_valid"],
-            outpath + "/training_plots/losses/",
-        )
+        for loss in losses_of_interest:
+            fig, ax = plt.subplots()
+            ax.plot(
+                range(len(losses["train"][loss])),
+                losses["train"][loss],
+                label="training ({:.3f})".format(best_train_loss["Total"]),
+            )
+            ax.plot(
+                range(len(losses["valid"][loss])),
+                losses["valid"][loss],
+                label="validation ({:.3f})".format(best_val_loss["Total"]),
+            )
+            ax.set_xlabel("Epochs")
+            ax.set_ylabel(f"{loss} Loss")
+            ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
+            if mode == "ssl":
+                ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
+            else:
+                ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
+            plt.tight_layout()
+            plt.savefig(f"{outpath}/mlpf_{mode}_loss_{loss}.pdf")
+            plt.close()
+        with open(f"{outpath}/mlpf_{mode}_losses.pkl", "wb") as f:
+            pkl.dump(losses, f)
 
         print("----------------------------------------------------------")
     print(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")

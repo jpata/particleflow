@@ -37,9 +37,9 @@ mv delphes ../../../data/
 cd ..
 
 #generate pytorch data files from pkl files
-python3 PFGraphDataset.py --data delphes --dataset ../../data/delphes/pythia8_ttbar \
+python3 PFGraphDataset.py --data DELPHES --dataset ../../data/delphes/pythia8_ttbar \
   --processed_dir ../../data/delphes/pythia8_ttbar/processed --num-files-merge 1 --num-proc 1
 
 #generate pytorch data files from pkl files
-python3 PFGraphDataset.py --data delphes --dataset ../../data/delphes/pythia8_qcd \
+python3 PFGraphDataset.py --data DELPHES --dataset ../../data/delphes/pythia8_qcd \
   --processed_dir ../../data/delphes/pythia8_qcd/processed --num-files-merge 1 --num-proc 1

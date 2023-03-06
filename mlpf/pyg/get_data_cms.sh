@@ -26,7 +26,7 @@ echo -----------------------
 for sample in ../../data/cms/* ; do
   echo $sample
   #generate pytorch data files from pkl files
-  python3 PFGraphDataset.py --data cms --dataset $sample \
+  python3 PFGraphDataset.py --data CMS --dataset $sample \
     --processed_dir $sample/processed --num-files-merge 1 --num-proc 1
 done
 echo -----------------------
