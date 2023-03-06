@@ -1,4 +1,5 @@
 # import bz2
+import bz2
 import multiprocessing
 import os.path as osp
 import pickle
@@ -9,101 +10,103 @@ import awkward as ak
 import numpy as np
 import torch
 import tqdm
+from numpy.lib.recfunctions import append_fields
 
 # from numpy.lib.recfunctions import append_fields
 from torch_geometric.data import Data, Dataset
 
 sys.path
 sys.path.append("../")
-from heptfds.cms_pf.cms_utils import prepare_data_cms
+# from heptfds.cms_pf.cms_utils import prepare_data_cms
 
-# def prepare_data_cms(fn):
-#     """
-#     Takes as input a bz2 file that contains the cms raw information, and returns a list of PyG Data() objects.
-#     Each element of the list looks like this ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
 
-#     Args
-#         raw_file_name: raw parquet data file.
-#     Returns
-#         list of Data() objects.
-#     """
-#     from utils import CLASS_LABELS, X_FEATURES
+def prepare_data_cms(fn):
+    """
+    Takes as input a bz2 file that contains the cms raw information, and returns a list of PyG Data() objects.
+    Each element of the list looks like this ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
 
-#     # ELEM_NAMES = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
-#     ELEM_LABELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    Args
+        raw_file_name: raw parquet data file.
+    Returns
+        list of Data() objects.
+    """
+    from utils import CLASS_LABELS, X_FEATURES
 
-#     batched_data = []
+    # ELEM_NAMES = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
+    ELEM_LABELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
-#     data = pickle.load(bz2.BZ2File(fn, "rb"))
-#     for event in data:
-#         Xelem = event["Xelem"]
-#         ygen = event["ygen"]
-#         ycand = event["ycand"]
+    # prepare jet definition and min jet pt for clustering gen jets
+    if fn.endswith(".pkl"):
+        data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
+    elif fn.endswith(".pkl.bz2"):
+        data = pickle.load(bz2.BZ2File(fn, "rb"))
 
-#         # remove PS and BREM from inputs
-#         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
+    batched_data = []
+    for event in data:
+        Xelem = event["Xelem"]
+        ygen = event["ygen"]
+        ycand = event["ycand"]
 
-#         Xelem = Xelem[~msk_ps]
-#         ygen = ygen[~msk_ps]
-#         ycand = ycand[~msk_ps]
+        # remove PS and BREM from inputs
+        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
-#         Xelem = append_fields(
-#             Xelem,
-#             "typ_idx",
-#             np.array(
-#                 [ELEM_LABELS.index(int(i)) for i in Xelem["typ"]],
-#                 dtype=np.float32,
-#             ),
-#         )
-#         ygen = append_fields(
-#             ygen,
-#             "typ_idx",
-#             np.array(
-#                 [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ygen["typ"]],
-#                 dtype=np.float32,
-#             ),
-#         )
-#         ycand = append_fields(
-#             ycand,
-#             "typ_idx",
-#             np.array(
-#                 [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ycand["typ"]],
-#                 dtype=np.float32,
-#             ),
-#         )
+        Xelem = Xelem[~msk_ps]
+        ygen = ygen[~msk_ps]
+        ycand = ycand[~msk_ps]
 
-#         Xelem_flat = np.stack(
-#             [Xelem[k].view(np.float32).data for k in X_FEATURES["CMS"]],
-#             axis=-1,
-#         )
-#         ygen_flat = np.stack(
-#             [ygen[k].view(np.float32).data for k in ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
-#             axis=-1,
-#         )
-#         ycand_flat = np.stack(
-#             [ycand[k].view(np.float32).data for k in ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
-#             axis=-1,
-#         )
+        Xelem = append_fields(
+            Xelem,
+            "typ_idx",
+            np.array(
+                [ELEM_LABELS.index(int(i)) for i in Xelem["typ"]],
+                dtype=np.float32,
+            ),
+        )
+        ygen = append_fields(
+            ygen,
+            "typ_idx",
+            np.array(
+                [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ygen["typ"]],
+                dtype=np.float32,
+            ),
+        )
+        ygen = append_fields(ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32))
+        ycand = append_fields(
+            ycand,
+            "typ_idx",
+            np.array(
+                [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ycand["typ"]],
+                dtype=np.float32,
+            ),
+        )
+        ycand = append_fields(
+            ycand,
+            "jet_idx",
+            np.zeros(ycand["typ"].shape, dtype=np.float32),
+        )
 
-#         # take care of outliers
-#         Xelem_flat[np.isnan(Xelem_flat)] = 0
-#         Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
+        Xelem_flat = np.stack(
+            [Xelem[k].view(np.float32).data for k in X_FEATURES],
+            axis=-1,
+        )
+        ygen_flat = np.stack(
+            [ygen[k].view(np.float32).data for k in ["charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
+            axis=-1,
+        )
+        ycand_flat = np.stack(
+            [ycand[k].view(np.float32).data for k in ["charge", "pt", "eta", "sin_phi", "cos_phi", "e"]],
+            axis=-1,
+        )
 
-#         ygen_flat[np.isnan(ygen_flat)] = 0
-#         ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-
-#         ycand_flat[np.isnan(ycand_flat)] = 0
-#         ycand_flat[np.abs(ycand_flat) > 1e4] = 0
-
-#         d = Data(
-#             x=torch.tensor(Xelem_flat),
-#             ygen=torch.tensor(ygen_flat[:, 1:]),
-#             ygen_id=torch.tensor(ygen_flat[:, 0]).long(),
-#             ycand=torch.tensor(ycand_flat[:, 1:]),
-#             ycand_id=torch.tensor(ycand_flat[:, 0]).long(),
-#         )
-#         batched_data.append(d)
-#     return batched_data
+        d = Data(
+            x=torch.tensor(Xelem_flat),
+            ygen=torch.tensor(ygen_flat[:, 1:]),
+            ygen_id=torch.tensor(ygen_flat[:, 0]).long(),
+            ycand=torch.tensor(ycand_flat[:, 1:]),
+            ycand_id=torch.tensor(ycand_flat[:, 0]).long(),
+        )
+        batched_data.append(d)
+    return batched_data
 
 
 def prepare_data_delphes(fn):

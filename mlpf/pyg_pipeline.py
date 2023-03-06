@@ -172,9 +172,9 @@ def inference(rank, world_size, args, data, model, PATH):
 
     test_dataset = torch.utils.data.Subset(data, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
 
-    if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
+    if args.dataset == "CMS":  # construct "file loaders" first because we need to set num_workers>0 and prefetch_factor>2
         file_loader_test = make_file_loaders(world_size, test_dataset)
-    else:  # construct pyg DataLoaders directly
+    else:  # construct pyg DataLoaders directly because "file loaders" are not needed
         file_loader_test = torch_geometric.loader.DataLoader(test_dataset, args.bs)
 
     if world_size > 1:
