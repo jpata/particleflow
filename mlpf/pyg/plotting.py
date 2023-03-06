@@ -592,9 +592,14 @@ def plot_stacked_distribution(dataset, yvals_f, outpath, sample):
 
 def make_plots(pred_path, plot_path, dataset, sample):
     """
-    dataset: CMS, DELPHES
-    sample: TTbar, QCD
+    Takes as input the predictions saved in pt files by the make_predictions() function from evaluate.py
+    and makes plots.
+
+    Args
+        dataset: "CMS", "DELPHES" or "CLIC".
+        sample: "TTbar" or "QCD".
     """
+
     if not osp.isdir(plot_path):
         os.makedirs(plot_path)
 

@@ -103,6 +103,8 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
                 # make mlpf forward pass
                 pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.to(device))
 
+                pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True) - 1
+
                 pred_ids = torch.argmax(pred_ids_one_hot, axis=1)
                 target_ids = event.ygen_id
                 cand_ids = event.ycand_id
@@ -116,12 +118,9 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
                     ),
                 }
 
-                gen_p4 = []
-                gen_cls = []
-                cand_p4 = []
-                cand_cls = []
-                pred_p4 = []
-                pred_cls = []
+                gen_p4, gen_cls = [], []
+                cand_p4, cand_cls = [], []
+                pred_p4, pred_cls = [], []
                 Xs = []
                 for ibatch in np.unique(event.batch.cpu().numpy()):
                     msk_batch = event.batch == ibatch

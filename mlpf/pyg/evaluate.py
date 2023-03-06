@@ -71,7 +71,7 @@ def make_predictions(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl_enc
             pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
             tf = tf + (time.time() - t0)
 
-            pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True)
+            pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True) - 1
             pred_p4 = torch.cat([pred_charge, pred_momentum], axis=-1)
 
             target_ids = event.ygen_id
