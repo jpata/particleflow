@@ -1,9 +1,8 @@
 import torch.nn as nn
-from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.nn.conv import GravNetConv
 
-from .utils import CLUSTERS_X, TRACKS_X
+from .utils import CLUSTERS_X, TRACKS_X, distinguish_PFelements
 
 
 class VICReg(nn.Module):
@@ -12,38 +11,10 @@ class VICReg(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
 
-    def distinguish_PFelements(self, batch):
-        """Takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters."""
-
-        track_id = 1
-        cluster_id = 2
-
-        tracks = Batch(
-            x=batch.x[batch.x[:, 0] == track_id][:, 1:].float()[
-                :, :TRACKS_X
-            ],  # remove the first input feature which is not needed anymore
-            ygen=batch.ygen[batch.x[:, 0] == track_id],
-            ygen_id=batch.ygen_id[batch.x[:, 0] == track_id],
-            ycand=batch.ycand[batch.x[:, 0] == track_id],
-            ycand_id=batch.ycand_id[batch.x[:, 0] == track_id],
-            batch=batch.batch[batch.x[:, 0] == track_id],
-        )
-        clusters = Batch(
-            x=batch.x[batch.x[:, 0] == cluster_id][:, 1:].float()[
-                :, :CLUSTERS_X
-            ],  # remove the first input feature which is not needed anymore
-            ygen=batch.ygen[batch.x[:, 0] == cluster_id],
-            ygen_id=batch.ygen_id[batch.x[:, 0] == cluster_id],
-            ycand=batch.ycand[batch.x[:, 0] == cluster_id],
-            ycand_id=batch.ycand_id[batch.x[:, 0] == cluster_id],
-            batch=batch.batch[batch.x[:, 0] == cluster_id],
-        )
-        return tracks, clusters
-
     def forward(self, event):
 
         # seperate tracks from clusters
-        tracks, clusters = self.distinguish_PFelements(event)
+        tracks, clusters = distinguish_PFelements(event)
 
         # encode to retrieve the representations
         track_representations, cluster_representations = self.encoder(tracks, clusters)

@@ -55,23 +55,9 @@ X_FEATURES_CL = [
 CLUSTERS_X = len(X_FEATURES_CL) - 1  # remove the `type` feature
 TRACKS_X = len(X_FEATURES_TRK) - 1  # remove the `type` feature
 
-# define regression output
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
-# define classification output
-CLASS_NAMES_CLIC_LATEX = [
-    "none",
-    "chhad",
-    "nhad",
-    r"$\gamma$",
-    r"$e^\pm$",
-    r"$\mu^\pm$",
-]
-NUM_CLASSES = len(CLASS_NAMES_CLIC_LATEX)
-
-
-# function that takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters
 def distinguish_PFelements(batch):
+    """Takes an event~Batch() and splits it into two Batch() objects representing the tracks/clusters."""
 
     track_id = 1
     cluster_id = 2
@@ -99,8 +85,9 @@ def distinguish_PFelements(batch):
     return tracks, clusters
 
 
-# conversly, function that combines the learned latent representations back into one Batch() object
 def combine_PFelements(tracks, clusters):
+    """Takes two Batch() objects represeting the learned latent representation of
+    tracks and the clusters and combines them under a single event~Batch()."""
 
     event = Batch(
         x=torch.cat([tracks.x, clusters.x]),
@@ -229,7 +216,7 @@ def save_MLPF(args, outpath, mlpf, mlpf_model_kwargs, mode):
         )
 
 
-def data_split(dataset, data_split_mode):
+def data_split(data_path, data_split_mode):
     """
     Depending on the data split mode chosen, the function returns different data splits.
 
@@ -245,8 +232,8 @@ def data_split(dataset, data_split_mode):
     print(f"Will use data split mode `{data_split_mode}`")
 
     if data_split_mode == "quick":
-        data_qq = torch.load(f"{dataset}/p8_ee_qq_ecm380/processed/data_0.pt")
-        data_ttbar = torch.load(f"{dataset}/p8_ee_tt_ecm380/processed/data_0.pt")
+        data_qq = torch.load(f"{data_path}/p8_ee_qq_ecm380/processed/data_0.pt")
+        data_ttbar = torch.load(f"{data_path}/p8_ee_tt_ecm380/processed/data_0.pt")
 
         data_test_qq = data_qq[: round(0.1 * len(data_qq))]
         data_test_ttbar = data_ttbar[: round(0.1 * len(data_ttbar))]
@@ -270,8 +257,8 @@ def data_split(dataset, data_split_mode):
 
     else:  # actual meaningful data splits
         # load the qq and ttbar samples seperately
-        qq_files = glob.glob(f"{dataset}/p8_ee_qq_ecm380/processed/*")
-        ttbar_files = glob.glob(f"{dataset}/p8_ee_tt_ecm380/processed/*")
+        qq_files = glob.glob(f"{data_path}/p8_ee_qq_ecm380/processed/*")
+        ttbar_files = glob.glob(f"{data_path}/p8_ee_tt_ecm380/processed/*")
 
         data_qq = []
         for file in list(qq_files):
@@ -334,5 +321,7 @@ def data_split(dataset, data_split_mode):
     print(f"Will use {len(data_VICReg_valid)} events to validate VICReg")
     print(f"Will use {len(data_mlpf_train)} events to train MLPF")
     print(f"Will use {len(data_mlpf_valid)} events to validate MLPF")
+    print(f"Will use {len(data_test_ttbar)} events to test MLPF on TTbar")
+    print(f"Will use {len(data_test_qq)} events to test MLPF on QCD")
 
     return data_VICReg_train, data_VICReg_valid, data_mlpf_train, data_mlpf_valid, data_test_qq, data_test_ttbar

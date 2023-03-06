@@ -4,8 +4,6 @@ import torch_geometric
 import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv  # also returns edge index
 
-from .utils import NUM_CLASSES
-
 # from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
@@ -97,6 +95,7 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
+        NUM_CLASSES=8,
         embedding_dim=128,
         width=126,
         num_convs=2,

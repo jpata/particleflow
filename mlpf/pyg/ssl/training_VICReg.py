@@ -13,29 +13,6 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
-# # VICReg loss function
-# def criterion(x, y, device="cuda", lmbd=25, epsilon=1e-3):
-#     bs = x.size(0)
-#     emb = x.size(1)
-
-#     std_x = torch.sqrt(x.var(dim=0) + epsilon)
-#     std_y = torch.sqrt(y.var(dim=0) + epsilon)
-#     var_loss = torch.mean(F.relu(1 - std_x)) + torch.mean(F.relu(1 - std_y))
-
-#     invar_loss = F.mse_loss(x, y)
-
-#     xNorm = (x - x.mean(0)) / x.std(0)
-#     yNorm = (y - y.mean(0)) / y.std(0)
-#     crossCorMat = (xNorm.T @ yNorm) / bs
-#     cross_loss = (crossCorMat * lmbd - torch.eye(emb, device=torch.device(device)) * lmbd).pow(2).sum()
-
-#     return var_loss, invar_loss, cross_loss
-
-
-def sum_off_diagonal(M):
-    """Sums the off-diagonal elements of a square matrix M."""
-    return M.sum() - torch.diagonal(M).sum()
-
 
 def off_diagonal(x):
     """Copied from VICReg paper github https://github.com/facebookresearch/vicreg/"""
@@ -127,14 +104,9 @@ def train(multi_gpu, device, vicreg, loaders, optimizer, loss_hparams):
             loss_["Total"].backward()
             optimizer.step()
 
-        print(f'debug: tot={loss_["Total"]} - {loss_["Invariance"]} - {loss_["Variance"]} - {loss_["Covariance"]}')
-
         # accumulate the loss to make plots
         for loss in losses_of_interest:
             losses[loss] += loss_[loss].detach()
-
-        # if i == 2:
-        #     break
 
     for loss in losses_of_interest:
         losses[loss] = losses[loss].cpu().item() / (len(loader))
@@ -234,6 +206,7 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
         )
 
         for loss in losses_of_interest:
+
             # make total loss plot
             fig, ax = plt.subplots()
             ax.plot(
@@ -245,14 +218,14 @@ def training_loop_VICReg(multi_gpu, device, vicreg, loaders, n_epochs, patience,
             ax.set_xlabel("Epochs")
             ax.set_ylabel(f"{loss} Loss")
             ax.legend(
-                title=r"VICReg - ($\lambda={} - \mu={} - \nu={}$)".format(
-                    loss_hparams["lmbd"], loss_hparams["mu"], loss_hparams["nu"]
-                ),
+                title=rf"VICReg - ($\lambda={loss_hparams['lmbd']} - \mu={loss_hparams['mu']} - \nu={loss_hparams['nu']}$)",
                 loc="best",
                 title_fontsize=20,
                 fontsize=15,
             )
+            plt.tight_layout()
             plt.savefig(f"{outpath}/VICReg_loss_{loss}.pdf")
+            plt.close()
 
         with open(f"{outpath}/VICReg_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
