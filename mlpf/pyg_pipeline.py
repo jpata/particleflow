@@ -14,7 +14,8 @@ from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
+from pyg.utils import (CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders,
+                       save_mlpf)
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -83,7 +84,7 @@ def run_demo(demo_fn, world_size, args, dataset, model, outpath):
 def train(rank, world_size, args, data, model, outpath):
     """
     A function that may be passed as a demo_fn to run_demo() to perform training over
-    multiple gpus using DDP in case there are multiple gpus available (world_size > 1)
+    multiple gpus using DDP in case there are multiple gpus available (world_size > 1).
 
         . It divides and distributes the training dataset appropriately.
         . Copies the model on each gpu.
@@ -150,7 +151,7 @@ def train(rank, world_size, args, data, model, outpath):
 def inference(rank, world_size, args, data, model, PATH):
     """
     A function that may be passed as a demo_fn to run_demo() to perform inference over
-    multiple gpus using DDP in case there are multiple gpus available (world_size > 1)
+    multiple gpus using DDP in case there are multiple gpus available (world_size > 1).
 
         . It divides and distributes the testing dataset appropriately.
         . Copies the model on each gpu.
@@ -309,7 +310,7 @@ if __name__ == "__main__":
 
         postprocess_predictions(args.dataset, pred_path)
 
-    # load the predictions and make plots (must run make_predictions() beforehand)
+    # load the predictions and make plots (must have ran make_predictions() beforehand)
     if args.make_plots:
         print(f"Will make plots of the {args.dataset} {args.sample} sample.")
         make_plots(pred_path, plot_path, args.dataset, args.sample)

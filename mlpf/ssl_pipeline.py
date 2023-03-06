@@ -46,7 +46,6 @@ if __name__ == "__main__":
 
     # our data size varies from batch to batch, because each set of N_batch events has a different number of particles
     torch.backends.cudnn.benchmark = False
-
     # torch.autograd.set_detect_anomaly(True)
 
     # load the clic dataset

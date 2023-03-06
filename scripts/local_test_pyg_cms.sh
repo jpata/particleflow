@@ -38,4 +38,4 @@ echo -----------------------
 
 # run a supervised training of mlpf on CMS dataset
 cd ../
-python pyg_pipeline.py --dataset CMS --data_path ../data/cms/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1 --nearest=4 --width=128
+python pyg_pipeline.py --dataset CMS --data_path ../data/cms/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1 --num_convs=1 --nearest=4 --width=34 --embedding_dim=34

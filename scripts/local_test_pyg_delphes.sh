@@ -40,4 +40,4 @@ echo -----------------------
 
 # run a supervised training of mlpf on DELPHES dataset
 cd ../
-python pyg_pipeline.py --dataset DELPHES --data_path ../data/delphes/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1
+python pyg_pipeline.py --dataset DELPHES --data_path ../data/delphes/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1 --num_convs=1 --nearest=4 --width=34 --embedding_dim=34
