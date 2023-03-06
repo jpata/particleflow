@@ -1,13 +1,13 @@
 [![CI](https://github.com/jpata/particleflow/workflows/CI/badge.svg)](https://github.com/jpata/particleflow/actions)
 
-# MLPF overview
+# Overview
 MLPF focuses on developing full event reconstruction based on computationally scalable and flexible end-to-end ML models.
 
 <p float="left">
   <img src="images/schematic.png" alt="High-level overview" width="600"/>
 </p>
 
-## MLPF with CMS
+## MLPF development in CMS
 
 <p float="left">
   <img src="images/cms/ev_pf.png" alt="PF reconstruction" width="300"/>
@@ -21,10 +21,10 @@ MLPF focuses on developing full event reconstruction based on computationally sc
   - ACAT 2022: http://cds.cern.ch/record/2842375
   - ACAT 2021: http://dx.doi.org/10.1088/1742-6596/2438/1/012100
 
-## MLPF with Delphes
+## Initial development with Delphes
 
 <p float="left">
-  <img src="images/delphes/num_particles.png" alt="Number of reconstructed particles" width="300"/>
+  <img src="images/delphes/num_particles.png" alt="Number of reconstructed particles" width="250"/>
   <img src="images/delphes/inference_time.png" alt="Scaling of the inference time" width="300"/>
 </p>
 
