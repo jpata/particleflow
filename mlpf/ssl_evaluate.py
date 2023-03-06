@@ -41,16 +41,19 @@ if __name__ == "__main__":
 
     vicreg = VICReg(vicreg_encoder, vicreg_decoder)
 
-    # # because model was saved using dataparallel
-    # from collections import OrderedDict
+    try:
+        vicreg.load_state_dict(vicreg_state_dict)
+    except RuntimeError:
+        # because model was saved using dataparallel
+        from collections import OrderedDict
 
-    # new_state_dict = OrderedDict()
-    # for k, v in vicreg_state_dict.items():
-    #     name = k[7:]  # remove module.
-    #     new_state_dict[name] = v
-    # vicreg_state_dict = new_state_dict
+        new_state_dict = OrderedDict()
+        for k, v in vicreg_state_dict.items():
+            name = k[7:]  # remove module.
+            new_state_dict[name] = v
+        vicreg_state_dict = new_state_dict
+        vicreg.load_state_dict(vicreg_state_dict)
 
-    vicreg.load_state_dict(vicreg_state_dict)
     vicreg.to(device)
 
     # load a pre-trained MLPF model
