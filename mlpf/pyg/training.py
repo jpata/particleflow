@@ -169,62 +169,61 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
         tf = 0
-        for z in range(2):  # TODO: remove
-            for i, batch in enumerate(file):
+        for i, batch in enumerate(file):
 
-                if ssl_encoder is not None:
-                    # seperate PF-elements
-                    tracks, clusters = distinguish_PFelements(batch.to(rank))
-                    # ENCODE
-                    embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
-                    # concat the inputs with embeddings
-                    tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
-                    clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
-                    # combine PF-elements
-                    event = combine_PFelements(tracks, clusters).to(rank)
+            if ssl_encoder is not None:
+                # seperate PF-elements
+                tracks, clusters = distinguish_PFelements(batch.to(rank))
+                # ENCODE
+                embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
+                # concat the inputs with embeddings
+                tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
+                # combine PF-elements
+                event = combine_PFelements(tracks, clusters).to(rank)
 
-                else:
-                    event = batch.to(rank)
+            else:
+                event = batch.to(rank)
 
-                # make mlpf forward pass
-                t0 = time.time()
-                pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
-                tf = tf + (time.time() - t0)
+            # make mlpf forward pass
+            t0 = time.time()
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            tf = tf + (time.time() - t0)
 
-                target_ids = event.ygen_id
+            target_ids = event.ygen_id
 
-                target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
-                target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
+            target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
+            target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
 
-                loss_ = {}
-                # for CLASSIFYING PID
-                loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-                # REGRESSING p4: mask the loss in cases there is no true particle
-                msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-                loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-                    pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-                )
-                # PREDICTING CHARGE
-                loss_["Charge"] = torch.nn.functional.cross_entropy(
-                    pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-                )
-                # TOTAL LOSS
-                loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
+            loss_ = {}
+            # for CLASSIFYING PID
+            loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+            # REGRESSING p4: mask the loss in cases there is no true particle
+            msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+            )
+            # PREDICTING CHARGE
+            loss_["Charge"] = torch.nn.functional.cross_entropy(
+                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+            )
+            # TOTAL LOSS
+            loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
-                # update parameters
-                if is_train:
-                    for param in mlpf.parameters():
-                        param.grad = None
-                    loss_["Total"].backward()
-                    optimizer.step()
+            # update parameters
+            if is_train:
+                for param in mlpf.parameters():
+                    param.grad = None
+                loss_["Total"].backward()
+                optimizer.step()
 
-                for loss in losses_of_interest:
-                    losses[loss] += loss_[loss].detach()
+            for loss in losses_of_interest:
+                losses[loss] += loss_[loss].detach()
 
-                # if i == 2:
-                #     break
-            # if num == 2:
+            # if i == 2:
             #     break
+        # if num == 2:
+        #     break
 
         print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
 
