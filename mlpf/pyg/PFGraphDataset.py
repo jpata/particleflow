@@ -86,7 +86,7 @@ def prepare_data_cms(fn):
         )
 
         Xelem_flat = np.stack(
-            [Xelem[k].view(np.float32).data for k in X_FEATURES],
+            [Xelem[k].view(np.float32).data for k in X_FEATURES["CMS"]],
             axis=-1,
         )
         ygen_flat = np.stack(
