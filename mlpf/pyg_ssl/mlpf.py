@@ -28,7 +28,7 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=32, num_heads=4, width=128, dropout=0.2):
+    def __init__(self, embedding_dim=128, num_heads=4, width=128, dropout=0.1):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, 8, batch_first=True)
@@ -41,13 +41,10 @@ class SelfAttentionLayer(nn.Module):
 
     def forward(self, x, mask):
 
-        x = x + self.mha(x, x, x, key_padding_mask=mask)[0]
-        x = x * (~mask.unsqueeze(-1))
-        x = self.norm0(x)
-        x = x + self.seq(x)
-        x = x * (~mask.unsqueeze(-1))
-        x = self.norm1(x)
+        x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
+        x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
+        x = x * (~mask.unsqueeze(-1))
         return x
 
 
