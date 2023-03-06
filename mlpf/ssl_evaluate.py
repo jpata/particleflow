@@ -26,7 +26,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # load the clic dataset
-    _, _, _, _, data_test_qcd, data_test_ttbar = data_split(args.data_path + "/clic_edm4hep/", args.data_split_mode)
+    _, _, _, _, data_test_qcd, data_test_ttbar = data_split(args.data_path, args.data_split_mode)
 
     # setup the directory path to hold all models and plots
     if args.prefix_VICReg is None:
