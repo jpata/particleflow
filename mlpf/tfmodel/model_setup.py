@@ -356,6 +356,7 @@ def eval_model(
         if verbose:
             print("evaluating model")
         ypred = model.predict(elem["X"], verbose=verbose)
+        ypred["charge"] = np.argmax(ypred["charge"], axis=-1) - 1
 
         keys_particle = [k for k in ypred.keys() if k != "met"]
 
@@ -364,6 +365,9 @@ def eval_model(
 
         ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
         ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
+        # 0, 1, 2 -> -1, 0, 1
+        ygen["charge"] = tf.expand_dims(tf.math.argmax(ygen["charge"], axis=-1), axis=-1) - 1
+        ycand["charge"] = tf.expand_dims(tf.math.argmax(ycand["charge"], axis=-1), axis=-1) - 1
 
         # in the delphes dataset, the pt is only defined for charged PFCandidates
         # and energy only for the neutral PFCandidates.

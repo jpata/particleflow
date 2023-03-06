@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument("--width_mlpf", type=int, default=256, help="hidden dimension of mlpf")
     parser.add_argument("--embedding_dim_mlpf", type=int, default=256, help="first embedding of mlpf")
     parser.add_argument("--num_convs_mlpf", type=int, default=3, help="number of graph layers for mlpf")
-    parser.add_argument("--dropout_mlpf", type=float, default=0.4, help="dropout for MLPF model")
+    parser.add_argument("--dropout_mlpf", type=float, default=0.3, help="dropout for MLPF model")
 
     # shared architecture
     parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")

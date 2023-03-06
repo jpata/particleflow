@@ -6,12 +6,13 @@ import vector
 
 @numba.njit
 def deltaphi(phi1, phi2):
-    return np.fmod(phi1 - phi2 + np.pi, 2 * np.pi) - np.pi
+    diff = phi1 - phi2
+    return np.arctan2(np.sin(diff), np.cos(diff))
 
 
 @numba.njit
 def deltar(eta1, phi1, eta2, phi2):
-    deta = np.abs(eta1 - eta2)
+    deta = eta1 - eta2
     dphi = deltaphi(phi1, phi2)
     return np.sqrt(deta**2 + dphi**2)
 
