@@ -108,13 +108,16 @@ def train(rank, world_size, args, data, model, outpath):
     valid_dataset = torch.utils.data.Subset(
         data, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
     )
-
+    print("train_dataset=", len(train_dataset))
+    print("valid_dataset=", len(valid_dataset))
     if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
         file_loader_train = make_file_loaders(world_size, train_dataset)
         file_loader_valid = make_file_loaders(world_size, valid_dataset)
     else:  # construct pyg DataLoaders directly
         file_loader_train = torch_geometric.loader.DataLoader(train_dataset, args.bs)
         file_loader_valid = torch_geometric.loader.DataLoader(valid_dataset, args.bs)
+        print("file_loader_train=", len(file_loader_train))
+        print("file_loader_valid=", len(file_loader_valid))
 
     print("-----------------------------")
     if world_size > 1:
