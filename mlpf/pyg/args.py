@@ -23,7 +23,7 @@ def parse_args():
 
     # for training hyperparameters
     parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
-    parser.add_argument("--bs", type=int, default=100, help="number of events to run inference on before updating the loss")
+    parser.add_argument("--bs", type=int, default=100, help="training minibatch size in number of events")
     parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 

@@ -369,26 +369,6 @@ def eval_model(
         ygen["charge"] = tf.expand_dims(tf.math.argmax(ygen["charge"], axis=-1), axis=-1) - 1
         ycand["charge"] = tf.expand_dims(tf.math.argmax(ycand["charge"], axis=-1), axis=-1) - 1
 
-        # in the delphes dataset, the pt is only defined for charged PFCandidates
-        # and energy only for the neutral PFCandidates.
-        # therefore, we compute the pt and energy again under a massless approximation for those cases
-        if config["dataset"]["schema"] == "delphes":
-            # p ~ E
-            # cos(theta)=pz/p
-            # eta = -ln(tan(theta/2))
-            # => pz = p*cos(2atan(exp(-eta)))
-            pz = ycand["energy"] * np.cos(2 * np.arctan(np.exp(-ycand["eta"])))
-            pt = np.sqrt(ycand["energy"] ** 2 - pz**2)
-
-            # eta=atanh(pz/p) => E=pt/sqrt(1-tanh(eta))
-            e = ycand["pt"] / np.sqrt(1.0 - np.tanh(ycand["eta"]))
-
-            # use these computed values where they are missing
-            msk_neutral = np.abs(ycand["charge"]) == 0
-            msk_charged = ~msk_neutral
-            ycand["pt"] = msk_charged * ycand["pt"] + msk_neutral * pt
-            ycand["energy"] = msk_neutral * ycand["energy"] + msk_charged * e
-
         X = awkward.Array(elem["X"].numpy())
         ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})
         ycand = awkward.Array({k: squeeze_if_one(ycand[k].numpy()) for k in keys_particle})
