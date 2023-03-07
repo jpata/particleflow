@@ -31,7 +31,7 @@ jobs:
       - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
       - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
 
-  clic-pipeline:
+  tf-clic-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:
@@ -43,7 +43,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_clic_pipeline.sh
 
-  delphes-pipeline:
+  tf-delphes-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:
@@ -55,7 +55,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_delphes_pipeline.sh
 
-  cms-pipeline:
+  tf-cms-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]
     steps:

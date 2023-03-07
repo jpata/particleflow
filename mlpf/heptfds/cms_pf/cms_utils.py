@@ -103,7 +103,7 @@ Y_FEATURES = [
 ]
 
 
-def prepare_data_cms(fn):
+def prepare_data_cms(fn, with_jet_idx=True):
     Xs = []
     ygens = []
     ycands = []
@@ -145,7 +145,6 @@ def prepare_data_cms(fn):
                 dtype=np.float32,
             ),
         )
-        ygen = append_fields(ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32))
         ycand = append_fields(
             ycand,
             "typ_idx",
@@ -154,22 +153,27 @@ def prepare_data_cms(fn):
                 dtype=np.float32,
             ),
         )
-        ycand = append_fields(
-            ycand,
-            "jet_idx",
-            np.zeros(ycand["typ"].shape, dtype=np.float32),
-        )
+
+        y_features = Y_FEATURES[:-1]
+        if with_jet_idx:
+            ygen = append_fields(ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32))
+            ycand = append_fields(
+                ycand,
+                "jet_idx",
+                np.zeros(ycand["typ"].shape, dtype=np.float32),
+            )
+            y_features = Y_FEATURES
 
         Xelem_flat = np.stack(
             [Xelem[k].view(np.float32).data for k in X_FEATURES],
             axis=-1,
         )
         ygen_flat = np.stack(
-            [ygen[k].view(np.float32).data for k in Y_FEATURES],
+            [ygen[k].view(np.float32).data for k in y_features],
             axis=-1,
         )
         ycand_flat = np.stack(
-            [ycand[k].view(np.float32).data for k in Y_FEATURES],
+            [ycand[k].view(np.float32).data for k in y_features],
             axis=-1,
         )
 
@@ -185,42 +189,43 @@ def prepare_data_cms(fn):
         ycand = ycand_flat
         ygen = ygen_flat
 
-        # prepare gen candidates for clustering
-        cls_id = ygen[..., 0]
-        valid = cls_id != 0
-        # save mapping of index after masking -> index before masking as numpy array
-        # inspired from:
-        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-        cumsum = np.cumsum(valid) - 1
-        _, index_mapping = np.unique(cumsum, return_index=True)
+        if with_jet_idx:
+            # prepare gen candidates for clustering
+            cls_id = ygen[..., 0]
+            valid = cls_id != 0
+            # save mapping of index after masking -> index before masking as numpy array
+            # inspired from:
+            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+            cumsum = np.cumsum(valid) - 1
+            _, index_mapping = np.unique(cumsum, return_index=True)
 
-        pt = ygen[valid, Y_FEATURES.index("pt")]
-        eta = ygen[valid, Y_FEATURES.index("eta")]
-        phi = np.arctan2(
-            ygen[valid, Y_FEATURES.index("sin_phi")],
-            ygen[valid, Y_FEATURES.index("cos_phi")],
-        )
-        e = ygen[valid, Y_FEATURES.index("e")]
-        vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
+            pt = ygen[valid, y_features.index("pt")]
+            eta = ygen[valid, y_features.index("eta")]
+            phi = np.arctan2(
+                ygen[valid, y_features.index("sin_phi")],
+                ygen[valid, y_features.index("cos_phi")],
+            )
+            e = ygen[valid, y_features.index("e")]
+            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
 
-        # cluster jets, sort jet indices in descending order by pt
-        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-        sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
-        # retrieve corresponding indices of constituents
-        constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
+            # cluster jets, sort jet indices in descending order by pt
+            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
+            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
+            # retrieve corresponding indices of constituents
+            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
 
-        # add index information to ygen and ycand
-        # index jets in descending order by pt starting from 1:
-        # 0 is null (unclustered),
-        # 1 is 1st highest-pt jet,
-        # 2 is 2nd highest-pt jet, ...
-        for jet_idx in sorted_jet_idx:
-            jet_constituents = [
-                index_mapping[idx] for idx in constituent_idx[jet_idx]
-            ]  # map back to constituent index *before* masking
-            ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-            ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+            # add index information to ygen and ycand
+            # index jets in descending order by pt starting from 1:
+            # 0 is null (unclustered),
+            # 1 is 1st highest-pt jet,
+            # 2 is 2nd highest-pt jet, ...
+            for jet_idx in sorted_jet_idx:
+                jet_constituents = [
+                    index_mapping[idx] for idx in constituent_idx[jet_idx]
+                ]  # map back to constituent index *before* masking
+                ygen[jet_constituents, y_features.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
+                ycand[jet_constituents, y_features.index("jet_idx")] = jet_idx + 1
 
         Xs.append(X)
         ygens.append(ygen)

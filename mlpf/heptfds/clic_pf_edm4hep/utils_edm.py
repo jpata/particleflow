@@ -3,6 +3,9 @@ import fastjet
 import numpy as np
 import vector
 
+jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+min_jet_pt = 1.0  # GeV
+
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
     "type",
@@ -61,49 +64,50 @@ def split_sample(path, test_frac=0.8):
     }
 
 
-def generate_examples(files):
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-    min_jet_pt = 1.0  # GeV
-    for fi in files:
-        ret = ak.from_parquet(fi)
+def prepare_data_clic(fn, with_jet_idx=True):
+    ret = ak.from_parquet(fn)
 
-        X_track = ret["X_track"]
-        X_cluster = ret["X_cluster"]
+    X_track = ret["X_track"]
+    X_cluster = ret["X_cluster"]
 
-        assert len(X_track) == len(X_cluster)
-        nev = len(X_track)
+    assert len(X_track) == len(X_cluster)
+    nev = len(X_track)
 
-        for iev in range(nev):
+    Xs = []
+    ygens = []
+    ycands = []
+    for iev in range(nev):
 
-            X1 = ak.to_numpy(X_track[iev])
-            X2 = ak.to_numpy(X_cluster[iev])
+        X1 = ak.to_numpy(X_track[iev])
+        X2 = ak.to_numpy(X_cluster[iev])
 
-            if len(X1) == 0 or len(X2) == 0:
-                continue
+        if len(X1) == 0 or len(X2) == 0:
+            continue
 
-            ygen_track = ak.to_numpy(ret["ygen_track"][iev])
-            ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
-            ycand_track = ak.to_numpy(ret["ycand_track"][iev])
-            ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+        ygen_track = ak.to_numpy(ret["ygen_track"][iev])
+        ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
+        ycand_track = ak.to_numpy(ret["ycand_track"][iev])
+        ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
 
-            if len(ygen_track) == 0 or len(ygen_cluster) == 0:
-                continue
+        if len(ygen_track) == 0 or len(ygen_cluster) == 0:
+            continue
 
-            # pad feature dim between tracks and clusters to the same size
-            if X1.shape[1] < X2.shape[1]:
-                X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
-            if X2.shape[1] < X1.shape[1]:
-                X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
+        # pad feature dim between tracks and clusters to the same size
+        if X1.shape[1] < X2.shape[1]:
+            X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
+        if X2.shape[1] < X1.shape[1]:
+            X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
 
-            # concatenate tracks and clusters in features and targets
-            X = np.concatenate([X1, X2])
-            ygen = np.concatenate([ygen_track, ygen_cluster])
-            ycand = np.concatenate([ycand_track, ycand_cluster])
+        # concatenate tracks and clusters in features and targets
+        X = np.concatenate([X1, X2])
+        ygen = np.concatenate([ygen_track, ygen_cluster])
+        ycand = np.concatenate([ycand_track, ycand_cluster])
 
-            assert ygen.shape[0] == X.shape[0]
-            assert ycand.shape[0] == X.shape[0]
+        assert ygen.shape[0] == X.shape[0]
+        assert ycand.shape[0] == X.shape[0]
 
-            # add jet_idx column
+        # add jet_idx column
+        if with_jet_idx:
             ygen = np.concatenate(
                 [
                     ygen.astype(np.float32),
@@ -119,12 +123,13 @@ def generate_examples(files):
                 axis=-1,
             )
 
-            # replace PID with index in labels array
-            arr = np.array([labels.index(p) for p in ygen[:, 0]])
-            ygen[:, 0][:] = arr[:]
-            arr = np.array([labels.index(p) for p in ycand[:, 0]])
-            ycand[:, 0][:] = arr[:]
+        # replace PID with index in labels array
+        arr = np.array([labels.index(p) for p in ygen[:, 0]])
+        ygen[:, 0][:] = arr[:]
+        arr = np.array([labels.index(p) for p in ycand[:, 0]])
+        ycand[:, 0][:] = arr[:]
 
+        if with_jet_idx:
             # prepare gen candidates for clustering
             cls_id = ygen[..., 0]
             valid = cls_id != 0
@@ -160,11 +165,20 @@ def generate_examples(files):
                 ]  # map back to constituent index *before* masking
                 ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
                 ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+        Xs.append(X)
+        ygens.append(ygen)
+        ycands.append(ycand)
+    return Xs, ygens, ycands
 
+
+def generate_examples(files, with_jet_idx=True):
+    for fi in files:
+        Xs, ygens, ycands = prepare_data_clic(fi, with_jet_idx=with_jet_idx)
+        for iev in range(len(Xs)):
             yield str(fi) + "_" + str(iev), {
-                "X": X.astype(np.float32),
-                "ygen": ygen,
-                "ycand": ycand,
+                "X": Xs[iev].astype(np.float32),
+                "ygen": ygens[iev],
+                "ycand": ycands[iev],
             }
 
 
