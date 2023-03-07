@@ -1,294 +1,45 @@
-# import bz2
-import bz2
 import multiprocessing
 import os.path as osp
-import pickle
 import sys
 from glob import glob
 
-import awkward as ak
-
-# import fastjet
-import numpy as np
 import torch
 import tqdm
 
-# import vector
-from numpy.lib.recfunctions import append_fields
-
-# from numpy.lib.recfunctions import append_fields
 from torch_geometric.data import Data, Dataset
 
-sys.path
-sys.path.append("../")
-# from heptfds.cms_pf.cms_utils import prepare_data_cms
+sys.path.append(sys.path[0] + "/..")  # temp hack
+from heptfds.cms_pf.cms_utils import prepare_data_cms
+from heptfds.delphes_pf.delphes_utils import prepare_data_delphes
+from heptfds.clic_pf_edm4hep.utils_edm import prepare_data_clic
 
 
-def prepare_data_cms(fn):
-    """
-    Takes as input a bz2 file that contains the cms raw information, and returns a list of PyG Data() objects.
-    Each element of the list looks like this ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
-
-    Args
-        raw_file_name: raw parquet data file.
-    Returns
-        list of Data() objects.
-    """
-    from utils import CLASS_LABELS, X_FEATURES
-
-    Y_FEATURES = [
-        "typ_idx",
-        "charge",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "e",
-        # "jet_idx",
-    ]
-    # ELEM_NAMES = ["NONE", "TRACK", "PS1", "PS2", "ECAL", "HCAL", "GSF", "BREM", "HFEM", "HFHAD", "SC", "HO"]
-    ELEM_LABELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-
-    # prepare jet definition and min jet pt for clustering gen jets
-    # jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-    # min_jet_pt = 5.0  # GeV
-
-    if fn.endswith(".pkl"):
-        data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
-    elif fn.endswith(".pkl.bz2"):
-        data = pickle.load(bz2.BZ2File(fn, "rb"))
-
+def prepare_data_pyg(fn, func):
+    Xs, ygens, ycands = func(fn, with_jet_idx=False)
     batched_data = []
-    for event in data:
-        Xelem = event["Xelem"]
-        ygen = event["ygen"]
-        ycand = event["ycand"]
-
-        # remove PS and BREM from inputs
-        msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
-
-        Xelem = Xelem[~msk_ps]
-        ygen = ygen[~msk_ps]
-        ycand = ycand[~msk_ps]
-
-        Xelem = append_fields(
-            Xelem,
-            "typ_idx",
-            np.array(
-                [ELEM_LABELS.index(int(i)) for i in Xelem["typ"]],
-                dtype=np.float32,
-            ),
-        )
-        ygen = append_fields(
-            ygen,
-            "typ_idx",
-            np.array(
-                [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ygen["typ"]],
-                dtype=np.float32,
-            ),
-        )
-        ygen = append_fields(ygen, "jet_idx", np.zeros(ygen["typ"].shape, dtype=np.float32))
-        ycand = append_fields(
-            ycand,
-            "typ_idx",
-            np.array(
-                [CLASS_LABELS["CMS"].index(abs(int(i))) for i in ycand["typ"]],
-                dtype=np.float32,
-            ),
-        )
-        ycand = append_fields(
-            ycand,
-            "jet_idx",
-            np.zeros(ycand["typ"].shape, dtype=np.float32),
-        )
-
-        Xelem_flat = np.stack(
-            [Xelem[k].view(np.float32).data for k in X_FEATURES["CMS"]],
-            axis=-1,
-        )
-        ygen_flat = np.stack(
-            [ygen[k].view(np.float32).data for k in Y_FEATURES],
-            axis=-1,
-        )
-        ycand_flat = np.stack(
-            [ycand[k].view(np.float32).data for k in Y_FEATURES],
-            axis=-1,
-        )
-
-        # # take care of outliers
-        # # Xelem_flat[np.isnan(Xelem_flat)] = 0
-        # # Xelem_flat[np.abs(Xelem_flat) > 1e4] = 0
-        # # ygen_flat[np.isnan(ygen_flat)] = 0
-        # # ygen_flat[np.abs(ygen_flat) > 1e4] = 0
-        # # ycand_flat[np.isnan(ycand_flat)] = 0
-        # # ycand_flat[np.abs(ycand_flat) > 1e4] = 0
-
-        # X = Xelem_flat
-        # ycand = ycand_flat
-        # ygen = ygen_flat
-
-        # # prepare gen candidates for clustering
-        # cls_id = ygen[..., 0]
-        # valid = cls_id != 0
-        # # save mapping of index after masking -> index before masking as numpy array
-        # # inspired from:
-        # # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-        # cumsum = np.cumsum(valid) - 1
-        # _, index_mapping = np.unique(cumsum, return_index=True)
-
-        # pt = ygen[valid, Y_FEATURES.index("pt")]
-        # eta = ygen[valid, Y_FEATURES.index("eta")]
-        # phi = np.arctan2(
-        #     ygen[valid, Y_FEATURES.index("sin_phi")],
-        #     ygen[valid, Y_FEATURES.index("cos_phi")],
-        # )
-        # e = ygen[valid, Y_FEATURES.index("e")]
-        # vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
-
-        # # cluster jets, sort jet indices in descending order by pt
-        # cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        # jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-        # sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
-        # # retrieve corresponding indices of constituents
-        # constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
-
-        # # add index information to ygen and ycand
-        # # index jets in descending order by pt starting from 1:
-        # # 0 is null (unclustered),
-        # # 1 is 1st highest-pt jet,
-        # # 2 is 2nd highest-pt jet, ...
-        # for jet_idx in sorted_jet_idx:
-        #     jet_constituents = [
-        #         index_mapping[idx] for idx in constituent_idx[jet_idx]
-        #     ]  # map back to constituent index *before* masking
-        #     ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-        #     ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
-
-        # print("X", X.shape)
-        # print("ygen", ygen.shape)
-        # print("ycand", ycand.shape)
-
-        d = Data(
-            x=torch.tensor(Xelem_flat),
-            ygen=torch.tensor(ygen_flat[:, 1:]),
-            ygen_id=torch.tensor(ygen_flat[:, 0]).long(),
-            ycand=torch.tensor(ycand_flat[:, 1:]),
-            ycand_id=torch.tensor(ycand_flat[:, 0]).long(),
-        )
-        batched_data.append(d)
-    return batched_data
-
-
-def prepare_data_delphes(fn):
-    """
-    Takes as input a pkl file that contains the delphes raw information, and returns a list of PyG Data() objects.
-    Each element of the list looks like this ~ Data(x=[#, 12], ygen=[#, 6], ygen_id=[#, 6], ycand=[#, 6], ycand_id=[#, 6])
-
-    Args
-        raw_file_name: raw parquet data file.
-    Returns
-        list of Data() objects.
-    """
-
-    with open(fn, "rb") as fi:
-        data = pickle.load(fi, encoding="iso-8859-1")
-
-    batched_data = []
-    for i in range(len(data["X"])):
+    for X, ygen, ycand in zip(Xs, ygens, ycands):
         # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
         d = Data(
-            x=torch.tensor(data["X"][i], dtype=torch.float),
-            ygen=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 1:],
-            ygen_id=torch.tensor(data["ygen"][i], dtype=torch.float)[:, 0].long(),
-            ycand=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 1:],
-            ycand_id=torch.tensor(data["ycand"][i], dtype=torch.float)[:, 0].long(),
-        )
-
-        batched_data.append(d)
-    return batched_data
-
-
-def prepare_data_clic(fn):
-    def generate_examples(files):
-        """
-        Function that reads the CLIC data information from the parquet files.
-
-        Args
-            list of files
-
-        Returns
-            a generator which yields [{filename}_{index}, X, ygen, ycand]
-        """
-
-        labels = [0, 211, 130, 22, 11, 13]
-        for fi in files:
-            ret = ak.from_parquet(fi)
-            X_track = ret["X_track"]
-            X_cluster = ret["X_cluster"]
-
-            assert len(X_track) == len(X_cluster)
-            nev = len(X_track)
-
-            for iev in range(nev):
-
-                X1 = ak.to_numpy(X_track[iev])
-                X2 = ak.to_numpy(X_cluster[iev])
-
-                X1[np.isnan(X1)] = 0.0
-                X1[np.isinf(X1)] = 0.0
-                X2[np.isnan(X2)] = 0.0
-                X2[np.isinf(X2)] = 0.0
-
-                if len(X1) == 0 or len(X2) == 0:
-                    continue
-
-                ygen_track = ak.to_numpy(ret["ygen_track"][iev])
-                ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
-                ycand_track = ak.to_numpy(ret["ycand_track"][iev])
-                ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
-
-                if len(ygen_track) == 0 or len(ygen_cluster) == 0:
-                    continue
-
-                # pad feature dim between tracks and clusters to the same size
-                if X1.shape[1] < X2.shape[1]:
-                    X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
-                if X2.shape[1] < X1.shape[1]:
-                    X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
-
-                # concatenate tracks and clusters in features and targets
-                X = np.concatenate([X1, X2])
-                ygen = np.concatenate([ygen_track, ygen_cluster])
-                ycand = np.concatenate([ycand_track, ycand_cluster])
-
-                assert ygen.shape[0] == X.shape[0]
-                assert ycand.shape[0] == X.shape[0]
-
-                # replace PID with index in labels array
-                arr = np.array([labels.index(p) for p in ygen[:, 0]])
-                ygen[:, 0][:] = arr[:]
-                arr = np.array([labels.index(p) for p in ycand[:, 0]])
-                ycand[:, 0][:] = arr[:]
-
-                yield str(fi) + "_" + str(iev), {
-                    "X": X.astype(np.float32),
-                    "ygen": ygen,
-                    "ycand": ycand,
-                }
-
-    events = generate_examples([fn])
-    batched_data = []
-    for event in events:
-        Xs, ys_gen, ys_cand = event[1]["X"], event[1]["ygen"], event[1]["ycand"]
-        d = Data(
-            x=torch.tensor(Xs),
-            ygen=torch.tensor(ys_gen[:, 1:]),
-            ygen_id=torch.tensor(ys_gen[:, 0]).long(),
-            ycand=torch.tensor(ys_cand[:, 1:]),
-            ycand_id=torch.tensor(ys_cand[:, 0]).long(),
+            x=torch.tensor(X, dtype=torch.float),
+            ygen=torch.tensor(ygen, dtype=torch.float)[:, 1:],
+            ygen_id=torch.tensor(ygen, dtype=torch.float)[:, 0].long(),
+            ycand=torch.tensor(ycand, dtype=torch.float)[:, 1:],
+            ycand_id=torch.tensor(ycand, dtype=torch.float)[:, 0].long(),
         )
         batched_data.append(d)
     return batched_data
+
+
+def prepare_data_delphes_pyg(fn):
+    return prepare_data_pyg(fn, prepare_data_delphes)
+
+
+def prepare_data_cms_pyg(fn):
+    return prepare_data_pyg(fn, prepare_data_cms)
+
+
+def prepare_data_clic_pyg(fn):
+    return prepare_data_pyg(fn, prepare_data_clic)
 
 
 def process_func(args):
@@ -354,13 +105,13 @@ class PFGraphDataset(Dataset):
         """
 
         if self.data == "CMS":
-            return prepare_data_cms(osp.join(self.raw_dir, raw_file_name))
+            return prepare_data_cms_pyg(osp.join(self.raw_dir, raw_file_name))
 
         elif self.data == "DELPHES":
-            return prepare_data_delphes(osp.join(self.raw_dir, raw_file_name))
+            return prepare_data_delphes_pyg(osp.join(self.raw_dir, raw_file_name))
 
         elif self.data == "CLIC":
-            return prepare_data_clic([osp.join(self.raw_dir, raw_file_name)])
+            return prepare_data_clic_pyg(osp.join(self.raw_dir, raw_file_name))
 
     def process_multiple_files(self, filenames, idx_file):
         datas = []
@@ -370,7 +121,7 @@ class PFGraphDataset(Dataset):
                 continue
             datas.append(x)
 
-        datas = sum(datas, [])
+        datas = sum(datas[1:], datas[0])
         p = osp.join(self.processed_dir, "data_{}.pt".format(idx_file))
         torch.save(datas, p)
         print(f"saved file {p}")
@@ -389,6 +140,8 @@ class PFGraphDataset(Dataset):
             idx_file += 1
         pool = multiprocessing.Pool(num_proc)
         pool.map(process_func, pars)
+        # for p in pars:
+        #     process_func(p)
 
     def get(self, idx):
         p = osp.join(self.processed_dir, "data_{}.pt".format(idx))

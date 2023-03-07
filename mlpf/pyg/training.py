@@ -1,5 +1,4 @@
 import json
-import math
 import pickle as pkl
 import time
 from typing import Optional
@@ -12,15 +11,12 @@ import torch_geometric
 from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
 from torch import Tensor, nn
 from torch.nn import functional as F
+import tqdm
 
 matplotlib.use("Agg")
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
-
-
-# keep track of the training step across epochs
-istep_global = 0
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
@@ -104,19 +100,6 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def compute_weights(device, target_ids, num_classes):
-    """
-    computes necessary weights to accomodate class imbalance in the loss function
-    """
-
-    vs, cs = torch.unique(target_ids, return_counts=True)
-    weights = torch.zeros(num_classes).to(device=device)
-    for k, v in zip(vs, cs):
-        weights[k] = 1.0 / math.sqrt(float(v))
-    # weights[2] = weights[2] * 3  # emphasize nhadrons
-    return weights
-
-
 @torch.no_grad()
 def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None):
     with torch.no_grad():
@@ -140,7 +123,6 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
     """
 
     is_train = not (optimizer is None)
-    global istep_global
 
     loss_obj_id = FocalLoss(gamma=2.0)
 
@@ -169,7 +151,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
         tf = 0
-        for i, batch in enumerate(file):
+        for i, batch in tqdm.tqdm(enumerate(file), total=len(file)):
 
             if ssl_encoder is not None:
                 # seperate PF-elements
@@ -193,7 +175,8 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             target_ids = event.ygen_id
 
             target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
-            target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1
+            target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
+            assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
             loss_ = {}
             # for CLASSIFYING PID
