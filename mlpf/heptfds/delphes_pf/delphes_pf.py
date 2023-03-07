@@ -1,20 +1,10 @@
-"""delphes_pf dataset."""
-import os
-import resource
 from pathlib import Path
-
 import tensorflow as tf
 import tqdm
 
 import tensorflow_datasets as tfds
 
 from delphes_utils import prepare_data_delphes, X_FEATURES, Y_FEATURES
-
-# Increase python's soft limit on number of open files to accomodate tensorflow_datasets sharding
-# https://github.com/tensorflow/datasets/issues/1441
-low, high = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (high, high))
-
 
 _DESCRIPTION = """
 Dataset generated with Delphes.
@@ -24,6 +14,7 @@ TTbar and QCD events with PU~200.
 
 # TODO(delphes_pf): BibTeX citation
 _CITATION = """
+https://zenodo.org/record/4559324#.YTs853tRVH4
 """
 
 
@@ -56,7 +47,7 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
             # features, specify them here. They'll be used if
             # `as_supervised=True` in `builder.as_dataset`.
             supervised_keys=("X", "ygen"),  # Set to `None` to disable
-            homepage="",
+            homepage="https://zenodo.org/record/4559324#.YTs853tRVH4",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES),
         )
@@ -78,11 +69,3 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
                     "ygen": ygens[iev],
                     "ycand": ycands[iev],
                 }
-
-
-def get_delphes_from_zenodo(download_dir="."):
-    # url = 'https://zenodo.org/record/4559324'
-    zenodo_doi = "10.5281/zenodo.4559324"
-    print("Downloading data from {} to {}".format(zenodo_doi, download_dir))
-    os.system("zenodo_get -d {} -o {}".format(zenodo_doi, download_dir))
-    return Path(download_dir)
