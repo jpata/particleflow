@@ -144,7 +144,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
         losses[loss] = 0.0
 
     tf_0, tf_f = time.time(), 0
-    for num, file in enumerate(file_loader):
+    for num, file in tqdm.tqdm(enumerate(file_loader), total=len(file_loader)):
         if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
             print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
             tf_f = tf_f + (time.time() - tf_0)
