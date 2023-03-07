@@ -151,8 +151,8 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
         tf = 0
-        for i, batch in tqdm.tqdm(enumerate(file), total=len(file)):
-
+        for i, batch in enumerate(file):
+            print(batch.batch.shape, batch.batch.unique())
             if ssl_encoder is not None:
                 # seperate PF-elements
                 tracks, clusters = distinguish_PFelements(batch.to(rank))
