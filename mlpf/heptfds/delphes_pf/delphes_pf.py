@@ -35,6 +35,9 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         "1.0.0": "Initial release.",
         "1.1.0": "Do not pad events to the same size",
     }
+    MANUAL_DOWNLOAD_INSTRUCTIONS = """
+    Download from https://zenodo.org/record/4559324#.YTs853tRVH4
+    """
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -59,28 +62,10 @@ class DelphesPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
-        """Returns SplitGenerators."""
-        delphes_dir = dl_manager.download_dir / "delphes_pf"
-        if delphes_dir.exists():
-            print("INFO: Data already exists. Please delete {} if you want to download data again.".format(delphes_dir))
-        else:
-            get_delphes_from_zenodo(download_dir=dl_manager.download_dir / "delphes_pf")
-
-        ttbar_dir = delphes_dir / "pythia8_ttbar/raw"
-        qcd_dir = delphes_dir / "pythia8_qcd/val"
-
-        if not ttbar_dir.exists():
-            ttbar_dir.mkdir(parents=True)
-            for ttbar_file in delphes_dir.glob("*ttbar*.pkl.bz2"):
-                ttbar_file.rename(ttbar_dir / ttbar_file.name)
-        if not qcd_dir.exists():
-            qcd_dir.mkdir(parents=True)
-            for qcd_file in delphes_dir.glob("*qcd*.pkl.bz2"):
-                qcd_file.rename(qcd_dir / qcd_file.name)
-
+        path = Path(dl_manager.manual_dir)
         return {
-            "train": self._generate_examples(delphes_dir / "pythia8_ttbar/raw"),
-            "test": self._generate_examples(delphes_dir / "pythia8_qcd/val"),
+            "train": self._generate_examples(path / "pythia8_ttbar"),
+            "test": self._generate_examples(path / "pythia8_qcd"),
         }
 
     def _generate_examples(self, path):
