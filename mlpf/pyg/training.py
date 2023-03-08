@@ -12,6 +12,7 @@ from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
 from torch import Tensor, nn
 from torch.nn import functional as F
 import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 matplotlib.use("Agg")
 
@@ -144,15 +145,14 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
         losses[loss] = 0.0
 
     tf_0, tf_f = time.time(), 0
-    for num, file in tqdm.tqdm(enumerate(file_loader), total=len(file_loader)):
+    for num, file in enumerate(file_loader):
         if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
             print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
             tf_f = tf_f + (time.time() - tf_0)
             file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
 
         tf = 0
-        for i, batch in enumerate(file):
-            print(batch.batch.shape, batch.batch.unique())
+        for i, batch in tqdm.tqdm(enumerate(file), total=len(file)):
             if ssl_encoder is not None:
                 # seperate PF-elements
                 tracks, clusters = distinguish_PFelements(batch.to(rank))
@@ -243,6 +243,8 @@ def training_loop(
         ssl_encoder: the encoder part of VICReg. If None is provided then the function will run a supervised training.
     """
 
+    tensorboard_writer = SummaryWriter(outpath)
+
     t0_initial = time.time()
 
     losses_of_interest = ["Total", "Classification", "Regression"]
@@ -273,6 +275,8 @@ def training_loop(
 
         # training step
         losses_t = train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder)
+        for k, v in losses_t.items():
+            tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
@@ -280,6 +284,10 @@ def training_loop(
         losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, ssl_encoder)
         for loss in losses_of_interest:
             losses["valid"][loss].append(losses_v[loss])
+        for k, v in losses_v.items():
+            tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
+
+        tensorboard_writer.flush()
 
         # save the lowest value of each component of the loss to print it on the legend of the loss plots
         for loss in losses_of_interest:

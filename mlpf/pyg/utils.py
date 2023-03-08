@@ -248,23 +248,18 @@ def make_file_loaders(world_size, data, num_files=1, num_workers=0, prefetch_fac
         element is a tuple of size=num_files containing Data() objects.
     """
 
-    if world_size > 0:
-        return torch.utils.data.DataLoader(
-            data,
-            num_files,
-            shuffle=False,
-            num_workers=2,
-            prefetch_factor=4,
-            collate_fn=Collater(),
-            pin_memory=True,
-        )
-    else:
-        return torch.utils.data.DataLoader(
-            data,
-            num_files,
-            shuffle=False,
-            num_workers=2,
-            prefetch_factor=4,
-            collate_fn=Collater(),
-            pin_memory=False,
-        )
+    pin_memory = world_size > 0
+
+    # prevent a "too many open files" error
+    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-421146936
+    torch.multiprocessing.set_sharing_strategy("file_system")
+
+    return torch.utils.data.DataLoader(
+        data,
+        num_files,
+        shuffle=False,
+        num_workers=2,
+        prefetch_factor=4,
+        collate_fn=Collater(),
+        pin_memory=pin_memory,
+    )
