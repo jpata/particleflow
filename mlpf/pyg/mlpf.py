@@ -212,6 +212,12 @@ class MLPF(nn.Module):
         else:
             embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
+        # do some sanity checks on the PFElement input data
+        assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
+        assert torch.all(torch.abs(input_[:, 4]) <= 1.0)  # cos_phi
+        assert torch.all(torch.abs(input_[:, 1]) >= 0.0)  # pt
+        assert torch.all(torch.abs(input_[:, 5]) >= 0.0)  # energy
+
         # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
         # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
         preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]
