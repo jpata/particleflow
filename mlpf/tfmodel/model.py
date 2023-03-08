@@ -238,8 +238,6 @@ class InputEncodingCMS(tf.keras.layers.Layer):
         Xeta1 = tf.clip_by_value(tf.expand_dims(tf.sinh(X[:, :, 2]), axis=-1), -10, 10)
         Xeta2 = tf.clip_by_value(tf.expand_dims(tf.cosh(X[:, :, 2]), axis=-1), -10, 10)
         Xabs_eta = tf.expand_dims(tf.math.abs(X[:, :, 2]), axis=-1)
-        Xphi1 = tf.expand_dims(tf.sin(X[:, :, 3]), axis=-1)
-        Xphi2 = tf.expand_dims(tf.cos(X[:, :, 3]), axis=-1)
 
         Xe_0p5 = tf.math.sqrt(Xe)
         Xe_2 = tf.math.pow(Xe, 2)
@@ -258,8 +256,6 @@ class InputEncodingCMS(tf.keras.layers.Layer):
                 Xeta1,
                 Xeta2,
                 Xabs_eta,
-                Xphi1,
-                Xphi2,
                 Xe,
                 Xe_0p5,
                 Xe_2,
@@ -867,16 +863,9 @@ class OutputDecoding(tf.keras.Model):
         orig_pt = tf.cast(X_input[:, :, 1:2], out_dtype)
         orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
-        # FIXME: better schema propagation between hep_tfds
-        # skip connection from raw input values
-        if self.schema == "cms" or self.schema == "clic":
-            orig_sin_phi = tf.cast(tf.math.sin(X_input[:, :, 3:4]) * msk_input, out_dtype)
-            orig_cos_phi = tf.cast(tf.math.cos(X_input[:, :, 3:4]) * msk_input, out_dtype)
-            orig_energy = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-        elif self.schema == "delphes" or self.schema == "clic":
-            orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
-            orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-            orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
+        orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
+        orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
+        orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
 
         if self.regression_use_classification:
             X_encoded = tf.concat(
