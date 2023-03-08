@@ -108,8 +108,8 @@ def train(rank, world_size, args, data, model, outpath):
     valid_dataset = torch.utils.data.Subset(
         data, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
     )
-    print("train_dataset=", len(train_dataset))
-    print("valid_dataset=", len(valid_dataset))
+    print("train_dataset={}".format(len(train_dataset)))
+    print("valid_dataset={}".format(len(valid_dataset)))
 
     if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
         file_loader_train = make_file_loaders(world_size, train_dataset)
@@ -261,6 +261,7 @@ if __name__ == "__main__":
 
         # load the ttbar data for training/validation
         data = load_data(args.data_path, args.dataset, "TTbar")
+        print("loaded data={}".format(len(data)))
 
         # run the training using DDP if more than one gpu is available
         if world_size > 1:
@@ -295,6 +296,7 @@ if __name__ == "__main__":
 
         # load the qcd data for testing
         data = load_data(args.data_path, args.dataset, args.sample)
+        print("loaded data={}".format(len(data)))
 
         # run the inference using DDP if more than one gpu is available
         if world_size > 1:
