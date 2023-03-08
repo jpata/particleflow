@@ -140,6 +140,8 @@ class PFGraphDataset(Dataset):
             idx_file += 1
         pool = multiprocessing.Pool(num_proc)
         pool.map(process_func, pars)
+        # for p in pars:
+        #     process_func(p)
 
     def get(self, idx):
         fn = "data_{}.pt".format(idx)

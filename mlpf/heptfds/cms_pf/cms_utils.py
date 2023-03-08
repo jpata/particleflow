@@ -1,10 +1,10 @@
 import bz2
 import pickle
+import tqdm
 
 import awkward as ak
 import fastjet
 import numpy as np
-import tqdm
 import vector
 from numpy.lib.recfunctions import append_fields
 
@@ -51,7 +51,8 @@ X_FEATURES = [
     "typ_idx",
     "pt",
     "eta",
-    "phi",
+    "sin_phi",
+    "cos_phi",
     "e",
     "layer",
     "depth",
@@ -117,7 +118,7 @@ def prepare_data_cms(fn, with_jet_idx=True):
     elif fn.endswith(".pkl.bz2"):
         data = pickle.load(bz2.BZ2File(fn, "rb"))
 
-    for event in data:
+    for event in tqdm.tqdm(data):
         Xelem = event["Xelem"]
         ygen = event["ygen"]
         ycand = event["ycand"]
@@ -128,6 +129,17 @@ def prepare_data_cms(fn, with_jet_idx=True):
         Xelem = Xelem[~msk_ps]
         ygen = ygen[~msk_ps]
         ycand = ycand[~msk_ps]
+
+        Xelem = append_fields(
+            Xelem,
+            "sin_phi",
+            np.sin(Xelem["phi"]),
+        )
+        Xelem = append_fields(
+            Xelem,
+            "cos_phi",
+            np.cos(Xelem["phi"]),
+        )
 
         Xelem = append_fields(
             Xelem,
