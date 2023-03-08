@@ -100,7 +100,7 @@ class PFGraphDataset(Dataset):
             raw_file_name: raw data file name.
         Returns
             batched_data: a list of Data() objects of the form
-             cms ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
+             cms ~ Data(x=[#, 42], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
              delphes ~ Data(x=[#, 12], ygen=[#elem, 6], ygen_id=[#, 6], ycand=[#, 6], ycand_id=[#, 6])
         """
 
