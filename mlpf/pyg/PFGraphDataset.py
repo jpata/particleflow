@@ -123,8 +123,8 @@ class PFGraphDataset(Dataset):
             if x is None:
                 continue
             datas.append(x)
-        
-        assert(len(datas)>0)
+
+        assert len(datas) > 0
         datas = sum(datas[1:], datas[0])
         p = osp.join(self.processed_dir, "data_{}.pt".format(idx_file))
         torch.save(datas, p)
