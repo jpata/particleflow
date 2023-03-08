@@ -5,11 +5,11 @@
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/pytorch.simg
-cd ~/particleflow/mlpf
+cd ~/particleflow
 
-#TF training
+#pytorch training
 singularity exec -B /scratch-persistent --nv $IMG \
-  python3 ssl_pipeline.py --data_split_mode mix \
-  --prefix_VICReg pytorch_${SLURM_JOB_ID} --prefix_mlpf MLPF_test \
-  --train_mlpf --native --n_epochs_VICReg 0 --bs_mlpf 100 \
-  --n_epochs_mlpf 5000 --patience 200 --width_mlpf 256 --embedding_dim_mlpf 256 --lr 0.0001 --num_convs_mlpf 3 --nearest 32 --evaluate_mlpf
+  python3 mlpf/pyg_pipeline.py --dataset CLIC --data_path data/clic_edm4hep/ \
+  --outpath experiments/pytorch_${SLURM_JOB_ID} --bs 200 --n_train 1800 \
+  --n_valid 100 --n_test 100 --n_epochs 500 --propagate_dim 8 \
+  --space_dim 4 --nearest 32 --embedding_dim 256
