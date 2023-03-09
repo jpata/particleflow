@@ -22,3 +22,6 @@ tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar --manual_dir data
 python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
 python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
 python mlpf/pipeline.py plots --train-dir ./experiments/clic*
+
+#try to train a fp16 model
+python mlpf/pipeline.py train --config parameters/clic-fp16.yaml --nepochs 1 --customize pipeline_test

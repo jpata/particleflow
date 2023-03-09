@@ -200,7 +200,9 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
         )
 
         # X[:, :, 1:] - all the other non-categorical features
-        Xprop = X[:, :, 1:]
+
+        # FIXME: this clipping needs to be rethought, seems like some inputs have large values which cause NaN/Inf
+        Xprop = tf.clip_by_value(X[:, :, 1:], -100, 100)
 
         return tf.concat([Xid, Xprop], axis=-1)
 
@@ -885,7 +887,6 @@ class OutputDecoding(tf.keras.Model):
         pred_sin_phi = orig_sin_phi + pred_phi_corr[:, :, 0:1]
         pred_cos_phi = orig_cos_phi + pred_phi_corr[:, :, 1:2]
 
-        # FIXME: check that this is helpful
         pred_eta = tf.clip_by_value(pred_eta, -7, 7)
         pred_sin_phi = tf.clip_by_value(pred_sin_phi, -1, 1)
         pred_cos_phi = tf.clip_by_value(pred_cos_phi, -1, 1)
@@ -954,7 +955,6 @@ class OutputDecoding(tf.keras.Model):
             py = pred_pt * pred_sin_phi * msk_input_outtype * msk_outparticle
             met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
             ret["met"] = met
-
         return ret
 
     def set_trainable_regression(self):
@@ -1205,6 +1205,7 @@ class PFNetDense(tf.keras.Model):
             enc_all = cg(X_enc_cg, msk, training=training)
 
             if self.node_update_mode == "additive":
+                X_enc_cg = tf.cast(X_enc_cg, enc_all["enc"].dtype)
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
                 X_enc_cg = enc_all["enc"]
@@ -1229,6 +1230,7 @@ class PFNetDense(tf.keras.Model):
         for cg in self.cg_reg:
             enc_all = cg(X_enc_cg, msk, training=training)
             if self.node_update_mode == "additive":
+                X_enc_cg = tf.cast(X_enc_cg, enc_all["enc"].dtype)
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
                 X_enc_cg = enc_all["enc"]
