@@ -100,7 +100,7 @@ class PFGraphDataset(Dataset):
             raw_file_name: raw data file name.
         Returns
             batched_data: a list of Data() objects of the form
-             cms ~ Data(x=[#, 41], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
+             cms ~ Data(x=[#, 42], ygen=[#, 6], ygen_id=[#, 9], ycand=[#, 6], ycand_id=[#, 9])
              delphes ~ Data(x=[#, 12], ygen=[#elem, 6], ygen_id=[#, 6], ycand=[#, 6], ycand_id=[#, 6])
         """
 
@@ -113,6 +113,9 @@ class PFGraphDataset(Dataset):
         elif self.data == "CLIC":
             return prepare_data_clic_pyg(osp.join(self.raw_dir, raw_file_name))
 
+        else:
+            raise KeyError("unrecognized data: {}".format(self.data))
+
     def process_multiple_files(self, filenames, idx_file):
         datas = []
         for fn in tqdm.tqdm(filenames):
@@ -121,6 +124,7 @@ class PFGraphDataset(Dataset):
                 continue
             datas.append(x)
 
+        assert len(datas) > 0
         datas = sum(datas[1:], datas[0])
         p = osp.join(self.processed_dir, "data_{}.pt".format(idx_file))
         torch.save(datas, p)
@@ -144,8 +148,10 @@ class PFGraphDataset(Dataset):
         #     process_func(p)
 
     def get(self, idx):
-        p = osp.join(self.processed_dir, "data_{}.pt".format(idx))
+        fn = "data_{}.pt".format(idx)
+        p = osp.join(self.processed_dir, fn)
         data = torch.load(p, map_location="cpu")
+        print("loaded {}, N={}".format(fn, len(data)))
         return data
 
     def __getitem__(self, idx):
@@ -156,7 +162,7 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, required=True, help="'cms' or 'delphes'?")
+    parser.add_argument("--data", type=str, required=True, choices=["CMS", "DELPHES", "CLIC"])
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")
