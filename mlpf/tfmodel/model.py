@@ -202,7 +202,7 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
         # X[:, :, 1:] - all the other non-categorical features
 
         # FIXME: this clipping needs to be rethought, seems like some inputs have large values which cause NaN/Inf
-        Xprop = tf.clip_by_value(X[:, :, 1:], -100, 100)
+        Xprop = tf.clip_by_value(X[:, :, 1:], -200, 200)
 
         return tf.concat([Xid, Xprop], axis=-1)
 
@@ -1165,6 +1165,10 @@ class PFNetDense(tf.keras.Model):
 
     def call(self, inputs, training=False):
         X = inputs
+
+        # replace infs and nans with zeros
+        X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
+        X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
 
         shp = tf.shape(X)
         # tf.print("\nX", shp, X.device,"\n")
