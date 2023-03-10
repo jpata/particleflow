@@ -12,13 +12,13 @@ dataset:
   reg_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 1.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
-  eta_loss_coef: 1.0
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
-  energy_loss_coef: 1.0
+  pt_loss_coef: 10.0
+  eta_loss_coef: 10.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 10.0
   charge_loss:
     type: BinaryCrossentropy
     from_logits: yes
@@ -44,7 +44,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.00001
+  lr: 0.0001
   num_epochs: 500
   dtype: float16
   trainable:
@@ -135,7 +135,7 @@ parameters:
       type: NodePairGaussianKernel
       dist_mult: 0.1
       clip_value_low: 0.0
-      dist_norm: l1
+      dist_norm: l2
     num_node_messages: 2
     node_message:
       type: GHConvDense
@@ -145,8 +145,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 1
-  num_graph_layers_reg: 1
+  num_graph_layers_id: 5
+  num_graph_layers_reg: 5
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -161,7 +161,7 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
+    id_hidden_dim: 512
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
@@ -175,7 +175,7 @@ parameters:
     phi_num_layers: 2
     energy_num_layers: 2
     layernorm: yes
-    mask_reg_cls0: no
+    mask_reg_cls0: yes
 
   skip_connection: no
   debug: no
