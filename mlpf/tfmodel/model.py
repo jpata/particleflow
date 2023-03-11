@@ -1180,7 +1180,7 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        X = self.normalizer(Xorig)
+        X = tf.concat([Xorig[:, :, 0:1], self.normalizer(Xorig[:, :, 1:])], axis=-1)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
         X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
@@ -1428,6 +1428,8 @@ class PFNetTransformer(tf.keras.Model):
 
         self.key_dim = hidden_dim
 
+        self.normalizer = tf.keras.layers.Normalization(axis=-1, dtype="float32")
+
         self.ffn = point_wise_feed_forward_network(
             self.key_dim,
             self.key_dim,
@@ -1479,7 +1481,8 @@ class PFNetTransformer(tf.keras.Model):
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
-        X = inputs
+        Xorig = inputs
+        X = tf.concat([Xorig[:, :, 0:1], self.normalizer(Xorig[:, :, 1:])], axis=-1)
 
         # tf.print("\nX.shape=", tf.shape(X), "\n")
 
@@ -1535,7 +1538,7 @@ class PFNetTransformer(tf.keras.Model):
             X_reg = dec([X_reg, X_reg, msk], training=training) * msk_input
 
         # decode the outputs to classification and regression values
-        ret = self.output_dec([X, X_cls, X_reg, msk_input], training=training)
+        ret = self.output_dec([Xorig, X_cls, X_reg, msk_input], training=training)
 
         if self.multi_output:
             return ret

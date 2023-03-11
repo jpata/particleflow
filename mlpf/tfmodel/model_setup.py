@@ -228,7 +228,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         write_graph=False,
         write_images=False,
         update_freq="batch",
-        # profile_batch=(10,90),
+        # profile_batch=(10,200),
         profile_batch=0,
         dump_history=config["callbacks"]["tensorboard"]["dump_history"],
     )

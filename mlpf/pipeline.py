@@ -283,7 +283,7 @@ def train(
 
         callbacks.append(optim_callbacks)
 
-        model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X))
+        model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
         print(model.normalizer.mean)
         print(model.normalizer.variance)
 
