@@ -1180,7 +1180,7 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        X = tf.concat([Xorig[:, :, 0:1], self.normalizer(Xorig[:, :, 1:])], axis=-1)
+        X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
         X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
