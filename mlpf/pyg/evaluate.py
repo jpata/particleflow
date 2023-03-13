@@ -6,11 +6,30 @@ import numpy as np
 import torch
 import torch_geometric
 from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
+import awkward
+from jet_utils import build_dummy_array, match_two_jet_collections
+import fastjet
+import vector
+import tqdm
 
 from .utils import CLASS_LABELS, Y_FEATURES
 
-matplotlib.use("Agg")
+jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+jet_pt = 5.0
+jet_match_dr = 0.1
 
+def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
+    ret = {
+        "cls_id": arr_id,
+        "pt": arr_p4[:, 1],
+        "eta": arr_p4[:, 2],
+        "sin_phi": arr_p4[:, 3],
+        "cos_phi": arr_p4[:, 4],
+        "energy": arr_p4[:, 5],
+    }
+    ret["phi"] = np.arctan2(ret["sin_phi"], ret["cos_phi"])
+    ret = awkward.from_iter([{k: ret[k][batch_ids == b] for k in ret.keys()} for b in np.unique(batch_ids)])
+    return ret
 
 def one_hot_embedding(labels, num_classes):
     """
@@ -32,7 +51,6 @@ def make_predictions(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl_enc
     Saves the predictions as .pt files.
     Each .pt file will contain a dict() object with keys X, Y_pid, Y_p4;
     contains all the necessary event information to make plots.
-
     Args
         rank: int representing the gpu device id, or str=='cpu' (both work, trust me)
         model: pytorch model
@@ -157,80 +175,147 @@ def make_predictions(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl_enc
     print(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def postprocess_predictions(dataset, pred_path):
-    """
-    Loads all the predictions .pt files and combines them after some necessary processing to make plots.
-    Saves the processed predictions.
-    """
+def make_predictions_awk(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl_encoder=None):
+    num_classes = len(CLASS_LABELS[dataset])  # we have 6 classes for delphes and 9 for cms
 
-    print("--> Concatenating all predictions...")
-    t0 = time.time()
+    ti = time.time()
 
-    Xs = []
-    Y_pids = []
-    Y_p4s = []
+    tf_0, tf_f = time.time(), 0
+    for num, this_loader in enumerate(file_loader):
+        if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
+            print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
+            tf_f = tf_f + (time.time() - tf_0)
+            this_loader = torch_geometric.loader.DataLoader([x for t in this_loader for x in t], batch_size=batch_size)
 
-    PATH = list(glob.glob(f"{pred_path}/pred_batch*.pt"))
-    for i, fi in enumerate(PATH):
-        print(f"loading prediction # {i+1}/{len(PATH)}")
-        dd = torch.load(fi)
-        Xs.append(dd["X"])
-        Y_pids.append(dd["Y_pid"])
-        Y_p4s.append(dd["Y_p4"])
+        tf = 0
+        for i, batch in tqdm.tqdm(enumerate(this_loader), total=len(this_loader)):
 
-    Xs = torch.cat(Xs).numpy()
-    Y_pids = torch.cat(Y_pids)
-    Y_p4s = torch.cat(Y_p4s)
+            if ssl_encoder is not None:
+                # seperate PF-elements
+                tracks, clusters = distinguish_PFelements(batch.to(rank))
+                # ENCODE
+                embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
+                # concat the inputs with embeddings
+                tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
+                clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
+                # combine PF-elements
+                event = combine_PFelements(tracks, clusters).to(rank)
 
-    # reformat the loaded files for convenient plotting
-    yvals = {}
-    yvals["gen_cls"] = Y_pids[:, 0, :, :].numpy()
-    yvals["cand_cls"] = Y_pids[:, 1, :, :].numpy()
-    yvals["pred_cls"] = Y_pids[:, 2, :, :].numpy()
+            else:
+                event = batch.to(rank)
 
-    for feat, key in enumerate(Y_FEATURES[dataset][1:]):  # skip the PDG
-        yvals[f"gen_{key}"] = Y_p4s[:, 0, :, feat].unsqueeze(-1).numpy()
-        yvals[f"cand_{key}"] = Y_p4s[:, 1, :, feat].unsqueeze(-1).numpy()
-        yvals[f"pred_{key}"] = Y_p4s[:, 2, :, feat].unsqueeze(-1).numpy()
+            t0 = time.time()
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            tf = tf + (time.time() - t0)
 
-    print(f"Time taken to concatenate all predictions is: {round(((time.time() - t0) / 60), 2)} min")
+            pred_ids = torch.argmax(pred_ids_one_hot.detach(), axis=-1)
+            pred_charge = torch.argmax(pred_charge.detach(), axis=1, keepdim=True) - 1
+            pred_p4 = torch.cat([pred_charge, pred_momentum.detach()], axis=-1)
 
-    print("--> Further processing for convenient plotting")
-    t0 = time.time()
+            target_ids = event.ygen_id
+            target_p4 = event.ygen.to(dtype=torch.float32)
+            cand_ids = event.ycand_id
+            cand_p4 = event.ycand.to(dtype=torch.float32)
 
-    def flatten(arr):
-        return arr.reshape(-1, arr.shape[-1])
+            batch_ids = event.batch.cpu().numpy()
+            awkvals = {
+                "gen": particle_array_to_awkward(batch_ids, target_ids.cpu().numpy(), event.ygen.cpu().numpy()),
+                "cand": particle_array_to_awkward(batch_ids, cand_ids.cpu().numpy(), event.ycand.cpu().numpy()),
+                "pred": particle_array_to_awkward(
+                    batch_ids, pred_ids.cpu().numpy(), pred_p4.cpu().numpy()
+                ),
+            }
+            
+            gen_p4 = []
+            gen_cls = []
+            cand_p4 = []
+            cand_cls = []
+            pred_p4 = []
+            pred_cls = []
+            Xs = []
+            for _ibatch in np.unique(event.batch.cpu().numpy()):
+                msk_batch = event.batch == _ibatch
+                msk_gen = target_ids[msk_batch] != 0
+                msk_cand = cand_ids[msk_batch] != 0
+                msk_pred = pred_ids[msk_batch] != 0
 
-    X_f = flatten(Xs)
+                Xs.append(event.x[msk_batch].cpu().numpy())
 
-    msk_X_f = X_f[:, 0] != 0
+                gen_p4.append(event.ygen[msk_batch, 1:][msk_gen])
+                gen_cls.append(target_ids[msk_batch][msk_gen])
 
-    for val in ["gen", "cand", "pred"]:
-        if dataset != "CLIC":  # TODO: remove
-            yvals[f"{val}_phi"] = np.arctan2(yvals[f"{val}_sin_phi"], yvals[f"{val}_cos_phi"])
-        yvals[f"{val}_cls_id"] = np.argmax(yvals[f"{val}_cls"], axis=-1).reshape(
-            yvals[f"{val}_cls"].shape[0], yvals[f"{val}_cls"].shape[1], 1
-        )  # cz for some reason keepdims doesn't work
+                cand_p4.append(event.ycand[msk_batch, 1:][msk_cand])
+                cand_cls.append(cand_ids[msk_batch][msk_cand])
 
-        yvals[f"{val}_px"] = np.sin(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
-        yvals[f"{val}_py"] = np.cos(yvals[f"{val}_phi"]) * yvals[f"{val}_pt"]
+                pred_p4.append(pred_momentum[msk_batch, :][msk_pred])
+                pred_cls.append(pred_ids[msk_batch][msk_pred])
 
-    yvals_f = {k: flatten(v) for k, v in yvals.items()}
+            Xs = awkward.from_iter(Xs)
+            gen_p4 = awkward.from_iter(gen_p4)
+            gen_cls = awkward.from_iter(gen_cls)
+            gen_p4 = vector.awk(
+                awkward.zip(
+                    {"pt": gen_p4[:, :, 0], "eta": gen_p4[:, :, 1], "phi": gen_p4[:, :, 2], "e": gen_p4[:, :, 3]}
+                )
+            )
 
-    # remove the last dim
-    for k in yvals_f.keys():
-        if yvals_f[k].shape[-1] == 1:
-            yvals_f[k] = yvals_f[k][..., -1]
+            cand_p4 = awkward.from_iter(cand_p4)
+            cand_cls = awkward.from_iter(cand_cls)
+            cand_p4 = vector.awk(
+                awkward.zip(
+                    {"pt": cand_p4[:, :, 0], "eta": cand_p4[:, :, 1], "phi": cand_p4[:, :, 2], "e": cand_p4[:, :, 3]}
+                )
+            )
 
-    print(f"Time taken to process the predictions is: {round(((time.time() - t0) / 60), 2)} min")
+            # in case of no predicted particles in the batch
+            if torch.sum(pred_ids != 0) == 0:
+                pt = build_dummy_array(len(pred_p4), np.float64)
+                eta = build_dummy_array(len(pred_p4), np.float64)
+                phi = build_dummy_array(len(pred_p4), np.float64)
+                pred_cls = build_dummy_array(len(pred_p4), np.float64)
+                energy = build_dummy_array(len(pred_p4), np.float64)
+                pred_p4 = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            else:
+                pred_p4 = awkward.from_iter(pred_p4)
+                pred_cls = awkward.from_iter(pred_cls)
+                pred_p4 = vector.awk(
+                    awkward.zip(
+                        {
+                            "pt": pred_p4[:, :, 0],
+                            "eta": pred_p4[:, :, 1],
+                            "phi": pred_p4[:, :, 2],
+                            "e": pred_p4[:, :, 3],
+                        }
+                    )
+                )
 
-    print("-->Saving the processed events")
-    t0 = time.time()
-    torch.save(Xs, f"{pred_path}/post_processed_Xs.pt", pickle_protocol=4)
-    torch.save(X_f, f"{pred_path}/post_processed_X_f.pt", pickle_protocol=4)
-    torch.save(msk_X_f, f"{pred_path}/post_processed_msk_X_f.pt", pickle_protocol=4)
-    torch.save(yvals, f"{pred_path}/post_processed_yvals.pt", pickle_protocol=4)
-    torch.save(yvals_f, f"{pred_path}/post_processed_yvals_f.pt", pickle_protocol=4)
-    print(f"Time taken to save the predictions is: {round(((time.time() - t0) / 60), 2)} min")
+            jets_coll = {}
 
-    return Xs, X_f, msk_X_f, yvals, yvals_f
+            cluster1 = fastjet.ClusterSequence(awkward.Array(gen_p4.to_xyzt()), jetdef)
+            jets_coll["gen"] = cluster1.inclusive_jets(min_pt=jet_pt)
+            cluster2 = fastjet.ClusterSequence(awkward.Array(cand_p4.to_xyzt()), jetdef)
+            jets_coll["cand"] = cluster2.inclusive_jets(min_pt=jet_pt)
+            cluster3 = fastjet.ClusterSequence(awkward.Array(pred_p4.to_xyzt()), jetdef)
+            jets_coll["pred"] = cluster3.inclusive_jets(min_pt=jet_pt)
+
+            gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
+            gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
+            matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
+
+            awkward.to_parquet(
+                awkward.Array(
+                    {
+                        "inputs": Xs,
+                        "particles": awkvals,
+                        "jets": jets_coll,
+                        "matched_jets": matched_jets,
+                    }
+                ),
+                f"{PATH}/pred_{i}.parquet",
+            )
+
+        print(f"Average inference time per batch on rank {rank} is {(tf / len(this_loader)):.3f}s")
+        t0 = time.time()
+        print(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
+
+
