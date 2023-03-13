@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch_geometric
 from pyg.args import parse_args
-from pyg.evaluate import make_predictions, make_predictions_awk
+from pyg.evaluate import make_predictions_awk
 from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
