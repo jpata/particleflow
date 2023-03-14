@@ -166,12 +166,6 @@ def load_eval_data(path, max_files=None):
         for k in data["particles"][typ].fields:
             yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
 
-    # Get the classification output as a class ID
-    if "gen_cls_id" not in yvals.keys():
-        yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
-        yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
-        yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
-
     for typ in ["gen", "cand", "pred"]:
 
         # Compute phi, px, py
