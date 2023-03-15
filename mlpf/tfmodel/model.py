@@ -200,6 +200,8 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
         )
 
         # X[:, :, 1:] - all the other non-categorical features
+
+        # FIXME: this clipping needs to be rethought, seems like some inputs have large values which cause NaN/Inf
         Xprop = X[:, :, 1:]
 
         return tf.concat([Xid, Xprop], axis=-1)
@@ -885,7 +887,6 @@ class OutputDecoding(tf.keras.Model):
         pred_sin_phi = orig_sin_phi + pred_phi_corr[:, :, 0:1]
         pred_cos_phi = orig_cos_phi + pred_phi_corr[:, :, 1:2]
 
-        # FIXME: check that this is helpful
         pred_eta = tf.clip_by_value(pred_eta, -7, 7)
         pred_sin_phi = tf.clip_by_value(pred_sin_phi, -1, 1)
         pred_cos_phi = tf.clip_by_value(pred_cos_phi, -1, 1)
@@ -926,6 +927,10 @@ class OutputDecoding(tf.keras.Model):
             "energy": pred_energy * msk_input_outtype,
         }
 
+        for k in ret.keys():
+            ret[k] = tf.where(tf.math.is_inf(ret[k]), tf.zeros_like(ret[k]), ret[k])
+            ret[k] = tf.where(tf.math.is_nan(ret[k]), tf.zeros_like(ret[k]), ret[k])
+
         # p(particle) = 1 - p(no particle)
         # multiply the logits by a coefficient 10 to make the probabilities "harder",
         # i.e. p(particle | no particle) would be close to 0
@@ -954,7 +959,6 @@ class OutputDecoding(tf.keras.Model):
             py = pred_pt * pred_sin_phi * msk_input_outtype * msk_outparticle
             met = tf.sqrt(tf.reduce_sum(px, axis=-2) ** 2 + tf.reduce_sum(py, axis=-2) ** 2)
             ret["met"] = met
-
         return ret
 
     def set_trainable_regression(self):
@@ -1116,19 +1120,29 @@ class PFNetDense(tf.keras.Model):
     ):
         super(PFNetDense, self).__init__()
 
+        # if True, return a dictionary with "cls", "pt", "eta", "sin_phi" etc.
+        # if False, return all the outputs in a concatenated array
         self.multi_output = multi_output
+
+        # if True, print out various debugging information in the layers
         self.debug = debug
 
+        # if True, use the raw input features in addition to the GNN layer information for decoding
         self.skip_connection = skip_connection
 
+        # if True, encode the raw features with a FFN before the GNN layers
         self.do_node_encoding = do_node_encoding
+
         self.node_encoding_hidden_dim = node_encoding_hidden_dim
         self.dropout = dropout
         self.node_update_mode = node_update_mode
         self.small_graph_opt = small_graph_opt
         self.activation = getattr(tf.keras.activations, activation)
 
+        # if True, run small graphs (Nelem < bin_size) in a more optimal way
         combined_graph_layer["small_graph_opt"] = self.small_graph_opt
+
+        self.normalizer = tf.keras.layers.Normalization(axis=-1, dtype="float32")
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
@@ -1164,7 +1178,15 @@ class PFNetDense(tf.keras.Model):
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
-        X = inputs
+        Xorig = inputs
+
+        X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
+
+        X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
+        X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
+
+        # tf.print("\n X=", tf.reduce_min(X), tf.reduce_max(X),
+        #   tf.math.reduce_mean(X, axis=[0,1]), tf.math.reduce_std(X, axis=[0,1]))
 
         shp = tf.shape(X)
         # tf.print("\nX", shp, X.device,"\n")
@@ -1205,6 +1227,7 @@ class PFNetDense(tf.keras.Model):
             enc_all = cg(X_enc_cg, msk, training=training)
 
             if self.node_update_mode == "additive":
+                X_enc_cg = tf.cast(X_enc_cg, enc_all["enc"].dtype)
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
                 X_enc_cg = enc_all["enc"]
@@ -1229,6 +1252,7 @@ class PFNetDense(tf.keras.Model):
         for cg in self.cg_reg:
             enc_all = cg(X_enc_cg, msk, training=training)
             if self.node_update_mode == "additive":
+                X_enc_cg = tf.cast(X_enc_cg, enc_all["enc"].dtype)
                 X_enc_cg += enc_all["enc"]
             elif self.node_update_mode == "concat":
                 X_enc_cg = enc_all["enc"]
@@ -1249,7 +1273,7 @@ class PFNetDense(tf.keras.Model):
 
         ret = self.output_dec(
             [
-                X[:, :n_points],
+                Xorig[:, :n_points],
                 dec_output_id[:, :n_points],
                 dec_output_reg[:, :n_points],
                 msk_input[:, :n_points],
@@ -1404,6 +1428,8 @@ class PFNetTransformer(tf.keras.Model):
 
         self.key_dim = hidden_dim
 
+        self.normalizer = tf.keras.layers.Normalization(axis=-1, dtype="float32")
+
         self.ffn = point_wise_feed_forward_network(
             self.key_dim,
             self.key_dim,
@@ -1455,7 +1481,8 @@ class PFNetTransformer(tf.keras.Model):
         self.output_dec = OutputDecoding(**output_decoding)
 
     def call(self, inputs, training=False):
-        X = inputs
+        Xorig = inputs
+        X = tf.concat([Xorig[:, :, 0:1], self.normalizer(Xorig[:, :, 1:])], axis=-1)
 
         # tf.print("\nX.shape=", tf.shape(X), "\n")
 
@@ -1511,7 +1538,7 @@ class PFNetTransformer(tf.keras.Model):
             X_reg = dec([X_reg, X_reg, msk], training=training) * msk_input
 
         # decode the outputs to classification and regression values
-        ret = self.output_dec([X, X_cls, X_reg, msk_input], training=training)
+        ret = self.output_dec([Xorig, X_cls, X_reg, msk_input], training=training)
 
         if self.multi_output:
             return ret

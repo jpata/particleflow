@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch_geometric
 from pyg.args import parse_args
-from pyg.evaluate import make_predictions, postprocess_predictions
+from pyg.evaluate import make_predictions_awk
 from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
@@ -200,7 +200,7 @@ def inference(rank, world_size, args, data, model, PATH):
         model = model.to(rank)
     model.eval()
 
-    make_predictions(rank, args.dataset, model, file_loader_test, args.bs, PATH)
+    make_predictions_awk(rank, args.dataset, model, file_loader_test, args.bs, PATH)
 
     if world_size > 1:
         cleanup()
@@ -317,8 +317,6 @@ if __name__ == "__main__":
                 model,
                 PATH,
             )
-
-        postprocess_predictions(args.dataset, pred_path)
 
     # load the predictions and make plots (must have ran make_predictions() beforehand)
     if args.make_plots:

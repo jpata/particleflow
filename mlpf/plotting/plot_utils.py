@@ -70,8 +70,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
     "clic_edm_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "clic_edm_qcd_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
-    "clic_edm_zz_fullhad_pf": r"CLIC $ee \rightarrow \mathrm{ZZ} \rightarrow \mathrm{hadrons}$",
+    "clic_edm_qq_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
 }
 
 
@@ -166,12 +165,6 @@ def load_eval_data(path, max_files=None):
     for typ in ["gen", "cand", "pred"]:
         for k in data["particles"][typ].fields:
             yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
-
-    # Get the classification output as a class ID
-    if "gen_cls_id" not in yvals.keys():
-        yvals["gen_cls_id"] = np.argmax(yvals["gen_cls"], axis=-1)
-        yvals["cand_cls_id"] = np.argmax(yvals["cand_cls"], axis=-1)
-        yvals["pred_cls_id"] = np.argmax(yvals["pred_cls"], axis=-1)
 
     for typ in ["gen", "cand", "pred"]:
 
