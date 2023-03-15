@@ -283,6 +283,10 @@ def train(
 
         callbacks.append(optim_callbacks)
 
+        model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
+        print(model.normalizer.mean)
+        print(model.normalizer.variance)
+
         model.fit(
             ds_train.tensorflow_dataset.repeat(),
             validation_data=ds_test.tensorflow_dataset.repeat(),

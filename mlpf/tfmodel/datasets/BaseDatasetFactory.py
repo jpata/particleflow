@@ -71,8 +71,10 @@ def get_map_to_supervised(config):
         X = data_item["X"]
         y = data_item["y{}".format(target_particles)]
 
-        X = tf.clip_by_value(X, -1e12, 1e12)
-        y = tf.clip_by_value(y, -1e12, 1e12)
+        X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
+        X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
+
+        X = tf.clip_by_value(X, -1e6, 1e6)
 
         # mask to keep only nonzero (not zero-padded due to batching) elements
         msk_elems = tf.cast(X[..., 0:1] != 0, tf.float32)
