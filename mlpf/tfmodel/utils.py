@@ -495,7 +495,10 @@ def get_class_loss(config):
 def get_loss_from_params(input_dict):
     input_dict = input_dict.copy()
     loss_type = input_dict.pop("type")
-    loss_cls = getattr(tf.keras.losses, loss_type)
+    if loss_type == "PinballLoss":
+        loss_cls = getattr(tfa.losses, loss_type)
+    else:
+        loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict)
 
 
