@@ -228,7 +228,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         write_graph=False,
         write_images=False,
         update_freq="batch",
-        # profile_batch=(10,90),
+        # profile_batch=(10,200),
         profile_batch=0,
         dump_history=config["callbacks"]["tensorboard"]["dump_history"],
     )
@@ -358,8 +358,6 @@ def eval_model(
         ypred = model.predict(elem["X"], verbose=verbose)
         ypred["charge"] = np.argmax(ypred["charge"], axis=-1) - 1
 
-        keys_particle = [k for k in ypred.keys() if k != "met"]
-
         if verbose:
             print("unpacking outputs")
 
@@ -368,6 +366,12 @@ def eval_model(
         # 0, 1, 2 -> -1, 0, 1
         ygen["charge"] = tf.expand_dims(tf.math.argmax(ygen["charge"], axis=-1), axis=-1) - 1
         ycand["charge"] = tf.expand_dims(tf.math.argmax(ycand["charge"], axis=-1), axis=-1) - 1
+
+        ygen["cls_id"] = tf.math.argmax(ygen["cls"], axis=-1)
+        ycand["cls_id"] = tf.math.argmax(ycand["cls"], axis=-1)
+        ypred["cls_id"] = tf.math.argmax(ypred["cls"], axis=-1).numpy()
+
+        keys_particle = [k for k in ypred.keys() if k != "met"]
 
         X = awkward.Array(elem["X"].numpy())
         ygen = awkward.Array({k: squeeze_if_one(ygen[k].numpy()) for k in keys_particle})
