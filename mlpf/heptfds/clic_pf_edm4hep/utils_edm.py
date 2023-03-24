@@ -3,8 +3,8 @@ import fastjet
 import numpy as np
 import vector
 
-jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-min_jet_pt = 1.0  # GeV
+jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+min_jet_pt = 5.0  # GeV
 
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
