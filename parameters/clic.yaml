@@ -45,11 +45,11 @@ setup:
   weights:
   weights_config:
   lr: 0.0001
-  num_epochs: 500
+  num_epochs: 50
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
@@ -236,8 +236,8 @@ train_test_datasets:
       - clic_edm_qq_pf
 
 validation_dataset: clic_edm_ttbar_pf
-validation_batch_size: 50
-validation_num_events: 500
+validation_batch_size: 100
+validation_num_events: 2000
 
 evaluation_datasets:
   clic_edm_ttbar_pf:
@@ -248,10 +248,10 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_pf:
-    version: 1.2.0
+    version: 1.3.0
     data_dir:
     manual_dir:
   clic_edm_qq_pf:
-    version: 1.2.0
+    version: 1.3.0
     data_dir:
     manual_dir:
