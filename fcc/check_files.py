@@ -12,17 +12,17 @@ samples = [
 ]
 
 samples_pu = [
-    ("p8_ee_tt_ecm380",              1,   101),
+    ("p8_ee_tt_ecm380",              1,  10001),
 ]
 
 if __name__ == "__main__":
-    for sname, seed0, seed1 in samples:
-        for seed in range(seed0, seed1):
-            #check if output file exists, and print out batch submission if it doesn't
-            if not os.path.isfile("{}/{}/reco_{}_{}.root".format(outpath, sname, sname, seed)):
-                print("sbatch run_sim.sh {} {}".format(seed, sname)) 
-    #for sname, seed0, seed1 in samples_pu:
+    #for sname, seed0, seed1 in samples:
     #    for seed in range(seed0, seed1):
     #        #check if output file exists, and print out batch submission if it doesn't
-    #        if not os.path.isfile("{}/{}_PU10/reco_{}_{}.root".format(outpath, sname, sname, seed)):
-    #            print("sbatch run_sim_pu.sh {} {} p8_ee_gg_ecm380".format(seed, sname)) 
+    #        if not os.path.isfile("{}/{}/reco_{}_{}.root".format(outpath, sname, sname, seed)):
+    #            print("sbatch run_sim.sh {} {}".format(seed, sname)) 
+    for sname, seed0, seed1 in samples_pu:
+        for seed in range(seed0, seed1):
+            #check if output file exists, and print out batch submission if it doesn't
+            if not os.path.isfile("{}/{}_PU10/reco_{}_{}.root".format(outpath, sname, sname, seed)):
+                print("sbatch run_sim_pu.sh {} {} p8_ee_gg_ecm380".format(seed, sname)) 

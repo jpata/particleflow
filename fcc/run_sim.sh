@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH -x comp-u-[001-128],comp-r-003
 #SBATCH --mem-per-cpu=6G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
