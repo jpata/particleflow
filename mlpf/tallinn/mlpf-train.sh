@@ -10,5 +10,5 @@ cd ~/particleflow
 #TF training
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
-    --env TFDS_DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets \
+    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python mlpf/pipeline.py train -c $1 --plot-freq 1 --num-cpus 8 --batch-multiplier $2

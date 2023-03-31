@@ -17,7 +17,7 @@ NUM=$1 #random seed
 SAMPLE=$2 #main card
 #PU=$3 #pu card
 
-WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
+WORKDIR=/scratch/local/$USER/${SAMPLE}_${SLURM_JOB_ID}
 FULLOUTDIR=${OUTDIR}/${SAMPLE}
 
 mkdir -p $FULLOUTDIR
