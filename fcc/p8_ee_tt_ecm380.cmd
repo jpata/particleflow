@@ -17,5 +17,4 @@ Beams:eCM = 380                    ! CM energy of collision
 PartonLevel:ISR = on
 PartonLevel:FSR = on
 
-! 3) Hard process : tt at 380 GeV
 Top:ffbar2ttbar(s:gmZ) = on
