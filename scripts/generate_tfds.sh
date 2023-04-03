@@ -30,13 +30,13 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # CLIC
-export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_27
+# export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_27
 # $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar_pu10 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_pu10.log &
-$CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ww_fullhad.log &
-wait
+# $CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ww_fullhad.log &
+# wait
 
 # Delphes
 # $CMD mlpf/heptfds/delphes_pf/delphes_pf &> logs/tfds_delphes.log &

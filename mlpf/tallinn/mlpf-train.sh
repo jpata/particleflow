@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gpus 1
+#SBATCH --gpus 4
 #SBATCH --mem-per-gpu=8G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
@@ -11,4 +11,4 @@ cd ~/particleflow
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py train -c $1 --plot-freq 1 --num-cpus 8 --batch-multiplier $2
+    $IMG python mlpf/pipeline.py train -c $1 --plot-freq 1 --num-cpus 16 --batch-multiplier $2
