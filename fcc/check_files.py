@@ -7,7 +7,7 @@ outpath = "/local/joosep/clic_edm4hep_2023_02_27/"
 samples = [
     ("p8_ee_tt_ecm380",              1,  10011),
     ("p8_ee_qq_ecm380",         100001, 110011),
-    ("p8_ee_ZH_Htautau_ecm380", 200001, 202011),
+    ("p8_ee_ZH_Htautau_ecm380", 200001, 210011),
 ]
 
 samples_pu = [

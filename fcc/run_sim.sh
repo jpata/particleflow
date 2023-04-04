@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH -x comp-d-[001-128],comp-u-[001-128],comp-r-003
+#SBATCH -x comp-u-[001-128],comp-r-003
 #SBATCH --mem-per-cpu=4G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -40,11 +40,6 @@ cat card.cmd
 #without PU
 source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc11.2.0-opt/csapx/setup.sh
 k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd
-
-#with PU (needs double checking)
-#LD_LIBRARY_PATH=/home/joosep/HepMC3/hepmc3-install/lib/:/home/joosep/pythia8308/lib/ ./main $NUM
-#mv pythia.hepmc out.hepmc
-#source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2022-12-23/x86_64-centos7-gcc11.2.0-opt/ll3gi/setup.sh
 
 ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --outputFile out_sim_edm4hep.root \
