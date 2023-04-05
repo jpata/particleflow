@@ -980,15 +980,30 @@ def plots(train_dir, max_files):
         format_dataset_name,
         load_eval_data,
         plot_jet_ratio,
-        plot_met_and_ratio,
+        plot_met,
+        plot_met_ratio,
         plot_num_elements,
         plot_particles,
         plot_sum_energy,
+        load_loss_history,
+        loss_plot,
+        plot_jet_response_binned,
+        plot_met_response_binned,
     )
 
     mplhep.set_style(mplhep.styles.CMS)
 
     eval_dir = Path(train_dir) / "evaluation"
+
+    history = load_loss_history(str(Path(train_dir) / "history/history_*.json"))
+    loss_plot(
+        history["loss"].values,
+        history["val_loss"].values,
+        margin=0.5,
+        smoothing=True,
+        cp_dir=Path(train_dir),
+        title="Total loss",
+    )
 
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir
@@ -1003,12 +1018,30 @@ def plots(train_dir, max_files):
             plot_num_elements(X, cp_dir=cp_dir, title=_title)
             plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
 
-            plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title)
+            plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True)
+            plot_jet_ratio(
+                yvals,
+                cp_dir=cp_dir,
+                title=_title,
+                bins=np.linspace(0.5, 1.5, 100),
+                logy=False,
+                file_modifier="_bins_0p5_1p5",
+            )
 
             met_data = compute_met_and_ratio(yvals)
-            plot_met_and_ratio(met_data, cp_dir=cp_dir, title=_title)
+            plot_met(met_data, cp_dir=cp_dir, title=_title)
+            plot_met_ratio(met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
+            plot_met_ratio(
+                met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=False, file_modifier="_bins_0_2"
+            )
+            plot_met_ratio(
+                met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=False, file_modifier="_bins_0_5"
+            )
 
             plot_particles(yvals, cp_dir=cp_dir, title=_title)
+
+            plot_jet_response_binned(yvals, cp_dir=cp_dir, title=_title)
+            plot_met_response_binned(met_data, cp_dir=cp_dir, title=_title)
 
 
 if __name__ == "__main__":

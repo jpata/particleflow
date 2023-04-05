@@ -7,6 +7,8 @@ import numpy as np
 import scipy
 import tqdm
 import vector
+import json
+import pandas
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -71,7 +73,57 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
     "clic_edm_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_qq_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
+    "clic_edm_ww_fullhad_pf": r"CLIC $ee \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "clic_edm_zh_tautau_pf": r"CLIC $ee \rightarrow ZH \rightarrow \tau \tau$",
 }
+
+
+def load_loss_history(path, min_epoch=None, max_epoch=None):
+    ret = {}
+    for fi in glob.glob(path):
+        data = json.load(open(fi))
+        epoch = int(fi.split("_")[-1].split(".")[0])
+        ret[epoch] = data
+
+    if not max_epoch:
+        max_epoch = max(ret.keys())
+    if not min_epoch:
+        min_epoch = min(ret.keys())
+
+    ret2 = []
+    for i in range(min_epoch, max_epoch + 1):
+        ret2.append(ret[i])
+    return pandas.DataFrame(ret2)
+
+
+def loss_plot(train, test, margin=0.05, smoothing=False, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    plt.figure()
+
+    alpha = 0.2 if smoothing else 1.0
+    l0 = None if smoothing else "train"
+    l1 = None if smoothing else "test"
+    p0 = plt.plot(train, alpha=alpha, label=l0)
+    p1 = plt.plot(test, alpha=alpha, label=l1)
+
+    if smoothing:
+        train_smooth = np.convolve(train, np.ones(5) / 5, mode="valid")
+        plt.plot(train_smooth, color=p0[0].get_color(), lw=2, label="train")
+        test_smooth = np.convolve(test, np.ones(5) / 5, mode="valid")
+        plt.plot(test_smooth, color=p1[0].get_color(), lw=2, label="test")
+
+    plt.ylim(test[-1] * (1.0 - margin), test[-1] * (1.0 + margin))
+    plt.legend(loc=3, frameon=False)
+    plt.xlabel("epoch")
+
+    if title:
+        plt.title(title)
+
+    save_img(
+        "loss.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
 
 
 def format_dataset_name(dataset):
@@ -252,7 +304,8 @@ def compute_met_and_ratio(yvals):
 def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
     if cp_dir:
         image_path = str(cp_dir / outfile)
-        plt.savefig(image_path, bbox_inches="tight", dpi=100)
+        plt.savefig(image_path, dpi=100)
+        plt.savefig(image_path.replace(".png", ".pdf"))
         plt.clf()
         if comet_experiment:
             comet_experiment.log_image(image_path, step=epoch - 1)
@@ -309,44 +362,56 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None)
     )
 
 
-def plot_jet_ratio(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+def plot_jet_ratio(
+    yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False
+):
     plt.figure()
-    b = np.linspace(0, 5, 100)
+    ax = plt.axes()
+
+    if bins is None:
+        bins = np.linspace(0, 5, 100)
 
     p = med_iqr(yvals["jet_ratio_cand"])
     n_matched = len(yvals["jet_ratio_cand"])
+    n_jets = len(awkward.flatten(yvals["jets_cand_pt"]))
     plt.hist(
         yvals["jet_ratio_cand"],
-        bins=b,
+        bins=bins,
         histtype="step",
         lw=2,
-        label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
+        label="PF $(M={:.2f}, IQR={:.2f}, f_m={:.2f})$".format(p[0], p[1], n_matched / n_jets),
     )
     p = med_iqr(yvals["jet_ratio_pred"])
     n_matched = len(yvals["jet_ratio_pred"])
     plt.hist(
         yvals["jet_ratio_pred"],
-        bins=b,
+        bins=bins,
         histtype="step",
         lw=2,
-        label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n_matched),
+        label="MLPF $(M={:.2f}, IQR={:.2f}, f_m={:.2f})$".format(p[0], p[1], n_matched / n_jets),
     )
     plt.xlabel("jet $p_T$ reco/gen")
     plt.ylabel("number of matched jets")
-    plt.legend(loc="best")
-    if title:
-        plt.title(title)
+    plt.legend(loc="best", title=title)
+
+    plt.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], 1.2 * ylim[1])
+
+    if logy:
+        ax.set_yscale("log")
+        ax.set_ylim(10, 10 * ylim[1])
+
     save_img(
-        "jet_res.png",
+        "jet_res{}.png".format(file_modifier),
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
     )
 
 
-def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
-    # MET
+def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     plt.figure()
     maxval = max(
         [
@@ -392,20 +457,23 @@ def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None
     )
     plt.xlabel("MET [GeV]")
     plt.ylabel("Number of events / bin")
-    plt.legend(loc="best")
+    plt.legend(loc="best", title=title)
     plt.xscale("log")
-    if title:
-        plt.title(title)
     save_img("met.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    # Ratio
+
+def plot_met_ratio(
+    met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False
+):
     plt.figure()
-    b = np.linspace(0, 20, 100)
+    ax = plt.axes()
+    if bins is None:
+        bins = np.linspace(0, 20, 100)
 
     p = med_iqr(met_ratio["ratio_cand"])
     plt.hist(
         met_ratio["ratio_cand"],
-        bins=b,
+        bins=bins,
         histtype="step",
         lw=2,
         label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
@@ -413,18 +481,24 @@ def plot_met_and_ratio(met_ratio, epoch=None, cp_dir=None, comet_experiment=None
     p = med_iqr(met_ratio["ratio_pred"])
     plt.hist(
         met_ratio["ratio_pred"],
-        bins=b,
+        bins=bins,
         histtype="step",
         lw=2,
         label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
     plt.xlabel("MET reco/gen")
     plt.ylabel("number of events")
-    plt.legend(loc="best")
-    if title:
-        plt.title(title)
+    plt.legend(loc="best", title=title)
+
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], 1.2 * ylim[1])
+
+    if logy:
+        ax.set_yscale("log")
+        ax.set_ylim(10, 10 * ylim[1])
+
     save_img(
-        "met_res.png",
+        "met_res{}.png".format(file_modifier),
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
@@ -714,6 +788,180 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         plt.title(title + ", MLPF")
     save_img(
         "particle_pt_gen_vs_mlpf.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
+def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    pf_genjet_pt = yvals["jet_gen_to_cand_genpt"]
+    mlpf_genjet_pt = yvals["jet_gen_to_pred_genpt"]
+
+    pf_response = yvals["jet_ratio_cand"]
+    mlpf_response = yvals["jet_ratio_pred"]
+
+    genjet_bins = [10, 20, 40, 60, 80, 100, 200]
+
+    x_vals = []
+    pf_vals = []
+    mlpf_vals = []
+    b = np.linspace(0, 2, 100)
+
+    fig, axs = plt.subplots(2, 3, figsize=(3 * 5, 2 * 5))
+    axs = axs.flatten()
+    for ibin in range(len(genjet_bins) - 1):
+        lim_low = genjet_bins[ibin]
+        lim_hi = genjet_bins[ibin + 1]
+        x_vals.append(np.mean([lim_low, lim_hi]))
+
+        mask_genjet = (pf_genjet_pt > lim_low) & (pf_genjet_pt <= lim_hi)
+        pf_subsample = pf_response[mask_genjet]
+
+        pf_p25 = np.percentile(pf_subsample, 25)
+        pf_p50 = np.percentile(pf_subsample, 50)
+        pf_p75 = np.percentile(pf_subsample, 75)
+        pf_vals.append([pf_p25, pf_p50, pf_p75])
+
+        mask_genjet = (mlpf_genjet_pt > lim_low) & (mlpf_genjet_pt <= lim_hi)
+        mlpf_subsample = mlpf_response[mask_genjet]
+
+        mlpf_p25 = np.percentile(mlpf_subsample, 25)
+        mlpf_p50 = np.percentile(mlpf_subsample, 50)
+        mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        mlpf_vals.append([mlpf_p25, mlpf_p50, mlpf_p75])
+
+        plt.sca(axs[ibin])
+        plt.hist(pf_subsample, bins=b, histtype="step", lw=2, label="PF")
+        plt.hist(mlpf_subsample, bins=b, histtype="step", lw=2, label="MLPF")
+        plt.xlim(0, 2)
+        plt.xticks([0, 0.5, 1, 1.5, 2])
+        plt.ylabel("Matched jets / bin")
+        plt.xlabel("jet $p_{T,reco} / p_{T,gen}$")
+        plt.axvline(1.0, ymax=0.7, color="black", ls="--")
+        plt.legend(loc=1, fontsize=16)
+        plt.title(r"${} \less p_{{T,gen}} \leq {}$".format(lim_low, lim_hi))
+        plt.yscale("log")
+
+    plt.tight_layout()
+    save_img(
+        "jet_response_binned.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+    x_vals = np.array(x_vals)
+    pf_vals = np.array(pf_vals)
+    mlpf_vals = np.array(mlpf_vals)
+
+    # Plot median and IQR as a function of gen pt
+    fig, axs = plt.subplots(2, 1, sharex=True)
+    plt.sca(axs[0])
+    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.ylim(0.75, 1.25)
+    plt.axhline(1.0, color="black", ls="--")
+    plt.ylabel("Response median")
+    plt.legend()
+
+    plt.sca(axs[1])
+    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
+    plt.ylabel("Response IQR")
+    plt.legend()
+    plt.xlabel("gen-jet $p_T$ [GeV]")
+
+    plt.tight_layout()
+    save_img(
+        "jet_response_med_iqr.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
+def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    genmet = yvals["gen_met"]
+
+    pf_response = yvals["ratio_cand"]
+    mlpf_response = yvals["ratio_pred"]
+
+    genmet_bins = [10, 20, 40, 60, 80, 100, 200]
+
+    x_vals = []
+    pf_vals = []
+    mlpf_vals = []
+    b = np.linspace(0, 2, 100)
+
+    fig, axs = plt.subplots(2, 3, figsize=(3 * 5, 2 * 5))
+    axs = axs.flatten()
+    for ibin in range(len(genmet_bins) - 1):
+        lim_low = genmet_bins[ibin]
+        lim_hi = genmet_bins[ibin + 1]
+        x_vals.append(np.mean([lim_low, lim_hi]))
+
+        mask_gen = (genmet > lim_low) & (genmet <= lim_hi)
+        pf_subsample = pf_response[mask_gen]
+
+        pf_p25 = np.percentile(pf_subsample, 25)
+        pf_p50 = np.percentile(pf_subsample, 50)
+        pf_p75 = np.percentile(pf_subsample, 75)
+        pf_vals.append([pf_p25, pf_p50, pf_p75])
+
+        mlpf_subsample = mlpf_response[mask_gen]
+
+        mlpf_p25 = np.percentile(mlpf_subsample, 25)
+        mlpf_p50 = np.percentile(mlpf_subsample, 50)
+        mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        mlpf_vals.append([mlpf_p25, mlpf_p50, mlpf_p75])
+
+        plt.sca(axs[ibin])
+        plt.hist(pf_subsample, bins=b, histtype="step", lw=2, label="PF")
+        plt.hist(mlpf_subsample, bins=b, histtype="step", lw=2, label="MLPF")
+        plt.xlim(0, 2)
+        plt.xticks([0, 0.5, 1, 1.5, 2])
+        plt.ylabel("Events / bin")
+        plt.xlabel("MET reco / gen")
+        plt.axvline(1.0, ymax=0.7, color="black", ls="--")
+        plt.legend(loc=1, fontsize=16)
+        plt.title(r"${} \less MET_{{gen}} \leq {}$".format(lim_low, lim_hi))
+        plt.yscale("log")
+
+    plt.tight_layout()
+    save_img(
+        "met_response_binned.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+    x_vals = np.array(x_vals)
+    pf_vals = np.array(pf_vals)
+    mlpf_vals = np.array(mlpf_vals)
+
+    # Plot median and IQR as a function of gen pt
+    fig, axs = plt.subplots(2, 1, sharex=True)
+    plt.sca(axs[0])
+    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.ylim(0.75, 1.25)
+    plt.axhline(1.0, color="black", ls="--")
+    plt.ylabel("Response median")
+    plt.legend()
+
+    plt.sca(axs[1])
+    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
+    plt.ylabel("Response IQR")
+    plt.legend()
+    plt.xlabel("gen MET [GeV]")
+
+    plt.tight_layout()
+    save_img(
+        "met_response_med_iqr.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,

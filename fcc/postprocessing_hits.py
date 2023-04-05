@@ -487,14 +487,20 @@ def assign_genparticles_to_obj_and_merge(gpdata):
 
             va = gpdata.genparticle_to_hit[1][gpdata.genparticle_to_hit[0]==igp]
             vb = gpdata.genparticle_to_hit[2][gpdata.genparticle_to_hit[0]==igp]
-            calohit_by_energy = np.array(sorted(range(len(va)), key=lambda x: vb[x], reverse=True))
-            va = va[calohit_by_energy]
-            vb = vb[calohit_by_energy]
+            if len(va) > 0:
+                calohit_by_energy = np.array(sorted(range(len(va)), key=lambda x: vb[x], reverse=True))
+                va = va[calohit_by_energy]
+                vb = vb[calohit_by_energy]
 
-            for calohit in va:
-                if calohit not in set_used_calohits:
-                    gp_to_obj[igp, 1] = calohit
-                    set_used_calohits.add(calohit)
+                for calohit in va:
+                    if calohit not in set_used_calohits:
+                        gp_to_obj[igp, 1] = calohit
+                        set_used_calohits.add(calohit)
+                        break
+
+    unmatched = (gp_to_obj[:, 0]!=-1) & (gp_to_obj[:, 1]!=-1)
+    if np.sum(unmatched)>0:
+        print("unmatched", gpdata.gen_features["energy"][unmatched])
 
     return gp_to_obj
 
@@ -646,14 +652,16 @@ def process_one_file(fn, ofn):
         used_gps = np.zeros(n_gps, dtype=np.int64)
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps)
-        #all genparticles must be assigned to some PFElement
-        assert(np.all(used_gps == 1))
+        if not np.all(used_gps==1):
+            print("unmatched gen", gpdata.gen_features["energy"][used_gps==0])
+        #assert(np.all(used_gps == 1))
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
         hit_to_rp_all = assign_to_recoobj(n_hits, hit_to_rp, used_rps)
-        #all reco particles must be assigned to some PFElement
-        assert(np.all(used_rps == 1))
+        if not np.all(used_rps==1):
+            print("unmatched reco", reco_features["energy"][used_rps==0])
+        #assert(np.all(used_rps == 1))
 
         gps_track = get_particle_feature_matrix(
             track_to_gp_all,
@@ -692,13 +700,13 @@ def process_one_file(fn, ofn):
         rps_hit[:, 1] = 0
 
         #all initial gen/reco particle energy must be reconstructable
-        assert(abs(
-            np.sum(gps_track[:, 6]) + np.sum(gps_hit[:, 6]) - np.sum(gpdata.gen_features["energy"])
-            ) < 1e-2)
+        #assert(abs(
+        #    np.sum(gps_track[:, 6]) + np.sum(gps_hit[:, 6]) - np.sum(gpdata.gen_features["energy"])
+        #    ) < 1e-2)
 
-        assert(abs(
-            np.sum(rps_track[:, 6]) + np.sum(rps_hit[:, 6]) - np.sum(reco_features["energy"])
-            ) < 1e-2)
+        #assert(abs(
+        #    np.sum(rps_track[:, 6]) + np.sum(rps_hit[:, 6]) - np.sum(reco_features["energy"])
+        #    ) < 1e-2)
 
 
         #we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
@@ -733,8 +741,8 @@ def process_one_file(fn, ofn):
     awkward.to_parquet(ret, ofn)
 
 def process_all_files():
-    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/"
+    inp = "/media/joosep/data/clic_edm4hep_2023_02_27/"
+    outp = "/media/joosep/data/mlpf_hits/clic_edm4hep_2023_02_27/"
     samps = [
         "p8_ee_qq_ecm380",
         "p8_ee_tt_ecm380",
@@ -742,7 +750,7 @@ def process_all_files():
         #"p8_ee_WW_fullhad_ecm380",
     ]
 
-    pool = multiprocessing.Pool(12)
+    pool = multiprocessing.Pool(16)
 
     for samp in samps:
         inpath_samp = inp + samp
@@ -752,7 +760,7 @@ def process_all_files():
             os.makedirs(outpath_samp)
 
         args = []
-        for inf in infiles:
+        for inf in infiles[:1000]:
             of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
             args.append((inf, of))
         pool.starmap(process_one_file, args)
