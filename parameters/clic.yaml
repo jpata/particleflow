@@ -240,7 +240,16 @@ validation_batch_size: 100
 validation_num_events: 2000
 
 evaluation_datasets:
+  clic_edm_qq_pf:
+    batch_size: 50
+    num_events: -1
   clic_edm_ttbar_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_zh_tautau_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ww_fullhad_pf:
     batch_size: 50
     num_events: -1
 
