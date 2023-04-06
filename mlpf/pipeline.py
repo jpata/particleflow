@@ -996,14 +996,16 @@ def plots(train_dir, max_files):
     eval_dir = Path(train_dir) / "evaluation"
 
     history = load_loss_history(str(Path(train_dir) / "history/history_*.json"))
-    loss_plot(
-        history["loss"].values,
-        history["val_loss"].values,
-        margin=0.5,
-        smoothing=True,
-        cp_dir=Path(train_dir),
-        title="Total loss",
-    )
+    for loss in ["loss", "cls_loss", "pt_loss", "energy_loss", "eta_loss", "sin_phi_loss", "cos_phi_loss", "charge_loss"]:
+        loss_plot(
+            history[loss].values,
+            history["val_" + loss].values,
+            loss + ".png",
+            margin=0.5,
+            smoothing=True,
+            cp_dir=Path(train_dir),
+            title=loss,
+        )
 
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir

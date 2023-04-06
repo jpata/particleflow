@@ -96,7 +96,7 @@ def load_loss_history(path, min_epoch=None, max_epoch=None):
     return pandas.DataFrame(ret2)
 
 
-def loss_plot(train, test, margin=0.05, smoothing=False, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+def loss_plot(train, test, fname, margin=0.05, smoothing=False, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     plt.figure()
 
     alpha = 0.2 if smoothing else 1.0
@@ -119,7 +119,7 @@ def loss_plot(train, test, margin=0.05, smoothing=False, epoch=None, cp_dir=None
         plt.title(title)
 
     save_img(
-        "loss.png",
+        fname,
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
