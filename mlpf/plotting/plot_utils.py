@@ -818,18 +818,27 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
         mask_genjet = (pf_genjet_pt > lim_low) & (pf_genjet_pt <= lim_hi)
         pf_subsample = pf_response[mask_genjet]
-
-        pf_p25 = np.percentile(pf_subsample, 25)
-        pf_p50 = np.percentile(pf_subsample, 50)
-        pf_p75 = np.percentile(pf_subsample, 75)
+        if len(pf_subsample) > 0:
+            pf_p25 = np.percentile(pf_subsample, 25)
+            pf_p50 = np.percentile(pf_subsample, 50)
+            pf_p75 = np.percentile(pf_subsample, 75)
+        else:
+            pf_p25 = 0
+            pf_p50 = 0
+            pf_p75 = 0
         pf_vals.append([pf_p25, pf_p50, pf_p75])
 
         mask_genjet = (mlpf_genjet_pt > lim_low) & (mlpf_genjet_pt <= lim_hi)
         mlpf_subsample = mlpf_response[mask_genjet]
 
-        mlpf_p25 = np.percentile(mlpf_subsample, 25)
-        mlpf_p50 = np.percentile(mlpf_subsample, 50)
-        mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        if len(mlpf_subsample) > 0:
+            mlpf_p25 = np.percentile(mlpf_subsample, 25)
+            mlpf_p50 = np.percentile(mlpf_subsample, 50)
+            mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        else:
+            mlpf_p25 = 0
+            mlpf_p50 = 0
+            mlpf_p75 = 0
         mlpf_vals.append([mlpf_p25, mlpf_p50, mlpf_p75])
 
         plt.sca(axs[ibin])
@@ -905,17 +914,25 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
         mask_gen = (genmet > lim_low) & (genmet <= lim_hi)
         pf_subsample = pf_response[mask_gen]
-
-        pf_p25 = np.percentile(pf_subsample, 25)
-        pf_p50 = np.percentile(pf_subsample, 50)
-        pf_p75 = np.percentile(pf_subsample, 75)
+        if len(pf_subsample) > 0:
+            pf_p25 = np.percentile(pf_subsample, 25)
+            pf_p50 = np.percentile(pf_subsample, 50)
+            pf_p75 = np.percentile(pf_subsample, 75)
+        else:
+            pf_p25 = 0.0
+            pf_p50 = 0.0
+            pf_p75 = 0.0
         pf_vals.append([pf_p25, pf_p50, pf_p75])
 
         mlpf_subsample = mlpf_response[mask_gen]
-
-        mlpf_p25 = np.percentile(mlpf_subsample, 25)
-        mlpf_p50 = np.percentile(mlpf_subsample, 50)
-        mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        if len(pf_subsample) > 0:
+            mlpf_p25 = np.percentile(mlpf_subsample, 25)
+            mlpf_p50 = np.percentile(mlpf_subsample, 50)
+            mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        else:
+            mlpf_p25 = 0.0
+            mlpf_p50 = 0.0
+            mlpf_p75 = 0.0
         mlpf_vals.append([mlpf_p25, mlpf_p50, mlpf_p75])
 
         plt.sca(axs[ibin])
