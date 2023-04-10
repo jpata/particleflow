@@ -543,117 +543,125 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
 
 def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
-    sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"], axis=1))
-    sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"], axis=1))
-    sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"], axis=1))
+    cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
 
-    max_e = max(
-        [
-            np.max(sum_gen_energy),
-            np.max(sum_cand_energy),
-            np.max(sum_pred_energy),
-        ]
-    )
-    min_e = min(
-        [
-            np.min(sum_gen_energy),
-            np.min(sum_cand_energy),
-            np.min(sum_pred_energy),
-        ]
-    )
+    for cls_id in cls_ids:
+        if cls_id == 0:
+            msk = yvals["gen_cls_id"] != 0
+        else:
+            msk = yvals["gen_cls_id"] == cls_id
 
-    max_e = int(1.2 * max_e)
-    min_e = int(0.8 * min_e)
+        sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"][msk], axis=1))
+        sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"][msk], axis=1))
+        sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"][msk], axis=1))
 
-    b = np.linspace(min_e, max_e, 100)
-    plt.figure()
-    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
-    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-    plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total PF energy / event [GeV]")
-    if title:
-        plt.title(title)
-    save_img(
-        "sum_gen_cand_energy.png",
-        epoch,
-        cp_dir=cp_dir,
-        comet_experiment=comet_experiment,
-    )
+        max_e = max(
+            [
+                np.max(sum_gen_energy),
+                np.max(sum_cand_energy),
+                np.max(sum_pred_energy),
+            ]
+        )
+        min_e = min(
+            [
+                np.min(sum_gen_energy),
+                np.min(sum_cand_energy),
+                np.min(sum_pred_energy),
+            ]
+        )
 
-    plt.figure()
-    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
-    plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-    plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total MLPF energy / event [GeV]")
-    if title:
-        plt.title(title)
-    save_img(
-        "sum_gen_pred_energy.png",
-        epoch,
-        cp_dir=cp_dir,
-        comet_experiment=comet_experiment,
-    )
+        max_e = int(1.2 * max_e)
+        min_e = int(0.8 * min_e)
 
-    max_e = max(
-        [
-            np.max(sum_gen_energy),
-            np.max(sum_cand_energy),
-            np.max(sum_pred_energy),
-        ]
-    )
-    min_e = min(
-        [
-            np.min(sum_gen_energy),
-            np.min(sum_cand_energy),
-            np.min(sum_pred_energy),
-        ]
-    )
-    max_e = math.ceil(np.log10(max_e))
-    min_e = math.floor(np.log10(max(min_e, 1e-2)))
+        b = np.linspace(min_e, max_e, 100)
+        plt.figure()
+        plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+        plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+        plt.xlabel("total true energy / event [GeV]")
+        plt.ylabel("total PF energy / event [GeV]")
+        if title:
+            plt.title(title)
+        save_img(
+            "sum_gen_cand_energy_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
 
-    b = np.logspace(min_e, max_e, 100)
-    plt.figure()
-    plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
-    plt.xscale("log")
-    plt.yscale("log")
-    plt.plot(
-        [10**min_e, 10**max_e],
-        [10**min_e, 10**max_e],
-        color="black",
-        ls="--",
-    )
-    plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total reconstructed energy / event [GeV]")
-    if title:
-        plt.title(title + ", PF")
-    save_img(
-        "sum_gen_cand_energy_log.png",
-        epoch,
-        cp_dir=cp_dir,
-        comet_experiment=comet_experiment,
-    )
+        plt.figure()
+        plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+        plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
+        plt.xlabel("total true energy / event [GeV]")
+        plt.ylabel("total MLPF energy / event [GeV]")
+        if title:
+            plt.title(title)
+        save_img(
+            "sum_gen_pred_energy_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
 
-    b = np.logspace(min_e, max_e, 100)
-    plt.figure()
-    plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
-    plt.xscale("log")
-    plt.yscale("log")
-    plt.plot(
-        [10**min_e, 10**max_e],
-        [10**min_e, 10**max_e],
-        color="black",
-        ls="--",
-    )
-    plt.xlabel("total true energy / event [GeV]")
-    plt.ylabel("total reconstructed energy / event [GeV]")
-    if title:
-        plt.title(title + ", MLPF")
-    save_img(
-        "sum_gen_pred_energy_log.png",
-        epoch,
-        cp_dir=cp_dir,
-        comet_experiment=comet_experiment,
-    )
+        max_e = max(
+            [
+                np.max(sum_gen_energy),
+                np.max(sum_cand_energy),
+                np.max(sum_pred_energy),
+            ]
+        )
+        min_e = min(
+            [
+                np.min(sum_gen_energy),
+                np.min(sum_cand_energy),
+                np.min(sum_pred_energy),
+            ]
+        )
+        max_e = math.ceil(np.log10(max_e))
+        min_e = math.floor(np.log10(max(min_e, 1e-2)))
+
+        b = np.logspace(min_e, max_e, 100)
+        plt.figure()
+        plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.plot(
+            [10**min_e, 10**max_e],
+            [10**min_e, 10**max_e],
+            color="black",
+            ls="--",
+        )
+        plt.xlabel("total true energy / event [GeV]")
+        plt.ylabel("total reconstructed energy / event [GeV]")
+        if title:
+            plt.title(title + ", PF")
+        save_img(
+            "sum_gen_cand_energy_log_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
+
+        b = np.logspace(min_e, max_e, 100)
+        plt.figure()
+        plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.plot(
+            [10**min_e, 10**max_e],
+            [10**min_e, 10**max_e],
+            color="black",
+            ls="--",
+        )
+        plt.xlabel("total true energy / event [GeV]")
+        plt.ylabel("total reconstructed energy / event [GeV]")
+        if title:
+            plt.title(title + ", MLPF")
+        save_img(
+            "sum_gen_pred_energy_log_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
 
 
 def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
