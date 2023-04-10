@@ -776,12 +776,13 @@ def process_all_files():
     outp = "/local/joosep/mlpf/clic_edm4hep_2023_02_27/"
     samps = [
         "p8_ee_qq_ecm380",
-        #"p8_ee_tt_ecm380",
-        #"p8_ee_ZH_Htautau_ecm380"
-        #"p8_ee_WW_fullhad_ecm380",
+        "p8_ee_tt_ecm380",
+        "p8_ee_tt_ecm380_PU10",
+        "p8_ee_ZH_Htautau_ecm380"
+        "p8_ee_WW_fullhad_ecm380",
     ]
 
-    pool = multiprocessing.Pool(12)
+    pool = multiprocessing.Pool(16)
 
     for samp in samps:
         inpath_samp = inp + samp

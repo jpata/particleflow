@@ -72,6 +72,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
     "clic_edm_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "clic_edm_ttbar_hits_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_qq_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"CLIC $ee \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"CLIC $ee \rightarrow ZH \rightarrow \tau \tau$",

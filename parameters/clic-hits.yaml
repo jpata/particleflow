@@ -44,8 +44,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0002
-  num_epochs: 200
+  lr: 0.0005
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -53,7 +53,7 @@ setup:
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: yes
+  small_graph_opt: no
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -239,23 +239,14 @@ validation_batch_size: 10
 validation_num_events: 2000
 
 evaluation_datasets:
-  clic_edm_qq_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ttbar_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_zh_tautau_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ww_fullhad_pf:
-    batch_size: 50
-    num_events: -1
+  clic_edm_ttbar_hits_pf:
+    batch_size: 10
+    num_events: 10000
 
 evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.0.0
+    version: 1.1.0
     data_dir:
     manual_dir:

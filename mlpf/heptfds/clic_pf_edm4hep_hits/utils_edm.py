@@ -54,6 +54,7 @@ def split_sample(path, test_frac=0.8):
 
 
 def prepare_data_clic(fn):
+    print(fn)
     ret = ak.from_parquet(fn)
 
     X_track = ret["X_track"]
@@ -116,3 +117,16 @@ def generate_examples(files, with_jet_idx=True):
                 "ygen": ygens[iev].astype(np.float32),
                 "ycand": ycands[iev].astype(np.float32),
             }
+
+def read_with_try(fn):
+    try:
+        ret = prepare_data_clic(fn) 
+    except Exception as e:
+        print(fn)
+ 
+if __name__ == "__main__":
+    import sys, glob
+    import multiprocessing
+    fl = glob.glob(sys.argv[1] + "/*.parquet")
+    pool = multiprocessing.Pool(16)
+    pool.map(read_with_try, list(fl))

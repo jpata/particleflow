@@ -741,13 +741,13 @@ def process_one_file(fn, ofn):
     awkward.to_parquet(ret, ofn)
 
 def process_all_files():
-    inp = "/media/joosep/data/clic_edm4hep_2023_02_27/"
-    outp = "/media/joosep/data/mlpf_hits/clic_edm4hep_2023_02_27/"
+    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
+    outp = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/"
     samps = [
         "p8_ee_qq_ecm380",
         "p8_ee_tt_ecm380",
-        #"p8_ee_ZH_Htautau_ecm380"
-        #"p8_ee_WW_fullhad_ecm380",
+        "p8_ee_ZH_Htautau_ecm380"
+        "p8_ee_WW_fullhad_ecm380",
     ]
 
     pool = multiprocessing.Pool(16)
@@ -760,7 +760,7 @@ def process_all_files():
             os.makedirs(outpath_samp)
 
         args = []
-        for inf in infiles[:1000]:
+        for inf in infiles:
             of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
             args.append((inf, of))
         pool.starmap(process_one_file, args)
