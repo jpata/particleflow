@@ -118,15 +118,21 @@ def generate_examples(files, with_jet_idx=True):
                 "ycand": ycands[iev].astype(np.float32),
             }
 
+
 def read_with_try(fn):
     try:
-        ret = prepare_data_clic(fn) 
+        ret = prepare_data_clic(fn)
+        return ret
     except Exception as e:
         print(fn)
- 
+        print(e)
+
+
 if __name__ == "__main__":
-    import sys, glob
+    import sys
+    import glob
     import multiprocessing
+
     fl = glob.glob(sys.argv[1] + "/*.parquet")
     pool = multiprocessing.Pool(16)
     pool.map(read_with_try, list(fl))

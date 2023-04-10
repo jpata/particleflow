@@ -18,4 +18,3 @@ singularity exec -B /scratch/persistent --nv \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python mlpf/pipeline.py plots \
     --train-dir experiments/clic-hits_20230406_154123_887574.gpu1.local
-
