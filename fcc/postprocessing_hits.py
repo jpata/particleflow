@@ -22,21 +22,15 @@ particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e
 #arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 #so we can easily use them in skip connections
 track_feature_order = [
-    "type", "pt", "eta", "sin_phi", "cos_phi", "p",
-    "chi2", "ndf", "dEdx", "dEdxError",
+    "elemtype", "pt", "eta", "sin_phi", "cos_phi", "p",
+    "chi2", "ndf",
     "radiusOfInnermostHit", "tanLambda", "D0", "omega",
-    "Z0", "time"
-]
-cluster_feature_order = [
-    "type", "et", "eta", "sin_phi", "cos_phi", "energy",
-    "position.x", "position.y", "position.z", "iTheta",
-    "energy_ecal", "energy_hcal", "energy_other", "num_hits",
-    "sigma_x", "sigma_y", "sigma_z"
+    "referencePoint.x", "referencePoint.y", "referencePoint.z",
+    "Z0", "time", "type"
 ]
 hit_feature_order = [
-    "type", "et", "eta", "sin_phi", "cos_phi", "energy",
-    "position.x", "position.y", "position.z", "time",
-    "energyError",
+    "elemtype", "et", "eta", "sin_phi", "cos_phi", "energy",
+    "position.x", "position.y", "position.z", "time", "subdetector", "type"
 ]
 
 def track_pt(omega):
@@ -132,6 +126,7 @@ def get_cluster_subdet_energies(hit_list, hit_data, collectionIDs_reverse, iev):
 def hits_to_features(hit_data, iev, coll, feats):
     feat_arr = {f: hit_data[coll + "." + f][iev] for f in feats}
 
+    #set the subdetector type
     sdcoll = "subdetector"
     feat_arr[sdcoll] = np.zeros(len(feat_arr["type"]), dtype=np.int32)
     if coll.startswith("ECAL"):
@@ -141,6 +136,10 @@ def hits_to_features(hit_data, iev, coll, feats):
     else:
         feat_arr[sdcoll][:] = 2
 
+    #hit elemtype is always 2
+    feat_arr["elemtype"] = 2*np.ones(len(feat_arr["type"]), dtype=np.int32)
+
+    #precompute some approximate et, eta, phi
     pos_mag = np.sqrt(feat_arr["position.x"]**2 + feat_arr["position.y"]**2 + feat_arr["position.z"]**2) 
     px = (feat_arr["position.x"] / pos_mag) * feat_arr["energy"]
     py = (feat_arr["position.y"] / pos_mag) * feat_arr["energy"]
@@ -149,6 +148,7 @@ def hits_to_features(hit_data, iev, coll, feats):
     feat_arr["eta"] = 0.5*np.log((feat_arr["energy"] + pz)/(feat_arr["energy"] - pz))
     feat_arr["sin_phi"] = py/feat_arr["energy"]
     feat_arr["cos_phi"] = px/feat_arr["energy"]
+
     return awkward.Record(feat_arr)
 
 def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
@@ -329,7 +329,7 @@ def track_to_features(prop_data, iev):
     #get the index of the first track state
     trackstate_idx = prop_data[track_coll][track_coll + ".trackStates_begin"][iev]
     #get the properties of the track at the first track state (at the origin)
-    for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
+    for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time", "referencePoint.x", "referencePoint.y", "referencePoint.z"]:
         ret[k] = prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx]
 
     ret["pt"] = track_pt(ret["omega"])
@@ -348,7 +348,7 @@ def track_to_features(prop_data, iev):
     ret["cos_phi"] = np.cos(ret["phi"])
 
     #override track type with 1
-    ret["type"] = 1*np.ones(n_tr, dtype=np.float32)
+    ret["elemtype"] = 1*np.ones(n_tr, dtype=np.int32)
 
     return awkward.Record(ret)
 
@@ -584,6 +584,7 @@ def get_feature_matrix(feature_dict, features):
 
 def process_one_file(fn, ofn):
 
+    print(fn)
     #output exists, do not recreate
     if os.path.isfile(ofn):
         return
@@ -612,7 +613,7 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
-    for iev in tqdm.tqdm(range(arrs.num_entries)):
+    for iev in range(arrs.num_entries):
 
         #get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -733,40 +734,37 @@ def process_one_file(fn, ofn):
             "ygen_track": ygen_track,
             "ygen_hit": ygen_hit,
             "ycand_track": ycand_track,
-            "ycand_hit": ycand_hit
+            "ycand_hit": ycand_hit,
         })
+        if np.sum(used_gps==0)>0:
+            this_ev["ygen_unused_pt"] = gpdata.gen_features["pt"][used_gps==0]
+            this_ev["ygen_unused_eta"] = gpdata.gen_features["eta"][used_gps==0]
+
         ret.append(this_ev)
 
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
-def process_all_files():
+def process_sample(samp):
     inp = "/local/joosep/clic_edm4hep_2023_02_27/"
     outp = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/"
-    samps = [
-        "p8_ee_qq_ecm380",
-        "p8_ee_tt_ecm380",
-        "p8_ee_ZH_Htautau_ecm380"
-        "p8_ee_WW_fullhad_ecm380",
-    ]
 
     pool = multiprocessing.Pool(16)
 
-    for samp in samps:
-        inpath_samp = inp + samp
-        outpath_samp = outp + samp
-        infiles = list(glob.glob(inpath_samp + "/*.root"))
-        if not os.path.isdir(outpath_samp):
-            os.makedirs(outpath_samp)
+    inpath_samp = inp + samp
+    outpath_samp = outp + samp
+    infiles = list(glob.glob(inpath_samp + "/*.root"))
+    if not os.path.isdir(outpath_samp):
+        os.makedirs(outpath_samp)
 
-        args = []
-        for inf in infiles:
-            of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-            args.append((inf, of))
-        pool.starmap(process_one_file, args)
+    args = []
+    for inf in infiles:
+        of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
+        args.append((inf, of))
+    pool.starmap(process_one_file, args)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
+    if len(sys.argv) == 2:
         process_all_files()
-    else:
+    if len(sys.argv) == 3:
         process_one_file(sys.argv[1], sys.argv[2])
