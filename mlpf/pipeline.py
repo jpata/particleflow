@@ -989,7 +989,7 @@ def plots(train_dir, max_files):
         loss_plot,
         plot_jet_response_binned,
         plot_met_response_binned,
-        get_class_names
+        get_class_names,
     )
 
     mplhep.set_style(mplhep.styles.CMS)

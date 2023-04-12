@@ -4,15 +4,38 @@ import tqdm
 
 # from fcc/postprocessing_hits.py
 X_FEATURES_TRK = [
-    "elemtype", "pt", "eta", "sin_phi", "cos_phi", "p",
-    "chi2", "ndf",
-    "radiusOfInnermostHit", "tanLambda", "D0", "omega",
-    "referencePoint.x", "referencePoint.y", "referencePoint.z",
-    "Z0", "time", "type"
+    "elemtype",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "p",
+    "chi2",
+    "ndf",
+    "radiusOfInnermostHit",
+    "tanLambda",
+    "D0",
+    "omega",
+    "referencePoint.x",
+    "referencePoint.y",
+    "referencePoint.z",
+    "Z0",
+    "time",
+    "type",
 ]
 X_FEATURES_CH = [
-    "elemtype", "et", "eta", "sin_phi", "cos_phi", "energy",
-    "position.x", "position.y", "position.z", "time", "subdetector", "type"
+    "elemtype",
+    "et",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "time",
+    "subdetector",
+    "type",
 ]
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
@@ -107,4 +130,3 @@ def generate_examples(files, with_jet_idx=True):
 if __name__ == "__main__":
     fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
     ret = prepare_data_clic(fn)
-

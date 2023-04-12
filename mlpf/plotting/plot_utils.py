@@ -75,15 +75,17 @@ CLASS_NAMES_CLIC = [
     r"$\mu^\pm$",
 ]
 
+
 def get_class_names(dataset_name):
     if dataset_name.startswith("clic_"):
-        return CLASS_NAMES_CLIC  
+        return CLASS_NAMES_CLIC
     elif dataset_name.startswith("cms_"):
         return CLASS_NAMES_CMS
     elif dataset_name.startswith("delphes_"):
         return CLASS_NAMES_CLIC
     else:
         raise Exception("Unknown dataset name: {}".format(dataset_name))
+
 
 EVALUATION_DATASET_NAMES = {
     "clic_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
@@ -596,7 +598,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         max_e = int(1.2 * max_e)
         min_e = int(0.8 * min_e)
 
-        #1D hist of sum energy 
+        # 1D hist of sum energy
         b = np.linspace(min_e, max_e, 100)
         plt.figure()
         plt.hist(sum_cand_energy, bins=b, label="PF", histtype="step", lw=2)
@@ -612,8 +614,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
         )
-        
-        #2D hist of gen vs. PF energy
+
+        # 2D hist of gen vs. PF energy
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
@@ -627,8 +629,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
         )
-      
-        #2D hist of gen vs. MLPF energy 
+
+        # 2D hist of gen vs. MLPF energy
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")

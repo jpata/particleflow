@@ -9,4 +9,3 @@ cd ~/particleflow
 
 singularity exec -B /local -B /scratch/persistent --nv \
     $IMG python fcc/postprocessing_hits.py $1
-
