@@ -1,37 +1,18 @@
 import awkward as ak
 import numpy as np
+import tqdm
 
-# from fcc/postprocessing.py
+# from fcc/postprocessing_hits.py
 X_FEATURES_TRK = [
-    "type",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "p",
-    "chi2",
-    "ndf",
-    "dEdx",
-    "dEdxError",
-    "radiusOfInnermostHit",
-    "tanLambda",
-    "D0",
-    "omega",
-    "Z0",
-    "time",
+    "elemtype", "pt", "eta", "sin_phi", "cos_phi", "p",
+    "chi2", "ndf",
+    "radiusOfInnermostHit", "tanLambda", "D0", "omega",
+    "referencePoint.x", "referencePoint.y", "referencePoint.z",
+    "Z0", "time", "type"
 ]
 X_FEATURES_CH = [
-    "type",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "time",
-    "energyError",
+    "elemtype", "et", "eta", "sin_phi", "cos_phi", "energy",
+    "position.x", "position.y", "position.z", "time", "subdetector", "type"
 ]
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
@@ -40,7 +21,7 @@ labels = [0, 211, 130, 22, 11, 13]
 
 def split_sample(path, test_frac=0.8):
     files = sorted(list(path.glob("*.parquet")))
-    print("Found {} files in {}".format(files, path))
+    print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
     files_train = files[:idx_split]
@@ -81,6 +62,8 @@ def prepare_data_clic(fn):
 
         if len(ygen_track) == 0 or len(ygen_hit) == 0:
             continue
+        if len(ycand_track) == 0 or len(ycand_hit) == 0:
+            continue
 
         # pad feature dim between tracks and hits to the same size
         if X1.shape[1] < X2.shape[1]:
@@ -92,7 +75,6 @@ def prepare_data_clic(fn):
         X = np.concatenate([X1, X2])
         ygen = np.concatenate([ygen_track, ygen_hit])
         ycand = np.concatenate([ycand_track, ycand_hit])
-
         assert ygen.shape[0] == X.shape[0]
         assert ycand.shape[0] == X.shape[0]
 
@@ -109,30 +91,20 @@ def prepare_data_clic(fn):
 
 
 def generate_examples(files, with_jet_idx=True):
-    for fi in files:
-        Xs, ygens, ycands = prepare_data_clic(fi)
-        for iev in range(len(Xs)):
-            yield str(fi) + "_" + str(iev), {
-                "X": Xs[iev].astype(np.float32),
-                "ygen": ygens[iev].astype(np.float32),
-                "ycand": ycands[iev].astype(np.float32),
-            }
-
-
-def read_with_try(fn):
-    try:
-        ret = prepare_data_clic(fn)
-        return ret
-    except Exception as e:
-        print(fn)
-        print(e)
+    for fi in tqdm.tqdm(files):
+        try:
+            Xs, ygens, ycands = prepare_data_clic(fi)
+            for iev in range(len(Xs)):
+                yield str(fi) + "_" + str(iev), {
+                    "X": Xs[iev].astype(np.float32),
+                    "ygen": ygens[iev].astype(np.float32),
+                    "ycand": ycands[iev].astype(np.float32),
+                }
+        except Exception as e:
+            print("could not process {}: {}".format(fi, e))
 
 
 if __name__ == "__main__":
-    import sys
-    import glob
-    import multiprocessing
+    fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
+    ret = prepare_data_clic(fn)
 
-    fl = glob.glob(sys.argv[1] + "/*.parquet")
-    pool = multiprocessing.Pool(16)
-    pool.map(read_with_try, list(fl))

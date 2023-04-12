@@ -989,6 +989,7 @@ def plots(train_dir, max_files):
         loss_plot,
         plot_jet_response_binned,
         plot_met_response_binned,
+        get_class_names
     )
 
     mplhep.set_style(mplhep.styles.CMS)
@@ -1010,6 +1011,9 @@ def plots(train_dir, max_files):
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir
         for dataset in sorted(os.listdir(str(eval_epoch_dir))):
+
+            class_names = get_class_names(dataset)
+
             _title = format_dataset_name(dataset)
             dataset_dir = eval_epoch_dir / dataset
             cp_dir = dataset_dir / "plots"
@@ -1018,7 +1022,7 @@ def plots(train_dir, max_files):
             yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
 
             plot_num_elements(X, cp_dir=cp_dir, title=_title)
-            plot_sum_energy(yvals, cp_dir=cp_dir, title=_title)
+            plot_sum_energy(yvals, class_names, cp_dir=cp_dir, title=_title)
 
             plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True)
             plot_jet_ratio(

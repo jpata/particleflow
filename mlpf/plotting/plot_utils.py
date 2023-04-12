@@ -65,6 +65,26 @@ CLASS_NAMES_CMS = [
     r"$\mu^\pm$",
 ]
 
+CLASS_LABELS_CLIC = [0, 211, 130, 22, 11, 13]
+CLASS_NAMES_CLIC = [
+    r"none",
+    r"ch.had",
+    r"n.had",
+    r"$\gamma$",
+    r"$e^\pm$",
+    r"$\mu^\pm$",
+]
+
+def get_class_names(dataset_name):
+    if dataset_name.startswith("clic_"):
+        return CLASS_NAMES_CLIC  
+    elif dataset_name.startswith("cms_"):
+        return CLASS_NAMES_CMS
+    elif dataset_name.startswith("delphes_"):
+        return CLASS_NAMES_CLIC
+    else:
+        raise Exception("Unknown dataset name: {}".format(dataset_name))
+
 EVALUATION_DATASET_NAMES = {
     "clic_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "delphes_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
@@ -72,6 +92,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
     "clic_edm_ttbar_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "clic_edm_ttbar_pu10_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"CLIC $ee \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_qq_pf": r"CLIC $ee \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"CLIC $ee \rightarrow WW \rightarrow \mathrm{hadrons}$",
@@ -541,15 +562,17 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
     )
 
 
-def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
     cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
 
     for cls_id in cls_ids:
         if cls_id == 0:
             msk = yvals["gen_cls_id"] != 0
+            clname = "all particles"
         else:
             msk = yvals["gen_cls_id"] == cls_id
+            clname = class_names[cls_id]
 
         sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"][msk], axis=1))
         sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"][msk], axis=1))
@@ -573,28 +596,46 @@ def plot_sum_energy(yvals, epoch=None, cp_dir=None, comet_experiment=None, title
         max_e = int(1.2 * max_e)
         min_e = int(0.8 * min_e)
 
+        #1D hist of sum energy 
         b = np.linspace(min_e, max_e, 100)
+        plt.figure()
+        plt.hist(sum_cand_energy, bins=b, label="PF", histtype="step", lw=2)
+        plt.hist(sum_pred_energy, bins=b, label="MLPF", histtype="step", lw=2)
+        plt.hist(sum_gen_energy, bins=b, label="Truth", histtype="step", lw=2)
+        plt.xlabel("total energy / event [GeV]")
+        plt.ylabel("events / bin")
+        if title:
+            plt.title(title + " " + clname)
+        save_img(
+            "sum_gen_energy_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
+        
+        #2D hist of gen vs. PF energy
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total PF energy / event [GeV]")
         if title:
-            plt.title(title)
+            plt.title(title + " " + clname)
         save_img(
             "sum_gen_cand_energy_cls{}.png".format(cls_id),
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
         )
-
+      
+        #2D hist of gen vs. MLPF energy 
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total MLPF energy / event [GeV]")
         if title:
-            plt.title(title)
+            plt.title(title + " " + clname)
         save_img(
             "sum_gen_pred_energy_cls{}.png".format(cls_id),
             epoch,

@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: clic
   target_particles: gen
-  num_input_features: 16
+  num_input_features: 18
   #(none=0, track=1, cluster=2)
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
@@ -233,6 +233,7 @@ train_test_datasets:
     batch_per_gpu: 1
     datasets:
       - clic_edm_ttbar_hits_pf
+      - clic_edm_qq_hits_pf
 
 validation_dataset: clic_edm_ttbar_hits_pf
 validation_batch_size: 10
@@ -247,6 +248,10 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.1.0
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_qq_hits_pf:
+    version: 1.2.0
     data_dir:
     manual_dir:

@@ -12,14 +12,14 @@ from utils_edm import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with ttbar with raw hits
+CLIC EDM4HEP dataset with qq with raw hits
 """
 
 _CITATION = """
 """
 
 
-class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
+class ClicEdmQqHitsPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release",
@@ -58,7 +58,7 @@ class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_tt_ecm380/"))
+        return split_sample(Path(path / "p8_ee_qq_ecm380/"))
 
     def _generate_examples(self, files):
         return generate_examples(files)

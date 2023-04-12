@@ -74,19 +74,17 @@ class EventData:
     def __init__(self,
         gen_features,
         hit_features,
-        cluster_features,
         track_features,
         genparticle_to_hit,
         genparticle_to_track,
-        hit_to_cluster,
+        hit_to_cluster
         ):
         self.gen_features = gen_features 
         self.hit_features = hit_features 
-        self.cluster_features = cluster_features 
         self.track_features = track_features 
         self.genparticle_to_hit = genparticle_to_hit 
         self.genparticle_to_track = genparticle_to_track 
-        self.hit_to_cluster = hit_to_cluster 
+        self.hit_to_cluster = hit_to_cluster
 
 def get_cluster_subdet_energies(hit_list, hit_data, collectionIDs_reverse, iev):
     """
@@ -251,72 +249,6 @@ def genparticle_track_adj(sitrack_links, iev):
     
     return genparticle_to_track_matrix_coo0, genparticle_to_track_matrix_coo1, genparticle_to_track_matrix_w
 
-def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
-    cluster_arr = prop_data["PandoraClusters"][iev]
-    feats = ["type", "position.x", "position.y", "position.z", "iTheta", "phi", "energy"]
-    ret = {feat: cluster_arr["PandoraClusters." + feat] for feat in feats}
-
-    hit_idx = np.array(hit_to_cluster[0])
-    cluster_idx = np.array(hit_to_cluster[1])
-    cl_energy_ecal = []
-    cl_energy_hcal = []
-    cl_energy_other = []
-    num_hits = []
-    cl_sigma_x = []
-    cl_sigma_y = []
-    cl_sigma_z = []
-
-    n_cl = len(ret["energy"])
-    for cl in range(n_cl):
-        msk_cl = cluster_idx == cl
-        hits = hit_idx[msk_cl]
-
-        num_hits.append(len(hits))
-
-        subdets = hit_features["subdetector"][hits]
-
-        hits_energy = hit_features["energy"][hits]
-
-        hits_posx = hit_features["position.x"][hits]
-        hits_posy = hit_features["position.y"][hits]
-        hits_posz = hit_features["position.z"][hits]
-
-        energy_ecal = np.sum(hits_energy[subdets==0])
-        energy_hcal = np.sum(hits_energy[subdets==1])
-        energy_other = np.sum(hits_energy[subdets==2])
-
-        cl_energy_ecal.append(energy_ecal)
-        cl_energy_hcal.append(energy_hcal)
-        cl_energy_other.append(energy_other)
-
-        cl_sigma_x.append(np.std(hits_posx))
-        cl_sigma_y.append(np.std(hits_posy))
-        cl_sigma_z.append(np.std(hits_posz))
-
-    ret["energy_ecal"] = np.array(cl_energy_ecal)
-    ret["energy_hcal"] = np.array(cl_energy_hcal)
-    ret["energy_other"] = np.array(cl_energy_other)
-    ret["num_hits"] = np.array(num_hits)
-    ret["sigma_x"] = np.array(cl_sigma_x)
-    ret["sigma_y"] = np.array(cl_sigma_y)
-    ret["sigma_z"] = np.array(cl_sigma_z)
-
-    tt = np.tan(ret["iTheta"] / 2.0)
-    eta = awkward.to_numpy(-np.log(tt, where=tt>0))
-    eta[tt<=0] = 0.0
-    ret["eta"] = eta
-
-    costheta = np.cos(ret["iTheta"])
-    ez = ret["energy"]*costheta
-    ret["et"]  = np.sqrt(ret["energy"]**2 - ez**2)
-
-    #override cluster type with 1
-    ret["type"] = 2*np.ones(n_cl, dtype=np.float32)
-    
-    ret["sin_phi"] = np.sin(ret["phi"])
-    ret["cos_phi"] = np.cos(ret["phi"])
-
-    return awkward.Record(ret)
 
 def track_to_features(prop_data, iev):
     track_arr = prop_data[track_coll][iev]
@@ -368,50 +300,47 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
-    cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
     genparticle_to_track = genparticle_track_adj(sitrack_links, iev)
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
     n_hit = awkward.count(hit_features["type"])
-    n_cluster = awkward.count(cluster_features["type"])
 
     if len(genparticle_to_track[0])>0:
-        gp_to_track = coo_matrix(
+        gp_to_track = np.array(coo_matrix(
             (genparticle_to_track[2],
             (genparticle_to_track[0], genparticle_to_track[1])),
             shape=(n_gp, n_track)
-        ).max(axis=1).todense()
+        ).max(axis=1).todense())[:, 0]
     else:
-        gp_to_track = np.zeros((n_gp, 1))
+        gp_to_track = np.zeros(n_gp)
 
-    gp_to_calohit = coo_matrix(
-        (genparticle_to_hit[2],
-        (genparticle_to_hit[0], genparticle_to_hit[1])),
-        shape=(n_gp, n_hit)
-    )
-    calohit_to_cluster = coo_matrix(
-        (hit_to_cluster[2],
-        (hit_to_cluster[0], hit_to_cluster[1])),
-        shape=(n_hit, n_cluster)
-    )
-    gp_to_cluster = (gp_to_calohit*calohit_to_cluster).sum(axis=1)
+    if len(genparticle_to_hit[0])>0:
+        gp_to_calohit = np.array(coo_matrix(
+            (genparticle_to_hit[2],
+            (genparticle_to_hit[0], genparticle_to_hit[1])),
+            shape=(n_gp, n_hit)
+        ).max(axis=1).todense())[:, 0]
+    else:
+        gp_to_calohit = np.zeros(n_gp)
 
     #60% of the hits of a track must come from the genparticle
-    gp_in_tracker = np.array(gp_to_track>=0.6)[:, 0]
+    gp_in_tracker = gp_to_track>=0.6
 
-    #at least 10% of the energy of the genparticle should be matched to a calorimeter cluster
-    gp_in_calo = (np.array(gp_to_cluster)[:, 0]/gen_features["energy"])>0.1
+    #the particle should deposit energy to some calo hit
+    gp_in_calo = gp_to_calohit>0.0
 
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
 
+    #get status 1 particles that are not neutrinos
+    #and have energy > 100 MeV
     mask_visible = (
         (gen_features["generatorStatus"]==1) & 
         (gen_features["PDG"]!=12) & 
         (gen_features["PDG"]!=14) & 
         (gen_features["PDG"]!=16) & 
-        (gen_features["energy"]>0.01) &
+        (gen_features["energy"]>0.1) &
         gp_interacted_with_detector
     )
     idx_all_masked = np.where(mask_visible)[0]
@@ -427,7 +356,6 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     return EventData(
         gen_features,
         hit_features,
-        cluster_features,
         track_features,
         genparticle_to_hit,
         genparticle_to_track,
@@ -439,7 +367,6 @@ def assign_genparticles_to_obj_and_merge(gpdata):
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
     n_hit = awkward.count(gpdata.hit_features["type"])
-    n_cluster = awkward.count(gpdata.cluster_features["type"])
 
     gp_to_track = np.array(coo_matrix(
         (gpdata.genparticle_to_track[2],
@@ -447,20 +374,13 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         shape=(n_gp, n_track)
     ).todense())
 
-    gp_to_calohit = coo_matrix(
+    gp_to_calohit = np.array(coo_matrix(
         (gpdata.genparticle_to_hit[2],
         (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])),
         shape=(n_gp, n_hit)
-    )
-    calohit_to_cluster = coo_matrix(
-        (gpdata.hit_to_cluster[2],
-        (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])),
-        shape=(n_hit, n_cluster)
-    )
+    ).todense())
 
-    gp_to_cluster = np.array((gp_to_calohit*calohit_to_cluster).todense())
-
-    #map each genparticle to a track, cluster (or calohit)
+    #map each genparticle to a track or calohit
     gp_to_obj = -1*np.ones((n_gp, 2), dtype=np.int32)
     set_used_tracks = set([])
     set_used_calohits = set([])
@@ -481,27 +401,15 @@ def assign_genparticles_to_obj_and_merge(gpdata):
 
         #if there was no matched track, try a calohit
         if gp_to_obj[igp, 0] == -1:
-            matched_clusters = gp_to_cluster[igp]
-            clusters = np.where(matched_clusters)[0]
-            clusters = sorted(clusters, key=lambda x: matched_clusters[x], reverse=True)
-
-            va = gpdata.genparticle_to_hit[1][gpdata.genparticle_to_hit[0]==igp]
-            vb = gpdata.genparticle_to_hit[2][gpdata.genparticle_to_hit[0]==igp]
-            if len(va) > 0:
-                calohit_by_energy = np.array(sorted(range(len(va)), key=lambda x: vb[x], reverse=True))
-                va = va[calohit_by_energy]
-                vb = vb[calohit_by_energy]
-
-                for calohit in va:
-                    if calohit not in set_used_calohits:
-                        gp_to_obj[igp, 1] = calohit
-                        set_used_calohits.add(calohit)
-                        break
+            matched_calohits = np.where(gp_to_calohit[igp])[0]
+            calohits = sorted(matched_calohits, key=lambda x: gp_to_calohit[igp, x], reverse=True)
+            for calohit in calohits:
+                if calohit not in set_used_calohits:
+                    gp_to_obj[igp, 1] = calohit
+                    set_used_calohits.add(calohit)
+                    break
 
     unmatched = (gp_to_obj[:, 0]!=-1) & (gp_to_obj[:, 1]!=-1)
-    if np.sum(unmatched)>0:
-        print("unmatched", gpdata.gen_features["energy"][unmatched])
-
     return gp_to_obj
 
 
@@ -584,10 +492,10 @@ def get_feature_matrix(feature_dict, features):
 
 def process_one_file(fn, ofn):
 
-    print(fn)
     #output exists, do not recreate
     if os.path.isfile(ofn):
         return
+    print(fn)
 
     fi = uproot.open(fn)
     
@@ -736,9 +644,9 @@ def process_one_file(fn, ofn):
             "ycand_track": ycand_track,
             "ycand_hit": ycand_hit,
         })
-        if np.sum(used_gps==0)>0:
-            this_ev["ygen_unused_pt"] = gpdata.gen_features["pt"][used_gps==0]
-            this_ev["ygen_unused_eta"] = gpdata.gen_features["eta"][used_gps==0]
+        #sometimes empty arrays confuse parquet
+        #this_ev["ygen_unused_pt"] = gpdata.gen_features["pt"][used_gps==0]
+        #this_ev["ygen_unused_eta"] = gpdata.gen_features["eta"][used_gps==0]
 
         ret.append(this_ev)
 
@@ -749,11 +657,11 @@ def process_sample(samp):
     inp = "/local/joosep/clic_edm4hep_2023_02_27/"
     outp = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/"
 
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(30)
 
     inpath_samp = inp + samp
     outpath_samp = outp + samp
-    infiles = list(glob.glob(inpath_samp + "/*.root"))
+    infiles = list(glob.glob(inpath_samp + "/*.root"))[:10000]
     if not os.path.isdir(outpath_samp):
         os.makedirs(outpath_samp)
 
@@ -765,6 +673,6 @@ def process_sample(samp):
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
-        process_all_files()
+        process_sample(sys.argv[1])
     if len(sys.argv) == 3:
         process_one_file(sys.argv[1], sys.argv[2])
