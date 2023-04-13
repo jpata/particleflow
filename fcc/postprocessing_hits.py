@@ -33,6 +33,14 @@ hit_feature_order = [
     "position.x", "position.y", "position.z", "time", "subdetector", "type"
 ]
 
+def build_dummy_array(num, dtype=np.int64):
+    return awkward.Array(
+        awkward.contents.ListOffsetArray(
+            awkward.index.Index64(np.zeros(num + 1, dtype=np.int64)),
+            awkward.from_numpy(np.array([], dtype=dtype), highlevel=False),
+        )
+    )
+
 def track_pt(omega):
     a = 3 * 10**-4
     b = 4  # B-field in tesla, from clicRec_e4h_input
@@ -521,6 +529,7 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
+    ret_unused_pt = []
     for iev in range(arrs.num_entries):
 
         #get the reco particles
@@ -618,7 +627,7 @@ def process_one_file(fn, ofn):
         #    ) < 1e-2)
 
 
-        #we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
+        #we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert(np.all(gps_hit[:, 1] == 0))
         assert(np.all(rps_hit[:, 1] == 0))
 
@@ -636,28 +645,38 @@ def process_one_file(fn, ofn):
         sanitize(ycand_track)
         sanitize(ycand_hit)
 
-        this_ev = awkward.Record({
+        this_ev = {
             "X_track": X_track,
             "X_hit": X_hit,
             "ygen_track": ygen_track,
             "ygen_hit": ygen_hit,
             "ycand_track": ycand_track,
             "ycand_hit": ycand_hit,
-        })
-        #sometimes empty arrays confuse parquet
-        #this_ev["ygen_unused_pt"] = gpdata.gen_features["pt"][used_gps==0]
-        #this_ev["ygen_unused_eta"] = gpdata.gen_features["eta"][used_gps==0]
+        }
+        if np.sum(used_gps==0)>0:
+            ret_unused_pt.append(awkward.to_numpy(gpdata.gen_features["pt"][used_gps==0]))
+        else:
+            ret_unused_pt.append(np.array([], dtype=np.float32))
+        this_ev = awkward.Record(this_ev)
 
         ret.append(this_ev)
 
-    ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
+    ret = {k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields}
+
+    ntot = sum([len(x) for x in ret_unused_pt])
+    if ntot>0:
+        ret["ygen_unused_pt"] = awkward.from_iter(ret_unused_pt)
+    else:
+        ret["ygen_unused_pt"] = build_dummy_array(len(ret_unused_pt), dtype=np.float32)
+    ret = awkward.Record(ret)
+
     awkward.to_parquet(ret, ofn)
 
 def process_sample(samp):
-    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/"
+    inp = "/media/joosep/data/clic_edm4hep_2023_02_27/"
+    outp = "/media/joosep/data/mlpf_hits/clic_edm4hep_2023_02_27/"
 
-    pool = multiprocessing.Pool(30)
+    pool = multiprocessing.Pool(15)
 
     inpath_samp = inp + samp
     outpath_samp = outp + samp
