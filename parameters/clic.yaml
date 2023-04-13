@@ -12,7 +12,7 @@ dataset:
   reg_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 100.0
+  classification_loss_coef: 200.0
   charge_loss_coef: 1.0
   pt_loss_coef: 10.0
   eta_loss_coef: 10.0
@@ -44,8 +44,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0002
-  num_epochs: 200
+  lr: 0.0005
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
