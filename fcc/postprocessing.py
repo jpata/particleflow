@@ -578,6 +578,38 @@ def assign_genparticles_to_obj_and_merge(gpdata):
     genparticle_to_track = filter_adj(gpdata.genparticle_to_track, genpart_idx_all_to_filtered)
     gp_to_obj = gp_to_obj[mask_gp_unmatched]
 
+    assert len(gp_to_obj) == len(gen_features_new["PDG"])
+    assert gp_to_obj.shape[1] == 2
+
+    # get the track/cluster -> genparticle map
+    track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
+    cluster_to_gp = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
+
+    # NEW CODE: to match all PF-elements to objects
+    # update the association matrices to not include the merged particles
+    gp_to_track = np.delete(gp_to_track, unmatched, axis=0)
+    gp_to_cluster = np.delete(gp_to_cluster, unmatched, axis=0)
+
+    # find the set of unmatched tracks
+    unmatched_trks = []
+    for trk in range(n_track):
+        if trk not in gp_to_obj[:, 0]:
+            unmatched_trks.append(trk)
+    # link the set of unmatched tracks to gps
+    unmatched_track_to_gp = {}
+    for unmatched_trk in unmatched_trks:
+        unmatched_track_to_gp[unmatched_trk] = gp_to_track[:, unmatched_trk].argmax()
+
+    # find the set of unmatched clusters
+    unmatched_cls = []
+    for cl in range(n_cluster):
+        if cl not in gp_to_obj[:, 1]:
+            unmatched_cls.append(cl)
+    # link the set of unmatched clusters to gps
+    unmatched_cluster_to_gp = {}
+    for unmatched_cl in unmatched_cls:
+        unmatched_cluster_to_gp[unmatched_cl] = gp_to_cluster[:, unmatched_cl].argmax()
+
     return (
         EventData(
             gen_features_new,
@@ -588,7 +620,10 @@ def assign_genparticles_to_obj_and_merge(gpdata):
             genparticle_to_track,
             gpdata.hit_to_cluster,
         ),
-        gp_to_obj,
+        track_to_gp,
+        cluster_to_gp,
+        unmatched_track_to_gp,
+        unmatched_cluster_to_gp,
     )
 
 
@@ -602,6 +637,17 @@ def assign_to_recoobj(n_obj, obj_to_ptcl, used_particles):
             obj_to_ptcl_all[iobj] = iptcl
             assert used_particles[iptcl] == 0
             used_particles[iptcl] = 1
+    return obj_to_ptcl_all
+
+
+def assign_null_to_recoobj(n_obj, obj_to_ptcl):
+    # same as the function above except that this one doesnt care about used particles since duplicates are allowed
+    obj_to_ptcl_all = -1 * np.ones(n_obj, dtype=np.int64)
+    for iobj in range(n_obj):
+        if iobj in obj_to_ptcl:
+            iptcl = obj_to_ptcl[iobj]
+            obj_to_ptcl_all[iobj] = iptcl
+
     return obj_to_ptcl_all
 
 
@@ -731,44 +777,86 @@ def process_one_file(fn, ofn):
         gpdata = get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs)
 
         # find the reconstructable genparticles and associate them to the best track/cluster
-        gpdata_cleaned, gp_to_obj = assign_genparticles_to_obj_and_merge(gpdata)
+        (
+            gpdata_cleaned,
+            track_to_gp,
+            cluster_to_gp,
+            null_track_to_gp,
+            null_cluster_to_gp,
+        ) = assign_genparticles_to_obj_and_merge(gpdata)
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
         n_gps = len(gpdata_cleaned.gen_features["PDG"])
 
-        assert len(gp_to_obj) == len(gpdata_cleaned.gen_features["PDG"])
-        assert gp_to_obj.shape[1] == 2
-
         # for each reco particle, find the tracks and clusters associated with it
         # construct track/cluster -> recoparticle maps
         track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr)
 
-        # get the track/cluster -> genparticle map
-        track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
-        cluster_to_gp = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
-
         used_gps = np.zeros(n_gps, dtype=np.int64)
+
+        # associating tracks and clusters to objects
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
         cluster_to_gp_all = assign_to_recoobj(n_clusters, cluster_to_gp, used_gps)
-        # all genparticles must be assigned to some PFElement
-        assert np.all(used_gps == 1)
+        # assert(np.all(used_gps == 1))     # all genparticles must be assigned to some PFElement
 
+        # associating unmatched tracks/clusters
+        null_track_to_gp_all = assign_null_to_recoobj(n_tracks, null_track_to_gp)
+        null_cluster_to_gp_all = assign_null_to_recoobj(n_clusters, null_cluster_to_gp)
+
+        # matched elements
+        gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
+        gps_track[:, 0] = np.array([map_pdgid_to_candid(p, c) for p, c in zip(gps_track[:, 0], gps_track[:, 1])])
+        # Old
+        # gps_track[:, 0] = np.array([
+        #     map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])]
+        # )
+
+        gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
+        gps_cluster[:, 0] = np.array([map_pdgid_to_candid(p, c) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])])
+        # Old
+        # gps_cluster[:, 0] = np.array([
+        #     map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])]
+        # )
+        # gps_cluster[:, 1] = 0 # charge should be 0
+
+        # null elements
+        null_gps_track = get_particle_feature_matrix(
+            null_track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order
+        )
+        null_gps_track[:, 0] = np.array(
+            [map_pdgid_to_candid(p, c) for p, c in zip(null_gps_track[:, 0], null_gps_track[:, 1])]
+        )
+
+        null_gps_cluster = get_particle_feature_matrix(
+            null_cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order
+        )
+
+        null_gps_cluster[:, 0] = np.array(
+            [map_pdgid_to_candid(p, c) for p, c in zip(null_gps_cluster[:, 0], null_gps_cluster[:, 1])]
+        )
+        # null_gps_cluster[:, 1] = 0 # charge should be 0
+
+        # check that all gen particles are associated to something
+        set_ = set()
+        for key in track_to_gp:
+            set_.add(track_to_gp[key])
+        for key in null_track_to_gp:
+            set_.add(null_track_to_gp[key])
+
+        for key in cluster_to_gp:
+            set_.add(cluster_to_gp[key])
+        for key in null_cluster_to_gp:
+            set_.add(null_cluster_to_gp[key])
+
+        for gp in range(n_gps):
+            assert gp in set_
+
+        # RECO
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
         cluster_to_rp_all = assign_to_recoobj(n_clusters, cluster_to_rp, used_rps)
-        # all reco particles must be assigned to some PFElement
-        assert np.all(used_rps == 1)
-
-        gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])]
-        )
-        gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_cluster[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])]
-        )
-        gps_cluster[:, 1] = 0
+        # assert(np.all(used_rps == 1))     # all reco particles must be assigned to some PFElement
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array(
@@ -778,7 +866,7 @@ def process_one_file(fn, ofn):
         rps_cluster[:, 0] = np.array(
             [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])]
         )
-        rps_cluster[:, 1] = 0
+        rps_cluster[:, 1] = 0  # charge should be 0
 
         # all initial gen/reco particle energy must be reconstructable
         assert (
@@ -787,9 +875,9 @@ def process_one_file(fn, ofn):
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
 
-        # we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
-        assert np.all(gps_cluster[:, 1] == 0)
-        assert np.all(rps_cluster[:, 1] == 0)
+        # #we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
+        # assert(np.all(gps_cluster[:, 1] == 0))
+        # assert(np.all(rps_cluster[:, 1] == 0))
 
         X_track = get_feature_matrix(gpdata_cleaned.track_features, track_feature_order)
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
@@ -805,25 +893,35 @@ def process_one_file(fn, ofn):
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
+        # unmatched
+        ygen_null_track = null_gps_track
+        ygen_null_cluster = null_gps_cluster
+
+        sanitize(ygen_null_track)
+        sanitize(ygen_null_cluster)
+
         this_ev = awkward.Record(
             {
                 "X_track": X_track,
                 "X_cluster": X_cluster,
                 "ygen_track": ygen_track,
                 "ygen_cluster": ygen_cluster,
+                "ygen_null_track": ygen_null_track,
+                "ygen_null_cluster": ygen_null_cluster,
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
             }
         )
         ret.append(this_ev)
-
+        if iev == 5:
+            break
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
 
 def process_all_files():
-    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_02_27/"
+    inp = "test/clic_edm4hep_2023_02_27/"
+    outp = "test/clic_edm4hep_2023_02_27/"
     samps = ["p8_ee_qq_ecm380", "p8_ee_tt_ecm380", "p8_ee_ZH_Htautau_ecm380"]
 
     pool = multiprocessing.Pool(12)
