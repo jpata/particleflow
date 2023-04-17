@@ -29,3 +29,5 @@ nohup.out
 slurm-*.out
 
 .vscode
+
+*.root
