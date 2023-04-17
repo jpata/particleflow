@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
+import tqdm
 from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
 from torch import Tensor, nn
 from torch.nn import functional as F
-import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 matplotlib.use("Agg")
@@ -192,8 +192,12 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             loss_ = {}
             # for CLASSIFYING PID
             loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-            # REGRESSING p4: mask the loss in cases there is no true particle
-            msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+            # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
+            # TODO: make the code compatible with the other labeling scheme
+            alpha = 0
+            msk_true_particle = alpha * torch.unsqueeze((target_ids <= 4).to(dtype=torch.float32), axis=-1)
+            # msk_true_particle = alpha * torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+
             loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
                 pred_momentum * msk_true_particle, target_momentum * msk_true_particle
             )
