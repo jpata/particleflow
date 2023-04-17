@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch_geometric
 from pyg.args import parse_args
-from pyg.evaluate import make_predictions, postprocess_predictions
+from pyg.evaluate import make_predictions_awk
 from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
@@ -108,16 +108,22 @@ def train(rank, world_size, args, data, model, outpath):
     valid_dataset = torch.utils.data.Subset(
         data, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
     )
-    print("train_dataset=", len(train_dataset))
-    print("valid_dataset=", len(valid_dataset))
+    print("train_dataset={}".format(len(train_dataset)))
+    print("valid_dataset={}".format(len(valid_dataset)))
+
     if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
         file_loader_train = make_file_loaders(world_size, train_dataset)
         file_loader_valid = make_file_loaders(world_size, valid_dataset)
     else:  # construct pyg DataLoaders directly
-        file_loader_train = torch_geometric.loader.DataLoader(train_dataset, args.bs)
-        file_loader_valid = torch_geometric.loader.DataLoader(valid_dataset, args.bs)
-        print("file_loader_train=", len(file_loader_train))
-        print("file_loader_valid=", len(file_loader_valid))
+        train_data = []
+        for file in train_dataset:
+            train_data += file
+        file_loader_train = [torch_geometric.loader.DataLoader(train_data, args.bs)]
+
+        valid_data = []
+        for file in valid_dataset:
+            valid_data += file
+        file_loader_valid = [torch_geometric.loader.DataLoader(valid_data, args.bs)]
 
     print("-----------------------------")
     if world_size > 1:
@@ -194,7 +200,7 @@ def inference(rank, world_size, args, data, model, PATH):
         model = model.to(rank)
     model.eval()
 
-    make_predictions(rank, args.dataset, model, file_loader_test, args.bs, PATH)
+    make_predictions_awk(rank, args.dataset, model, file_loader_test, args.bs, PATH)
 
     if world_size > 1:
         cleanup()
@@ -255,6 +261,7 @@ if __name__ == "__main__":
 
         # load the ttbar data for training/validation
         data = load_data(args.data_path, args.dataset, "TTbar")
+        print("loaded data={}".format(len(data)))
 
         # run the training using DDP if more than one gpu is available
         if world_size > 1:
@@ -289,6 +296,7 @@ if __name__ == "__main__":
 
         # load the qcd data for testing
         data = load_data(args.data_path, args.dataset, args.sample)
+        print("loaded data={}".format(len(data)))
 
         # run the inference using DDP if more than one gpu is available
         if world_size > 1:
@@ -309,8 +317,6 @@ if __name__ == "__main__":
                 model,
                 PATH,
             )
-
-        postprocess_predictions(args.dataset, pred_path)
 
     # load the predictions and make plots (must have ran make_predictions() beforehand)
     if args.make_plots:

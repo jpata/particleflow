@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: cms
   target_particles: gen
-  num_input_features: 41
+  num_input_features: 42
 #       NONE = 0,
 #       TRACK = 1,
 #       PS1 = 2,

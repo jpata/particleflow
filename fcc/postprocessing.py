@@ -717,6 +717,10 @@ def get_feature_matrix(feature_dict, features):
 
 def process_one_file(fn, ofn):
 
+    #output exists, do not recreate
+    if os.path.isfile(ofn):
+        return
+
     fi = uproot.open(fn)
 
     arrs = fi["events"]
@@ -920,9 +924,14 @@ def process_one_file(fn, ofn):
 
 
 def process_all_files():
-    inp = "test/clic_edm4hep_2023_02_27/"
-    outp = "test/clic_edm4hep_2023_02_27/"
-    samps = ["p8_ee_qq_ecm380", "p8_ee_tt_ecm380", "p8_ee_ZH_Htautau_ecm380"]
+
+    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
+    outp = "/local/joosep/mlpf/clic_edm4hep_2023_02_27/"
+    samps = [
+        "p8_ee_qq_ecm380",
+        "p8_ee_tt_ecm380",
+        #"p8_ee_ZH_Htautau_ecm380"
+    ]
 
     pool = multiprocessing.Pool(12)
 

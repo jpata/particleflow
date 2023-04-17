@@ -28,8 +28,8 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
 
   tf-clic-pipeline:
     runs-on: ubuntu-20.04
@@ -77,8 +77,8 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
       - run: ./scripts/local_test_pyg_cms.sh
 
   pyg-delphes-pipeline:
@@ -91,8 +91,8 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
       - run: ./scripts/local_test_pyg_delphes.sh
 
   pyg-clic-pipeline:
@@ -105,8 +105,8 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
       - run: ./scripts/local_test_pyg_clic.sh
 
   pyg-ssl-pipeline:
@@ -119,6 +119,6 @@ jobs:
           python-version: '3.8.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
       - run: ./scripts/local_test_pyg_ssl.sh
