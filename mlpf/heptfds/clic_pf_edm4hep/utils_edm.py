@@ -46,7 +46,23 @@ X_FEATURES_CL = [
 ]
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
-labels = [0, 211, 130, 22, 11, 13]
+labels = {
+    0: 0,  # will not be used in the end
+    211: 1,
+    130: 2,
+    22: 3,
+    11: 4,
+    13: 5,
+}
+
+labels_null = {
+    0: 0,  # will not be used in the end
+    211: 6,
+    130: 7,
+    22: 8,
+    11: 9,
+    13: 10,
+}
 
 
 def split_sample(path, test_frac=0.8):
@@ -86,6 +102,11 @@ def prepare_data_clic(fn, with_jet_idx=True):
 
         ygen_track = ak.to_numpy(ret["ygen_track"][iev])
         ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
+
+        # add null stuff
+        ygen_null_track = ak.to_numpy(ret["ygen_null_track"][iev])
+        ygen_null_cluster = ak.to_numpy(ret["ygen_null_cluster"][iev])
+
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
 
@@ -101,9 +122,11 @@ def prepare_data_clic(fn, with_jet_idx=True):
         # concatenate tracks and clusters in features and targets
         X = np.concatenate([X1, X2])
         ygen = np.concatenate([ygen_track, ygen_cluster])
+        ygen_null = np.concatenate([ygen_null_track, ygen_null_cluster])
         ycand = np.concatenate([ycand_track, ycand_cluster])
 
         assert ygen.shape[0] == X.shape[0]
+        assert ygen_null.shape[0] == X.shape[0]
         assert ycand.shape[0] == X.shape[0]
 
         # add jet_idx column
@@ -112,6 +135,13 @@ def prepare_data_clic(fn, with_jet_idx=True):
                 [
                     ygen.astype(np.float32),
                     np.zeros((len(ygen), 1), dtype=np.float32),
+                ],
+                axis=-1,
+            )
+            ygen_null = np.concatenate(
+                [
+                    ygen_null.astype(np.float32),
+                    np.zeros((len(ygen_null), 1), dtype=np.float32),
                 ],
                 axis=-1,
             )
@@ -124,9 +154,13 @@ def prepare_data_clic(fn, with_jet_idx=True):
             )
 
         # replace PID with index in labels array
-        arr = np.array([labels.index(p) for p in ygen[:, 0]])
+        arr = np.array([labels[p] for p in ygen[:, 0]])
         ygen[:, 0][:] = arr[:]
-        arr = np.array([labels.index(p) for p in ycand[:, 0]])
+
+        arr = np.array([labels_null[p] for p in ygen_null[:, 0]])
+        ygen_null[:, 0][:] = arr[:]
+
+        arr = np.array([labels[p] for p in ycand[:, 0]])
         ycand[:, 0][:] = arr[:]
 
         if with_jet_idx:
@@ -165,9 +199,13 @@ def prepare_data_clic(fn, with_jet_idx=True):
                 ]  # map back to constituent index *before* masking
                 ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
                 ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+
         Xs.append(X)
-        ygens.append(ygen)
+        # combine the primaries and the nulls but first assert that there's no overlap
+        assert np.all((ygen.sum(axis=1) != 0) & (ygen_null.sum(axis=1) != 0)) == 0
+        ygens.append(ygen + ygen_null)
         ycands.append(ycand)
+
     return Xs, ygens, ycands
 
 
