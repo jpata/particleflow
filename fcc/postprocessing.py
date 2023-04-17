@@ -717,7 +717,7 @@ def get_feature_matrix(feature_dict, features):
 
 def process_one_file(fn, ofn):
 
-    #output exists, do not recreate
+    # output exists, do not recreate
     if os.path.isfile(ofn):
         return
 
@@ -917,8 +917,7 @@ def process_one_file(fn, ofn):
             }
         )
         ret.append(this_ev)
-        if iev == 5:
-            break
+
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
@@ -930,7 +929,7 @@ def process_all_files():
     samps = [
         "p8_ee_qq_ecm380",
         "p8_ee_tt_ecm380",
-        #"p8_ee_ZH_Htautau_ecm380"
+        # "p8_ee_ZH_Htautau_ecm380"
     ]
 
     pool = multiprocessing.Pool(12)
