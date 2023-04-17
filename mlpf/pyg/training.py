@@ -194,14 +194,25 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
             # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
             # TODO: make the code compatible with the previous labeling scheme
-            msk_nulls = alpha * torch.unsqueeze((target_ids > 4).to(dtype=torch.float32), axis=-1)
-            # msk_true_particle = alpha * torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+            msk_true_particle = torch.unsqueeze((target_ids <= 4).to(dtype=torch.float32), axis=-1)
 
-            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(pred_momentum * msk_nulls, target_momentum * msk_nulls)
+            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+            )
+            loss_["Regression"] += (
+                alpha
+                * 10
+                * torch.nn.functional.huber_loss(pred_momentum * ~msk_true_particle, target_momentum * ~msk_true_particle)
+            )
+
             # PREDICTING CHARGE
             loss_["Charge"] = torch.nn.functional.cross_entropy(
-                pred_charge * msk_nulls, (target_charge * msk_nulls[:, 0]).to(dtype=torch.int64)
+                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
             )
+            loss_["Charge"] += alpha * torch.nn.functional.cross_entropy(
+                pred_charge * ~msk_true_particle, (target_charge * ~msk_true_particle[:, 0]).to(dtype=torch.int64)
+            )
+
             # TOTAL LOSS
             loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 

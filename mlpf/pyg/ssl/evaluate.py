@@ -46,11 +46,11 @@ CLASS_NAMES_CLIC_LATEX = [
     r"$\gamma$",
     r"$e^\pm$",
     r"$\mu^\pm$",
-    "Null - Charged Hadron",
-    "Null - Neutral Hadron",
-    "Null - " + r"$\gamma$",
-    "Null - " + r"$e^\pm$",
-    "Null - " + r"$\mu^\pm$",
+    "Null: Charged Hadron",
+    "Null: Neutral Hadron",
+    "Null: " + r"$\gamma$",
+    "Null: " + r"$e^\pm$",
+    "Null: " + r"$\mu^\pm$",
 ]
 
 
