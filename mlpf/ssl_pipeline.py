@@ -13,7 +13,7 @@ from pyg.ssl.training_VICReg import training_loop_VICReg
 from pyg.ssl.utils import CLUSTERS_X, TRACKS_X, data_split, load_VICReg, save_VICReg
 from pyg.ssl.VICReg import DECODER, ENCODER, VICReg
 from pyg.training import training_loop
-from pyg.utils import save_mlpf
+from pyg.utils import CLASS_NAMES, save_mlpf
 
 matplotlib.use("Agg")
 mplhep.style.use(mplhep.styles.CMS)
@@ -60,12 +60,15 @@ if __name__ == "__main__":
 
     # load a pre-trained VICReg model
     if args.load_VICReg:
-        vicreg_state_dict, encoder_model_kwargs, decoder_model_kwargs = load_VICReg(device, outpath)
+        encoder_model_kwargs, decoder_model_kwargs = load_VICReg(outpath)
 
         vicreg_encoder = ENCODER(**encoder_model_kwargs)
         vicreg_decoder = DECODER(**decoder_model_kwargs)
 
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
+
+        print("Loading a previously trained VICReg model..")
+        vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
 
         try:
             vicreg.load_state_dict(vicreg_state_dict)
@@ -145,6 +148,7 @@ if __name__ == "__main__":
         if args.ssl:
 
             mlpf_model_kwargs = {
+                "NUM_CLASSES": len(CLASS_NAMES["CLIC"]),
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim,
                 "width": args.width,
@@ -182,6 +186,7 @@ if __name__ == "__main__":
         if args.native:
 
             mlpf_model_kwargs = {
+                "NUM_CLASSES": len(CLASS_NAMES["CLIC"]),
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim,
                 "width": args.width,

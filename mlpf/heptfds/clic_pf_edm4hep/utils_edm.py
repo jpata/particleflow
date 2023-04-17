@@ -46,22 +46,23 @@ X_FEATURES_CL = [
 ]
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+
 labels = {
-    0: 0,  # will not be used in the end
-    211: 1,
-    130: 2,
-    22: 3,
-    11: 4,
-    13: 5,
+    0: 0,  # unused in the end when we combine the primaries and the nulls because there are no overlap between them
+    211: 0,
+    130: 1,
+    22: 2,
+    11: 3,
+    13: 4,
 }
 
 labels_null = {
-    0: 0,  # will not be used in the end
-    211: 6,
-    130: 7,
-    22: 8,
-    11: 9,
-    13: 10,
+    0: 0,  # unused in the end when we combine the primaries and the nulls because there are no overlap between them
+    211: 5,
+    130: 6,
+    22: 7,
+    11: 8,
+    13: 9,
 }
 
 

@@ -20,14 +20,38 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
+# CLASS_TO_ID = {
+#     "charged_hadron": 1,
+#     "neutral_hadron": 2,
+#     "photon": 3,
+#     "electron": 4,
+#     "muon": 5,
+# }
 CLASS_TO_ID = {
-    "charged_hadron": 1,
-    "neutral_hadron": 2,
-    "photon": 3,
-    "electron": 4,
-    "muon": 5,
+    "charged_hadron": 0,
+    "neutral_hadron": 1,
+    "photon": 2,
+    "electron": 3,
+    "muon": 4,
+    "null charged_hadron": 5,
+    "null neutral_hadron": 6,
+    "null photon": 7,
+    "null electron": 8,
+    "null muon": 9,
 }
-CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
+# CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
+CLASS_NAMES_CLIC_LATEX = [
+    "Charged Hadron",
+    "Neutral Hadron",
+    r"$\gamma$",
+    r"$e^\pm$",
+    r"$\mu^\pm$",
+    "Null - Charged Hadron",
+    "Null - Neutral Hadron",
+    "Null - " + r"$\gamma$",
+    "Null - " + r"$e^\pm$",
+    "Null - " + r"$\mu^\pm$",
+]
 
 
 def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
@@ -79,7 +103,7 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
         mlpf.eval()
         encoder.eval()
 
-        conf_matrix = np.zeros((6, 6))
+        conf_matrix = np.zeros((len(CLASS_NAMES_CLIC_LATEX), len(CLASS_NAMES_CLIC_LATEX)))
         with torch.no_grad():
             for i, batch in tqdm.tqdm(enumerate(test_loader), total=len(test_loader)):
                 print(f"making predictions: {i+1}/{len(test_loader)}")
@@ -240,7 +264,7 @@ def make_conf_matrix(cm, outpath, mode, save_as):
     cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
     cm[np.isnan(cm)] = 0.0
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(15, 12))
     plt.axes()
     plt.imshow(cm, interpolation="nearest", cmap=cmap)
     plt.colorbar()
