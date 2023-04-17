@@ -179,6 +179,7 @@ if __name__ == "__main__":
                 args.n_epochs,
                 args.patience,
                 args.lr,
+                args.alpha,
                 outpath_ssl,
                 vicreg_encoder,
             )
@@ -214,5 +215,6 @@ if __name__ == "__main__":
                 args.n_epochs,
                 args.patience,
                 args.lr,
+                args.alpha,
                 outpath_native,
             )

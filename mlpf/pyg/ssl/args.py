@@ -30,6 +30,8 @@ def parse_args():
     parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 
     # training hyperparameters
+    parser.add_argument("--alpha", type=float, default=1, help="hyperparameter for null reconstruction")
+
     parser.add_argument("--lmbd", type=float, default=1, help="the lambda term in the VICReg loss")
     parser.add_argument("--mu", type=float, default=0.1, help="the mu term in the VICReg loss")
     parser.add_argument("--nu", type=float, default=1e-9, help="the nu term in the VICReg loss")

@@ -106,14 +106,14 @@ class FocalLoss(nn.Module):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None, tensorboard_writer=None):
+def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None, tensorboard_writer=None, alpha=0):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer)
+        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer, alpha)
     return ret
 
 
-def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None, tensorboard_writer=None):
+def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None, tensorboard_writer=None, alpha=0):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -193,17 +193,14 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             # for CLASSIFYING PID
             loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
             # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
-            # TODO: make the code compatible with the other labeling scheme
-            alpha = 0
-            msk_true_particle = alpha * torch.unsqueeze((target_ids <= 4).to(dtype=torch.float32), axis=-1)
+            # TODO: make the code compatible with the previous labeling scheme
+            msk_nulls = alpha * torch.unsqueeze((target_ids > 4).to(dtype=torch.float32), axis=-1)
             # msk_true_particle = alpha * torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
 
-            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-            )
+            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(pred_momentum * msk_nulls, target_momentum * msk_nulls)
             # PREDICTING CHARGE
             loss_["Charge"] = torch.nn.functional.cross_entropy(
-                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+                pred_charge * msk_nulls, (target_charge * msk_nulls[:, 0]).to(dtype=torch.int64)
             )
             # TOTAL LOSS
             loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
@@ -241,16 +238,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
 
 
 def training_loop(
-    rank,
-    mlpf,
-    train_loader,
-    valid_loader,
-    batch_size,
-    n_epochs,
-    patience,
-    lr,
-    outpath,
-    ssl_encoder=None,
+    rank, mlpf, train_loader, valid_loader, batch_size, n_epochs, patience, lr, alpha=0, outpath="", ssl_encoder=None
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
@@ -297,14 +285,16 @@ def training_loop(
             break
 
         # training step
-        losses_t = train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer)
+        losses_t = train(
+            rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer, alpha
+        )
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, ssl_encoder, tensorboard_writer)
+        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, ssl_encoder, tensorboard_writer, alpha)
         for loss in losses_of_interest:
             losses["valid"][loss].append(losses_v[loss])
         for k, v in losses_v.items():
