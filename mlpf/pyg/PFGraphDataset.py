@@ -167,7 +167,7 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, required=True, choices=["CMS", "DELPHES", "CLIC"])
+    parser.add_argument("--data", type=str, required=True, choices=["CMS", "DELPHES", "CLIC", "CLIC_new"])
     parser.add_argument("--dataset", type=str, required=True, help="Input data path")
     parser.add_argument("--processed_dir", type=str, help="processed", required=False, default=None)
     parser.add_argument("--num-files-merge", type=int, default=10, help="number of files to merge")

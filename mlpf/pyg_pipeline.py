@@ -149,6 +149,7 @@ def train(rank, world_size, args, data, model, outpath):
         args.n_epochs,
         args.patience,
         args.lr,
+        args.alpha,
         outpath,
     )
 

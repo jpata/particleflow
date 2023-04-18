@@ -195,6 +195,7 @@ def train(
             # for CLASSIFYING PID
             loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
             # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
+            print(alpha)
             if alpha == -1:  # old code
                 msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
                 loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
