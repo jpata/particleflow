@@ -160,7 +160,7 @@ class MLPF(nn.Module):
 
     def forward(self, batch):
         # before standardization
-        input_before_standardization = batch.x
+        input_before_standardization = batch.x.clone()
 
         # for CLIC
         mean = torch.tensor(
