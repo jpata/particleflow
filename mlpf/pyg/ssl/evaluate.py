@@ -81,11 +81,11 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples, new
     jet_pt = 5.0
     jet_match_dr = 0.1
 
-    npred_, ngen_, ncand_, = (
-        {},
-        {},
-        {},
-    )
+    # npred_, ngen_, ncand_, = (
+    #     {},
+    #     {},
+    #     {},
+    # )
 
     mlpf.eval()
     encoder.eval()
@@ -250,14 +250,11 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples, new
                         ncand[class_].append((cand == id_).sum().item())
 
             make_conf_matrix(conf_matrix, outpath, mode, sample, new_setup)
-            npred_[sample], ngen_[sample], ncand_[sample] = make_multiplicity_plots(
-                npred, ngen, ncand, outpath, mode, sample, new_setup
-            )
+            # npred_[sample], ngen_[sample], ncand_[sample] = make_multiplicity_plots(
+            #     npred, ngen, ncand, outpath, mode, sample, new_setup
+            # )
             yvals, _, _ = load_eval_data(f"{this_out_path}/pred_*.parquet")
             plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=sample)
-            # if i == 2:
-            #     break
-    return npred_, ngen_, ncand_
 
 
 def make_conf_matrix(cm, outpath, mode, save_as, new_setup):

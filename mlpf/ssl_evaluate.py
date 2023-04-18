@@ -77,14 +77,15 @@ if __name__ == "__main__":
         mlpf_ssl = MLPF(**mlpf_model_kwargs).to(device)
         mlpf_ssl.load_state_dict(mlpf_ssl_state_dict)
 
-        ret_ssl = evaluate(
+        evaluate(
             device,
             vicreg_encoder,
             mlpf_ssl,
             args.bs,
             "ssl",
             outpath_ssl,
-            {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            # {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            {"TTBar": data_test_ttbar},
             new_setup,
         )
 
@@ -100,13 +101,14 @@ if __name__ == "__main__":
         mlpf_native = MLPF(**mlpf_model_kwargs).to(device)
         mlpf_native.load_state_dict(mlpf_native_state_dict)
 
-        ret_native = evaluate(
+        evaluate(
             device,
             vicreg_encoder,
             mlpf_native,
             args.bs,
             "native",
             outpath_native,
-            {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            # {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            {"TTBar": data_test_ttbar},
             new_setup,
         )
