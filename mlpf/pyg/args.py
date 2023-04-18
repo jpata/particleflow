@@ -22,6 +22,8 @@ def parse_args():
     parser.add_argument("--load", dest="load", action="store_true", help="Load the model (no training)")
 
     # for training hyperparameters
+    parser.add_argument("--alpha", type=float, default=-1, help="hyperparameter for null reconstruction")
+
     parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
     parser.add_argument("--bs", type=int, default=100, help="training minibatch size in number of events")
     parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")

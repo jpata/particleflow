@@ -106,14 +106,16 @@ class FocalLoss(nn.Module):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None, tensorboard_writer=None, alpha=0):
+def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None, tensorboard_writer=None, alpha=-1):
     with torch.no_grad():
         optimizer = None
         ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer, alpha)
     return ret
 
 
-def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None, tensorboard_writer=None, alpha=0):
+def train(
+    rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None, tensorboard_writer=None, alpha=-1
+):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -193,26 +195,31 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
             # for CLASSIFYING PID
             loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
             # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
-            # TODO: make the code compatible with the previous labeling scheme
-            msk_true_particle = torch.unsqueeze((target_ids <= 4).to(dtype=torch.float32), axis=-1)
-            msk_null_particle = torch.unsqueeze((target_ids > 4).to(dtype=torch.float32), axis=-1)
-
-            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-            )
-            loss_["Regression"] += (
-                alpha
-                * 10
-                * torch.nn.functional.huber_loss(pred_momentum * msk_null_particle, target_momentum * msk_null_particle)
-            )
-
-            # PREDICTING CHARGE
-            loss_["Charge"] = torch.nn.functional.cross_entropy(
-                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-            )
-            loss_["Charge"] += alpha * torch.nn.functional.cross_entropy(
-                pred_charge * msk_null_particle, (target_charge * msk_null_particle[:, 0]).to(dtype=torch.int64)
-            )
+            if alpha == -1:  # old code
+                msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+                loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+                    pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+                )
+                loss_["Charge"] = torch.nn.functional.cross_entropy(
+                    pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+                )
+            else:
+                msk_true_particle = torch.unsqueeze((target_ids <= 4).to(dtype=torch.float32), axis=-1)
+                msk_null_particle = torch.unsqueeze((target_ids > 4).to(dtype=torch.float32), axis=-1)
+                loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+                    pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+                )
+                loss_["Regression"] += (
+                    alpha
+                    * 10
+                    * torch.nn.functional.huber_loss(pred_momentum * msk_null_particle, target_momentum * msk_null_particle)
+                )
+                loss_["Charge"] = torch.nn.functional.cross_entropy(
+                    pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+                )
+                loss_["Charge"] += alpha * torch.nn.functional.cross_entropy(
+                    pred_charge * msk_null_particle, (target_charge * msk_null_particle[:, 0]).to(dtype=torch.int64)
+                )
 
             # TOTAL LOSS
             loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
@@ -250,7 +257,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
 
 
 def training_loop(
-    rank, mlpf, train_loader, valid_loader, batch_size, n_epochs, patience, lr, alpha=0, outpath="", ssl_encoder=None
+    rank, mlpf, train_loader, valid_loader, batch_size, n_epochs, patience, lr, alpha=-1, outpath="", ssl_encoder=None
 ):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.

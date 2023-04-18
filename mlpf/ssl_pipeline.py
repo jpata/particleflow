@@ -148,7 +148,7 @@ if __name__ == "__main__":
         if args.ssl:
 
             mlpf_model_kwargs = {
-                "NUM_CLASSES": len(CLASS_NAMES["CLIC"]),
+                "NUM_CLASSES": len(CLASS_NAMES[args.dataset]),
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim,
                 "width": args.width,
@@ -187,7 +187,7 @@ if __name__ == "__main__":
         if args.native:
 
             mlpf_model_kwargs = {
-                "NUM_CLASSES": len(CLASS_NAMES["CLIC"]),
+                "NUM_CLASSES": len(CLASS_NAMES[args.dataset]),
                 "input_dim": input_,
                 "embedding_dim": args.embedding_dim,
                 "width": args.width,

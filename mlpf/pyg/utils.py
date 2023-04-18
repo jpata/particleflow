@@ -24,8 +24,8 @@ CLASS_LABELS = {
 CLASS_NAMES_LATEX = {
     "CMS": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
     "DELPHES": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    # "CLIC": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "CLIC": [
+    "CLIC": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "CLIC_new": [
         "Charged Hadron",
         "Neutral Hadron",
         r"$\gamma$",
@@ -41,14 +41,14 @@ CLASS_NAMES_LATEX = {
 CLASS_NAMES = {
     "CMS": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     "DELPHES": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    # "CLIC": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "CLIC": ["chhad", "nhad", "gamma", "ele", "mu", "null chhad", "null nhad", "null gamma", "null ele", "null mu"],
+    "CLIC": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "CLIC_new": ["chhad", "nhad", "gamma", "ele", "mu", "null chhad", "null nhad", "null gamma", "null ele", "null mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "CMS": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     "DELPHES": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    # "CLIC": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "CLIC": [
+    "CLIC": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "CLIC_new": [
         "Charged hadron",
         "Neutral hadron",
         "Photon",
