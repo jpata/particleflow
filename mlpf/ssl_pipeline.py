@@ -53,6 +53,8 @@ if __name__ == "__main__":
         args.data_path, args.data_split_mode
     )
 
+    # normalization
+
     # setup the directory path to hold all models and plots
     if args.prefix_VICReg is None:
         args.prefix_VICReg = "pyg_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "." + platform.node()
@@ -66,25 +68,6 @@ if __name__ == "__main__":
         vicreg_decoder = DECODER(**decoder_model_kwargs)
 
         vicreg = VICReg(vicreg_encoder, vicreg_decoder)
-
-        print("Loading a previously trained VICReg model..")
-        vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
-
-        try:
-            vicreg.load_state_dict(vicreg_state_dict)
-        except RuntimeError:
-            # if the mlpf model was saved using torch.nn.DataParallel()
-            from collections import OrderedDict
-
-            new_state_dict = OrderedDict()
-            for k, v in vicreg_state_dict.items():
-                name = k[7:]  # remove module.
-                new_state_dict[name] = v
-            vicreg_state_dict = new_state_dict
-            vicreg.load_state_dict(vicreg_state_dict)
-
-        vicreg.load_state_dict(vicreg_state_dict)
-        vicreg.to(device)
 
     else:
         encoder_model_kwargs = {
@@ -146,6 +129,25 @@ if __name__ == "__main__":
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
         if args.ssl:
+
+            print("Loading a previously trained VICReg model..")
+            vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
+
+            try:
+                vicreg.load_state_dict(vicreg_state_dict)
+            except RuntimeError:
+                # if the mlpf model was saved using torch.nn.DataParallel()
+                from collections import OrderedDict
+
+                new_state_dict = OrderedDict()
+                for k, v in vicreg_state_dict.items():
+                    name = k[7:]  # remove module.
+                    new_state_dict[name] = v
+                vicreg_state_dict = new_state_dict
+                vicreg.load_state_dict(vicreg_state_dict)
+
+            vicreg.load_state_dict(vicreg_state_dict)
+            vicreg.to(device)
 
             mlpf_model_kwargs = {
                 "NUM_CLASSES": len(CLASS_NAMES[args.dataset]),
