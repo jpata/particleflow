@@ -208,6 +208,7 @@ def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
                 "k": args.nearest,
                 "num_mlpf_parameters": num_mlpf_parameters,
                 "mode": mode,
+                "alpha": args.alpha,
             },
             fp,
         )
