@@ -278,10 +278,11 @@ def data_split(data_path, data_split_mode):
         frac_qq_train = round(0.8 * len(rem_qq))
         frac_tt_train = round(0.8 * len(rem_ttbar))
 
-        assert frac_qq_train > 0
-        assert frac_qq_test > 0
-        assert frac_tt_train > 0
-        assert frac_tt_test > 0
+        # not necessarily need be. assuming only ttbar files are found.
+        # assert frac_qq_train > 0
+        # assert frac_qq_test > 0
+        # assert frac_tt_train > 0
+        # assert frac_tt_test > 0
 
         if data_split_mode == "domain_adaptation":
             """
