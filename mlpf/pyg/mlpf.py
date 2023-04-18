@@ -7,50 +7,6 @@ from torch_geometric.nn.conv import GravNetConv  # also returns edge index
 # from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
-# for CLIC
-mean = torch.tensor(
-    [
-        2.8273e00,
-        -2.9272e-04,
-        6.9944e-05,
-        6.2897e-03,
-        3.6280e00,
-        2.6983e01,
-        5.6092e00,
-        -1.5506e00,
-        1.0216e00,
-        1.6612e01,
-        6.3377e-01,
-        5.2939e-04,
-        5.2478e01,
-        3.2740e01,
-        3.2399e01,
-        3.3631e01,
-    ]
-)
-
-std = torch.tensor(
-    [
-        1.1827e01,
-        9.0163e-01,
-        7.0703e-01,
-        7.0716e-01,
-        3.7501e01,
-        1.1569e04,
-        8.7224e02,
-        1.2554e03,
-        9.3771e-01,
-        3.9489e01,
-        2.7251e00,
-        1.7655e00,
-        9.3879e01,
-        6.5164e01,
-        6.2998e01,
-        6.3626e01,
-    ]
-)
-
-
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
         super(GravNetLayer, self).__init__()
@@ -205,6 +161,51 @@ class MLPF(nn.Module):
     def forward(self, batch):
         # before standardization
         input_before_standardization = batch.x
+
+        # for CLIC
+        mean = torch.tensor(
+            [
+                2.8273e00,
+                -2.9272e-04,
+                6.9944e-05,
+                6.2897e-03,
+                3.6280e00,
+                2.6983e01,
+                5.6092e00,
+                -1.5506e00,
+                1.0216e00,
+                1.6612e01,
+                6.3377e-01,
+                5.2939e-04,
+                5.2478e01,
+                3.2740e01,
+                3.2399e01,
+                3.3631e01,
+            ],
+            device=batch.x.device,
+        )
+
+        std = torch.tensor(
+            [
+                1.1827e01,
+                9.0163e-01,
+                7.0703e-01,
+                7.0716e-01,
+                3.7501e01,
+                1.1569e04,
+                8.7224e02,
+                1.2554e03,
+                9.3771e-01,
+                3.9489e01,
+                2.7251e00,
+                1.7655e00,
+                9.3879e01,
+                6.5164e01,
+                6.2998e01,
+                6.3626e01,
+            ],
+            device=batch.x.device,
+        )
 
         # standardize the batch (only for CLIC will work well). Note: leave the type feature untouched.
         batch.x[:, 1:] = (batch.x[:, 1:] - mean) / std
