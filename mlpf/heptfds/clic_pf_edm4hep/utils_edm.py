@@ -124,7 +124,8 @@ def prepare_data_clic(fn, with_jet_idx=True, new_setup=False):
         # concatenate tracks and clusters in features and targets
         X = np.concatenate([X1, X2])
         ygen = np.concatenate([ygen_track, ygen_cluster])
-        ygen_null = np.concatenate([ygen_null_track, ygen_null_cluster])
+        if new_setup:
+            ygen_null = np.concatenate([ygen_null_track, ygen_null_cluster])
         ycand = np.concatenate([ycand_track, ycand_cluster])
 
         assert ygen.shape[0] == X.shape[0]

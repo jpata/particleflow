@@ -41,6 +41,11 @@ if __name__ == "__main__":
 
     vicreg = VICReg(vicreg_encoder, vicreg_decoder)
 
+    if "new" in args.dataset:
+        new_setup = True
+    else:
+        new_setup = False
+
     # load a pre-trained MLPF model
     if args.ssl:
         print("Loading a previously trained VICReg model..")
@@ -80,6 +85,7 @@ if __name__ == "__main__":
             "ssl",
             outpath_ssl,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            new_setup,
         )
 
     if args.native:
@@ -102,4 +108,5 @@ if __name__ == "__main__":
             "native",
             outpath_native,
             {"QCD": data_test_qcd, "TTBar": data_test_ttbar},
+            new_setup,
         )

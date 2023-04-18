@@ -20,39 +20,6 @@ matplotlib.use("Agg")
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
-# CLASS_TO_ID = {
-#     "charged_hadron": 1,
-#     "neutral_hadron": 2,
-#     "photon": 3,
-#     "electron": 4,
-#     "muon": 5,
-# }
-CLASS_TO_ID = {
-    "charged_hadron": 0,
-    "neutral_hadron": 1,
-    "photon": 2,
-    "electron": 3,
-    "muon": 4,
-    "null charged_hadron": 5,
-    "null neutral_hadron": 6,
-    "null photon": 7,
-    "null electron": 8,
-    "null muon": 9,
-}
-# CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
-CLASS_NAMES_CLIC_LATEX = [
-    "Charged Hadron",
-    "Neutral Hadron",
-    r"$\gamma$",
-    r"$e^\pm$",
-    r"$\mu^\pm$",
-    "Null: Charged Hadron",
-    "Null: Neutral Hadron",
-    "Null: " + r"$\gamma$",
-    "Null: " + r"$e^\pm$",
-    "Null: " + r"$\mu^\pm$",
-]
-
 
 def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     ret = {
@@ -68,7 +35,43 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
-def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
+def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples, new_setup):
+
+    if new_setup:
+        CLASS_TO_ID = {
+            "charged_hadron": 0,
+            "neutral_hadron": 1,
+            "photon": 2,
+            "electron": 3,
+            "muon": 4,
+            "null charged_hadron": 5,
+            "null neutral_hadron": 6,
+            "null photon": 7,
+            "null electron": 8,
+            "null muon": 9,
+        }
+        CLASS_NAMES_CLIC_LATEX = [
+            "Charged Hadron",
+            "Neutral Hadron",
+            r"$\gamma$",
+            r"$e^\pm$",
+            r"$\mu^\pm$",
+            "Null: Charged Hadron",
+            "Null: Neutral Hadron",
+            "Null: " + r"$\gamma$",
+            "Null: " + r"$e^\pm$",
+            "Null: " + r"$\mu^\pm$",
+        ]
+    else:
+        CLASS_TO_ID = {
+            "charged_hadron": 1,
+            "neutral_hadron": 2,
+            "photon": 3,
+            "electron": 4,
+            "muon": 5,
+        }
+        CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
+
     import fastjet
     import vector
     from jet_utils import build_dummy_array, match_two_jet_collections
@@ -246,9 +249,9 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
                         ngen[class_].append((target == id_).sum().item())
                         ncand[class_].append((cand == id_).sum().item())
 
-            make_conf_matrix(conf_matrix, outpath, mode, sample)
+            make_conf_matrix(conf_matrix, outpath, mode, sample, new_setup)
             npred_[sample], ngen_[sample], ncand_[sample] = make_multiplicity_plots(
-                npred, ngen, ncand, outpath, mode, sample
+                npred, ngen, ncand, outpath, mode, sample, new_setup
             )
             yvals, _, _ = load_eval_data(f"{this_out_path}/pred_*.parquet")
             plot_jet_ratio(yvals, cp_dir=Path(this_out_path), title=sample)
@@ -257,7 +260,23 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
     return npred_, ngen_, ncand_
 
 
-def make_conf_matrix(cm, outpath, mode, save_as):
+def make_conf_matrix(cm, outpath, mode, save_as, new_setup):
+    if new_setup:
+        CLASS_NAMES_CLIC_LATEX = [
+            "Charged Hadron",
+            "Neutral Hadron",
+            r"$\gamma$",
+            r"$e^\pm$",
+            r"$\mu^\pm$",
+            "Null: Charged Hadron",
+            "Null: Neutral Hadron",
+            "Null: " + r"$\gamma$",
+            "Null: " + r"$e^\pm$",
+            "Null: " + r"$\mu^\pm$",
+        ]
+    else:
+        CLASS_NAMES_CLIC_LATEX = ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"]
+
     import itertools
 
     cmap = plt.get_cmap("Blues")
@@ -302,7 +321,29 @@ def make_conf_matrix(cm, outpath, mode, save_as):
     plt.close()
 
 
-def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as):
+def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as, new_setup):
+    if new_setup:
+        CLASS_TO_ID = {
+            "charged_hadron": 0,
+            "neutral_hadron": 1,
+            "photon": 2,
+            "electron": 3,
+            "muon": 4,
+            "null charged_hadron": 5,
+            "null neutral_hadron": 6,
+            "null photon": 7,
+            "null electron": 8,
+            "null muon": 9,
+        }
+    else:
+        CLASS_TO_ID = {
+            "charged_hadron": 1,
+            "neutral_hadron": 2,
+            "photon": 3,
+            "electron": 4,
+            "muon": 5,
+        }
+
     for class_ in ["charged_hadron", "neutral_hadron", "photon"]:
         # Plot the particle multiplicities
         plt.figure()
@@ -324,26 +365,48 @@ def make_multiplicity_plots(npred, ngen, ncand, outpath, mode, save_as):
     return npred, ngen, ncand
 
 
-def make_multiplicity_plots_both(ret_ssl, ret_native, outpath):
+# def make_multiplicity_plots_both(ret_ssl, ret_native, outpath, new_setup):
+#     if new_setup:
+#         CLASS_TO_ID = {
+#             "charged_hadron": 0,
+#             "neutral_hadron": 1,
+#             "photon": 2,
+#             "electron": 3,
+#             "muon": 4,
+#             "null charged_hadron": 5,
+#             "null neutral_hadron": 6,
+#             "null photon": 7,
+#             "null electron": 8,
+#             "null muon": 9,
+#         }
+#     else:
+#         CLASS_TO_ID = {
+#             "charged_hadron": 1,
+#             "neutral_hadron": 2,
+#             "photon": 3,
+#             "electron": 4,
+#             "muon": 5,
+#         }
 
-    npred_ssl, ngen_ssl, _ = ret_ssl
-    npred_native, ngen_native, _ = ret_native
+#     npred_ssl, ngen_ssl, _ = ret_ssl
+#     npred_native, ngen_native, _ = ret_native
 
-    for data_ in npred_ssl.keys():
-        for class_ in ["charged_hadron", "neutral_hadron", "photon"]:
-            # Plot the particle multiplicities
-            plt.figure()
-            plt.axes()
-            plt.scatter(ngen_ssl[data_][class_], npred_ssl[data_][class_], marker=".", alpha=0.4, label="ssl-based MLPF")
-            plt.scatter(ngen_native[data_][class_], npred_native[data_][class_], marker=".", alpha=0.4, label="native MLPF")
-            a = 0.5 * min(np.min(npred_ssl[data_][class_]), np.min(ngen_ssl[data_][class_]))
-            b = 1.5 * max(np.max(npred_ssl[data_][class_]), np.max(ngen_ssl[data_][class_]))
-            # plt.xlim(a, b)
-            # plt.ylim(a, b)
-            plt.plot([a, b], [a, b], color="black", ls="--")
-            plt.title(class_)
-            plt.xlabel("number of truth particles")
-            plt.ylabel("number of reconstructed particles")
-            plt.legend(title=data_, loc=4)
-            plt.savefig(f"{outpath}/multiplicity_plots_{CLASS_TO_ID[class_]}_{data_}.pdf")
-            plt.close()
+#     for data_ in npred_ssl.keys():
+#         for class_ in ["charged_hadron", "neutral_hadron", "photon"]:
+#             # Plot the particle multiplicities
+#             plt.figure()
+#             plt.axes()
+#             plt.scatter(ngen_ssl[data_][class_], npred_ssl[data_][class_], marker=".", alpha=0.4, label="ssl-based MLPF")
+#             plt.scatter(ngen_native[data_][class_], npred_native[data_][class_], marker=".", alpha=0.4,
+# label="native MLPF")
+#             a = 0.5 * min(np.min(npred_ssl[data_][class_]), np.min(ngen_ssl[data_][class_]))
+#             b = 1.5 * max(np.max(npred_ssl[data_][class_]), np.max(ngen_ssl[data_][class_]))
+#             # plt.xlim(a, b)
+#             # plt.ylim(a, b)
+#             plt.plot([a, b], [a, b], color="black", ls="--")
+#             plt.title(class_)
+#             plt.xlabel("number of truth particles")
+#             plt.ylabel("number of reconstructed particles")
+#             plt.legend(title=data_, loc=4)
+#             plt.savefig(f"{outpath}/multiplicity_plots_{CLASS_TO_ID[class_]}_{data_}.pdf")
+#             plt.close()
