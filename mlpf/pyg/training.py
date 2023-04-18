@@ -23,49 +23,6 @@ np.seterr(divide="ignore", invalid="ignore")
 ISTEP_GLOBAL_TRAIN = 0
 ISTEP_GLOBAL_VALID = 0
 
-# for CLIC
-mean = torch.tensor(
-    [
-        2.8273e00,
-        -2.9272e-04,
-        6.9944e-05,
-        6.2897e-03,
-        3.6280e00,
-        2.6983e01,
-        5.6092e00,
-        -1.5506e00,
-        1.0216e00,
-        1.6612e01,
-        6.3377e-01,
-        5.2939e-04,
-        5.2478e01,
-        3.2740e01,
-        3.2399e01,
-        3.3631e01,
-    ]
-)
-
-std = torch.tensor(
-    [
-        1.1827e01,
-        9.0163e-01,
-        7.0703e-01,
-        7.0716e-01,
-        3.7501e01,
-        1.1569e04,
-        8.7224e02,
-        1.2554e03,
-        9.3771e-01,
-        3.9489e01,
-        2.7251e00,
-        1.7655e00,
-        9.3879e01,
-        6.5164e01,
-        6.2998e01,
-        6.3626e01,
-    ]
-)
-
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
 class FocalLoss(nn.Module):
@@ -201,9 +158,6 @@ def train(
                     batch.x.shape[0],
                     ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
                 )
-
-            # standardize the batch
-            batch.x[:, 1:] = (batch.x[:, 1:] - mean) / std
 
             if ssl_encoder is not None:
                 # separate PF-elements

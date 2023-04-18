@@ -7,6 +7,50 @@ from torch_geometric.nn.conv import GravNetConv  # also returns edge index
 # from pyg_ssl.gravnet import GravNetConv  # also returns edge index
 
 
+# for CLIC
+mean = torch.tensor(
+    [
+        2.8273e00,
+        -2.9272e-04,
+        6.9944e-05,
+        6.2897e-03,
+        3.6280e00,
+        2.6983e01,
+        5.6092e00,
+        -1.5506e00,
+        1.0216e00,
+        1.6612e01,
+        6.3377e-01,
+        5.2939e-04,
+        5.2478e01,
+        3.2740e01,
+        3.2399e01,
+        3.3631e01,
+    ]
+)
+
+std = torch.tensor(
+    [
+        1.1827e01,
+        9.0163e-01,
+        7.0703e-01,
+        7.0716e-01,
+        3.7501e01,
+        1.1569e04,
+        8.7224e02,
+        1.2554e03,
+        9.3771e-01,
+        3.9489e01,
+        2.7251e00,
+        1.7655e00,
+        9.3879e01,
+        6.5164e01,
+        6.2998e01,
+        6.3626e01,
+    ]
+)
+
+
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
         super(GravNetLayer, self).__init__()
@@ -159,6 +203,11 @@ class MLPF(nn.Module):
         self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout, ssl)
 
     def forward(self, batch):
+        # before standardization
+        input_before_standardization = batch.x
+
+        # standardize the batch (only for CLIC will work well). Note: leave the type feature untouched.
+        batch.x[:, 1:] = (batch.x[:, 1:] - mean) / std
 
         # unfold the Batch object
         if self.ssl:
@@ -212,18 +261,18 @@ class MLPF(nn.Module):
         else:
             embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
-        # # do some sanity checks on the PFElement input data
-        # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
-        # assert torch.all(torch.abs(input_[:, 4]) <= 1.0)  # cos_phi
-        # assert torch.all(input_[:, 1] >= 0.0)  # pt
-        # assert torch.all(input_[:, 5] >= 0.0)  # energy
+        # # do some sanity checks on the PFElement input data (before standardization)
+        assert torch.all(torch.abs(input_before_standardization[:, 3]) <= 1.0)  # sin_phi
+        assert torch.all(torch.abs(input_before_standardization[:, 4]) <= 1.0)  # cos_phi
+        assert torch.all(input_before_standardization[:, 1] >= 0.0)  # pt
+        assert torch.all(input_before_standardization[:, 5] >= 0.0)  # energy
 
         # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
         # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
-        preds_pt = self.nn_pt(embedding_reg) + input_[:, 1:2]
-        preds_eta = self.nn_eta(embedding_reg) + input_[:, 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_[:, 3:5]
-        preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
+        preds_pt = self.nn_pt(embedding_reg) + input_before_standardization[:, 1:2]
+        preds_eta = self.nn_eta(embedding_reg) + input_before_standardization[:, 2:3]
+        preds_phi = self.nn_phi(embedding_reg) + input_before_standardization[:, 3:5]
+        preds_energy = self.nn_energy(embedding_reg) + input_before_standardization[:, 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
         return preds_id, preds_momentum, pred_charge
