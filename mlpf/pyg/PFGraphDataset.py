@@ -5,17 +5,19 @@ from glob import glob
 
 import torch
 import tqdm
-
 from torch_geometric.data import Data, Dataset
 
 sys.path.append(sys.path[0] + "/..")  # temp hack
+from heptfds.clic_pf_edm4hep.utils_edm import prepare_data_clic
 from heptfds.cms_pf.cms_utils import prepare_data_cms
 from heptfds.delphes_pf.delphes_utils import prepare_data_delphes
-from heptfds.clic_pf_edm4hep.utils_edm import prepare_data_clic
 
 
-def prepare_data_pyg(fn, func):
-    Xs, ygens, ycands = func(fn, with_jet_idx=False)
+def prepare_data_pyg(fn, func, new_setup=False):
+    if new_setup:
+        Xs, ygens, ycands = func(fn, with_jet_idx=False, new_setup=new_setup)
+    else:
+        Xs, ygens, ycands = func(fn, with_jet_idx=False)
     batched_data = []
     for X, ygen, ycand in zip(Xs, ygens, ycands):
         # remove from ygen & ycand the first element (PID) so that they only contain the regression variables
@@ -38,8 +40,8 @@ def prepare_data_cms_pyg(fn):
     return prepare_data_pyg(fn, prepare_data_cms)
 
 
-def prepare_data_clic_pyg(fn):
-    return prepare_data_pyg(fn, prepare_data_clic)
+def prepare_data_clic_pyg(fn, new_setup=False):
+    return prepare_data_pyg(fn, prepare_data_clic, new_setup)
 
 
 def process_func(args):
@@ -112,6 +114,9 @@ class PFGraphDataset(Dataset):
 
         elif self.data == "CLIC":
             return prepare_data_clic_pyg(osp.join(self.raw_dir, raw_file_name))
+
+        elif self.data == "CLIC_new":
+            return prepare_data_clic_pyg(osp.join(self.raw_dir, raw_file_name), new_setup=True)
 
         else:
             raise KeyError("unrecognized data: {}".format(self.data))

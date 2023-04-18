@@ -122,3 +122,17 @@ jobs:
       - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
       - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
       - run: ./scripts/local_test_pyg_ssl.sh
+
+  pyg-clic-new-pipeline:
+    runs-on: ubuntu-20.04
+    needs: [deps-pyg]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: ./scripts/local_test_pyg_clic_new_setup.sh
