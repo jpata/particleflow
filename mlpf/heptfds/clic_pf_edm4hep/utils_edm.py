@@ -47,24 +47,6 @@ X_FEATURES_CL = [
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 
-labels = {
-    0: 0,  # unused in the end when we combine the primaries and the nulls because there are no overlap between them
-    211: 0,
-    130: 1,
-    22: 2,
-    11: 3,
-    13: 4,
-}
-
-labels_null = {
-    0: 0,  # unused in the end when we combine the primaries and the nulls because there are no overlap between them
-    211: 5,
-    130: 6,
-    22: 7,
-    11: 8,
-    13: 9,
-}
-
 
 def split_sample(path, test_frac=0.8):
     files = sorted(list(path.glob("*.parquet")))
@@ -157,6 +139,12 @@ def prepare_data_clic(fn, with_jet_idx=True, new_setup=False):
                 ],
                 axis=-1,
             )
+        if new_setup:
+            # the 0:0 is unused in the end when we combine the primaries and the nulls because there are no overlap
+            labels = {0: 0, 211: 0, 130: 1, 22: 2, 11: 3, 13: 4}
+            labels_null = {0: 0, 211: 5, 130: 6, 22: 7, 11: 8, 13: 9}
+        else:
+            labels = {0: 0, 211: 1, 130: 2, 22: 3, 11: 4, 13: 5}
 
         # replace PID with index in labels array
         arr = np.array([labels[p] for p in ygen[:, 0]])
