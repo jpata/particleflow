@@ -8,9 +8,12 @@ SEED_KERNELATTENTION = 0
 
 
 def debugging_train_step(self, data):
+    print("\n")
     x, y, sample_weights = data
     if not hasattr(self, "step"):
         self.step = 0
+
+    print("data", data[0].shape, [(k, v.shape) for (k, v) in data[1].items()])
 
     with tf.GradientTape() as tape:
         y_pred = self(x, training=True)  # Forward pass
@@ -18,6 +21,11 @@ def debugging_train_step(self, data):
 
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
+
+    print("Max of Gradients[0]: %.4f" % tf.reduce_max(gradients[0]))
+    print("Min of Gradients[0]: %.4f" % tf.reduce_min(gradients[0]))
+    print("Mean of Gradients[0]: %.4f" % tf.reduce_mean(gradients[0]))
+    print("Loss: %.4f" % loss)
 
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     self.compiled_metrics.update_state(y, y_pred)
@@ -1309,11 +1317,11 @@ class PFNetDense(tf.keras.Model):
 
         self.output_dec.set_trainable_named(layer_names)
 
-    # def train_step(self, data):
-    #     debugging_train_step(self, data)
+    def train_step(self, data):
+        debugging_train_step(self, data)
 
-    # def test_step(self, data):
-    #     debugging_test_step(self, data)
+    def test_step(self, data):
+        debugging_test_step(self, data)
 
 
 class KernelEncoder(tf.keras.layers.Layer):

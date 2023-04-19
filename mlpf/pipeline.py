@@ -990,6 +990,8 @@ def plots(train_dir, max_files):
         plot_jet_response_binned,
         plot_met_response_binned,
         get_class_names,
+        plot_rocs,
+        plot_particle_multiplicity,
     )
 
     mplhep.set_style(mplhep.styles.CMS)
@@ -1016,6 +1018,7 @@ def plots(train_dir, max_files):
 
             _title = format_dataset_name(dataset)
             dataset_dir = eval_epoch_dir / dataset
+            print(dataset_dir)
             cp_dir = dataset_dir / "plots"
             if not os.path.isdir(str(cp_dir)):
                 os.makedirs(str(cp_dir))
@@ -1023,6 +1026,8 @@ def plots(train_dir, max_files):
 
             plot_num_elements(X, cp_dir=cp_dir, title=_title)
             plot_sum_energy(yvals, class_names, cp_dir=cp_dir, title=_title)
+            plot_particle_multiplicity(X, yvals, class_names, cp_dir=cp_dir, title=_title)
+            plot_rocs(yvals, class_names, cp_dir=cp_dir, title=_title)
 
             plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True)
             plot_jet_ratio(

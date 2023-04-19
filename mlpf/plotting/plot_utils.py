@@ -9,6 +9,8 @@ import tqdm
 import vector
 import json
 import pandas
+import sklearn
+import sklearn.metrics
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -544,6 +546,31 @@ def compute_distances(distribution_1, distribution_2, ratio):
     return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}
 
 
+def plot_rocs(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    ncls = len(yvals["gen_cls"][0, 0])
+    plt.figure()
+    for icls in range(ncls):
+        predvals = awkward.flatten(yvals["pred_cls"][:, :, icls])
+        truevals = awkward.flatten(yvals["gen_cls_id"] == icls)
+        fpr, tpr, _ = sklearn.metrics.roc_curve(truevals, predvals)
+        plt.plot(fpr, tpr, label=class_names[icls])
+    plt.xlim(1e-7, 1)
+    plt.ylim(1e-7, 1)
+    plt.legend(loc="best")
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    if title:
+        plt.title(title)
+    plt.yscale("log")
+    plt.xscale("log")
+    save_img(
+        "roc.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
 def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=None):
 
     # compute the number of unpadded elements per event
@@ -580,23 +607,10 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"][msk], axis=1))
         sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"][msk], axis=1))
 
-        max_e = max(
-            [
-                np.max(sum_gen_energy),
-                np.max(sum_cand_energy),
-                np.max(sum_pred_energy),
-            ]
-        )
-        min_e = min(
-            [
-                np.min(sum_gen_energy),
-                np.min(sum_cand_energy),
-                np.min(sum_pred_energy),
-            ]
-        )
-
-        max_e = int(1.2 * max_e)
-        min_e = int(0.8 * min_e)
+        mean = np.mean(sum_gen_energy)
+        std = np.std(sum_gen_energy)
+        max_e = mean + 2 * std
+        min_e = max(mean - 2 * std, 0)
 
         # 1D hist of sum energy
         b = np.linspace(min_e, max_e, 100)
@@ -609,7 +623,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         if title:
             plt.title(title + " " + clname)
         save_img(
-            "sum_gen_energy_cls{}.png".format(cls_id),
+            "sum_energy_cls{}.png".format(cls_id),
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
@@ -645,22 +659,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             comet_experiment=comet_experiment,
         )
 
-        max_e = max(
-            [
-                np.max(sum_gen_energy),
-                np.max(sum_cand_energy),
-                np.max(sum_pred_energy),
-            ]
-        )
-        min_e = min(
-            [
-                np.min(sum_gen_energy),
-                np.min(sum_cand_energy),
-                np.min(sum_pred_energy),
-            ]
-        )
-        max_e = math.ceil(np.log10(max_e))
-        min_e = math.floor(np.log10(max(min_e, 1e-2)))
+        min_e = np.log10(max(min_e, 1e-2))
+        max_e = np.log10(max_e) + 1
 
         b = np.logspace(min_e, max_e, 100)
         plt.figure()
@@ -701,6 +701,38 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             plt.title(title + ", MLPF")
         save_img(
             "sum_gen_pred_energy_log_cls{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
+
+
+def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+
+    cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
+
+    for cls_id in cls_ids:
+        if cls_id == 0:
+            continue
+
+        clname = class_names[cls_id]
+
+        plt.figure()
+        gen_vals = awkward.sum(yvals["gen_cls_id"][X[:, :, 0] != 0] == cls_id, axis=1)
+        cand_vals = awkward.sum(yvals["cand_cls_id"][X[:, :, 0] != 0] == cls_id, axis=1)
+        pred_vals = awkward.sum(yvals["pred_cls_id"][X[:, :, 0] != 0] == cls_id, axis=1)
+
+        plt.scatter(gen_vals, cand_vals, alpha=0.5)
+        plt.scatter(gen_vals, pred_vals, alpha=0.5)
+        max_val = 1.2 * np.max(gen_vals)
+        plt.plot([0, max_val], [0, max_val], color="black")
+        plt.xlim(0, max_val)
+        plt.ylim(0, max_val)
+        if title:
+            plt.title(title + " " + clname)
+
+        save_img(
+            "particle_multiplicity_{}.png".format(cls_id),
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
