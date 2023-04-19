@@ -152,9 +152,14 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples, new
                 Xs = []
                 for ibatch in np.unique(event.batch.cpu().numpy()):
                     msk_batch = event.batch == ibatch
-                    msk_gen = target_ids[msk_batch] != 0
-                    msk_cand = cand_ids[msk_batch] != 0
-                    msk_pred = pred_ids[msk_batch] != 0
+                    if new_setup:
+                        msk_gen = target_ids[msk_batch] <= 4
+                        msk_cand = cand_ids[msk_batch] <= 4
+                        msk_pred = pred_ids[msk_batch] <= 4
+                    else:
+                        msk_gen = target_ids[msk_batch] != 0
+                        msk_cand = cand_ids[msk_batch] != 0
+                        msk_pred = pred_ids[msk_batch] != 0
 
                     Xs.append(event.x[msk_batch].cpu().numpy())
 
@@ -186,7 +191,12 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples, new
                 )
 
                 # in case of no predicted particles in the batch
-                if torch.sum(pred_ids != 0) == 0:
+                if new_setup:
+                    no_particles = torch.sum(pred_ids <= 4) == 0
+                else:
+                    no_particles = torch.sum(pred_ids != 0) == 0
+
+                if no_particles:
                     pt = build_dummy_array(len(pred_p4), np.float64)
                     eta = build_dummy_array(len(pred_p4), np.float64)
                     phi = build_dummy_array(len(pred_p4), np.float64)
