@@ -1,4 +1,5 @@
 import json
+import math
 import pickle as pkl
 import time
 from typing import Optional
@@ -22,6 +23,16 @@ np.seterr(divide="ignore", invalid="ignore")
 # keep track of step across epochs
 ISTEP_GLOBAL_TRAIN = 0
 ISTEP_GLOBAL_VALID = 0
+
+
+def compute_weights(gen_ids_one_hot, device):
+
+    output_dim_id = len(torch.unique(gen_ids_one_hot))
+    vs, cs = torch.unique(gen_ids_one_hot, return_counts=True)
+    weights = torch.zeros(output_dim_id).to(device=device)
+    for k, v in zip(vs, cs):
+        weights[k] = 1.0 / math.sqrt(float(v))
+    return weights
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
@@ -123,7 +134,7 @@ def train(
     global ISTEP_GLOBAL_TRAIN, ISTEP_GLOBAL_VALID
     is_train = not (optimizer is None)
 
-    loss_obj_id = FocalLoss(gamma=2.0)
+    # loss_obj_id = FocalLoss(gamma=2.0)
 
     is_train = not (optimizer is None)
     step_type = "train" if is_train else "valid"
@@ -193,7 +204,12 @@ def train(
 
             loss_ = {}
             # for CLASSIFYING PID
-            loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+            # loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+            weights = compute_weights(target_ids, rank)
+            loss_["Classification"] = 100 * torch.nn.functional.cross_entropy(
+                pred_ids_one_hot, target_ids, weight=weights
+            )  # for classifying PID
+
             # REGRESSING p4: mask the loss in cases there is no true particle (when target_ids>4)
             if alpha == -1:  # old code
                 msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
