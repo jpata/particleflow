@@ -113,7 +113,7 @@ def prepare_data_clic(fn):
     return Xs, ygens, ycands
 
 
-def generate_examples(files, with_jet_idx=True):
+def generate_examples(files):
     for fi in tqdm.tqdm(files):
         try:
             Xs, ygens, ycands = prepare_data_clic(fi)
