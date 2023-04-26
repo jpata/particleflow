@@ -208,16 +208,16 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
         )
 
         Xprop = X[:, :, 1:]
-        #et = X[:, :, 1:2]
-        #log_et = tf.math.log(et + 1e-5)
-        #one_over_et = 1.0/et
-        #et2 = et**2
-        #et0p5 = tf.math.sqrt(et)
-        #eta = X[:, :, 2:3]
-        #eta1 = tf.clip_by_value(tf.sinh(eta), -10, 10)
-        #eta2 = tf.clip_by_value(tf.cosh(eta), -10, 10)
+        # et = X[:, :, 1:2]
+        # log_et = tf.math.log(et + 1e-5)
+        # one_over_et = 1.0/et
+        # et2 = et**2
+        # et0p5 = tf.math.sqrt(et)
+        # eta = X[:, :, 2:3]
+        # eta1 = tf.clip_by_value(tf.sinh(eta), -10, 10)
+        # eta2 = tf.clip_by_value(tf.cosh(eta), -10, 10)
 
-        #return tf.concat([Xid, Xprop, log_et, one_over_et, et0p5, et2, eta1, eta2], axis=-1)
+        # return tf.concat([Xid, Xprop, log_et, one_over_et, et0p5, et2, eta1, eta2], axis=-1)
         return tf.concat([Xid, Xprop], axis=-1)
 
 
@@ -1194,7 +1194,7 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        #normalize all features except the PFElement type (feature 0)
+        # normalize all features except the PFElement type (feature 0)
         X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
