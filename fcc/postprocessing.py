@@ -555,25 +555,38 @@ def assign_to_recoobj(n_obj, obj_to_ptcl, used_particles):
             used_particles[iptcl] = 1
     return obj_to_ptcl_all
 
-def get_recoptcl_to_obj(n_rps, reco_arr):
+
+def get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track, idx_rp_to_cluster):
     track_to_rp = {}
     cluster_to_rp = {}
+
+    #loop over the reco particles
     for irp in range(n_rps):
         assigned = False
+
+        #find and loop over tracks associated to the reco particle
         trks_begin = reco_arr["tracks_begin"][irp]
         trks_end = reco_arr["tracks_end"][irp]
         for itrk in range(trks_begin, trks_end):
-            assert(itrk not in track_to_rp)
-            track_to_rp[itrk] = irp
+
+            #get the index of the track in the track collection
+            itrk_real = idx_rp_to_track[itrk]
+            assert(itrk_real not in track_to_rp)
+            track_to_rp[itrk_real] = irp
             assigned = True
 
         #only look for clusters if tracks were not found
         if not assigned:
+
+            #find and loop over clusters associated to the reco particle
             cls_begin = reco_arr["clusters_begin"][irp]
             cls_end = reco_arr["clusters_end"][irp]
             for icls in range(cls_begin, cls_end):
-                assert(icls not in cluster_to_rp)
-                cluster_to_rp[icls] = irp
+
+                #get the index of the cluster in the cluster collection
+                icls_real = idx_rp_to_cluster[icls]
+                assert(icls_real not in cluster_to_rp)
+                cluster_to_rp[icls_real] = irp
     return track_to_rp, cluster_to_rp
 
 def get_reco_properties(prop_data, iev):
@@ -634,6 +647,10 @@ def process_one_file(fn, ofn):
     calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
     sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
 
+    #maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end) to the index in the track/cluster collection
+    idx_rp_to_cluster = arrs["MergedRecoParticles#0/MergedRecoParticles#0.index"].array()
+    idx_rp_to_track = arrs["MergedRecoParticles#1/MergedRecoParticles#1.index"].array()
+
     hit_data = {
         "ECALBarrel": arrs["ECALBarrel"].array(),
         "ECALEndcap": arrs["ECALEndcap"].array(),
@@ -676,7 +693,7 @@ def process_one_file(fn, ofn):
         
         #for each reco particle, find the tracks and clusters associated with it
         #construct track/cluster -> recoparticle maps
-        track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr)
+        track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
         #get the track/cluster -> genparticle map
         track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}

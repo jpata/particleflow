@@ -433,7 +433,7 @@ def assign_to_recoobj(n_obj, obj_to_ptcl, used_particles):
             used_particles[iptcl] = 1
     return obj_to_ptcl_all
 
-def get_recoptcl_to_obj(n_rps, reco_arr, gpdata):
+def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_cluster):
     track_to_rp = {}
     calohit_to_rp = {}
     for irp in range(n_rps):
@@ -441,8 +441,9 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata):
         trks_begin = reco_arr["tracks_begin"][irp]
         trks_end = reco_arr["tracks_end"][irp]
         for itrk in range(trks_begin, trks_end):
-            assert(itrk not in track_to_rp)
-            track_to_rp[itrk] = irp
+            itrk_real = idx_rp_to_track[itrk]
+            assert(itrk_real not in track_to_rp)
+            track_to_rp[itrk_real] = irp
             assigned = True
 
         #only look for calohits if tracks were not found
@@ -450,7 +451,12 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata):
             cls_begin = reco_arr["clusters_begin"][irp]
             cls_end = reco_arr["clusters_end"][irp]
             for icls in range(cls_begin, cls_end):
-                calohit_inds = gpdata.hit_to_cluster[0][gpdata.hit_to_cluster[1]==icls]
+                icls_real = idx_rp_to_cluster[icls]
+
+                #find hits of the cluster
+                calohit_inds = gpdata.hit_to_cluster[0][gpdata.hit_to_cluster[1]==icls_real]
+
+                #get the highest-energy hit
                 calohits_e_ascending = np.argsort(gpdata.hit_features["energy"][calohit_inds])
                 highest_e_hit = calohit_inds[calohits_e_ascending[-1]]
                 assert(highest_e_hit not in calohit_to_rp)
@@ -518,6 +524,10 @@ def process_one_file(fn, ofn):
     calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
     sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
 
+    #maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end) to the index in the track/cluster collection
+    idx_rp_to_cluster = arrs["MergedRecoParticles#0/MergedRecoParticles#0.index"].array()
+    idx_rp_to_track = arrs["MergedRecoParticles#1/MergedRecoParticles#1.index"].array()
+
     hit_data = {
         "ECALBarrel": arrs["ECALBarrel"].array(),
         "ECALEndcap": arrs["ECALEndcap"].array(),
@@ -561,7 +571,7 @@ def process_one_file(fn, ofn):
         
         #for each reco particle, find the tracks and clusters associated with it
         #construct track/cluster -> recoparticle maps
-        track_to_rp, hit_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, gpdata)
+        track_to_rp, hit_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
         #get the track/cluster -> genparticle map
         track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
