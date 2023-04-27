@@ -20,8 +20,9 @@ _CITATION = """
 
 
 class ClicEdmQqHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("0.9.0")
     RELEASE_NOTES = {
+        "0.9.0": "Small stats",
         "1.0.0": "Initial release",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
