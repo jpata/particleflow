@@ -4,7 +4,7 @@ dataset:
   schema: clic
   target_particles: gen
   num_input_features: 18
-  #(none=0, track=1, cluster=2)
+  #(none=0, track=1, hit=2)
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
   num_output_classes: 6
@@ -45,7 +45,7 @@ setup:
   weights:
   weights_config:
   lr: 0.001
-  num_epochs: 200
+  num_epochs: 20
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -248,10 +248,10 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 0.9.0
+    version: 1.0.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf:
-    version: 0.9.0
+    version: 1.0.0
     data_dir:
     manual_dir:

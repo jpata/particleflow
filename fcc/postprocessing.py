@@ -788,34 +788,26 @@ def process_one_file(fn, ofn):
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
-def process_all_files():
+def process_sample(sample):
     inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_02_27/"
-    samps = [
-        "p8_ee_qq_ecm380",
-        "p8_ee_tt_ecm380",
-        "p8_ee_tt_ecm380_PU10",
-        "p8_ee_ZH_Htautau_ecm380"
-        "p8_ee_WW_fullhad_ecm380",
-    ]
+    outp = "/local/joosep/mlpf/clic_edm4hep_2023_04_27/"
 
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(30)
 
-    for samp in samps:
-        inpath_samp = inp + samp
-        outpath_samp = outp + samp
-        infiles = list(glob.glob(inpath_samp + "/*.root"))
-        if not os.path.isdir(outpath_samp):
-            os.makedirs(outpath_samp)
+    inpath_samp = inp + samp
+    outpath_samp = outp + samp
+    infiles = list(glob.glob(inpath_samp + "/*.root"))
+    if not os.path.isdir(outpath_samp):
+        os.makedirs(outpath_samp)
 
-        args = []
-        for inf in infiles:
-            of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-            args.append((inf, of))
-        pool.starmap(process_one_file, args)
+    args = []
+    for inf in infiles:
+        of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
+        args.append((inf, of))
+    pool.starmap(process_one_file, args)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        process_all_files()
+    if len(sys.argv) == 2:
+        process_sample(sys.argv[1])
     else:
         process_one_file(sys.argv[1], sys.argv[2])
