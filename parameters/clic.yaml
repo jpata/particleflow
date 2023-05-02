@@ -12,7 +12,7 @@ dataset:
   reg_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 100.0
+  classification_loss_coef: 200.0
   charge_loss_coef: 1.0
   pt_loss_coef: 10.0
   eta_loss_coef: 10.0
@@ -44,8 +44,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_epochs: 50
+  lr: 0.0005
+  num_epochs: 100
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -63,9 +63,9 @@ batching:
 
 #on 8GB GPU
   bucket_batch_sizes:
-    - 25, 160
-    - 50, 80
-    - 100, 40
+    - 25, 200
+    - 50, 100
+    - 100, 50
     - 200, 20
     - 500, 10
     - 1000, 5
@@ -108,14 +108,14 @@ parameters:
   node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 640
+    bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 2
-    ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 3
+    ffn_dist_hidden_dim: 64
 
     # MPNN
     #kernel:
@@ -145,8 +145,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 5
-  num_graph_layers_reg: 5
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -161,19 +161,19 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
-    charge_hidden_dim: 256
-    pt_hidden_dim: 256
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    id_hidden_dim: 128
+    charge_hidden_dim: 128
+    pt_hidden_dim: 128
+    eta_hidden_dim: 128
+    phi_hidden_dim: 128
+    energy_hidden_dim: 128
 
-    id_num_layers: 3
-    charge_num_layers: 2
-    pt_num_layers: 2
-    eta_num_layers: 2
-    phi_num_layers: 2
-    energy_num_layers: 2
+    id_num_layers: 1
+    charge_num_layers: 1
+    pt_num_layers: 1
+    eta_num_layers: 1
+    phi_num_layers: 1
+    energy_num_layers: 1
     layernorm: yes
     mask_reg_cls0: yes
 
@@ -240,7 +240,19 @@ validation_batch_size: 100
 validation_num_events: 2000
 
 evaluation_datasets:
+  clic_edm_qq_pf:
+    batch_size: 50
+    num_events: -1
   clic_edm_ttbar_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ttbar_pu10_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_zh_tautau_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ww_fullhad_pf:
     batch_size: 50
     num_events: -1
 
@@ -251,7 +263,19 @@ datasets:
     version: 1.3.0
     data_dir:
     manual_dir:
+  clic_edm_ttbar_pu10_pf:
+    version: 1.3.0
+    data_dir:
+    manual_dir:
   clic_edm_qq_pf:
+    version: 1.3.1
+    data_dir:
+    manual_dir:
+  clic_edm_ww_fullhad_pf:
+    version: 1.3.0
+    data_dir:
+    manual_dir:
+  clic_edm_zh_tautau_pf:
     version: 1.3.0
     data_dir:
     manual_dir:

@@ -27,6 +27,9 @@ def customize_pipeline_test(config):
     # validate only on a small number of events
     config["validation_num_events"] = config["validation_batch_size"] * 2
 
+    config["parameters"]["num_graph_layers_id"] = 1
+    config["parameters"]["num_graph_layers_cls"] = 1
+
     return config
 
 

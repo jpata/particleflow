@@ -8,9 +8,12 @@ SEED_KERNELATTENTION = 0
 
 
 def debugging_train_step(self, data):
+    print("\n")
     x, y, sample_weights = data
     if not hasattr(self, "step"):
         self.step = 0
+
+    print("data", data[0].shape, [(k, v.shape) for (k, v) in data[1].items()])
 
     with tf.GradientTape() as tape:
         y_pred = self(x, training=True)  # Forward pass
@@ -18,6 +21,11 @@ def debugging_train_step(self, data):
 
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
+
+    print("Max of Gradients[0]: %.4f" % tf.reduce_max(gradients[0]))
+    print("Min of Gradients[0]: %.4f" % tf.reduce_min(gradients[0]))
+    print("Mean of Gradients[0]: %.4f" % tf.reduce_mean(gradients[0]))
+    print("Loss: %.4f" % loss)
 
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     self.compiled_metrics.update_state(y, y_pred)
@@ -199,11 +207,17 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
             dtype=X.dtype,
         )
 
-        # X[:, :, 1:] - all the other non-categorical features
-
-        # FIXME: this clipping needs to be rethought, seems like some inputs have large values which cause NaN/Inf
         Xprop = X[:, :, 1:]
+        # et = X[:, :, 1:2]
+        # log_et = tf.math.log(et + 1e-5)
+        # one_over_et = 1.0/et
+        # et2 = et**2
+        # et0p5 = tf.math.sqrt(et)
+        # eta = X[:, :, 2:3]
+        # eta1 = tf.clip_by_value(tf.sinh(eta), -10, 10)
+        # eta2 = tf.clip_by_value(tf.cosh(eta), -10, 10)
 
+        # return tf.concat([Xid, Xprop, log_et, one_over_et, et0p5, et2, eta1, eta2], axis=-1)
         return tf.concat([Xid, Xprop], axis=-1)
 
 
@@ -1180,16 +1194,13 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
+        # normalize all features except the PFElement type (feature 0)
         X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
         X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
 
-        # tf.print("\n X=", tf.reduce_min(X), tf.reduce_max(X),
-        #   tf.math.reduce_mean(X, axis=[0,1]), tf.math.reduce_std(X, axis=[0,1]))
-
         shp = tf.shape(X)
-        # tf.print("\nX", shp, X.device,"\n")
         n_points = shp[1]
 
         bins_to_pad_to = -tf.math.floordiv(-n_points, self.bin_size)
@@ -1203,7 +1214,6 @@ class PFNetDense(tf.keras.Model):
             X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
         else:
             X = tf.pad(X, pad_size)
-        # tf.print("\nshape:", shp, tf.shape(X))
 
         debugging_data = {}
 
