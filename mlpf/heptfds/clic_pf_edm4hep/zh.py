@@ -12,21 +12,17 @@ from utils_edm import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with ee -> gamma/Z* -> quarks
+CLIC EDM4HEP dataset with ZH->tautau
 """
 
 _CITATION = """
 """
 
 
-class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.3.1")
+class ClicEdmZhTautauPf(tfds.core.GeneratorBasedBuilder):
+    VERSION = tfds.core.Version("1.3.0")
     RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-        "1.1.0": "update stats, move to 380 GeV",
-        "1.2.0": "sin cos as separate features",
-        "1.3.0": "Update stats to ~1M events",
-        "1.3.1": "Update stats to ~2M events",
+        "1.3.0": "First version",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./
@@ -62,7 +58,7 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_qq_ecm380/"))
+        return split_sample(Path(path / "p8_ee_ZH_Htautau_ecm380/"))
 
     def _generate_examples(self, files):
         return generate_examples(files)

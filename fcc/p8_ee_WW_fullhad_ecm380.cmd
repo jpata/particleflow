@@ -17,4 +17,6 @@ Beams:eCM = 380                    ! CM energy of collision
 PartonLevel:ISR = on
 PartonLevel:FSR = on
 
-Top:ffbar2ttbar(s:gmZ) = on
+WeakDoubleBoson:ffbar2WW = on
+24:onMode   = off
+24:onIfAny = 1 2 3 4 5 6
