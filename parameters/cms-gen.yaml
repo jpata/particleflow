@@ -31,8 +31,12 @@ loss:
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
   energy_loss_coef: 1.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
   charge_loss:
-    type: BinaryCrossentropy
+    type: CategoricalCrossentropy
     from_logits: yes
   energy_loss:
     type: MeanSquaredLogarithmicError
@@ -60,15 +64,12 @@ setup:
   weights:
   weights_config:
   lr: 0.0001
-  num_events_validation: 500
   num_epochs: 50
   dtype: float32
   trainable:
-  classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
-  cls_output_as_logits: yes
   small_graph_opt: yes
 
 batching:

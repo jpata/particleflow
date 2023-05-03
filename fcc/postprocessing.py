@@ -80,6 +80,9 @@ class EventData:
         genparticle_to_hit,
         genparticle_to_track,
         hit_to_cluster,
+        gp_merges_gp0,
+        gp_merges_gp1,
+
         ):
         self.gen_features = gen_features 
         self.hit_features = hit_features 
@@ -87,7 +90,9 @@ class EventData:
         self.track_features = track_features 
         self.genparticle_to_hit = genparticle_to_hit 
         self.genparticle_to_track = genparticle_to_track 
-        self.hit_to_cluster = hit_to_cluster 
+        self.hit_to_cluster = hit_to_cluster
+        self.gp_merges_gp0 = gp_merges_gp0
+        self.gp_merges_gp1 = gp_merges_gp1
 
 def get_cluster_subdet_energies(hit_list, hit_data, collectionIDs_reverse, iev):
     """
@@ -415,7 +420,9 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
         track_features,
         genparticle_to_hit,
         genparticle_to_track,
-        hit_to_cluster
+        hit_to_cluster,
+        [],
+        []
     )
 
 def assign_genparticles_to_obj_and_merge(gpdata):
@@ -483,19 +490,24 @@ def assign_genparticles_to_obj_and_merge(gpdata):
     phi_arr = np.array(awkward.to_numpy(gpdata.gen_features["phi"]))
     energy_arr = np.array(awkward.to_numpy(gpdata.gen_features["energy"]))
 
-    #now merge unmatched genparticles to their closest genparticle 
+    #now merge unmatched genparticles to their closest genparticle
+    gp_merges_gp0 = []
+    gp_merges_gp1 = []
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
         idx_best_cluster = np.argmax(gp_to_cluster[igp_unmatched])
         idx_gp_bestcluster = np.where(gp_to_obj[:, 1]==idx_best_cluster)[0]
 
         #if the genparticle is not matched to any cluster, then it left a few hits to some other track
-        #this is rare, happens only for low-pT particles and we don"t want to try to reconstruct it
+        #this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
         if (len(idx_gp_bestcluster)!=1):
             print("unmatched pt=", pt_arr[igp_unmatched])
             continue
 
         idx_gp_bestcluster = idx_gp_bestcluster[0]
+
+        gp_merges_gp0.append(igp_unmatched)
+        gp_merges_gp1.append(idx_gp_bestcluster)
 
         vec0 = vector.obj(
             pt=gpdata.gen_features["pt"][igp_unmatched],
@@ -539,7 +551,9 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         gpdata.track_features,
         genparticle_to_hit,
         genparticle_to_track,
-        gpdata.hit_to_cluster
+        gpdata.hit_to_cluster,
+        gp_merges_gp0,
+        gp_merges_gp1
     ), gp_to_obj
 
 
@@ -774,6 +788,8 @@ def process_one_file(fn, ofn):
         sanitize(ygen_cluster)
         sanitize(ycand_track)
         sanitize(ycand_cluster)
+
+        # print(len(gpdata.gen_features["PDG"]), len(gpdata_cleaned.gen_features["PDG"]), gpdata_cleaned.gp_merges_gp0, gpdata_cleaned.gp_merges_gp1)
 
         this_ev = awkward.Record({
             "X_track": X_track,

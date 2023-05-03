@@ -94,40 +94,6 @@ class EventData:
         self.genparticle_to_track = genparticle_to_track 
         self.hit_to_cluster = hit_to_cluster
 
-def get_cluster_subdet_energies(hit_list, hit_data, collectionIDs_reverse, iev):
-    """
-    This function calculates the energy contribution from each of four subdetectors in a particle physics experiment, based on a list of hits and their corresponding data.
-
-    Args:
-    hit_list: a list of tuples, where each tuple contains a collection ID and a hit index
-    hit_data: a dictionary containing data for each hit in the experiment, organized by collection
-    collectionIDs_reverse: a dictionary mapping collection IDs to collection names
-    iev: the event number for the current event
-
-    Returns:
-    A tuple containing the energy contributions from each of the four subdetectors:
-    (ecal_energy, hcal_energy, muon_energy, other_energy)
-    """
-
-    ecal_energy = 0.0
-    hcal_energy = 0.0
-    muon_energy = 0.0
-    other_energy = 0.0
-
-    for coll_id, hit_idx in hit_list:
-        coll = collectionIDs_reverse[coll_id]
-        hit_energy = hit_data[coll][iev][coll+".energy"][hit_idx]
-
-        if coll.startswith("ECAL"):
-            ecal_energy += hit_energy
-        elif coll.startswith("HCAL"):
-            hcal_energy += hit_energy
-        elif coll == "MUON":
-            muon_energy += hit_energy
-        else:
-            other_energy += hit_energy
-
-    return ecal_energy, hcal_energy, muon_energy, other_energy
 
 def hits_to_features(hit_data, iev, coll, feats):
     feat_arr = {f: hit_data[coll + "." + f][iev] for f in feats}
@@ -438,9 +404,13 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
     calohit_to_rp = {}
     for irp in range(n_rps):
         assigned = False
+
+        #get the tracks of the reco particle
         trks_begin = reco_arr["tracks_begin"][irp]
         trks_end = reco_arr["tracks_end"][irp]
         for itrk in range(trks_begin, trks_end):
+
+            #get the index of the track
             itrk_real = idx_rp_to_track[itrk]
             assert(itrk_real not in track_to_rp)
             track_to_rp[itrk_real] = irp
@@ -448,9 +418,13 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
 
         #only look for calohits if tracks were not found
         if not assigned:
+
+            #loop over clusters of the reco particle
             cls_begin = reco_arr["clusters_begin"][irp]
             cls_end = reco_arr["clusters_end"][irp]
             for icls in range(cls_begin, cls_end):
+
+                #get the index of the cluster
                 icls_real = idx_rp_to_cluster[icls]
 
                 #find hits of the cluster
@@ -582,14 +556,12 @@ def process_one_file(fn, ofn):
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps)
         if not np.all(used_gps==1):
             print("unmatched gen", gpdata.gen_features["energy"][used_gps==0])
-        #assert(np.all(used_gps == 1))
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
         hit_to_rp_all = assign_to_recoobj(n_hits, hit_to_rp, used_rps)
         if not np.all(used_rps==1):
             print("unmatched reco", reco_features["energy"][used_rps==0])
-        #assert(np.all(used_rps == 1))
 
         gps_track = get_particle_feature_matrix(
             track_to_gp_all,
@@ -626,16 +598,6 @@ def process_one_file(fn, ofn):
             map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_hit[:, 0], rps_hit[:, 1])]
         )
         rps_hit[:, 1] = 0
-
-        #all initial gen/reco particle energy must be reconstructable
-        #assert(abs(
-        #    np.sum(gps_track[:, 6]) + np.sum(gps_hit[:, 6]) - np.sum(gpdata.gen_features["energy"])
-        #    ) < 1e-2)
-
-        #assert(abs(
-        #    np.sum(rps_track[:, 6]) + np.sum(rps_hit[:, 6]) - np.sum(reco_features["energy"])
-        #    ) < 1e-2)
-
 
         #we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert(np.all(gps_hit[:, 1] == 0))
