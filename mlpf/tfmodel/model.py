@@ -304,6 +304,7 @@ class GHConvDense(tf.keras.layers.Layer):
         self.activation = getattr(tf.keras.activations, kwargs.pop("activation"))
         self.output_dim = kwargs.pop("output_dim")
         self.normalize_degrees = kwargs.pop("normalize_degrees", True)
+        self.initializer = kwargs.pop("initializer", "random_normal")
 
         super(GHConvDense, self).__init__(*args, **kwargs)
 
@@ -313,28 +314,28 @@ class GHConvDense(tf.keras.layers.Layer):
         self.W_t = self.add_weight(
             shape=(self.hidden_dim, self.output_dim),
             name="w_t",
-            initializer="random_normal",
+            initializer=self.initializer,
             trainable=True,
             regularizer=tf.keras.regularizers.L1(regularizer_weight),
         )
         self.b_t = self.add_weight(
             shape=(self.output_dim,),
             name="b_t",
-            initializer="random_normal",
+            initializer=self.initializer,
             trainable=True,
             regularizer=tf.keras.regularizers.L1(regularizer_weight),
         )
         self.W_h = self.add_weight(
             shape=(self.hidden_dim, self.output_dim),
             name="w_h",
-            initializer="random_normal",
+            initializer=self.initializer,
             trainable=True,
             regularizer=tf.keras.regularizers.L1(regularizer_weight),
         )
         self.theta = self.add_weight(
             shape=(self.hidden_dim, self.output_dim),
             name="theta",
-            initializer="random_normal",
+            initializer=self.initializer,
             trainable=True,
             regularizer=tf.keras.regularizers.L1(regularizer_weight),
         )
@@ -572,6 +573,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         self.bin_size = bin_size
         self.kernel = kernel
         self.small_graph_opt = small_graph_opt
+        self.initializer = kwargs.pop("initializer", "random_normal")
 
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
@@ -581,7 +583,7 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         # generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = self.add_weight(
             shape=(self.distance_dim, self.max_num_bins // 2),
-            initializer="random_normal",
+            initializer=self.initializer,
             trainable=False,
             name="lsh_projections",
         )

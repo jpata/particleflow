@@ -17,7 +17,7 @@ particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e
 # arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 # so we can easily use them in skip connections
 track_feature_order = [
-    "type",
+    "elemtype",
     "pt",
     "eta",
     "sin_phi",
@@ -35,7 +35,7 @@ track_feature_order = [
     "time",
 ]
 cluster_feature_order = [
-    "type",
+    "elemtype",
     "et",
     "eta",
     "sin_phi",
@@ -362,8 +362,8 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ez = ret["energy"] * costheta
     ret["et"] = np.sqrt(ret["energy"] ** 2 - ez**2)
 
-    # override cluster type with 1
-    ret["type"] = 2 * np.ones(n_cl, dtype=np.float32)
+    # cluster is always type 2
+    ret["elemtype"] = 2 * np.ones(n_cl, dtype=np.float32)
 
     ret["sin_phi"] = np.sin(ret["phi"])
     ret["cos_phi"] = np.cos(ret["phi"])
@@ -376,8 +376,6 @@ def track_to_features(prop_data, iev):
     feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
     ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
     n_tr = len(ret["type"])
-
-    # FIXME: add additional track features from track state
 
     # get the index of the first track state
     trackstate_idx = prop_data[track_coll][track_coll + ".trackStates_begin"][iev]
@@ -400,8 +398,8 @@ def track_to_features(prop_data, iev):
     ret["sin_phi"] = np.sin(ret["phi"])
     ret["cos_phi"] = np.cos(ret["phi"])
 
-    # override track type with 1
-    ret["type"] = 1 * np.ones(n_tr, dtype=np.float32)
+    # track is always type 1
+    ret["elemtype"] = 1 * np.ones(n_tr, dtype=np.float32)
 
     return awkward.Record(ret)
 

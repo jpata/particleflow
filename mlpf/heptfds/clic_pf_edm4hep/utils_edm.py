@@ -8,7 +8,7 @@ min_jet_pt = 5.0  # GeV
 
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
-    "type",
+    "elemtype",
     "pt",
     "eta",
     "sin_phi",
@@ -26,7 +26,7 @@ X_FEATURES_TRK = [
     "time",
 ]
 X_FEATURES_CL = [
-    "type",
+    "elemtype",
     "et",
     "eta",
     "sin_phi",
