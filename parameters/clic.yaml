@@ -50,9 +50,9 @@ setup:
   weights_config:
   lr: 0.0005
   num_epochs: 100
-  dtype: float32
+  dtype: float16
   trainable:
-  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes

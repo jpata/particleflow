@@ -19,7 +19,7 @@ python3 fcc/postprocessing.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.root d
 tfds build mlpf/heptfds/clic_pf_edm4hep/ttbar --manual_dir data
 
 # #Train, evaluate and make plots
-python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test
+python mlpf/pipeline.py train --config parameters/clic.yaml --nepochs 1 --customize pipeline_test --ntrain 10 --ntest 10
 python mlpf/pipeline.py evaluate --nevents 100 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
 python mlpf/pipeline.py plots --train-dir ./experiments/clic*
 

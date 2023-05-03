@@ -19,10 +19,10 @@ def customize_pipeline_test(config):
     if "clic_edm_ttbar_pf" in config["datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["clic_edm_ttbar_pf"]
         config["train_test_datasets"] = {"physical": config["train_test_datasets"]["physical"]}
-        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 50
+        config["train_test_datasets"]["physical"]["batch_per_gpu"] = 5
         config["validation_dataset"] = "clic_edm_ttbar_pf"
-        config["validation_batch_size"] = 50
-        config["evaluation_datasets"] = {"clic_edm_ttbar_pf": {"batch_size": 50, "num_events": -1}}
+        config["validation_batch_size"] = 5
+        config["evaluation_datasets"] = {"clic_edm_ttbar_pf": {"batch_size": 5, "num_events": -1}}
 
     # validate only on a small number of events
     config["validation_num_events"] = config["validation_batch_size"] * 2
