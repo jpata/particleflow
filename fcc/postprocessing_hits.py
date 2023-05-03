@@ -163,7 +163,6 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
-    ret_unused_pt = []
     for iev in range(arrs.num_entries):
 
         # get the reco particles
@@ -203,8 +202,13 @@ def process_one_file(fn, ofn):
         track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
         hit_to_gp = {ihit: igp for igp, ihit in enumerate(gp_to_obj[:, 1]) if ihit != -1}
 
+        # keep track if all genparticles were used
         used_gps = np.zeros(n_gps, dtype=np.int64)
+
+        # assign all track-associated genparticles to a track
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
+
+        # assign all calohit-associated genparticles to a calohit
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps)
         if not np.all(used_gps == 1):
             print("unmatched gen", gpdata.gen_features["energy"][used_gps == 0])
@@ -261,12 +265,7 @@ def process_one_file(fn, ofn):
             "ycand_track": ycand_track,
             "ycand_hit": ycand_hit,
         }
-        if np.sum(used_gps == 0) > 0:
-            ret_unused_pt.append(awkward.to_numpy(gpdata.gen_features["pt"][used_gps == 0]))
-        else:
-            ret_unused_pt.append(np.array([], dtype=np.float32))
         this_ev = awkward.Record(this_ev)
-
         ret.append(this_ev)
 
     ret = {k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields}
@@ -282,7 +281,7 @@ def process_sample(samp):
 
     inpath_samp = inp + samp
     outpath_samp = outp + samp
-    infiles = list(glob.glob(inpath_samp + "/*.root"))[:10000]
+    infiles = list(glob.glob(inpath_samp + "/*.root"))
     if not os.path.isdir(outpath_samp):
         os.makedirs(outpath_samp)
 

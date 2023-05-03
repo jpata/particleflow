@@ -70,6 +70,7 @@ setup:
   lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
+  cls_output_as_logits: yes
   small_graph_opt: yes
 
 batching:
