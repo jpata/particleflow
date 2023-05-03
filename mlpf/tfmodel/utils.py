@@ -664,7 +664,7 @@ def gen_jet_logcosh_loss(y_true, y_pred):
 
 
 def get_loss_dict(config):
-    cls_loss = (get_loss_from_params(config["loss"].get("cls_loss")),)
+    cls_loss = get_loss_from_params(config["loss"].get("cls_loss"))
 
     default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
