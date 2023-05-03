@@ -10,7 +10,41 @@ from scipy.sparse import coo_matrix
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
 
 from postprocessing import track_coll, mc_coll, particle_feature_order
-from postprocessing import track_feature_order, hit_feature_order
+
+track_feature_order = [
+    "elemtype",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "p",
+    "chi2",
+    "ndf",
+    "radiusOfInnermostHit",
+    "tanLambda",
+    "D0",
+    "omega",
+    "referencePoint.x",
+    "referencePoint.y",
+    "referencePoint.z",
+    "Z0",
+    "time",
+    "type",
+]
+hit_feature_order = [
+    "elemtype",
+    "et",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "time",
+    "subdetector",
+    "type",
+]
 
 from postprocessing import (
     get_genparticles_and_adjacencies,
