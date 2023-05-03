@@ -20,7 +20,7 @@ loss:
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 10.0
   charge_loss:
-    type: BinaryCrossentropy
+    type: CategoricalCrossentropy
     from_logits: yes
   energy_loss:
     type: Huber
@@ -45,7 +45,7 @@ setup:
   weights:
   weights_config:
   lr: 0.001
-  num_epochs: 20
+  num_epochs: 10
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
@@ -53,6 +53,7 @@ setup:
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
+  focal_loss_gamma: 3.0
   small_graph_opt: no
 
 batching:
@@ -108,7 +109,7 @@ parameters:
   node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 256
+    bin_size: 512
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes

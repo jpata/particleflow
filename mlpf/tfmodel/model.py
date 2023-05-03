@@ -16,16 +16,30 @@ def debugging_train_step(self, data):
     print("data", data[0].shape, [(k, v.shape) for (k, v) in data[1].items()])
 
     with tf.GradientTape() as tape:
-        y_pred = self(x, training=True)  # Forward pass
-        loss = self.compiled_loss(y, y_pred, sample_weights, regularization_losses=self.losses)
+        y_pred = self(x, training=True)  # Forward passa
+
+        tf.print("predictions and targets")
+        for k in y_pred.keys():
+            tf.print(k, y_pred[k].shape, y[k].shape)
+
+        tf.print("loss shapes")
+        for k in self.compiled_loss._user_losses.keys():
+            tf.print(k, self.compiled_loss._user_losses[k])
+            tf.print(self.compiled_loss._user_losses[k](y[k], y_pred[k]).shape)
+
+        tf.print("sample weights")
+        for k in sample_weights.keys():
+            tf.print(k, sample_weights[k].shape)
+
+        loss = self.compiled_loss(y, y_pred, sample_weights)  # , regularization_losses=self.losses)
 
     trainable_vars = self.trainable_variables
     gradients = tape.gradient(loss, trainable_vars)
 
-    print("Max of Gradients[0]: %.4f" % tf.reduce_max(gradients[0]))
-    print("Min of Gradients[0]: %.4f" % tf.reduce_min(gradients[0]))
-    print("Mean of Gradients[0]: %.4f" % tf.reduce_mean(gradients[0]))
-    print("Loss: %.4f" % loss)
+    print("Max of Gradients[0]: {:.4f}".format(tf.reduce_max(gradients[0])))
+    print("Min of Gradients[0]: {:.4f}".format(tf.reduce_min(gradients[0])))
+    print("Mean of Gradients[0]: {:.4f}".format(tf.reduce_mean(gradients[0])))
+    print("Loss: {}".format(loss))
 
     self.optimizer.apply_gradients(zip(gradients, trainable_vars))
     self.compiled_metrics.update_state(y, y_pred)

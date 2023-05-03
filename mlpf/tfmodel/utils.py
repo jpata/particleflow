@@ -480,13 +480,20 @@ def set_config_loss(config, trainable):
 
 
 def get_class_loss(config):
+    from_logits = config["setup"]["cls_output_as_logits"]
     if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
         cls_loss = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False,
+            from_logits=from_logits,
             label_smoothing=config["setup"].get("classification_label_smoothing", 0.0),
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-        cls_loss = tfa.losses.sigmoid_focal_crossentropy
+        cls_loss = tfa.losses.SigmoidFocalCrossEntropy(
+            from_logits=from_logits,
+            gamma=config["setup"]["focal_loss_gamma"],
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        )
+        # cls_loss = tfa.losses.sigmoid_focal_crossentropy
     else:
         raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
     return cls_loss
@@ -499,7 +506,7 @@ def get_loss_from_params(input_dict):
         loss_cls = getattr(tfa.losses, loss_type)
     else:
         loss_cls = getattr(tf.keras.losses, loss_type)
-    return loss_cls(**input_dict)
+    return loss_cls(**input_dict, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
