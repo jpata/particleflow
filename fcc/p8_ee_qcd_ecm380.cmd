@@ -16,7 +16,7 @@ Stat:showPartonLevel = off
 Beams:idA = 11                   ! first beam, e- = 11
 Beams:idB = -11                  ! second beam, e+ = -11
 
-! s-channel gamma/Z 
+! s-channel gamma/Z
 Beams:eCM = 380               ! CM energy of collision
 HardQCD:all = on
 WeakSingleBoson:ffbar2ffbar(s:gmZ) = on

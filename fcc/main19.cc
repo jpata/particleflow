@@ -54,15 +54,15 @@ int main(int argc, char *argv[]) {
     std::cerr << "./main SEED NPU" << std::endl;
     return 1;
   }
-  
+
   std::string seedStr = std::string("Random:seed = ").append(std::string(argv[1]));
 
   // Average number of pileup events per signal event.
   double nPileupAvg = atoi(argv[2]);
-  
+
   // Shift each PU event by this time delta in time to mimic ee overlay
   double timeDelta = 0.5;
-  
+
   Pythia8ToHepMC ToHepMC;
   ToHepMC.setNewFile("pythia.hepmc");
 
@@ -84,18 +84,18 @@ int main(int argc, char *argv[]) {
 
     // Select the number of pileup events to generate.
     int nPileup = poisson(nPileupAvg, pythiaPileup.rndm);
-    
+
     // create a random index permutation from [0, nPileup)
     std::vector<int> puVectorInds;
     for (int npu=0; npu<nPileup; npu++) {
-      puVectorInds.push_back(npu); 
+      puVectorInds.push_back(npu);
     }
     pythiaPileup.rndm.shuffle(puVectorInds);
 
     // Generate a number of pileup events. Add them to sumEvent.
     for (int iPileup = 0; iPileup < nPileup; ++iPileup) {
-     
-      //generate a signal event if the permutation value is 0, otherwise generate a pileup event 
+
+      //generate a signal event if the permutation value is 0, otherwise generate a pileup event
       auto& pythiaSigOrPU = (puVectorInds[iPileup] == 0) ? pythiaSignal : pythiaPileup;
       pythiaSigOrPU.next();
 
