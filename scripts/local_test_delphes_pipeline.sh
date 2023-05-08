@@ -19,7 +19,7 @@ python mlpf/pipeline.py train --config parameters/delphes.yaml --nepochs 1 --ntr
 ls ./experiments/delphes_*/weights/
 
 #Generate the prediction files
-python mlpf/pipeline.py evaluate --nevents 10 --train-dir ./experiments/delphes_*
+python mlpf/pipeline.py evaluate --nevents 10 --customize pipeline_test --train-dir ./experiments/delphes_*
 
 #Run plots
 python mlpf/pipeline.py plots --train-dir ./experiments/delphes_*
