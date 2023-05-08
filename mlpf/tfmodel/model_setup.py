@@ -22,7 +22,8 @@ from plotting.plot_utils import (
     compute_met_and_ratio,
     load_eval_data,
     plot_jet_ratio,
-    plot_met_and_ratio,
+    plot_met,
+    plot_met_ratio,
     plot_jets,
 )
 from tfmodel.callbacks import BenchmarkLoggerCallback, CustomTensorBoard
@@ -108,7 +109,8 @@ def epoch_end(self, epoch, logs, comet_experiment=None):
 
         plot_jets(yvals, epoch, cp_dir, comet_experiment)
         plot_jet_ratio(yvals, epoch, cp_dir, comet_experiment)
-        plot_met_and_ratio(met_data, epoch, cp_dir, comet_experiment)
+        plot_met(met_data, epoch, cp_dir, comet_experiment)
+        plot_met_ratio(met_data, epoch, cp_dir, comet_experiment)
 
         jet_distances = compute_distances(
             yvals["jet_gen_to_pred_genpt"],

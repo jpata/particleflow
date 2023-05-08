@@ -2,10 +2,10 @@
 
 # Tallinn
 export MANUAL_DIR=/local/joosep/mlpf/cms/v2
-export DATA_DIR=/scratch-persistent/joosep/tensorflow_datasets
+export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
 export IMG=/home/software/singularity/tf-2.11.0.simg
 export PYTHONPATH=`pwd`/mlpf
-export CMD="singularity exec -B /local -B /scratch-persistent --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
+export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # Desktop
 # IMG=/home/joosep/HEP-KBFI/singularity/tf-2.10.0.simg
@@ -29,11 +29,20 @@ export CMD="singularity exec -B /local -B /scratch-persistent --env PYTHONPATH=$
 # $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singletau.log &
 # wait
 
-# CLIC
+# CLIC cluster-based
 # export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_02_27
 # $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
-wait
+# $CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh.log &
+# $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar_pu10 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_pu10.log &
+# $CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ww_fullhad.log &
+# wait
+
+# CLIC hit-based
+# export MANUAL_DIR=/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27
+# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
+# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
+# wait
 
 # Delphes
 # $CMD mlpf/heptfds/delphes_pf/delphes_pf &> logs/tfds_delphes.log &

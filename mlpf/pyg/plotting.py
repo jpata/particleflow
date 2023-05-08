@@ -7,7 +7,8 @@ from plotting.plot_utils import (
     format_dataset_name,
     load_eval_data,
     plot_jet_ratio,
-    plot_met_and_ratio,
+    plot_met,
+    plot_met_ratio,
     plot_num_elements,
     plot_particles,
     plot_sum_energy,
@@ -38,6 +39,7 @@ def make_plots(pred_path, plot_path, dataset, sample):
     plot_jet_ratio(yvals, cp_dir=plot_path, title=_title)
 
     met_data = compute_met_and_ratio(yvals)
-    plot_met_and_ratio(met_data, cp_dir=plot_path, title=_title)
+    plot_met(met_data, cp_dir=plot_path, title=_title)
+    plot_met_ratio(met_data, cp_dir=plot_path, title=_title)
 
     plot_particles(yvals, cp_dir=plot_path, title=_title)

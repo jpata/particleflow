@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH -x comp-u-[001-128],comp-r-003
-#SBATCH --mem-per-cpu=4G
+#SBATCH -x comp-d-[001-004]
+#SBATCH --mem-per-cpu=6G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
 set -e
@@ -10,7 +10,7 @@ set -x
 env
 df -h
 
-OUTDIR=/local/joosep/clic_edm4hep_2023_03_03/
+OUTDIR=/local/joosep/clic_edm4hep_2023_02_27/
 PFDIR=/home/joosep/particleflow
 NEV=100
 NPU=10
@@ -19,7 +19,7 @@ NUM=$1 #random seed
 SAMPLE=$2 #main card
 PU=$3 #pu card
 
-WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
+WORKDIR=/scratch/local/$USER/${SAMPLE}_${SLURM_JOB_ID}
 FULLOUTDIR=${OUTDIR}/${SAMPLE}_PU$NPU
 
 mkdir -p $FULLOUTDIR
