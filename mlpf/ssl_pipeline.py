@@ -39,7 +39,6 @@ else:
 multi_gpu = torch.cuda.device_count() > 1
 
 if __name__ == "__main__":
-
     args = parse_args()
 
     world_size = torch.cuda.device_count()
@@ -129,7 +128,6 @@ if __name__ == "__main__":
         input_ = max(CLUSTERS_X, TRACKS_X) + 1  # max cz we pad when we concatenate them & +1 cz there's the `type` feature
 
         if args.ssl:
-
             print("Loading a previously trained VICReg model..")
             vicreg_state_dict = torch.load(f"{outpath}/VICReg_best_epoch_weights.pth", map_location=device)
 
@@ -184,10 +182,10 @@ if __name__ == "__main__":
                 args.alpha,
                 outpath_ssl,
                 vicreg_encoder,
+                penalize_NCH=args.penalize_NCH,
             )
 
         if args.native:
-
             mlpf_model_kwargs = {
                 "NUM_CLASSES": len(CLASS_NAMES[args.dataset]),
                 "input_dim": input_,
@@ -219,4 +217,5 @@ if __name__ == "__main__":
                 args.lr,
                 args.alpha,
                 outpath_native,
+                penalize_NCH=args.penalize_NCH,
             )

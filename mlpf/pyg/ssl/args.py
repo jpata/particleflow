@@ -4,6 +4,10 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        "--penalize_NCH", dest="penalize_NCH", action="store_true", help="penalize null charged hadron predictions"
+    )
+
     parser.add_argument("--outpath", type=str, default="../experiments/", help="output folder")
     parser.add_argument("--data_split_mode", type=str, default="mix", help="choices: ['quick', 'domain_adaptation', 'mix']")
 
