@@ -154,7 +154,7 @@ def train(
             weights = compute_weights(target_ids, rank)
             if penalize_NCH:
                 weights[5] = 0  # penalize the charged hadron predictions?
-            loss_obj_id = 100 * FocalLoss(gamma=2.0, weights=weights)
+            loss_obj_id = FocalLoss(gamma=2.0, weights=weights)
 
             loss_["Classification"] = 100 * loss_obj_id(softmax(pred_ids_one_hot), target_ids)
 
