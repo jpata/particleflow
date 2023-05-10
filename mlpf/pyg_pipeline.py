@@ -14,7 +14,7 @@ from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
+from pyg.utils import CLASS_NAMES, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -221,7 +221,6 @@ def load_data(data_path, dataset, sample):
 
 
 if __name__ == "__main__":
-
     args = parse_args()
 
     world_size = torch.cuda.device_count()
@@ -240,7 +239,7 @@ if __name__ == "__main__":
     else:
         model_kwargs = {
             "input_dim": len(X_FEATURES[args.dataset]),
-            "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
+            "NUM_CLASSES": len(CLASS_NAMES[args.dataset]),
             "embedding_dim": args.embedding_dim,
             "width": args.width,
             "num_convs": args.num_convs,
