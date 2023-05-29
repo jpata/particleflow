@@ -41,8 +41,8 @@ source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc1
 k4run $PFDIR/fcc/pythia.py -n $NEV --Dumper.Filename out.hepmc --Pythia8.PythiaInterface.pythiacard card.cmd
 
 ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
-      --outputFile out_sim_edm4hep.root \
       --steeringFile clic_steer.py \
+      --outputFile out_sim_edm4hep.root \
       --inputFiles out.hepmc \
       --numberOfEvents $NEV \
       --random.seed $NUM

@@ -48,8 +48,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
-  num_epochs: 10
+  lr: 0.0005
+  num_epochs: 5
   dtype: float32
   trainable:
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
@@ -111,14 +111,14 @@ parameters:
   node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 512
+    bin_size: 320
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 3
-    ffn_dist_hidden_dim: 64
+    ffn_dist_num_layers: 2
+    ffn_dist_hidden_dim: 128
 
     # MPNN
     #kernel:
@@ -148,8 +148,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 6
-  num_graph_layers_reg: 6
+  num_graph_layers_id: 5
+  num_graph_layers_reg: 5
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -164,19 +164,19 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 128
-    charge_hidden_dim: 128
-    pt_hidden_dim: 128
-    eta_hidden_dim: 128
-    phi_hidden_dim: 128
-    energy_hidden_dim: 128
+    id_hidden_dim: 512
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
 
-    id_num_layers: 1
-    charge_num_layers: 1
-    pt_num_layers: 1
-    eta_num_layers: 1
-    phi_num_layers: 1
-    energy_num_layers: 1
+    id_num_layers: 3
+    charge_num_layers: 2
+    pt_num_layers: 2
+    eta_num_layers: 2
+    phi_num_layers: 2
+    energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: yes
 
@@ -237,9 +237,18 @@ train_test_datasets:
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
+  gun:
+    batch_per_gpu: 5
+    datasets:
+      - clic_edm_single_kaon0l_hits_pf
+      - clic_edm_single_pi_hits_pf
+      - clic_edm_single_pi0_hits_pf
+      - clic_edm_single_neutron_hits_pf
+      - clic_edm_single_electron_hits_pf
+      - clic_edm_single_muon_hits_pf
 
 validation_dataset: clic_edm_ttbar_hits_pf
-validation_batch_size: 10
+validation_batch_size: 20
 validation_num_events: 2000
 
 evaluation_datasets:
@@ -251,10 +260,38 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.1.0
+    version: 1.2.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf:
-    version: 1.1.0
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_kaon0l_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_gamma_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_pi_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_pi0_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_neutron_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_electron_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_muon_hits_pf:
+    version: 1.2.0
     data_dir:
     manual_dir:

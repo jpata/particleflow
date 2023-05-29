@@ -51,6 +51,13 @@ from postprocessing import (
     get_feature_matrix,
 )
 
+def build_dummy_array(num, dtype=np.int64):
+    return awkward.Array(
+        awkward.contents.ListOffsetArray(
+            awkward.index.Index64(np.zeros(num + 1, dtype=np.int64)),
+            awkward.from_numpy(np.array([], dtype=dtype), highlevel=False),
+        )
+    )
 
 def assign_genparticles_to_obj(gpdata):
 
@@ -221,6 +228,7 @@ def process_one_file(fn, ofn):
         n_tracks = len(gpdata.track_features["type"])
         n_hits = len(gpdata.hit_features["type"])
         n_gps = len(gpdata.gen_features["PDG"])
+        print("hits={} tracks={} gps={}".format(n_hits, n_tracks, n_gps))
 
         assert len(gp_to_obj) == len(gpdata.gen_features["PDG"])
         assert gp_to_obj.shape[1] == 2
@@ -300,15 +308,18 @@ def process_one_file(fn, ofn):
         ret.append(this_ev)
 
     ret = {k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields}
+    for k in ret.keys():
+        if len(awkward.flatten(ret[k])) == 0:
+            ret[k] = build_dummy_array(len(ret[k]), np.float32)
     ret = awkward.Record(ret)
     awkward.to_parquet(ret, ofn)
 
 
 def process_sample(samp):
-    inp = "/media/joosep/data/clic_edm4hep_2023_02_27/"
-    outp = "/media/joosep/data/mlpf_hits/clic_edm4hep_2023_02_27/"
+    inp = "/local/joosep/clic_edm4hep/"
+    outp = "/local/joosep/mlpf_hits/clic_edm4hep/"
 
-    pool = multiprocessing.Pool(15)
+    pool = multiprocessing.Pool(8)
 
     inpath_samp = inp + samp
     outpath_samp = outp + samp

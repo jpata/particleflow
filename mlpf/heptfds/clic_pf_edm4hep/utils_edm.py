@@ -63,6 +63,26 @@ def split_sample(path, test_frac=0.8):
         "test": generate_examples(files_test),
     }
 
+def split_sample_several(paths, test_frac=0.8):
+    files_train_tot = []
+    files_test_tot = []
+    for path in paths:
+        files = sorted(list(path.glob("*.parquet")))
+        print("Found {} files in {}".format(files, path))
+        assert len(files) > 0
+        idx_split = int(test_frac * len(files))
+        files_train = files[:idx_split]
+        files_test = files[idx_split:]
+        assert len(files_train) > 0
+        assert len(files_test) > 0
+        files_train_tot.append(files_train)
+        files_test_tot.append(files_test)
+
+    return {
+        "train": generate_examples(files_train_tot),
+        "test": generate_examples(files_test_tot),
+    }
+
 
 def prepare_data_clic(fn, with_jet_idx=True):
     ret = ak.from_parquet(fn)
