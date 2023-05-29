@@ -29,21 +29,21 @@ samples_gun = [
 ]
 
 if __name__ == "__main__":
-    #basic samples
+    # basic samples
     # for sname, seed0, seed1 in samples:
     #    for seed in range(seed0, seed1):
     #        #check if output file exists, and print out batch submission if it doesn't
     #        if not os.path.isfile("{}/{}/reco_{}_{}.root".format(outpath, sname, sname, seed)):
     #            print("sbatch run_sim.sh {} {}".format(seed, sname))
 
-    #PU 
-    #for sname, seed0, seed1 in samples_pu:
+    # PU
+    # for sname, seed0, seed1 in samples_pu:
     #    for seed in range(seed0, seed1):
     #        # check if output file exists, and print out batch submission if it doesn't
     #        if not os.path.isfile("{}/{}_PU10/reco_{}_{}.root".format(outpath, sname, sname, seed)):
     #            print("sbatch run_sim_pu.sh {} {} p8_ee_gg_ecm380".format(seed, sname))
 
-    #gun
+    # gun
     for sname, seed0, seed1 in samples_gun:
         for seed in range(seed0, seed1):
             # check if output file exists, and print out batch submission if it doesn't
