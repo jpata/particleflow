@@ -27,6 +27,7 @@ ISTEP_GLOBAL_VALID = 0
 
 def compute_weights(gen_ids_one_hot, device):
     output_dim_id = len(torch.unique(gen_ids_one_hot))
+    # more accurately `output_dim_id = NUM_CLASSES``
     vs, cs = torch.unique(gen_ids_one_hot, return_counts=True)
     weights = torch.zeros(output_dim_id).to(device=device)
     for k, v in zip(vs, cs):
