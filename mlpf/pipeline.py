@@ -287,6 +287,9 @@ def train(
         callbacks.append(optim_callbacks)
 
         if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+            logging.info(
+                "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
+            )
             model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
             print(model.normalizer.mean)
             print(model.normalizer.variance)

@@ -8,7 +8,8 @@ IMG=/home/software/singularity/tf-2.12.0.simg
 cd ~/particleflow
 
 #TF training
-singularity exec -B /scratch/persistent --nv \
+singularity exec -B /scratch/persistent -B /local --nv \
     --env PYTHONPATH=hep_tfds \
-    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
+    --env TFDS_DATA_DIR=/local/joosep/mlpf/tensorflow_datasets \
+    --env TF_XLA_FLAGS="--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit" \
     $IMG python mlpf/pipeline.py train -c parameters/clic-hits.yaml --plot-freq 1 --num-cpus 16 --batch-multiplier 1 --ntrain 100000 --ntest 100000
