@@ -72,6 +72,7 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: yes
+  normalizer_cache: parameters/cms_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
