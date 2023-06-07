@@ -65,12 +65,14 @@ def debugging_test_step(self, data):
     return {m.name: m.result() for m in self.metrics}
 
 
+@tf.function(jit_compile=True)
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
     return bins_split
 
 
+@tf.function(jit_compile=True)
 def pairwise_l2_dist(A, B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
@@ -129,17 +131,17 @@ Returns: (n_batch, n_bins, n_features) float32 matrix, after the binning operati
 """
 
 
-@tf.function
+@tf.function(jit_compile=True)
 def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
-    tf.debugging.assert_shapes(
-        [
-            (bins_split, ("n_batch", "n_bins", "n_points_bin")),
-            (
-                points_binned_enc,
-                ("n_batch", "n_bins", "n_points_bin", "n_features"),
-            ),
-        ]
-    )
+    # tf.debugging.assert_shapes(
+    #     [
+    #         (bins_split, ("n_batch", "n_bins", "n_points_bin")),
+    #         (
+    #             points_binned_enc,
+    #             ("n_batch", "n_bins", "n_points_bin", "n_features"),
+    #         ),
+    #     ]
+    # )
 
     shp = tf.shape(points_binned_enc)
     n_bins = shp[1]
@@ -172,11 +174,11 @@ def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
     else:
         ret = multiple_bins()
 
-    tf.debugging.assert_shapes(
-        [
-            (ret, ("n_batch", "n_elems", "n_features")),
-        ]
-    )
+    # tf.debugging.assert_shapes(
+    #     [
+    #         (ret, ("n_batch", "n_elems", "n_features")),
+    #     ]
+    # )
     return ret
 
 
@@ -189,7 +191,6 @@ class InputEncoding(tf.keras.layers.Layer):
         X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
     """
 
-    @tf.function
     def call(self, X):
 
         # X[:, :, 0] - categorical index of the element type
@@ -212,7 +213,6 @@ class InputEncodingCLIC(tf.keras.layers.Layer):
         X: [Nbatch, Nelem, Nfeat] array of all the input detector element feature data
     """
 
-    @tf.function
     def call(self, X):
 
         # X[:, :, 0] - categorical index of the element type
@@ -347,7 +347,7 @@ class GHConvDense(tf.keras.layers.Layer):
         # tf.print("GHConvDense.call:msk", msk.shape)
 
         # remove last dim from distance/adjacency matrix
-        tf.debugging.assert_equal(tf.shape(adj)[-1], 1)
+        # tf.debugging.assert_equal(tf.shape(adj)[-1], 1)
         adj = tf.squeeze(adj, axis=-1)
 
         # compute the normalization of the adjacency matrix
@@ -367,20 +367,20 @@ class GHConvDense(tf.keras.layers.Layer):
         gate = tf.nn.sigmoid(tf.linalg.matmul(x, self.W_t) + self.b_t)
 
         out = gate * f_hom + (1.0 - gate) * f_het
-        tf.debugging.assert_shapes(
-            [
-                (x, ("n_batch", "n_bins", "n_points_bin", "num_features")),
-                (
-                    adj,
-                    ("n_batch", "n_bins", "n_points_bin", "n_points_bin"),
-                ),
-                (msk, ("n_batch", "n_bins", "n_points_bin", 1)),
-                (
-                    out,
-                    ("n_batch", "n_bins", "n_points_bin", self.output_dim),
-                ),
-            ]
-        )
+        # tf.debugging.assert_shapes(
+        #     [
+        #         (x, ("n_batch", "n_bins", "n_points_bin", "num_features")),
+        #         (
+        #             adj,
+        #             ("n_batch", "n_bins", "n_points_bin", "n_points_bin"),
+        #         ),
+        #         (msk, ("n_batch", "n_bins", "n_points_bin", 1)),
+        #         (
+        #             out,
+        #             ("n_batch", "n_bins", "n_points_bin", self.output_dim),
+        #         ),
+        #     ]
+        # )
         # tf.print("GHConvDense.call:out", out.shape)
         return self.activation(out) * msk
 
@@ -596,13 +596,13 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
     def call(self, x_msg, x_node, msk, training=False):
         msk_f = tf.expand_dims(tf.cast(msk, x_msg.dtype), -1)
 
-        tf.debugging.assert_shapes(
-            [
-                (x_msg, ("n_batch", "n_points", "n_msg_features")),
-                (x_node, ("n_batch", "n_points", "n_node_features")),
-                (msk_f, ("n_batch", "n_points", 1)),
-            ]
-        )
+        # tf.debugging.assert_shapes(
+        #     [
+        #         (x_msg, ("n_batch", "n_points", "n_msg_features")),
+        #         (x_node, ("n_batch", "n_points", "n_node_features")),
+        #         (msk_f, ("n_batch", "n_points", 1)),
+        #     ]
+        # )
 
         shp = tf.shape(x_msg)
         n_points = shp[1]
@@ -621,16 +621,16 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
             # n_points must be divisible by bin_size exactly due to the use of reshape
             n_bins = tf.math.floordiv(n_points, self.bin_size)
 
-            tf.debugging.assert_greater(
-                n_bins,
-                0,
-                "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size),
-            )
-            tf.debugging.assert_equal(
-                tf.math.floormod(n_points, self.bin_size),
-                0,
-                "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
-            )
+            # tf.debugging.assert_greater(
+            #     n_bins,
+            #     0,
+            #     "number of points (dim 1) must be greater than bin_size={}".format(self.bin_size),
+            # )
+            # tf.debugging.assert_equal(
+            #     tf.math.floormod(n_points, self.bin_size),
+            #     0,
+            #     "number of points (dim 1) must be an integer multiple of bin_size={}".format(self.bin_size),
+            # )
             mul = tf.linalg.matmul(
                 x_msg,
                 self.codebook_random_rotations[:, : tf.math.maximum(1, n_bins // 2)],
@@ -690,39 +690,39 @@ class MessageBuildingLayerLSH(tf.keras.layers.Layer):
         msk_col = tf.cast(tf.reshape(msk_f_binned_squeeze, rshp_col), dm.dtype)
         dm = tf.math.multiply(dm, msk_row)
         dm = tf.math.multiply(dm, msk_col)
-        tf.debugging.assert_shapes(
-            [
-                (
-                    x_msg_binned,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_msg_features",
-                    ),
-                ),
-                (
-                    x_features_binned,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_node_features",
-                    ),
-                ),
-                (msk_f_binned, ("n_batch", "n_bins", "n_points_bin", 1)),
-                (
-                    dm,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_points_bin",
-                        1,
-                    ),
-                ),
-            ]
-        )
+        # tf.debugging.assert_shapes(
+        #     [
+        #         (
+        #             x_msg_binned,
+        #             (
+        #                 "n_batch",
+        #                 "n_bins",
+        #                 "n_points_bin",
+        #                 "n_msg_features",
+        #             ),
+        #         ),
+        #         (
+        #             x_features_binned,
+        #             (
+        #                 "n_batch",
+        #                 "n_bins",
+        #                 "n_points_bin",
+        #                 "n_node_features",
+        #             ),
+        #         ),
+        #         (msk_f_binned, ("n_batch", "n_bins", "n_points_bin", 1)),
+        #         (
+        #             dm,
+        #             (
+        #                 "n_batch",
+        #                 "n_bins",
+        #                 "n_points_bin",
+        #                 "n_points_bin",
+        #                 1,
+        #             ),
+        #         ),
+        #     ]
+        # )
 
         return bins_split, x_features_binned, dm, msk_f_binned
 
@@ -1073,44 +1073,44 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         # tf.print("CombinedGraphLayer.call:dm", dm.shape)
         # tf.print("CombinedGraphLayer.call:msk_f", msk_f.shape)
 
-        tf.debugging.assert_shapes(
-            [
-                (bins_split, ("n_batch", "n_bins", "n_points_bin")),
-                (
-                    x,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_node_features",
-                    ),
-                ),
-                (
-                    dm,
-                    (
-                        "n_batch",
-                        "n_bins",
-                        "n_points_bin",
-                        "n_points_bin",
-                        1,
-                    ),
-                ),
-                (msk_f, ("n_batch", "n_bins", "n_points_bin", 1)),
-            ]
-        )
+        # tf.debugging.assert_shapes(
+        #     [
+        #         (bins_split, ("n_batch", "n_bins", "n_points_bin")),
+        #         (
+        #             x,
+        #             (
+        #                 "n_batch",
+        #                 "n_bins",
+        #                 "n_points_bin",
+        #                 "n_node_features",
+        #             ),
+        #         ),
+        #         (
+        #             dm,
+        #             (
+        #                 "n_batch",
+        #                 "n_bins",
+        #                 "n_points_bin",
+        #                 "n_points_bin",
+        #                 1,
+        #             ),
+        #         ),
+        #         (msk_f, ("n_batch", "n_bins", "n_points_bin", 1)),
+        #     ]
+        # )
 
         # run the node update with message passing
         for msg in self.message_passing_layers:
             x_out = msg((x, dm, msk_f))
-            tf.debugging.assert_shapes(
-                [
-                    (x, ("n_batch", "n_bins", "n_points_bin", "feat_in")),
-                    (
-                        x_out,
-                        ("n_batch", "n_bins", "n_points_bin", "feat_out"),
-                    ),
-                ]
-            )
+            # tf.debugging.assert_shapes(
+            #     [
+            #         (x, ("n_batch", "n_bins", "n_points_bin", "feat_in")),
+            #         (
+            #             x_out,
+            #             ("n_batch", "n_bins", "n_points_bin", "feat_out"),
+            #         ),
+            #     ]
+            # )
             x = x_out
             if self.dropout_layer:
                 x = self.dropout_layer(x, training=training)
@@ -1211,6 +1211,7 @@ class PFNetDense(tf.keras.Model):
         Xorig = inputs
 
         # normalize all features except the PFElement type (feature 0)
+        # X = Xorig
         X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
@@ -1434,12 +1435,12 @@ class PFNetTransformer(tf.keras.Model):
         event_set_output=False,
         met_output=False,
         cls_output_as_logits=False,
-        num_layers_encoder=2,
-        num_layers_decoder_reg=2,
-        num_layers_decoder_cls=2,
+        num_layers_encoder=4,
+        num_layers_decoder_reg=4,
+        num_layers_decoder_cls=4,
         hidden_dim=256,
         num_heads=8,
-        num_random_features=128,
+        num_random_features=256,
     ):
         super(PFNetTransformer, self).__init__()
 
@@ -1508,6 +1509,7 @@ class PFNetTransformer(tf.keras.Model):
 
     def call(self, inputs, training=False):
         Xorig = inputs
+        # X = Xorig
         X = tf.concat([Xorig[:, :, 0:1], self.normalizer(Xorig[:, :, 1:])], axis=-1)
 
         # tf.print("\nX.shape=", tf.shape(X), "\n")
@@ -1529,6 +1531,7 @@ class PFNetTransformer(tf.keras.Model):
         for enc in self.encoders:
             X_enc = enc([X_enc, X_enc, msk], training=training) * msk_input
 
+        # initialize the classification and regression latent state with identity
         X_cls = tf.identity(X_enc)
         X_reg = tf.identity(X_enc)
 

@@ -241,6 +241,9 @@ def train(
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
+    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+    ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
     logging.info("num_train_steps: {}".format(ds_train.num_steps()))
@@ -283,9 +286,19 @@ def train(
 
         callbacks.append(optim_callbacks)
 
-        model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
-        print(model.normalizer.mean)
-        print(model.normalizer.variance)
+        if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+            model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
+            print(model.normalizer.mean)
+            print(model.normalizer.variance)
+            np.savez(
+                config["setup"]["normalizer_cache"],
+                mean=model.normalizer.mean.numpy(),
+                variance=model.normalizer.variance.numpy(),
+            )
+
+        cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+        model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+        model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
         model.fit(
             ds_train.tensorflow_dataset.repeat(),

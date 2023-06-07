@@ -215,7 +215,7 @@ def get_strategy(num_cpus=None):
         logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
 
         # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
-        cross_device_ops = tf.distribute.NcclAllReduce()
+        cross_device_ops = None
         if device == "roc":
             cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
 
@@ -744,6 +744,11 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
         policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    elif config["setup"]["dtype"] == "bfloat16":
+        model_dtype = tf.dtypes.bfloat16
+        policy = mixed_precision.Policy("mixed_bfloat16")
         mixed_precision.set_global_policy(policy)
         opt = mixed_precision.LossScaleOptimizer(opt)
     else:

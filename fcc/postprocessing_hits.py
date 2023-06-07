@@ -51,6 +51,7 @@ from postprocessing import (
     get_feature_matrix,
 )
 
+
 def build_dummy_array(num, dtype=np.int64):
     return awkward.Array(
         awkward.contents.ListOffsetArray(
@@ -58,6 +59,7 @@ def build_dummy_array(num, dtype=np.int64):
             awkward.from_numpy(np.array([], dtype=dtype), highlevel=False),
         )
     )
+
 
 def assign_genparticles_to_obj(gpdata):
 

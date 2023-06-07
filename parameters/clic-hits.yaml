@@ -57,6 +57,7 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
+  normalizer_cache: parameters/clic_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -111,7 +112,7 @@ parameters:
   node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 320
+    bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
@@ -148,8 +149,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 5
-  num_graph_layers_reg: 5
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -164,14 +165,14 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 256
     charge_hidden_dim: 256
     pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
     energy_hidden_dim: 256
 
-    id_num_layers: 3
+    id_num_layers: 2
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2

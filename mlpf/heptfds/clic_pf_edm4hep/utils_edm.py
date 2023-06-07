@@ -63,6 +63,7 @@ def split_sample(path, test_frac=0.8):
         "test": generate_examples(files_test),
     }
 
+
 def split_sample_several(paths, test_frac=0.8):
     files_train_tot = []
     files_test_tot = []

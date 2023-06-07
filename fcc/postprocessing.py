@@ -452,11 +452,8 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     gp_in_calo = (np.array(gp_to_cluster)[:, 0] / gen_features["energy"]) > 0.1
 
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
-    
-    mask_visible = (
-        (gen_features["energy"] > 0.01)
-        & gp_interacted_with_detector
-    )
+
+    mask_visible = (gen_features["energy"] > 0.01) & gp_interacted_with_detector
     print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
