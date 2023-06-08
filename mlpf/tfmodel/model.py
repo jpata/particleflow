@@ -65,14 +65,16 @@ def debugging_test_step(self, data):
     return {m.name: m.result() for m in self.metrics}
 
 
-@tf.function(jit_compile=True)
+# @tf.function(jit_compile=True)
+@tf.function
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
     bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
     return bins_split
 
 
-@tf.function(jit_compile=True)
+# @tf.function(jit_compile=True)
+@tf.function
 def pairwise_l2_dist(A, B):
     na = tf.reduce_sum(tf.square(A), -1)
     nb = tf.reduce_sum(tf.square(B), -1)
@@ -131,7 +133,8 @@ Returns: (n_batch, n_bins, n_features) float32 matrix, after the binning operati
 """
 
 
-@tf.function(jit_compile=True)
+# @tf.function(jit_compile=True)
+@tf.function
 def reverse_lsh(bins_split, points_binned_enc, small_graph_opt=False):
     # tf.debugging.assert_shapes(
     #     [

@@ -4,7 +4,7 @@
 #SBATCH --mem-per-gpu=8G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/tf-2.12.0.simg
+IMG=docker://nvcr.io/nvidia/tensorflow:23.05-tf2-py3
 cd ~/particleflow
 
 #TF training
