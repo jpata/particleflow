@@ -17,9 +17,9 @@ NUM=$1 #random seed
 SAMPLE=$2 #main card
 NUMPART=$3 #number of particles
 
-OUTDIR=/local/joosep/clic_edm4hep_gun_np$NUMPART/
+OUTDIR=/home/joosep/clic_edm4hep_gun_np$NUMPART/
 
-WORKDIR=/scratch/local/$USER/${SAMPLE}_${SLURM_JOB_ID}
+WORKDIR=/scratch/$USER/${SAMPLE}_${SLURM_JOB_ID}
 FULLOUTDIR=${OUTDIR}/${SAMPLE}
 
 mkdir -p $FULLOUTDIR

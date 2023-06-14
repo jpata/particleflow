@@ -50,7 +50,7 @@ setup:
   weights_config:
   lr: 0.0005
   num_epochs: 100
-  dtype: float16
+  dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
