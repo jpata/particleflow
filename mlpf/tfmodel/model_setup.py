@@ -11,6 +11,7 @@ import os
 import pickle
 from pathlib import Path
 
+import time
 import awkward
 import fastjet
 import numpy as np
@@ -468,6 +469,27 @@ def freeze_model(model, config, outdir):
         )
 
     full_model = tf.function(lambda x: model_output(model(x, training=False)))
+
+    niter = 10
+    nfeat = 17
+
+    if "combined_graph_layer" in config["parameters"]:
+        bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+        elem_range = list(range(bin_size, 15 * bin_size, bin_size))
+    else:
+        elem_range = range(100, 3000, 100)
+
+    for ibatch in [1, 2, 4, 8, 16]:
+        for nptcl in elem_range:
+            X = np.random.rand(ibatch, nptcl, nfeat)
+            full_model(X)
+
+            t0 = time.time()
+            for i in range(niter):
+                full_model(X)
+            t1 = time.time()
+
+            print(ibatch, nptcl, (t1 - t0) / niter)
 
     # we need to use opset 12 for the version of ONNXRuntime in CMSSW
     # the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
