@@ -48,11 +48,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0005
   num_epochs: 10
   dtype: float32
   trainable:
-  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
@@ -61,24 +61,11 @@ setup:
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: no
+  bucket_by_sequence_length: yes
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
-#on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 200
-    - 50, 100
-    - 100, 50
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
+  bucket_batch_sizes: auto
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
 
@@ -109,13 +96,13 @@ parameters:
   input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 256
+  node_encoding_hidden_dim: 512
 
   combined_graph_layer:
     bin_size: 256
     max_num_bins: 200
     distance_dim: 128
-    layernorm: yes
+    layernorm: no
     dropout: 0.0
     dist_activation: elu
     ffn_dist_num_layers: 2
@@ -143,7 +130,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 512
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
@@ -178,7 +165,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: yes
+    layernorm: no
     mask_reg_cls0: yes
 
   skip_connection: no

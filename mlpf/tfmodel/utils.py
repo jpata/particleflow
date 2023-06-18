@@ -216,8 +216,8 @@ def get_strategy(num_cpus=None):
 
         # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
         cross_device_ops = None
-        if device == "roc":
-            cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
+        #if device == "roc":
+        #    cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
 
         strategy = tf.distribute.MirroredStrategy(cross_device_ops=cross_device_ops)
     elif num_gpus == 1:
@@ -389,9 +389,12 @@ def load_and_interleave(
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
-        bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
+        if config["batching"]["bucket_batch_sizes"] == "auto":
+            bucket_batch_sizes = [(256*(n+1)+1, 12800/(n+1)//100) for n in range(75)]
+        else:
+            bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
 
-        assert bucket_batch_sizes[-1][0] == float("inf")
+        # assert bucket_batch_sizes[-1][0] == float("inf")
 
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
         bucket_batch_sizes = [
@@ -408,6 +411,7 @@ def load_and_interleave(
             bucket_boundaries=bucket_boundaries,
             # for multi-GPU, we need to multiply the batch size by the number of GPUs
             bucket_batch_sizes=bucket_batch_sizes,
+            pad_to_bucket_boundary=True,
             drop_remainder=True,
         )
     # use fixed-size batching
@@ -419,7 +423,7 @@ def load_and_interleave(
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
-        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, drop_remainder=True)
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, pad_shape, drop_remainder=True)
 
     ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
