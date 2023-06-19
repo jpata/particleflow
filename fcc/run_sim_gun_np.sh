@@ -11,7 +11,7 @@ env
 df -h
 
 PFDIR=/home/joosep/particleflow
-NEV=100
+NEV=10
 
 NUM=$1 #random seed
 SAMPLE=$2 #main card
