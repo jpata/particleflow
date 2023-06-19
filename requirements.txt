@@ -20,6 +20,7 @@ pandas
 papermill
 plotly
 pre-commit
+protobuf==3.20.3
 pyarrow
 ray[default]
 ray[tune]
