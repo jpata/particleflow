@@ -31,7 +31,7 @@ seaborn
 setGPU
 tensorflow
 tensorflow-addons
-tensorflow-datasets
+tensorflow-datasets==4.8.0
 tensorflow-estimator
 tensorflow-probability
 tensorflow-text
