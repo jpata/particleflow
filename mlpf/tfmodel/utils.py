@@ -381,7 +381,7 @@ def load_and_interleave(
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
         if config["batching"]["bucket_batch_sizes"] == "auto":
-            if "combined_graph_layer" in config["parameter"]:
+            if "combined_graph_layer" in config["parameters"]:
                 bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
             else:
                 bin_size = 256

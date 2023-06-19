@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=120G
-#SBATCH --gpus-per-task=1
+#SBATCH --gpus-per-task=4
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
