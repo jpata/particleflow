@@ -24,7 +24,7 @@ singularity exec \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-hits.yaml --plot-freq 1 --num-cpus 16 \
     --batch-multiplier 4 --ntrain 20000 --ntest 20000
-    
+
 #    --env MIOPEN_USER_DB_PATH=/users/patajoos/miopen-cache \
 #    --env MIOPEN_CUSTOM_CACHE_DIR=/users/patajoos/miopen-cache \
 #    --env MIOPEN_LOG_LEVEL=7 \

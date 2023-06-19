@@ -196,13 +196,10 @@ def get_strategy(num_cpus=None):
         tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
         tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
-    device = "cpu"
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("CUDA_VISIBLE_DEVICES")
-        device = "cuda"
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
-        device = "roc"
     else:
         logging.warning(
             "CUDA/ROC variable is empty. \
@@ -213,13 +210,7 @@ def get_strategy(num_cpus=None):
     if num_gpus > 1:
         # multiple GPUs selected
         logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
-
-        # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
-        cross_device_ops = None
-        #if device == "roc":
-        #    cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
-
-        strategy = tf.distribute.MirroredStrategy(cross_device_ops=cross_device_ops)
+        strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
         # single GPU
         logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
@@ -390,7 +381,17 @@ def load_and_interleave(
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
         if config["batching"]["bucket_batch_sizes"] == "auto":
-            bucket_batch_sizes = [(256*(n+1)+1, 12800/(n+1)//100) for n in range(75)]
+            if "combined_graph_layer" in config["parameter"]:
+                bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+            else:
+                bin_size = 256
+
+            # generate (max_elems, batch_size) pairs
+            # scale from max_elems to bin_size in steps of bin_size
+            max_elems = 50 * bin_size
+            max_n = 75
+            reduction_factor = 100
+            bucket_batch_sizes = [(bin_size * (n + 1) + 1, (max_elems) / (n + 1) // reduction_factor) for n in range(max_n)]
         else:
             bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
 
@@ -423,7 +424,7 @@ def load_and_interleave(
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
-        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, pad_shape, drop_remainder=True)
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, drop_remainder=True)
 
     ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
