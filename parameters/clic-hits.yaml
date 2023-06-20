@@ -236,6 +236,7 @@ validation_dataset: clic_edm_ttbar_hits_pf
 validation_batch_size: 20
 validation_num_events: 2000
 
+do_eval: false
 evaluation_datasets:
   clic_edm_ttbar_hits_pf:
     batch_size: 10

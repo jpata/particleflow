@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mlpf-train-cms-gen
 #SBATCH --account=project_465000301
-#SBATCH --time=24:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -34,7 +34,7 @@ singularity exec \
     --env LD_LIBRARY_PATH=/opt/rocm-5.4.0/lib/ \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-hits-ln.yaml --plot-freq 1 --num-cpus 8 \
-    --batch-multiplier 1 --ntrain 200000 --ntest 200000
+    --batch-multiplier 2 --ntrain 200000 --ntest 200000
 
 #    --env MIOPEN_USER_DB_PATH=$MIPEN_USER_DB_PATH \
 #    --env MIOPEN_CUSTOM_CACHE_DIR=$MIOPEN_CUSTOM_CACHE_DIR \

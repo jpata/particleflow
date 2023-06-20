@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.0001
   num_epochs: 10
   dtype: float16
   trainable:
@@ -236,6 +236,7 @@ validation_dataset: clic_edm_ttbar_hits_pf
 validation_batch_size: 20
 validation_num_events: 2000
 
+do_eval: false
 evaluation_datasets:
   clic_edm_ttbar_hits_pf:
     batch_size: 10
