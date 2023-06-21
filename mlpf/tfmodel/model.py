@@ -1213,6 +1213,8 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
+        # tf.print(tf.shape(Xorig))
+
         # normalize all features except the PFElement type (feature 0)
         # X = Xorig
         X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
