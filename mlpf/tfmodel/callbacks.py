@@ -1,5 +1,6 @@
 import json
 import pickle
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -58,6 +59,7 @@ class CustomTensorBoard(TensorBoard):
     def on_epoch_end(self, epoch, logs):
         logs = logs or {}
         logs.update(self._collect_learning_rate(logs))
+        logs["time"] = time.time()
         if self.dump_history:
             history_path = Path(self.log_dir) / "history"
             history_path.mkdir(parents=True, exist_ok=True)
