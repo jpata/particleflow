@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mlpf-train-cms-gen
+#SBATCH --job-name=mlpf-train-clic-hits-bf16
 #SBATCH --account=project_465000301
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
@@ -11,11 +11,11 @@
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-cd ~/particleflow
+cd /scratch/project_465000301/particleflow
 
 module load LUMI/22.08 partition/G
 
-export IMG=/scratch/project_465000301/tf-rocm.simg
+export IMG=/scratch/project_465000301/tf-rocm-5.5.1.simg
 export PYTHONPATH=hep_tfds
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
@@ -31,7 +31,7 @@ singularity exec \
     --rocm \
     -B /scratch/project_465000301 \
     -B /tmp \
-    --env LD_LIBRARY_PATH=/opt/rocm-5.4.0/lib/ \
+    --env LD_LIBRARY_PATH=/opt/rocm-5.5.1/lib/ \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-hits-bf16.yaml --plot-freq 1 --num-cpus 8 \
     --batch-multiplier 4 --ntrain 1000 --ntest 1000

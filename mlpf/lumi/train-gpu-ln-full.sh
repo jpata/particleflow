@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mlpf-train-cms-gen
+#SBATCH --job-name=mlpf-train-clic-hits-ln-full
 #SBATCH --account=project_465000301
 #SBATCH --time=3-00:00:00
 #SBATCH --nodes=1

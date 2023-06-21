@@ -49,10 +49,10 @@ setup:
   weights:
   weights_config:
   lr: 0.0005
-  num_epochs: 10
+  num_epochs: 20
   dtype: float32
   trainable:
-  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
@@ -99,7 +99,7 @@ parameters:
     bin_size: 256
     max_num_bins: 200
     distance_dim: 128
-    layernorm: no
+    layernorm: yes
     dropout: 0.0
     dist_activation: elu
     ffn_dist_num_layers: 2
@@ -162,7 +162,7 @@ parameters:
     eta_num_layers: 2
     phi_num_layers: 2
     energy_num_layers: 2
-    layernorm: no
+    layernorm: yes
     mask_reg_cls0: yes
 
   skip_connection: no
@@ -236,7 +236,6 @@ validation_dataset: clic_edm_ttbar_hits_pf
 validation_batch_size: 20
 validation_num_events: 2000
 
-do_eval: false
 evaluation_datasets:
   clic_edm_ttbar_hits_pf:
     batch_size: 10
