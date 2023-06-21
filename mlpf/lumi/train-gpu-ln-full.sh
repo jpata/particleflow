@@ -34,7 +34,7 @@ singularity exec \
     --env LD_LIBRARY_PATH=/opt/rocm-5.4.0/lib/ \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-hits-ln.yaml --plot-freq 1 --num-cpus 8 \
-    --batch-multiplier 2 --ntrain 200000 --ntest 200000 \
+    --batch-multiplier 2 \
     --weights experiments/clic-hits-ln_20230618_221955_628596.nid007335/weights/weights-06-0.189009.hdf5
 
 #    --env MIOPEN_USER_DB_PATH=$MIPEN_USER_DB_PATH \
