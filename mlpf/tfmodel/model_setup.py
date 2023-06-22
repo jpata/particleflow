@@ -197,7 +197,7 @@ def prepare_callbacks(
     return callbacks
 
 
-def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run=False, do_eval=True):
+def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run=False):
     callbacks = []
     cp_dir = Path(outdir) / "weights"
     cp_dir.mkdir(parents=True, exist_ok=True)
@@ -224,7 +224,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         is_hpo_run=is_hpo_run,
     )
 
-    if config.get("do_eval", True):
+    if config.get("do_validation_callback", True):
         callbacks += [cb]
 
     tb = CustomTensorBoard(
