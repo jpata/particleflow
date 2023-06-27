@@ -389,7 +389,7 @@ def load_and_interleave(
             # generate (max_elems, batch_size) pairs
             # scale from bin_size to max_elems in steps of bin_size
             max_elems = 75 * bin_size
-            max_n = 75 
+            max_n = 75
             reduction_factor = 125
             bucket_batch_sizes = [(bin_size * (n + 1) + 1, (max_elems) / (n + 1) // reduction_factor) for n in range(max_n)]
         else:
