@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.0001
   num_epochs: 20
   dtype: float32
   trainable:
@@ -62,9 +62,6 @@ setup:
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
   bucket_by_sequence_length: yes
-  # these sizes were sort of tuned for an 8GB GPU
-  # - max_sequence_length, batch_size_per_gpu
-
   bucket_batch_sizes: auto
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
