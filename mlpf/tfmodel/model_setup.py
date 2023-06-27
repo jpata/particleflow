@@ -477,11 +477,11 @@ def freeze_model(model, config, outdir):
 
     if "combined_graph_layer" in config["parameters"]:
         bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
-        elem_range = list(range(bin_size, 5 * bin_size, bin_size))
+        elem_range = list(range(bin_size, 20 * bin_size, bin_size))
     else:
         elem_range = range(100, 1000, 200)
 
-    for ibatch in [1, 2, 4, 8]:
+    for ibatch in [1, 2, 4, 8, 16]:
         for nptcl in elem_range:
             X = np.random.rand(ibatch, nptcl, nfeat)
             full_model(X)
