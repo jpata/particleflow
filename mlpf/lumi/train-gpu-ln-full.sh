@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=120G
+#SBATCH --mem=130G
 #SBATCH --gpus-per-task=8
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
@@ -35,7 +35,7 @@ singularity exec \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-hits-ln.yaml --plot-freq 1 --num-cpus 8 \
     --batch-multiplier 2 \
-    --weights experiments/clic-hits-ln_20230618_221955_628596.nid007335/weights/weights-06-0.189009.hdf5
+    --weights experiments/clic-hits-ln_20230623_090308_368360.nid007329/weights/weights-10-0.163285.hdf5
 
 #    --env MIOPEN_USER_DB_PATH=$MIPEN_USER_DB_PATH \
 #    --env MIOPEN_CUSTOM_CACHE_DIR=$MIOPEN_CUSTOM_CACHE_DIR \

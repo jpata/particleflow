@@ -352,6 +352,17 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
+    print("before loading")
+    print(model.normalizer.mean)
+    print(model.normalizer.variance)
+    
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+    model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+    print("after loading")
+    print(model.normalizer.mean)
+    print(model.normalizer.variance)
+
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
         ds_test = mlpf_dataset_from_config(
