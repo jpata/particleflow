@@ -355,7 +355,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
     print("before loading")
     print(model.normalizer.mean)
     print(model.normalizer.variance)
-    
+
     cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
