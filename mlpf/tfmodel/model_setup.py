@@ -16,7 +16,6 @@ import awkward
 import fastjet
 import numpy as np
 import tensorflow as tf
-import tensorflow_addons as tfa
 import vector
 from plotting.plot_utils import (
     compute_distances,
@@ -546,7 +545,10 @@ def configure_model_weights(model, trainable_layers):
 
 def make_focal_loss(config):
     def loss(x, y):
-        return tfa.losses.sigmoid_focal_crossentropy(
+
+        from .tfa import sigmoid_focal_crossentropy
+
+        return sigmoid_focal_crossentropy(
             x,
             y,
             alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),

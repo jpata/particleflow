@@ -15,7 +15,6 @@ except ModuleNotFoundError:
 
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 import yaml
 from tensorflow.keras import mixed_precision
 
@@ -283,13 +282,6 @@ def get_optimizer(config, lr_schedule=None):
         cfg_adam = config["optimizer"]["adam"]
         opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
         return opt
-    elif config["setup"]["optimizer"] == "adamw":
-        cfg_adamw = config["optimizer"]["adamw"]
-        return tfa.optimizers.AdamW(
-            learning_rate=lr,
-            weight_decay=cfg_adamw["weight_decay"],
-            amsgrad=cfg_adamw["amsgrad"],
-        )
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
         return tf.keras.optimizers.legacy.SGD(
@@ -487,8 +479,10 @@ def set_config_loss(config, trainable):
 def get_loss_from_params(input_dict):
     input_dict = input_dict.copy()
     loss_type = input_dict.pop("type")
-    if loss_type in ["PinballLoss", "SigmoidFocalCrossEntropy"]:
-        loss_cls = getattr(tfa.losses, loss_type)
+    if loss_type == "SigmoidFocalCrossEntropy":
+        from .tfa import SigmoidFocalCrossEntropy
+
+        loss_cls = SigmoidFocalCrossEntropy
     else:
         loss_cls = getattr(tf.keras.losses, loss_type)
     return loss_cls(**input_dict, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)

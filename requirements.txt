@@ -30,11 +30,9 @@ scipy
 seaborn
 setGPU
 tensorflow
-tensorflow-addons
 tensorflow-datasets==4.8.0
 tensorflow-estimator
 tensorflow-probability
-tensorflow-text
 tf-models-official
 tf2onnx
 tqdm
