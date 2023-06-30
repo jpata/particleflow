@@ -24,4 +24,4 @@ python mlpf/pipeline.py evaluate --nevents 10 --customize pipeline_test --train-
 python mlpf/pipeline.py plots --train-dir ./experiments/clic*
 
 #try to train a fp16 model
-python mlpf/pipeline.py train --config parameters/mixedprecision/clic-bf16.yaml --nepochs 1 --customize pipeline_test --ntrain 10 --ntest 10
+python mlpf/pipeline.py train --config parameters/mixedprecision/clic_bf16_bs1.yaml --nepochs 1 --customize pipeline_test --ntrain 10 --ntest 10
