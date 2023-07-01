@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
+  lr: 0.0005
   num_epochs: 20
   dtype: float32
   trainable:
@@ -93,7 +93,7 @@ parameters:
   input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 512
+  node_encoding_hidden_dim: 256
 
   combined_graph_layer:
     bin_size: 256
@@ -102,21 +102,8 @@ parameters:
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 2
-    ffn_dist_hidden_dim: 128
-
-    # MPNN
-    #kernel:
-    # type: NodePairTrainableKernel
-    # activation: elu
-    #num_node_messages: 1
-    #node_message:
-    # type: NodeMessageLearnable
-    # output_dim: 64
-    # hidden_dim: 128
-    # num_layers: 2
-    # activation: elu
-    #activation: elu
+    ffn_dist_num_layers: 3
+    ffn_dist_hidden_dim: 64
 
     # GCN
     kernel:
@@ -127,7 +114,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 512
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
@@ -149,19 +136,19 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
-    charge_hidden_dim: 256
-    pt_hidden_dim: 256
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    id_hidden_dim: 128
+    charge_hidden_dim: 128
+    pt_hidden_dim: 128
+    eta_hidden_dim: 128
+    phi_hidden_dim: 128
+    energy_hidden_dim: 128
 
-    id_num_layers: 2
-    charge_num_layers: 2
-    pt_num_layers: 2
-    eta_num_layers: 2
-    phi_num_layers: 2
-    energy_num_layers: 2
+    id_num_layers: 1
+    charge_num_layers: 1
+    pt_num_layers: 1
+    eta_num_layers: 1
+    phi_num_layers: 1
+    energy_num_layers: 1
     layernorm: yes
     mask_reg_cls0: yes
 

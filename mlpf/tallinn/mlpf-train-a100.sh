@@ -12,8 +12,7 @@ singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python mlpf/pipeline.py train -c parameters/clic-hits-ln.yaml \
-    --plot-freq 1 --num-cpus 32 --batch-multiplier 2 \
-    --weights experiments/clic-hits-ln_20230623_090308_368360.nid007329/weights/weights-10-0.163285.hdf5
+    --plot-freq 1 --num-cpus 32 --batch-multiplier 4
 
 #    --env TF_GPU_THREAD_MODE=gpu_private \
 #    --env TF_GPU_THREAD_COUNT=8 \
