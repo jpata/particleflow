@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.0001
   num_epochs: 20
   dtype: float32
   trainable:
@@ -62,6 +62,9 @@ setup:
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
   bucket_by_sequence_length: yes
+  # these sizes were sort of tuned for an 8GB GPU
+  # - max_sequence_length, batch_size_per_gpu
+
   bucket_batch_sizes: auto
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
@@ -93,17 +96,30 @@ parameters:
   input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 256
+  node_encoding_hidden_dim: 512
 
   combined_graph_layer:
     bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
-    dropout: 0.0
+    dropout: 0.2
     dist_activation: elu
-    ffn_dist_num_layers: 3
-    ffn_dist_hidden_dim: 64
+    ffn_dist_num_layers: 2
+    ffn_dist_hidden_dim: 128
+
+    # MPNN
+    #kernel:
+    # type: NodePairTrainableKernel
+    # activation: elu
+    #num_node_messages: 1
+    #node_message:
+    # type: NodeMessageLearnable
+    # output_dim: 64
+    # hidden_dim: 128
+    # num_layers: 2
+    # activation: elu
+    #activation: elu
 
     # GCN
     kernel:
@@ -114,7 +130,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 512
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
@@ -125,7 +141,7 @@ parameters:
   output_decoding:
     activation: elu
     regression_use_classification: yes
-    dropout: 0.1
+    dropout: 0.2
 
     pt_as_correction: no
 
@@ -136,19 +152,19 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 128
-    charge_hidden_dim: 128
-    pt_hidden_dim: 128
-    eta_hidden_dim: 128
-    phi_hidden_dim: 128
-    energy_hidden_dim: 128
+    id_hidden_dim: 256
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
 
-    id_num_layers: 1
-    charge_num_layers: 1
-    pt_num_layers: 1
-    eta_num_layers: 1
-    phi_num_layers: 1
-    energy_num_layers: 1
+    id_num_layers: 2
+    charge_num_layers: 2
+    pt_num_layers: 2
+    eta_num_layers: 2
+    phi_num_layers: 2
+    energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: yes
 
