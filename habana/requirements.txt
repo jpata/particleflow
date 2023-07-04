@@ -1,3 +1,4 @@
+autopep8
 awkward
 bayesian-optimization
 boost_histogram
@@ -12,15 +13,17 @@ mplhep
 networkx
 nevergrad
 notebook
+numba
 onnx
 onnxruntime
 pandas
 papermill
+plotly
 pre-commit
 promise
 pyarrow
-ray[default]==1.6.0
-ray[tune]==1.6.0
+ray[default]==2.5.1
+ray[tune]==2.5.1
 scikit-optimize
 scipy
 seaborn
@@ -32,7 +35,7 @@ tensorflow-estimator
 tensorflow-hub
 tensorflow-metadata
 tensorflow-probability
-tensorflow_datasets==4.3.0
+tensorflow_datasets==4.8.0
 tqdm
 typeguard
 uproot
