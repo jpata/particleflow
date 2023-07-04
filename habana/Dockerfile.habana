@@ -1,5 +1,5 @@
 FROM vault.habana.ai/gaudi-docker/1.9.0/ubuntu20.04/habanalabs/tensorflow-installer-tf-cpu-2.11.0:1.9.0-580
-        
+
 LABEL maintainer="Javier Duarte <jduarte@ucsd.edu>"
 
 COPY requirements.txt .
