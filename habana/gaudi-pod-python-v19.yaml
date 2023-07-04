@@ -28,7 +28,7 @@ spec:
       - name: registry-credentials
       containers:
       - name: htf2110-190-580-20230327-ubuntu2004
-        image: jmduarte/particleflow:habana
+        image: jmduarte/particleflow:habana_v19
         imagePullPolicy: Always
         resources:
           requests:
@@ -96,4 +96,4 @@ spec:
             hl-smi;
             hl-smi -q;
 
-            time -p python3 mlpf/pipeline.py train -g -c parameters/cms.yaml --customize pipeline_test --nepochs 2 -p testing_;
+            time -p python3 mlpf/pipeline.py train -g -c habana/best_tuned_gnn_clic_v130/config.yaml --nepochs 2;
