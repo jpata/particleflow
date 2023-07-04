@@ -21,9 +21,10 @@ papermill
 plotly
 pre-commit
 promise
+protobuf==3.19.6
 pyarrow
-ray[default]==2.5.1
-ray[tune]==2.5.1
+ray[default]==1.6.0
+ray[tune]==1.6.0
 scikit-optimize
 scipy
 seaborn
