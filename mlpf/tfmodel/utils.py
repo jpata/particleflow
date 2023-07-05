@@ -223,7 +223,7 @@ def get_strategy(num_cpus=None):
     elif num_gpus == 1:
         # single GPU
         logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
-        strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
+        strategy = tf.distribute.OneDeviceStrategy(f"gpu:{gpus[0]}")
     else:
         logging.info("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
@@ -231,7 +231,7 @@ def get_strategy(num_cpus=None):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
-        logging.info("Multiple GPUs detected, num_batces_multiplier={}".format(num_batches_multiplier))
+        logging.info(f"Multiple GPUs detected, num_batches_multiplier={num_batches_multiplier}")
 
     return strategy, num_gpus, num_batches_multiplier
 

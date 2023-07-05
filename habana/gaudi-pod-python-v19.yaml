@@ -34,12 +34,12 @@ spec:
           requests:
             cpu: '8'
             memory: 200Gi
-            habana.ai/gaudi: '1'
+            habana.ai/gaudi: '2'
             hugepages-2Mi: 12000Mi
           limits:
             cpu: '12'
             memory: 200Gi
-            habana.ai/gaudi: '1'
+            habana.ai/gaudi: '2'
             hugepages-2Mi: 12000Mi
         volumeMounts:
         - name: home
