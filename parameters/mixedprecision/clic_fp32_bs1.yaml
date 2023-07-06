@@ -1,55 +1,45 @@
 backend: tensorflow
 
 dataset:
-  schema: cms
+  schema: clic
   target_particles: gen
-  num_input_features: 41
-  num_output_features: 7
-#       NONE = 0,
-#       TRACK = 1,
-#       PS1 = 2,
-#       PS2 = 3,
-#       ECAL = 4,
-#       HCAL = 5,
-#       GSF = 6,
-#       BREM = 7,
-#       HFEM = 8,
-#       HFHAD = 9,
-#       SC = 10,
-#       HO = 11,
-  num_input_classes: 12
-  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7, tau=8)
-  num_output_classes: 9
-  padded_num_elem_size: 6400
-  #(pt, eta, sin phi, cos phi, E)
-  num_momentum_outputs: 5
+  num_input_features: 17
+  #(none=0, track=1, cluster=2)
+  num_input_classes: 3
+  #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
+  num_output_classes: 6
   cls_weight_by_pt: no
+  reg_weight_by_pt: no
 
 loss:
-  classification_loss_coef: 1.0
+  classification_loss_coef: 200.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
-  eta_loss_coef: 1.0
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
-  energy_loss_coef: 1.0
+  pt_loss_coef: 10.0
+  eta_loss_coef: 10.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 10.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
+  charge_loss:
+    type: CategoricalCrossentropy
+    from_logits: yes
   energy_loss:
     type: Huber
   pt_loss:
     type: Huber
   sin_phi_loss:
     type: Huber
-    delta: 0.1
   cos_phi_loss:
     type: Huber
-    delta: 0.1
   eta_loss:
     type: Huber
-    delta: 0.1
-  event_loss: none
+  event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
   event_loss_coef: 0.0
   met_loss: none
-  met_loss_coef: 0.0
+  met_loss_coef: 1.0
 
 tensorflow:
   eager: no
@@ -59,20 +49,23 @@ setup:
   weights:
   weights_config:
   lr: 0.0005
-  num_events_validation: 200
-  num_epochs: 50
+  num_epochs: 100
   dtype: float32
   trainable:
-  classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: none  # exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
-  horovod_enabled: False
+  horovod_enabled: no
+  cls_output_as_logits: yes
+  small_graph_opt: no
+  normalizer_cache: parameters/clic_normalizations
+
+batching:
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: no
 
 optimizer:
   adam:
     amsgrad: no
-    #pcgrad does not work with LossScaleOptimizer, so it must be disabled for float16
-    pcgrad: yes
   adamw:
     amsgrad: yes
     weight_decay: 0.001
@@ -94,20 +87,20 @@ onecycle:
 
 parameters:
   model: gnn_dense
-  input_encoding: cms
-  node_update_mode: concat
-  do_node_encoding: no
-  node_encoding_hidden_dim: 128
+  input_encoding: clic
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 256
 
   combined_graph_layer:
-    bin_size: 100
+    bin_size: 256
     max_num_bins: 200
-    distance_dim: 64
+    distance_dim: 128
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 2
-    ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 3
+    ffn_dist_hidden_dim: 64
 
     # MPNN
     #kernel:
@@ -131,18 +124,20 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 128
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
-      normalize_degrees: yes
+      normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 2
-  num_graph_layers_reg: 2
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
-    dropout: 0.0
+    dropout: 0.1
+
+    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -151,23 +146,23 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 256
-    charge_hidden_dim: 256
-    pt_hidden_dim: 256
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 256
+    id_hidden_dim: 128
+    charge_hidden_dim: 128
+    pt_hidden_dim: 128
+    eta_hidden_dim: 128
+    phi_hidden_dim: 128
+    energy_hidden_dim: 128
 
-    id_num_layers: 2
-    charge_num_layers: 2
-    pt_num_layers: 2
-    eta_num_layers: 2
-    phi_num_layers: 2
-    energy_num_layers: 2
+    id_num_layers: 1
+    charge_num_layers: 1
+    pt_num_layers: 1
+    eta_num_layers: 1
+    phi_num_layers: 1
+    energy_num_layers: 1
     layernorm: yes
-    mask_reg_cls0: no
+    mask_reg_cls0: yes
 
-  skip_connection: yes
+  skip_connection: no
   debug: no
 
 timing:
@@ -220,30 +215,52 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 5
+    batch_per_gpu: 20
     datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
+      - clic_edm_ttbar_pf
 
-validation_datasets:
-  - cms_pf_qcd_high_pt
+do_validation_callback: false
+validation_dataset: clic_edm_ttbar_pf
+validation_batch_size: 100
+validation_num_events: 2000
+
+evaluation_datasets:
+  clic_edm_qq_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ttbar_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ttbar_pu10_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_zh_tautau_pf:
+    batch_size: 50
+    num_events: -1
+  clic_edm_ww_fullhad_pf:
+    batch_size: 50
+    num_events: -1
+
+evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
-  cms_pf_ttbar:
+  clic_edm_ttbar_pf:
     version: 1.4.0
     data_dir:
     manual_dir:
-  cms_pf_ztt:
+  clic_edm_ttbar_pu10_pf:
     version: 1.4.0
     data_dir:
     manual_dir:
-  cms_pf_qcd:
+  clic_edm_qq_pf:
     version: 1.4.0
     data_dir:
     manual_dir:
-  cms_pf_qcd_high_pt:
+  clic_edm_ww_fullhad_pf:
+    version: 1.4.0
+    data_dir:
+    manual_dir:
+  clic_edm_zh_tautau_pf:
     version: 1.4.0
     data_dir:
     manual_dir:

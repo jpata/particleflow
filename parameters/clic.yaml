@@ -19,8 +19,12 @@ loss:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 10.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
   charge_loss:
-    type: BinaryCrossentropy
+    type: CategoricalCrossentropy
     from_logits: yes
   energy_loss:
     type: Huber
@@ -48,12 +52,12 @@ setup:
   num_epochs: 100
   dtype: float32
   trainable:
-  classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: yes
+  small_graph_opt: no
+  normalizer_cache: parameters/clic_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -260,22 +264,22 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_pf:
-    version: 1.3.0
+    version: 1.4.0
     data_dir:
     manual_dir:
   clic_edm_ttbar_pu10_pf:
-    version: 1.3.0
+    version: 1.4.0
     data_dir:
     manual_dir:
   clic_edm_qq_pf:
-    version: 1.3.1
+    version: 1.4.0
     data_dir:
     manual_dir:
   clic_edm_ww_fullhad_pf:
-    version: 1.3.0
+    version: 1.4.0
     data_dir:
     manual_dir:
   clic_edm_zh_tautau_pf:
-    version: 1.3.0
+    version: 1.4.0
     data_dir:
     manual_dir:
