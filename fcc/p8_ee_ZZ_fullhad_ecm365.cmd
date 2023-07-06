@@ -22,4 +22,3 @@ WeakDoubleBoson:ffbar2gmZgmZ = on
 ! 4) Settings for the event generation process in the Pythia8 library.
 PartonLevel:ISR = on               ! no initial-state radiation
 PartonLevel:FSR = on               ! no final-state radiation
-

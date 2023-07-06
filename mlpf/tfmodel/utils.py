@@ -15,7 +15,6 @@ except ModuleNotFoundError:
 
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 import yaml
 from tensorflow.keras import mixed_precision
 
@@ -196,13 +195,10 @@ def get_strategy(num_cpus=None):
         tf.config.threading.set_inter_op_parallelism_threads(num_cpus)
         tf.config.threading.set_intra_op_parallelism_threads(num_cpus)
 
-    device = "cpu"
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("CUDA_VISIBLE_DEVICES")
-        device = "cuda"
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = get_num_gpus("ROCR_VISIBLE_DEVICES")
-        device = "roc"
     else:
         logging.warning(
             "CUDA/ROC variable is empty. \
@@ -213,13 +209,7 @@ def get_strategy(num_cpus=None):
     if num_gpus > 1:
         # multiple GPUs selected
         logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
-
-        # For ROCM devices, I was getting errors from Adam/NcclAllReduce on multiple GPUs
-        cross_device_ops = tf.distribute.NcclAllReduce()
-        if device == "roc":
-            cross_device_ops = tf.distribute.HierarchicalCopyAllReduce()
-
-        strategy = tf.distribute.MirroredStrategy(cross_device_ops=cross_device_ops)
+        strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:
         # single GPU
         logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
@@ -292,13 +282,6 @@ def get_optimizer(config, lr_schedule=None):
         cfg_adam = config["optimizer"]["adam"]
         opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
         return opt
-    elif config["setup"]["optimizer"] == "adamw":
-        cfg_adamw = config["optimizer"]["adamw"]
-        return tfa.optimizers.AdamW(
-            learning_rate=lr,
-            weight_decay=cfg_adamw["weight_decay"],
-            amsgrad=cfg_adamw["amsgrad"],
-        )
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
         return tf.keras.optimizers.legacy.SGD(
@@ -389,9 +372,22 @@ def load_and_interleave(
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
-        bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
+        if config["batching"]["bucket_batch_sizes"] == "auto":
+            if "combined_graph_layer" in config["parameters"]:
+                bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+            else:
+                bin_size = 256
 
-        assert bucket_batch_sizes[-1][0] == float("inf")
+            # generate (max_elems, batch_size) pairs
+            # scale from bin_size to max_elems in steps of bin_size
+            max_elems = 75 * bin_size
+            max_n = 75
+            reduction_factor = 125
+            bucket_batch_sizes = [(bin_size * (n + 1) + 1, (max_elems) / (n + 1) // reduction_factor) for n in range(max_n)]
+        else:
+            bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
+
+        # assert bucket_batch_sizes[-1][0] == float("inf")
 
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
         bucket_batch_sizes = [
@@ -408,6 +404,7 @@ def load_and_interleave(
             bucket_boundaries=bucket_boundaries,
             # for multi-GPU, we need to multiply the batch size by the number of GPUs
             bucket_batch_sizes=bucket_batch_sizes,
+            pad_to_bucket_boundary=True,
             drop_remainder=True,
         )
     # use fixed-size batching
@@ -479,27 +476,16 @@ def set_config_loss(config, trainable):
     return config
 
 
-def get_class_loss(config):
-    if config["setup"]["classification_loss_type"] == "categorical_cross_entropy":
-        cls_loss = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False,
-            label_smoothing=config["setup"].get("classification_label_smoothing", 0.0),
-        )
-    elif config["setup"]["classification_loss_type"] == "sigmoid_focal_crossentropy":
-        cls_loss = tfa.losses.sigmoid_focal_crossentropy
-    else:
-        raise KeyError("Unknown classification loss type: {}".format(config["setup"]["classification_loss_type"]))
-    return cls_loss
-
-
 def get_loss_from_params(input_dict):
     input_dict = input_dict.copy()
     loss_type = input_dict.pop("type")
-    if loss_type == "PinballLoss":
-        loss_cls = getattr(tfa.losses, loss_type)
+    if loss_type == "SigmoidFocalCrossEntropy":
+        from .tfa import SigmoidFocalCrossEntropy
+
+        loss_cls = SigmoidFocalCrossEntropy
     else:
         loss_cls = getattr(tf.keras.losses, loss_type)
-    return loss_cls(**input_dict)
+    return loss_cls(**input_dict, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
 
 
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
@@ -677,7 +663,7 @@ def gen_jet_logcosh_loss(y_true, y_pred):
 
 
 def get_loss_dict(config):
-    cls_loss = get_class_loss(config)
+    cls_loss = get_loss_from_params(config["loss"].get("cls_loss"))
 
     default_loss = {"type": "MeanSquaredError"}
     loss_dict = {
@@ -757,6 +743,11 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
         policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_global_policy(policy)
+        opt = mixed_precision.LossScaleOptimizer(opt)
+    elif config["setup"]["dtype"] == "bfloat16":
+        model_dtype = tf.dtypes.bfloat16
+        policy = mixed_precision.Policy("mixed_bfloat16")
         mixed_precision.set_global_policy(policy)
         opt = mixed_precision.LossScaleOptimizer(opt)
     else:
