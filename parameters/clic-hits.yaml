@@ -3,7 +3,7 @@ backend: tensorflow
 dataset:
   schema: clic
   target_particles: gen
-  num_input_features: 18
+  num_input_features: 15
   #(none=0, track=1, hit=2)
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
@@ -19,8 +19,12 @@ loss:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 10.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
   charge_loss:
-    type: BinaryCrossentropy
+    type: CategoricalCrossentropy
     from_logits: yes
   energy_loss:
     type: Huber
@@ -44,37 +48,21 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0005
   num_epochs: 20
   dtype: float32
   trainable:
-  classification_loss_type: sigmoid_focal_crossentropy
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
+  normalizer_cache: parameters/clic_hits_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: no
-  # these sizes were sort of tuned for an 8GB GPU
-  # - max_sequence_length, batch_size_per_gpu
-
-#on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 200
-    - 50, 100
-    - 100, 50
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
+  bucket_by_sequence_length: yes
+  bucket_batch_sizes: auto
   # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
 
@@ -105,7 +93,7 @@ parameters:
   input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 256
+  node_encoding_hidden_dim: 512
 
   combined_graph_layer:
     bin_size: 256
@@ -114,8 +102,8 @@ parameters:
     layernorm: yes
     dropout: 0.0
     dist_activation: elu
-    ffn_dist_num_layers: 3
-    ffn_dist_hidden_dim: 64
+    ffn_dist_num_layers: 2
+    ffn_dist_hidden_dim: 128
 
     # MPNN
     #kernel:
@@ -139,7 +127,7 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 256
+      output_dim: 512
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
@@ -161,19 +149,19 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 128
-    charge_hidden_dim: 128
-    pt_hidden_dim: 128
-    eta_hidden_dim: 128
-    phi_hidden_dim: 128
-    energy_hidden_dim: 128
+    id_hidden_dim: 256
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
 
-    id_num_layers: 1
-    charge_num_layers: 1
-    pt_num_layers: 1
-    eta_num_layers: 1
-    phi_num_layers: 1
-    energy_num_layers: 1
+    id_num_layers: 2
+    charge_num_layers: 2
+    pt_num_layers: 2
+    eta_num_layers: 2
+    phi_num_layers: 2
+    energy_num_layers: 2
     layernorm: yes
     mask_reg_cls0: yes
 
@@ -234,9 +222,18 @@ train_test_datasets:
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
+  gun:
+    batch_per_gpu: 5
+    datasets:
+      - clic_edm_single_kaon0l_hits_pf
+      - clic_edm_single_pi_hits_pf
+      - clic_edm_single_pi0_hits_pf
+      - clic_edm_single_neutron_hits_pf
+      - clic_edm_single_electron_hits_pf
+      - clic_edm_single_muon_hits_pf
 
 validation_dataset: clic_edm_ttbar_hits_pf
-validation_batch_size: 10
+validation_batch_size: 20
 validation_num_events: 2000
 
 evaluation_datasets:
@@ -248,10 +245,38 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.0.0
+    version: 1.2.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf:
-    version: 1.0.0
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_kaon0l_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_gamma_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_pi_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_pi0_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_neutron_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_electron_hits_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  clic_edm_single_muon_hits_pf:
+    version: 1.2.0
     data_dir:
     manual_dir:

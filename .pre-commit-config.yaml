@@ -1,6 +1,6 @@
 default_language_version:
     python: python3
-exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)|^(fcc/.*)
+exclude: ^(delphes/tev14_pythia8_*.)|^(images/)|^(clic/dumper_hepsim.py)|^(mlpf/pyg/__init__.py)|^(fcc/clicRec_e4h_input.py)|^(fcc/clic_steer.py)|^(fcc/pythia.py)|^(fcc/PandoraSettings)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks

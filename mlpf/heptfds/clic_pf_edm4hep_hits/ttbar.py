@@ -20,10 +20,12 @@ _CITATION = """
 
 
 class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("0.9.0")
+    VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
         "0.9.0": "Small stats",
         "1.0.0": "Initial release",
+        "1.1.0": "Remove track referencepoint feature",
+        "1.2.0": "Keep all interacting genparticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     FIXME
