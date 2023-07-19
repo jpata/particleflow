@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH --cpus-per-task 30
+#SBATCH --cpus-per-task 16
 #SBATCH --mem-per-cpu=1G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 

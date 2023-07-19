@@ -2360,4 +2360,23 @@ algList.append(out)
 
 from Configurables import ApplicationMgr
 
-ApplicationMgr(TopAlg=algList, EvtSel="NONE", EvtMax=3, ExtSvc=[evtsvc], OutputLevel=WARNING)
+SequencerTimerTool().OutputLevel = INFO
+TIMER = TimingAuditor("TIMER")
+TIMER.addTool(SequencerTimerTool, name="TIMER")
+TIMER.TIMER.HistoProduce = True
+TIMER.TIMER.OutputLevel = INFO
+
+toolsvc = ToolSvc()
+auditorsvc = AuditorSvc()
+auditorsvc.Auditors += [TIMER]
+RootHistSvc().OutputFile = "timing_histos.root"
+ 
+ApplicationMgr(
+    TopAlg=algList,
+    EvtSel="NONE",
+    EvtMax=3,
+    ExtSvc=[evtsvc, toolsvc, auditorsvc],
+    OutputLevel=WARNING,
+    AuditAlgorithms=True,
+    HistogramPersistency = "ROOT")
+

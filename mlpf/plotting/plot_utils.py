@@ -621,7 +621,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.xlabel("total energy / event [GeV]")
         plt.ylabel("events / bin")
         if title:
-            plt.title(title + " " + clname)
+            plt.title(title + ", " + clname)
         save_img(
             "sum_energy_cls{}.png".format(cls_id),
             epoch,
@@ -636,7 +636,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total PF energy / event [GeV]")
         if title:
-            plt.title(title + " " + clname)
+            plt.title(title + ", " + clname)
         save_img(
             "sum_gen_cand_energy_cls{}.png".format(cls_id),
             epoch,
@@ -651,7 +651,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total MLPF energy / event [GeV]")
         if title:
-            plt.title(title + " " + clname)
+            plt.title(title + ", " + clname)
         save_img(
             "sum_gen_pred_energy_cls{}.png".format(cls_id),
             epoch,
@@ -676,7 +676,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total reconstructed energy / event [GeV]")
         if title:
-            plt.title(title + ", PF")
+            plt.title(title + ", " + clname + ", PF")
         save_img(
             "sum_gen_cand_energy_log_cls{}.png".format(cls_id),
             epoch,
@@ -698,7 +698,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.xlabel("total true energy / event [GeV]")
         plt.ylabel("total reconstructed energy / event [GeV]")
         if title:
-            plt.title(title + ", MLPF")
+            plt.title(title + ", " + clname + ", MLPF")
         save_img(
             "sum_gen_pred_energy_log_cls{}.png".format(cls_id),
             epoch,
@@ -729,7 +729,7 @@ def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, c
         plt.xlim(0, max_val)
         plt.ylim(0, max_val)
         if title:
-            plt.title(title + " " + clname)
+            plt.title(title + ", " + clname)
 
         save_img(
             "particle_multiplicity_{}.png".format(cls_id),
@@ -957,6 +957,8 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylim(0.75, 1.25)
     plt.axhline(1.0, color="black", ls="--")
     plt.ylabel("Response median")
+    if title:
+        plt.title(title)
     plt.legend()
 
     plt.sca(axs[1])
@@ -964,6 +966,8 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
     plt.ylabel("Response IQR")
     plt.legend()
+    if title:
+        plt.title(title)
     plt.xlabel("gen-jet $p_T$ [GeV]")
 
     plt.tight_layout()
@@ -1051,6 +1055,8 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylim(0.75, 1.25)
     plt.axhline(1.0, color="black", ls="--")
     plt.ylabel("Response median")
+    if title:
+        plt.title(title)
     plt.legend()
 
     plt.sca(axs[1])
@@ -1058,6 +1064,8 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
     plt.ylabel("Response IQR")
     plt.legend()
+    if title:
+        plt.title(title)
     plt.xlabel("gen MET [GeV]")
 
     plt.tight_layout()
