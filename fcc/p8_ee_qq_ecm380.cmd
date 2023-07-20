@@ -17,7 +17,7 @@ Beams:eCM = 380                    ! CM energy of collision
 PartonLevel:ISR = on
 PartonLevel:FSR = on
 
-! s-channel gamma/Z 
+! s-channel gamma/Z
 WeakSingleBoson:ffbar2ffbar(s:gmZ) = on
 23:onMode   = off
 23:onIfAny = 1 2 3 4 5
