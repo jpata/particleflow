@@ -53,6 +53,7 @@ from tfmodel.utils_analysis import (
     summarize_top_k,
     topk_summary_plot_v2,
 )
+from tfmodel.callbacks import NpEncoder
 
 
 @click.group()
@@ -397,7 +398,170 @@ def evaluate(config, train_dir, weights, customize, nevents):
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test_tfds, config, eval_dir)
 
-    freeze_model(model, config, train_dir)
+    freeze_model(model, config, train_dir)  # export to ONNX
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option(
+    "--train-dir",
+    default=None,
+    help="directory containing a completed training",
+    type=click.Path(),
+)
+@click.option("--config", help="configuration file", type=click.Path())
+@click.option(
+    "--weights",
+    default=None,
+    help="trained weights to load",
+    type=click.Path(),
+)
+@click.option("--bs", help="batch size to use for inference", type=int, default=1)
+@click.option("--customize", help="customization function", type=str, default=None)
+@click.option("--nevents", help="maximum number of events", type=int, default=-1)
+@click.option("--verbose", help="verbose output", type=int, default=0)
+@click.option("--num-runs", help="how many times to run the inference", type=int, default=2)
+@click.option("-o", "--output", help="write summary of results to file", type=Path)
+@click.option("--cpus", help="CPU threads", type=int, default=None)
+def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs, output, cpus):
+    import json
+
+    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=cpus)  # sets TF ENV variables to use num_cpus
+    assert num_gpus < 2, "Multi-GPU inference is not supported"
+
+    if output:
+        assert num_runs > 1, "If writing summary results to file, num_runs must be >1"
+
+    if train_dir is None:
+        assert (config is not None) and (
+            weights is not None
+        ), "Please provide a config and weight file when not giving train_dir"
+
+    if config is None:
+        config = Path(train_dir) / "config.yaml"
+        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
+    config, _ = parse_config(config, weights=weights)
+
+    if customize:
+        config = customization_functions[customize](config)
+
+    # disable small graph optimization for onnx export (tf.cond is not well supported by ONNX export)
+    if "small_graph_opt" in config["setup"]:
+        config["setup"]["small_graph_opt"] = False
+
+    if not weights:
+        weights = get_best_checkpoint(train_dir)
+        logging.info("Loading best weights that could be found from {}".format(weights))
+
+    model, _, initial_epoch = model_scope(config, 1, weights=weights)
+
+    print("before loading")
+    print("model.normalizer.mean:", model.normalizer.mean)
+    print("model.normalizer.variance:", model.normalizer.variance)
+
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+    model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+    print("after loading")
+    print("model.normalizer.mean:", model.normalizer.mean)
+    print("model.normalizer.variance:", model.normalizer.variance)
+
+    num_events = nevents if nevents >= 0 else config["validation_num_events"]
+    ds_val = mlpf_dataset_from_config(
+        config["validation_dataset"],
+        config,
+        "test",
+        num_events,
+    )
+    tfds_dataset = ds_val.tensorflow_dataset.padded_batch(bs)
+
+    times = []
+    predict_workers = bs  # 1 worker per sample in the batch
+    # TODO: don't hardcode maximum allowed workers
+    if predict_workers > 112:
+        predict_workers = 112  # ensure workers is not more than available cpu threads
+    for i in range(num_runs):
+        # Using model.predict(tf_dataset) doesn't work because pfnetdense is not hashable due to the use of slicing in
+        # __call__. Hence, we have to loop through the dataset.
+        print("\nRun {}/{}".format(i + 1, num_runs))
+        print("####### Inference using model.predict(sample) ############")
+        start_time = tf.timestamp().numpy()
+        for elem in tqdm.tqdm(tfds_dataset, desc="Model inference"):
+            _ = model.predict(
+                elem["X"],
+                verbose=verbose,
+                workers=predict_workers,
+                use_multiprocessing=(predict_workers > 1),
+            )
+            # ypred["charge"] = np.argmax(ypred["charge"], axis=-1) - 1
+            # ypred["cls_id"] = tf.math.argmax(ypred["cls"], axis=-1).numpy()
+        stop_time = tf.timestamp().numpy()
+        total_time = stop_time - start_time
+        times.append(total_time)
+        print("Total number of events used: {:d}".format(num_events))
+        print("Batch size: {:d}".format(bs))
+        print("Total inference time: {:.2f}s".format(total_time))
+        print("##########################################################")
+
+    if num_runs > 1:
+        # Summarizing results
+
+        # event throughput [1/s]
+        #   - ignore batch padding
+        throughput_per_run = num_events / np.array(times)
+
+        # mean throughput
+        #   - ignore first epoch (lazy graph construction)
+        mean_throughput = round(np.mean(throughput_per_run[1:]), 4)
+        print("mean_throughput:", mean_throughput)
+
+        # mean epoch time
+        #   - ignore first epoch (lazy graph construction)
+        mean_run_time = round(np.mean(times[1:]), 4)
+        # batch_size_total = bs * (num_gpus or num_cpus)
+        print("mean_run_time:", mean_run_time)
+
+        data = {
+            "results": [
+                {
+                    "wl-scores": {
+                        "mean_throughput": mean_throughput,
+                        "mean_run_time": mean_run_time,
+                    },
+                    "wl-stats": {
+                        "num_runs": len(times),
+                        "run_times": np.round(times, 4),
+                        "total_inference_time": round(sum(times[1:]), 4),
+                        "GPU": num_gpus,
+                        "CPU": cpus or -1,
+                        # "train_set_size": self.train_set_size,
+                        # "batch_size_per_device": self.batch_size_per_gpu,
+                        # "batch_size_total": batch_size_total,
+                        "batch_size": bs,
+                        "steps_per_run": num_events // bs,
+                        "events_per_run": num_events,
+                        "throughput_per_run": list(np.round(throughput_per_run, 4)),
+                    },
+                }
+            ],
+        }
+
+        if output:
+            result_path = output.resolve()
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if result_path.is_file():
+                with result_path.open("r", encoding="utf-8") as f:
+                    old_data = json.load(f)
+            else:
+                old_data = None
+
+            with result_path.open("w", encoding="utf-8") as f:
+                if old_data:
+                    data = {"results": old_data["results"] + data["results"]}
+                json.dump(data, f, ensure_ascii=False, indent=4, cls=NpEncoder)
+                f.write("\n")
+            print("Saved result to {}".format(result_path))
 
 
 @main.command()
