@@ -221,7 +221,7 @@ def get_strategy(num_cpus=None):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
-        logging.info("Multiple GPUs detected, num_batces_multiplier={}".format(num_batches_multiplier))
+        logging.info("Multiple GPUs detected, num_batches_multiplier={}".format(num_batches_multiplier))
 
     return strategy, num_gpus, num_batches_multiplier
 
@@ -368,7 +368,7 @@ def load_and_interleave(
 ):
     datasets = [mlpf_dataset_from_config(ds_name, config, split, max_events) for ds_name in dataset_names]
     ds = interleave_datasets(joint_dataset_name, split, datasets)
-    tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config))
+    tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config), num_parallel_calls=tf.data.AUTOTUNE)
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
