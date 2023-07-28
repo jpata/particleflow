@@ -1,7 +1,7 @@
-from ray.tune import grid_search  # choice, loguniform, quniform
+from ray.tune import choice  # grid_search, choice, loguniform, quniform
 
-raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
-samp = grid_search
+raytune_num_samples = 300  # Number of random samples to draw from search space. Set to 1 for grid search.
+samp = choice
 # search_space = {
 # Optimizer parameters
 # "lr": samp([1e-4, 1e-3]),
@@ -73,14 +73,48 @@ samp = grid_search
 #     # "mask_reg_cls0": choice([False, True]),
 # }
 
-# onecycle scan
+# # onecycle scan
+# search_space = {
+#     # "lr": samp([1e-4, 1e-3, 1e-2]),
+#     # "batch_size_physical": samp([24, 40]),
+#     "batch_multiplier": samp([1, 5, 10]),
+#     # "model": samp(["gnn_dense", "transformer"]),
+#     # "lr_schedule": samp(["none", "cosinedecay", "onecycle"]),
+#     # "optimizer": samp(["pcgrad_adam", "adam", "sgd"]),
+# }
+
+# transformer scan
+# search_space = {
+#     # optimizer parameters
+#     "lr": samp([1e-5, 1e-4, 1e-3]),
+#     "batch_multiplier": samp([10, 20, 40]),
+#     # model arch parameters
+#     "num_layers_encoder": samp([1, 2, 3, 4]),  # default is 1
+#     "num_layers_decoder_reg": samp([1, 2, 3, 4]),  # default is 1
+#     "num_layers_decoder_cls": samp([1, 2, 3, 4]),  # default is 1
+#     "hidden_dim": samp([32, 64, 128]),  # default is 64
+#     "num_heads": samp([8, 16, 32, 64]),  # default is 16
+#     "num_random_features": samp([16, 32, 64, 128]),  # default is 32
+#     # output_decoding parameters
+#     "out_hidden_dim": samp([128, 256, 512]),  # default is ~256
+#     "out_num_layers": samp([1, 2, 3, 4]),  # default is ~2
+# }
+
+# gnn scan
 search_space = {
-    # "lr": samp([1e-4, 1e-3, 1e-2]),
-    # "batch_size_physical": samp([24, 40]),
-    "batch_multiplier": samp([1, 5, 10]),
-    # "model": samp(["gnn_dense", "transformer"]),
-    # "lr_schedule": samp(["none", "cosinedecay", "onecycle"]),
-    # "optimizer": samp(["pcgrad_adam", "adam", "sgd"]),
+    # optimizer parameters
+    "lr": samp([1e-4, 1e-3, 1e-2]),
+    # "batch_multiplier": samp([10, 20, 40]),
+    # model arch parameters
+    "num_graph_layers_id": samp([1, 2, 3, 4, 5, 6]),
+    "num_graph_layers_reg": samp([1, 2, 3, 4, 5, 6]),
+    "bin_size": samp([16, 32, 64, 128, 256]),
+    "output_dim": samp([64, 128, 256]),
+    "ffn_dist_hidden_dim": samp([64, 128, 256]),
+    "ffn_dist_num_layers": samp([1, 2, 3, 4, 5]),
+    # output_decoding parameters
+    "out_hidden_dim": samp([64, 128, 256, 512]),
+    "out_num_layers": samp([1, 2, 3, 4, 5]),
 }
 
 
@@ -216,5 +250,19 @@ def set_raytune_search_parameters(search_space, config):
         config["parameters"]["output_decoding"]["eta_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["phi_num_layers"] = search_space["out_num_layers"]
         config["parameters"]["output_decoding"]["energy_num_layers"] = search_space["out_num_layers"]
+
+    # transformer specific parameters
+    if "num_layers_encoder" in search_space.keys():
+        config["parameters"]["num_layers_encoder"] = search_space["num_layers_encoder"]
+    if "num_layers_decoder_reg" in search_space.keys():
+        config["parameters"]["num_layers_decoder_reg"] = search_space["num_layers_decoder_reg"]
+    if "num_layers_decoder_cls" in search_space.keys():
+        config["parameters"]["num_layers_decoder_cls"] = search_space["num_layers_decoder_cls"]
+    if "hidden_dim" in search_space.keys():
+        config["parameters"]["hidden_dim"] = search_space["hidden_dim"]
+    if "num_heads" in search_space.keys():
+        config["parameters"]["num_heads"] = search_space["num_heads"]
+    if "num_random_features" in search_space.keys():
+        config["parameters"]["num_random_features"] = search_space["num_random_features"]
 
     return config

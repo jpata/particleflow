@@ -17,6 +17,7 @@ import shutil
 from datetime import datetime
 from functools import partial
 from pathlib import Path
+import ctypes
 
 import boost_histogram as bh
 import click
@@ -168,6 +169,15 @@ def train(
 
     # tf.debugging.enable_check_numerics()
 
+    # Configure GPU threads according to TensorFlow's best practices for optimal model performance
+    os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
+    os.environ["TF_GPU_THREAD_COUNT"] = "2"
+
+    # According to TensorFlow's best practices for optimal model performance, set GPU memory growth to True
+    physical_devices = tf.config.list_physical_devices("GPU")
+    for pd in physical_devices:
+        tf.config.experimental.set_memory_growth(pd, True)
+
     if seeds:
         random.seed(1234)
         np.random.seed(1234)
@@ -261,6 +271,17 @@ def train(
         with strategy.scope():
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
+    if num_gpus > 0:
+        # According to TensorFlow's best practices for optimal model performance,
+        # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
+        _libcudart = ctypes.CDLL("libcudart.so")
+        # Set device limit on the current device
+        # cudaLimitMaxL2FetchGranularity = 0x05
+        pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
+        _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
+        _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
+        assert pValue.contents.value == 128
+
     with strategy.scope():
         callbacks = prepare_callbacks(
             config,
@@ -304,8 +325,8 @@ def train(
         model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
         model.fit(
-            ds_train.tensorflow_dataset.repeat(),
-            validation_data=ds_test.tensorflow_dataset.repeat(),
+            ds_train.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
+            validation_data=ds_test.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
             epochs=config["setup"]["num_epochs"],
             callbacks=callbacks,
             steps_per_epoch=ds_train.num_steps(),
@@ -704,6 +725,8 @@ def raytune(
     from ray.tune.logger import TBXLoggerCallback
     from raytune.search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
+
+    os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"  # don't crash if a metric is missing
 
     if seeds:
         # Set seeds for reproducibility
