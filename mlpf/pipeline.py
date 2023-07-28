@@ -493,8 +493,6 @@ def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs,
                 workers=predict_workers,
                 use_multiprocessing=(predict_workers > 1),
             )
-            # ypred["charge"] = np.argmax(ypred["charge"], axis=-1) - 1
-            # ypred["cls_id"] = tf.math.argmax(ypred["cls"], axis=-1).numpy()
         stop_time = tf.timestamp().numpy()
         total_time = stop_time - start_time
         times.append(total_time)
