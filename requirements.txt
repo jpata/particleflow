@@ -15,6 +15,7 @@ networkx
 nevergrad
 notebook
 numba
+numpy==1.23.5  # later versions are incompatible with tf2onnx v1.14.0 (latest as of this commit)
 onnxruntime
 pandas
 papermill

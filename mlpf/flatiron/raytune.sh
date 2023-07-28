@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 12
+#SBATCH -N 8
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --constraint=a100-80gb,ib
@@ -78,5 +78,5 @@ echo All Ray workers started.
 
 #### call your code below
 python3 mlpf/pipeline.py raytune -c $1 -n $2 --cpus "${SLURM_CPUS_PER_TASK}" \
-  --gpus $num_gpus --seeds --comet-exp-name particleflow-raytune
+  --gpus $num_gpus --seeds --comet-exp-name particleflow-raytune #  --comet-online
 exit

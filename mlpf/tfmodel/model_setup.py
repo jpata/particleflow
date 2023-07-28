@@ -166,7 +166,7 @@ def prepare_callbacks(
             benchmark_dir = outdir
         if config["dataset"]["schema"] == "delphes":
             bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
-        elif config["dataset"]["schema"] == "cms":
+        elif (config["dataset"]["schema"] == "cms") or (config["dataset"]["schema"] == "clic"):
             assert (
                 len(config["train_test_datasets"]) == 1
             ), "Expected exactly 1 key, physical OR delphes, \
@@ -176,8 +176,8 @@ def prepare_callbacks(
             bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
         else:
             raise ValueError(
-                "Benchmark callback only supports delphes or \
-                cms dataset schema. {}".format(
+                "Benchmark callback only supports delphes \
+                cms or clic dataset schema. {}".format(
                     config["dataset"]["schema"]
                 )
             )
@@ -232,7 +232,9 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         write_graph=False,
         write_images=False,
         update_freq="batch",
-        # profile_batch=(50,100),
+        profile_batch=config["callbacks"]["tensorboard"]["profile_batch"]
+        if "profile_batch" in config["callbacks"]["tensorboard"].keys()
+        else 0,
         dump_history=config["callbacks"]["tensorboard"]["dump_history"],
     )
     # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
