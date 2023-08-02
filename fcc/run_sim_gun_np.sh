@@ -1,9 +1,4 @@
 #!/bin/bash
-#SBATCH -p main
-#SBATCH --mem-per-cpu=35G
-#SBATCH --cpus-per-task=1
-#SBATCH -o logs/slurm-%x-%j-%N.out
-#SBATCH --no-requeue
 set -e
 set -x
 
