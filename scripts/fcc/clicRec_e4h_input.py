@@ -2370,7 +2370,7 @@ toolsvc = ToolSvc()
 auditorsvc = AuditorSvc()
 auditorsvc.Auditors += [TIMER]
 RootHistSvc().OutputFile = "timing_histos.root"
- 
+
 ApplicationMgr(
     TopAlg=algList,
     EvtSel="NONE",
@@ -2378,5 +2378,5 @@ ApplicationMgr(
     ExtSvc=[evtsvc, toolsvc, auditorsvc],
     OutputLevel=WARNING,
     AuditAlgorithms=True,
-    HistogramPersistency = "ROOT")
-
+    HistogramPersistency="ROOT",
+)
