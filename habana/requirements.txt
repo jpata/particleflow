@@ -10,6 +10,7 @@ fsspec
 future
 gviz-api
 matplotlib
+mpi4py
 mplhep
 networkx
 nevergrad
