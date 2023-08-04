@@ -273,15 +273,16 @@ def train(
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
 
     if num_gpus > 0:
-        # According to TensorFlow's best practices for optimal model performance,
-        # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
-        _libcudart = ctypes.CDLL("libcudart.so")
-        # Set device limit on the current device
-        # cudaLimitMaxL2FetchGranularity = 0x05
-        pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
-        _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
-        _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
-        assert pValue.contents.value == 128
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            # According to TensorFlow's best practices for optimal model performance,
+            # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
+            _libcudart = ctypes.CDLL("libcudart.so")
+            # Set device limit on the current device
+            # cudaLimitMaxL2FetchGranularity = 0x05
+            pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
+            _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
+            _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
+            assert pValue.contents.value == 128
 
     with strategy.scope():
         callbacks = prepare_callbacks(

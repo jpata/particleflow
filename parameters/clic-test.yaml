@@ -50,7 +50,7 @@ setup:
   weights_config:
   lr: 0.0005
   num_epochs: 100
-  dtype: float16
+  dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
@@ -60,7 +60,27 @@ setup:
   normalizer_cache: parameters/clic_normalizations
 
 batching:
-  bucket_by_sequence_length: no
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: yes
+  # these sizes were sort of tuned for an 8GB GPU
+  # - max_sequence_length, batch_size_per_gpu
+
+#on 8GB GPU
+  bucket_batch_sizes:
+    - 25, 200
+    - 50, 100
+    - 100, 50
+    - 200, 20
+    - 500, 10
+    - 1000, 5
+    - 2000, 3
+    - 3000, 2
+    - 4000, 2
+    - 5000, 1
+    - 6000, 1
+    - inf, 1
+  # use this batch multiplier to increase all batch sizes by a constant factor
+  batch_multiplier: 1
 
 optimizer:
   adam:
@@ -214,7 +234,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 20
+    batch_per_gpu: 1
     datasets:
       - clic_edm_ttbar_pf
 
@@ -244,22 +264,6 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_pf:
-    version: 1.4.0
-    data_dir:
-    manual_dir:
-  clic_edm_ttbar_pu10_pf:
-    version: 1.4.0
-    data_dir:
-    manual_dir:
-  clic_edm_qq_pf:
-    version: 1.4.0
-    data_dir:
-    manual_dir:
-  clic_edm_ww_fullhad_pf:
-    version: 1.4.0
-    data_dir:
-    manual_dir:
-  clic_edm_zh_tautau_pf:
     version: 1.4.0
     data_dir:
     manual_dir:
