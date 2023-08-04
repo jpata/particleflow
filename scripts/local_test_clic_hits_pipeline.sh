@@ -13,8 +13,8 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/clic_edm4hep_
 
 cd ../..
 
-python3 fcc/postprocessing_hits.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.parquet
-python3 fcc/postprocessing_hits.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.parquet
+python3 scripts/fcc/postprocessing_hits.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_1.parquet
+python3 scripts/fcc/postprocessing_hits.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.root data/p8_ee_tt_ecm380/reco_p8_ee_tt_ecm380_2.parquet
 
 tfds build mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --manual_dir data
 
