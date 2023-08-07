@@ -17,6 +17,7 @@ import shutil
 from datetime import datetime
 from functools import partial
 from pathlib import Path
+import ctypes
 
 import boost_histogram as bh
 import click
@@ -52,6 +53,7 @@ from tfmodel.utils_analysis import (
     summarize_top_k,
     topk_summary_plot_v2,
 )
+from tfmodel.callbacks import NpEncoder
 
 
 @click.group()
@@ -168,6 +170,15 @@ def train(
 
     # tf.debugging.enable_check_numerics()
 
+    # Configure GPU threads according to TensorFlow's best practices for optimal model performance
+    os.environ["TF_GPU_THREAD_MODE"] = "gpu_private"
+    os.environ["TF_GPU_THREAD_COUNT"] = "2"
+
+    # According to TensorFlow's best practices for optimal model performance, set GPU memory growth to True
+    physical_devices = tf.config.list_physical_devices("GPU")
+    for pd in physical_devices:
+        tf.config.experimental.set_memory_growth(pd, True)
+
     if seeds:
         random.seed(1234)
         np.random.seed(1234)
@@ -244,6 +255,9 @@ def train(
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
+    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+    ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
     logging.info("num_train_steps: {}".format(ds_train.num_steps()))
@@ -260,6 +274,18 @@ def train(
     else:
         with strategy.scope():
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
+
+    if num_gpus > 0:
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            # According to TensorFlow's best practices for optimal model performance,
+            # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
+            _libcudart = ctypes.CDLL("libcudart.so")
+            # Set device limit on the current device
+            # cudaLimitMaxL2FetchGranularity = 0x05
+            pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
+            _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
+            _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
+            assert pValue.contents.value == 128
 
     with strategy.scope():
         callbacks = prepare_callbacks(
@@ -286,13 +312,26 @@ def train(
 
         callbacks.append(optim_callbacks)
 
-        model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
-        print(model.normalizer.mean)
-        print(model.normalizer.variance)
+        if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+            logging.info(
+                "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
+            )
+            model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
+            print(model.normalizer.mean)
+            print(model.normalizer.variance)
+            np.savez(
+                config["setup"]["normalizer_cache"],
+                mean=model.normalizer.mean.numpy(),
+                variance=model.normalizer.variance.numpy(),
+            )
+
+        cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+        model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+        model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
         model.fit(
-            ds_train.tensorflow_dataset.repeat(),
-            validation_data=ds_test.tensorflow_dataset.repeat(),
+            ds_train.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
+            validation_data=ds_test.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
             epochs=config["setup"]["num_epochs"],
             callbacks=callbacks,
             steps_per_epoch=ds_train.num_steps(),
@@ -339,6 +378,17 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
+    print("before loading")
+    print(model.normalizer.mean)
+    print(model.normalizer.variance)
+
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+    model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+    print("after loading")
+    print(model.normalizer.mean)
+    print(model.normalizer.variance)
+
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
         ds_test = mlpf_dataset_from_config(
@@ -352,7 +402,168 @@ def evaluate(config, train_dir, weights, customize, nevents):
         Path(eval_dir).mkdir(parents=True, exist_ok=True)
         eval_model(model, ds_test_tfds, config, eval_dir)
 
-    freeze_model(model, config, train_dir)
+    freeze_model(model, config, train_dir)  # export to ONNX
+
+
+@main.command()
+@click.help_option("-h", "--help")
+@click.option(
+    "--train-dir",
+    default=None,
+    help="directory containing a completed training",
+    type=click.Path(),
+)
+@click.option("--config", help="configuration file", type=click.Path())
+@click.option(
+    "--weights",
+    default=None,
+    help="trained weights to load",
+    type=click.Path(),
+)
+@click.option("--bs", help="batch size to use for inference", type=int, default=1)
+@click.option("--customize", help="customization function", type=str, default=None)
+@click.option("--nevents", help="maximum number of events", type=int, default=-1)
+@click.option("--verbose", help="verbose output", type=int, default=0)
+@click.option("--num-runs", help="how many times to run the inference", type=int, default=2)
+@click.option("-o", "--output", help="write summary of results to file", type=Path)
+@click.option("--cpus", help="CPU threads", type=int, default=None)
+def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs, output, cpus):
+    import json
+
+    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=cpus)  # sets TF ENV variables to use num_cpus
+    assert num_gpus < 2, "Multi-GPU inference is not supported"
+
+    if output:
+        assert num_runs > 1, "If writing summary results to file, num_runs must be >1"
+
+    if train_dir is None:
+        assert (config is not None) and (
+            weights is not None
+        ), "Please provide a config and weight file when not giving train_dir"
+
+    if config is None:
+        config = Path(train_dir) / "config.yaml"
+        assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
+    config, _ = parse_config(config, weights=weights)
+
+    if customize:
+        config = customization_functions[customize](config)
+
+    # disable small graph optimization for onnx export (tf.cond is not well supported by ONNX export)
+    if "small_graph_opt" in config["setup"]:
+        config["setup"]["small_graph_opt"] = False
+
+    if not weights:
+        weights = get_best_checkpoint(train_dir)
+        logging.info("Loading best weights that could be found from {}".format(weights))
+
+    model, _, initial_epoch = model_scope(config, 1, weights=weights)
+
+    print("before loading")
+    print("model.normalizer.mean:", model.normalizer.mean)
+    print("model.normalizer.variance:", model.normalizer.variance)
+
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+    model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+    print("after loading")
+    print("model.normalizer.mean:", model.normalizer.mean)
+    print("model.normalizer.variance:", model.normalizer.variance)
+
+    num_events = nevents if nevents >= 0 else config["validation_num_events"]
+    ds_val = mlpf_dataset_from_config(
+        config["validation_dataset"],
+        config,
+        "test",
+        num_events,
+    )
+    tfds_dataset = ds_val.tensorflow_dataset.padded_batch(bs)
+
+    times = []
+    predict_workers = bs  # 1 worker per sample in the batch
+    # TODO: don't hardcode maximum allowed workers
+    if predict_workers > 112:
+        predict_workers = 112  # ensure workers is not more than available cpu threads
+    for i in range(num_runs):
+        # Using model.predict(tf_dataset) doesn't work because pfnetdense is not hashable due to the use of slicing in
+        # __call__. Hence, we have to loop through the dataset.
+        print("\nRun {}/{}".format(i + 1, num_runs))
+        print("####### Inference using model.predict(sample) ############")
+        start_time = tf.timestamp().numpy()
+        for elem in tqdm.tqdm(tfds_dataset, desc="Model inference"):
+            _ = model.predict(
+                elem["X"],
+                verbose=verbose,
+                workers=predict_workers,
+                use_multiprocessing=(predict_workers > 1),
+            )
+        stop_time = tf.timestamp().numpy()
+        total_time = stop_time - start_time
+        times.append(total_time)
+        print("Total number of events used: {:d}".format(num_events))
+        print("Batch size: {:d}".format(bs))
+        print("Total inference time: {:.2f}s".format(total_time))
+        print("##########################################################")
+
+    if num_runs > 1:
+        # Summarizing results
+
+        # event throughput [1/s]
+        #   - ignore batch padding
+        throughput_per_run = num_events / np.array(times)
+
+        # mean throughput
+        #   - ignore first epoch (lazy graph construction)
+        mean_throughput = round(np.mean(throughput_per_run[1:]), 4)
+        print("mean_throughput:", mean_throughput)
+
+        # mean epoch time
+        #   - ignore first epoch (lazy graph construction)
+        mean_run_time = round(np.mean(times[1:]), 4)
+        # batch_size_total = bs * (num_gpus or num_cpus)
+        print("mean_run_time:", mean_run_time)
+
+        data = {
+            "results": [
+                {
+                    "wl-scores": {
+                        "mean_throughput": mean_throughput,
+                        "mean_run_time": mean_run_time,
+                    },
+                    "wl-stats": {
+                        "num_runs": len(times),
+                        "run_times": np.round(times, 4),
+                        "total_inference_time": round(sum(times[1:]), 4),
+                        "GPU": num_gpus,
+                        "CPU": cpus or -1,
+                        # "train_set_size": self.train_set_size,
+                        # "batch_size_per_device": self.batch_size_per_gpu,
+                        # "batch_size_total": batch_size_total,
+                        "batch_size": bs,
+                        "steps_per_run": num_events // bs,
+                        "events_per_run": num_events,
+                        "throughput_per_run": list(np.round(throughput_per_run, 4)),
+                    },
+                }
+            ],
+        }
+
+        if output:
+            result_path = output.resolve()
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if result_path.is_file():
+                with result_path.open("r", encoding="utf-8") as f:
+                    old_data = json.load(f)
+            else:
+                old_data = None
+
+            with result_path.open("w", encoding="utf-8") as f:
+                if old_data:
+                    data = {"results": old_data["results"] + data["results"]}
+                json.dump(data, f, ensure_ascii=False, indent=4, cls=NpEncoder)
+                f.write("\n")
+            print("Saved result to {}".format(result_path))
 
 
 @main.command()
@@ -680,6 +891,8 @@ def raytune(
     from ray.tune.logger import TBXLoggerCallback
     from raytune.search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
+
+    os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"  # don't crash if a metric is missing
 
     if seeds:
         # Set seeds for reproducibility

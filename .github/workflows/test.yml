@@ -43,6 +43,18 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_clic_pipeline.sh
 
+  tf-clic-hits-pipeline:
+    runs-on: ubuntu-20.04
+    needs: [deps]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: ./scripts/local_test_clic_hits_pipeline.sh
+
   tf-delphes-pipeline:
     runs-on: ubuntu-20.04
     needs: [deps]

@@ -11,11 +11,11 @@ import os
 import pickle
 from pathlib import Path
 
+import time
 import awkward
 import fastjet
 import numpy as np
 import tensorflow as tf
-import tensorflow_addons as tfa
 import vector
 from plotting.plot_utils import (
     compute_distances,
@@ -166,7 +166,7 @@ def prepare_callbacks(
             benchmark_dir = outdir
         if config["dataset"]["schema"] == "delphes":
             bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
-        elif config["dataset"]["schema"] == "cms":
+        elif (config["dataset"]["schema"] == "cms") or (config["dataset"]["schema"] == "clic"):
             assert (
                 len(config["train_test_datasets"]) == 1
             ), "Expected exactly 1 key, physical OR delphes, \
@@ -176,8 +176,8 @@ def prepare_callbacks(
             bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
         else:
             raise ValueError(
-                "Benchmark callback only supports delphes or \
-                cms dataset schema. {}".format(
+                "Benchmark callback only supports delphes \
+                cms or clic dataset schema. {}".format(
                     config["dataset"]["schema"]
                 )
             )
@@ -223,15 +223,18 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         is_hpo_run=is_hpo_run,
     )
 
-    callbacks += [cb]
+    if config.get("do_validation_callback", True):
+        callbacks += [cb]
+
     tb = CustomTensorBoard(
         log_dir=outdir + "/logs",
         histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
         write_graph=False,
         write_images=False,
         update_freq="batch",
-        # profile_batch=(10,200),
-        profile_batch=0,
+        profile_batch=config["callbacks"]["tensorboard"]["profile_batch"]
+        if "profile_batch" in config["callbacks"]["tensorboard"].keys()
+        else 0,
         dump_history=config["callbacks"]["tensorboard"]["dump_history"],
     )
     # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
@@ -470,6 +473,27 @@ def freeze_model(model, config, outdir):
 
     full_model = tf.function(lambda x: model_output(model(x, training=False)))
 
+    niter = 10
+    nfeat = config["dataset"]["num_input_features"]
+
+    if "combined_graph_layer" in config["parameters"]:
+        bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
+        elem_range = list(range(bin_size, 5 * bin_size, bin_size))
+    else:
+        elem_range = range(100, 1000, 200)
+
+    for ibatch in [1, 2, 4]:
+        for nptcl in elem_range:
+            X = np.random.rand(ibatch, nptcl, nfeat)
+            full_model(X)
+
+            t0 = time.time()
+            for i in range(niter):
+                full_model(X)
+            t1 = time.time()
+
+            print(ibatch, nptcl, (t1 - t0) / niter)
+
     # we need to use opset 12 for the version of ONNXRuntime in CMSSW
     # the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
     model_proto, _ = tf2onnx.convert.from_function(
@@ -523,7 +547,10 @@ def configure_model_weights(model, trainable_layers):
 
 def make_focal_loss(config):
     def loss(x, y):
-        return tfa.losses.sigmoid_focal_crossentropy(
+
+        from .tfa import sigmoid_focal_crossentropy
+
+        return sigmoid_focal_crossentropy(
             x,
             y,
             alpha=float(config["setup"].get("focal_loss_alpha", 0.25)),
