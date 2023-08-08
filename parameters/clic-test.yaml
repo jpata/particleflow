@@ -48,15 +48,15 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
-  num_epochs: 100
+  lr: 0.001
+  num_epochs: 11
   dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: no
+  small_graph_opt: yes
   normalizer_cache: parameters/clic_normalizations
 
 batching:
