@@ -48,20 +48,20 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
-  num_epochs: 100
+  lr: 0.001
+  num_epochs: 11
   dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  small_graph_opt: no
+  small_graph_opt: yes
   normalizer_cache: parameters/clic_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
@@ -234,7 +234,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 1
+    batch_per_gpu: 50
     datasets:
       - clic_edm_ttbar_pf
 
@@ -244,19 +244,7 @@ validation_batch_size: 100
 validation_num_events: 2000
 
 evaluation_datasets:
-  clic_edm_qq_pf:
-    batch_size: 50
-    num_events: -1
   clic_edm_ttbar_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ttbar_pu10_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_zh_tautau_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ww_fullhad_pf:
     batch_size: 50
     num_events: -1
 

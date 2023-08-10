@@ -5,6 +5,11 @@ import tensorflow as tf
 
 import tensorflow_datasets as tfds
 
+try:
+    import horovod.tensorflow.keras as hvd
+except ModuleNotFoundError:
+    pass
+
 
 # Unpacks a flat target array along the feature axis to a feature dict
 # the feature order is defined in the data prep stage
@@ -41,7 +46,7 @@ def unpack_target(y, num_output_classes, config):
     return ret
 
 
-def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None):
+def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, horovod_enabled=False):
     dataset_config = full_config["datasets"][dataset_name]
     tf_dataset = tfds.load(
         "{}:{}".format(dataset_name, dataset_config["version"]),
@@ -54,6 +59,10 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None):
     )
     if max_events:
         tf_dataset = tf_dataset.take(max_events)
+
+    if horovod_enabled:
+        tf_dataset = tf_dataset.shard(num_shards=hvd.size(), index=hvd.rank())
+
     num_samples = tf_dataset.cardinality().numpy()
     logging.info("Loaded {}:{} with {} samples".format(dataset_name, split, num_samples))
     return MLPFDataset(dataset_name, split, tf_dataset, num_samples)
