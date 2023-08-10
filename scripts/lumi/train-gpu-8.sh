@@ -34,7 +34,7 @@ singularity exec \
     --env LD_LIBRARY_PATH=/opt/rocm-5.4.0/lib/ \
     $IMG python3 mlpf/pipeline.py train \
     --config parameters/clic-test.yaml --plot-freq 1 --num-cpus 8 \
-    --batch-multiplier 5 --nepochs 5 --ntrain 50000 --ntest 50000
+    --batch-multiplier 5 --nepochs 5 --ntrain 50000 --ntest 50000 --benchmark_dir exp_dir
 
 #    --env MIOPEN_USER_DB_PATH=$MIPEN_USER_DB_PATH \
 #    --env MIOPEN_CUSTOM_CACHE_DIR=$MIOPEN_CUSTOM_CACHE_DIR \

@@ -155,43 +155,47 @@ def prepare_callbacks(
 ):
 
     callbacks = []
-    terminate_cb = tf.keras.callbacks.TerminateOnNaN()
-    callbacks += [terminate_cb]
+    callbacks.append(tf.keras.callbacks.TerminateOnNaN())
 
-    if not horovod_enabled or hvd.rank() == 0:
+    # these checkpoints don't seem to work in horovod (maybe it's Tensorboard)
+    if not horovod_enabled:
         callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run)
 
-    if benchmark_dir:
-        if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
-            benchmark_dir = outdir
-        if config["dataset"]["schema"] == "delphes":
-            bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
-        elif (config["dataset"]["schema"] == "cms") or (config["dataset"]["schema"] == "clic"):
-            assert (
-                len(config["train_test_datasets"]) == 1
-            ), "Expected exactly 1 key, physical OR delphes, \
-                found {}".format(
-                config["train_test_datasets"].keys()
-            )
-            bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
-        else:
-            raise ValueError(
-                "Benchmark callback only supports delphes \
-                cms or clic dataset schema. {}".format(
-                    config["dataset"]["schema"]
+    if not horovod_enabled or hvd.rank() == 0:
+        if benchmark_dir:
+            if benchmark_dir == "exp_dir":  # save benchmarking results in experiment output folder
+                benchmark_dir = outdir
+            if config["dataset"]["schema"] == "delphes":
+                bmk_bs = config["train_test_datasets"]["delphes"]["batch_per_gpu"]
+            elif (config["dataset"]["schema"] == "cms") or (config["dataset"]["schema"] == "clic"):
+                assert (
+                    len(config["train_test_datasets"]) == 1
+                ), "Expected exactly 1 key, physical OR delphes, \
+                    found {}".format(
+                    config["train_test_datasets"].keys()
+                )
+                bmk_bs = config["train_test_datasets"]["physical"]["batch_per_gpu"]
+            else:
+                raise ValueError(
+                    "Benchmark callback only supports delphes \
+                    cms or clic dataset schema. {}".format(
+                        config["dataset"]["schema"]
+                    )
+                )
+
+            Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
+
+            callbacks.append(
+                BenchmarkLoggerCallback(
+                    outdir=benchmark_dir,
+                    steps_per_epoch=num_train_steps,
+                    batch_size_per_gpu=bmk_bs,
+                    num_gpus=num_gpus,
+                    num_cpus=num_cpus,
+                    train_set_size=train_samples,
+                    horovod_enabled=horovod_enabled,
                 )
             )
-        Path(benchmark_dir).mkdir(exist_ok=True, parents=True)
-        callbacks.append(
-            BenchmarkLoggerCallback(
-                outdir=benchmark_dir,
-                steps_per_epoch=num_train_steps,
-                batch_size_per_gpu=bmk_bs,
-                num_gpus=num_gpus,
-                num_cpus=num_cpus,
-                train_set_size=train_samples,
-            )
-        )
 
     return callbacks
 
