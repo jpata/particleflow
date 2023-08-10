@@ -112,6 +112,7 @@ class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
         self.num_gpus = kwargs.pop("num_gpus")
         self.num_cpus = kwargs.pop("num_cpus")
         self.train_set_size = kwargs.pop("train_set_size")
+        self.horovod_enabled = kwargs.pop("horovod_enabled")
 
         super().__init__(*args, **kwargs)
 
@@ -183,6 +184,7 @@ class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
                 "train_start": self.start_time,
                 "train_stop": stop_time,
                 "train_time": total_time,
+                "horovod_enabled": self.horovod_enabled,
                 "GPU": self.num_gpus,
                 "CPU": self.num_cpus,
                 "train_set_size": self.train_set_size,

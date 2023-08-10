@@ -61,7 +61,7 @@ setup:
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
@@ -234,7 +234,7 @@ raytune:
 
 train_test_datasets:
   physical:
-    batch_per_gpu: 1
+    batch_per_gpu: 50
     datasets:
       - clic_edm_ttbar_pf
 
@@ -244,19 +244,7 @@ validation_batch_size: 100
 validation_num_events: 2000
 
 evaluation_datasets:
-  clic_edm_qq_pf:
-    batch_size: 50
-    num_events: -1
   clic_edm_ttbar_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ttbar_pu10_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_zh_tautau_pf:
-    batch_size: 50
-    num_events: -1
-  clic_edm_ww_fullhad_pf:
     batch_size: 50
     num_events: -1
 
