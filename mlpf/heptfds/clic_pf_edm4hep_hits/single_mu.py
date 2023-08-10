@@ -21,10 +21,7 @@ _CITATION = """
 
 class ClicEdmSingleMuonHitsPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.2.0")
-    RELEASE_NOTES = {
-        "1.1.0": "Remove track referencepoint feature",
-        "1.2.0": "Keep all interacting genparticels"
-    }
+    RELEASE_NOTES = {"1.1.0": "Remove track referencepoint feature", "1.2.0": "Keep all interacting genparticels"}
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     FIXME
     """

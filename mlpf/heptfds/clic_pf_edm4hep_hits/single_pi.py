@@ -59,9 +59,7 @@ class ClicEdmSinglePiHitsPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample_several([
-            Path(path / "pi-/"), Path(path / "pi+/")
-        ])
+        return split_sample_several([Path(path / "pi-/"), Path(path / "pi+/")])
 
     def _generate_examples(self, files):
         return generate_examples(files)
