@@ -282,7 +282,7 @@ def get_optimizer(config, lr_schedule=None, horovod_enabled=False):
     if lr_schedule is None:
         lr = float(config["setup"]["lr"])
         if horovod_enabled:
-            lr = lr * hvd.size() # scale the learning rate by the number of processes 
+            lr = lr * hvd.size()  # scale the learning rate by the number of processes
     else:
         lr = lr_schedule
 
@@ -305,7 +305,6 @@ def get_optimizer(config, lr_schedule=None, horovod_enabled=False):
         # https://horovod.readthedocs.io/en/latest/keras.html
         opt = hvd.DistributedOptimizer(opt)
     return opt
-
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):

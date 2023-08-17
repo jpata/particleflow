@@ -76,7 +76,7 @@ batching:
     - 6000, 1
     - inf, 1
   # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 5  # HPO using 1 GPU per trial gave 10 (lowest in search space) 
+  batch_multiplier: 5  # HPO using 1 GPU per trial gave 10 (lowest in search space)
                        # as best value (corresponding to 2.5 for 4 GPUs)
 
 optimizer:
