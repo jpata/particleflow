@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mlpf-hpu-strategy-v19-short
+  name: mlpf-hpu-strategy-v19-8hpu
 spec:
   completions: 1
   parallelism: 1
@@ -98,4 +98,4 @@ spec:
               hl-smi;
               hl-smi -q;
 
-              time -p mpirun -n 8 --allow-run-as-root --prefix "${MPI_ROOT}" -x "${VGR_POD_ID}" python3 -u mlpf/pipeline.py train -g -h -c habana/best_tuned_gnn_clic_v130/config.yaml --nepochs 10 --ntrain 1000 --ntest 1000;
+              time -p mpirun -n 8 --allow-run-as-root --prefix "${MPI_ROOT}" -x "${VGR_POD_ID}" python3 -u mlpf/pipeline.py train -g -m -c habana/best_tuned_gnn_clic_v130/config.yaml --nepochs 150;
