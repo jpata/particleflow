@@ -20,13 +20,14 @@ _CITATION = """
 
 
 class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.3.1")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
         "1.2.0": "sin cos as separate features",
         "1.3.0": "Update stats to ~1M events",
         "1.3.1": "Update stats to ~2M events",
+        "1.4.0": "Fix ycand matching",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./

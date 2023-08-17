@@ -20,9 +20,10 @@ _CITATION = """
 
 
 class ClicEdmZhTautauPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.3.0")
+    VERSION = tfds.core.Version("1.4.0")
     RELEASE_NOTES = {
         "1.3.0": "First version",
+        "1.4.0": "Fix ycand matching",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./

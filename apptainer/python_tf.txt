@@ -1,0 +1,17 @@
+comet-ml
+datasets
+keras-flops
+keras-tuner
+keras_core
+onnx
+onnxruntime
+ray[default]
+ray[tune]
+tensorboard_plugin_profile
+tensorflow-datasets
+tensorflow-estimator
+tensorflow-model-optimization
+tensorflow-text
+tf-models-official
+tf2onnx
+transformers
