@@ -278,19 +278,20 @@ def get_lr_schedule(config, steps):
     return lr_schedule, callbacks, lr
 
 
-def get_optimizer(config, lr_schedule=None):
+def get_optimizer(config, lr_schedule=None, horovod_enabled=False):
     if lr_schedule is None:
         lr = float(config["setup"]["lr"])
+        if horovod_enabled:
+            lr = lr * hvd.size() # scale the learning rate by the number of processes 
     else:
         lr = lr_schedule
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
         opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
-        return opt
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        return tf.keras.optimizers.legacy.SGD(
+        opt = tf.keras.optimizers.legacy.SGD(
             learning_rate=lr,
             momentum=cfg_sgd["momentum"],
             nesterov=cfg_sgd["nesterov"],
@@ -299,6 +300,12 @@ def get_optimizer(config, lr_schedule=None):
         raise ValueError(
             "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
         )
+    if horovod_enabled:
+        # wrap the Keras optimizer with Horovod's Distributed Optimizer.
+        # https://horovod.readthedocs.io/en/latest/keras.html
+        opt = hvd.DistributedOptimizer(opt)
+    return opt
+
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
@@ -742,9 +749,9 @@ def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, nte
     return ds_train, ds_test, ds_val
 
 
-def model_scope(config, total_steps, weights=None, horovod_enabled=False):
+def model_scope(config, total_steps, weights=None, horovod_enabled=False, habana_enabled=False):
     lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
-    opt = get_optimizer(config, lr_schedule)
+    opt = get_optimizer(config, lr_schedule, horovod_enabled)
 
     if config["setup"]["dtype"] == "float16":
         model_dtype = tf.dtypes.float16
@@ -817,11 +824,12 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
 
 def initialize_horovod(habana_enabled=False):
     hvd.init()
-    gpus = tf.config.experimental.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    if gpus:
-        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
+    if not habana_enabled:
+        gpus = tf.config.experimental.list_physical_devices("GPU")
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        if gpus:
+            tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
 
     num_batches_multiplier = 1
     if hvd.size() > 1:

@@ -215,27 +215,16 @@ def train(
     if customize:
         config = customization_functions[customize](config)
 
+    if habana_enabled:
+        import habana_frameworks.tensorflow as htf
+
+        htf.load_habana_module()
+
     # Decide tf.distribute.strategy depending on number of available GPUs
     horovod_enabled = horovod_enabled or config["setup"]["horovod_enabled"]
 
     if horovod_enabled:
-        num_gpus, num_batches_multiplier = initialize_horovod()
-    elif habana_enabled:
-        import habana_frameworks.tensorflow as htf
-
-        htf.load_habana_module()
-        # initialize horovod
-        hvd.init()
-        from habana_frameworks.tensorflow.distribute import HPUStrategy
-
-        logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
-        strategy = HPUStrategy()
-        # physical_devices = tf.config.list_physical_devices("HPU")
-        # num_gpus = len(physical_devices)
-        num_gpus = 8
-        logging.info(f"Number of HPUs: {len(physical_devices)}")
-        num_batches_multiplier = num_gpus
-        logging.info(f"Multiple HPUs detected, num_batches_multiplier={num_batches_multiplier}")
+        num_gpus, num_batches_multiplier = initialize_horovod(habana_enabled)
     else:
         strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
 
@@ -272,8 +261,8 @@ def train(
         experiment.log_parameter("num_test_steps", ds_test.num_steps())
         experiment.log_parameter("num_val_steps", ds_val.num_steps())
 
-    if horovod_enabled:
-        model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled)
+    if horovod_enabled or habana_enabled:
+        model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled, habana_enabled)
     else:
         with strategy.scope():
             model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
@@ -306,6 +295,10 @@ def train(
 
         verbose = 1
         if horovod_enabled:
+            # Horovod: broadcast initial variable states from rank 0 to all other
+            # processes. This is necessary to ensure consistent initialization of
+            # all workers when training is started with random weights or restored
+            # from a checkpoint.
             callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
             callbacks.append(hvd.callbacks.MetricAverageCallback())
             verbose = 1 if hvd.rank() == 0 else 0
