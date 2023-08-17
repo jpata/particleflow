@@ -19,6 +19,10 @@ loss:
   sin_phi_loss_coef: 10.0
   cos_phi_loss_coef: 10.0
   energy_loss_coef: 10.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
   charge_loss:
     type: BinaryCrossentropy
     from_logits: yes
@@ -49,8 +53,8 @@ setup:
   dtype: float32
   trainable:
   classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
-  optimizer: adam  # adam, adamw, sgd
+  lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
+  optimizer: adam # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: yes
@@ -61,7 +65,7 @@ batching:
   # these sizes were sort of tuned for an 8GB GPU
   # - max_sequence_length, batch_size_per_gpu
 
-#on 8GB GPU
+  #on 8GB GPU
   bucket_batch_sizes:
     - 25, 160
     - 50, 80
@@ -76,8 +80,9 @@ batching:
     - 6000, 1
     - inf, 1
   # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 5  # HPO using 1 GPU per trial gave 10 (lowest in search space)
-                       # as best value (corresponding to 2.5 for 4 GPUs)
+  batch_multiplier:
+    5 # HPO using 1 GPU per trial gave 10 (lowest in search space)
+    # as best value (corresponding to 2.5 for 4 GPUs)
 
 optimizer:
   adam:
@@ -201,7 +206,7 @@ callbacks:
     hist_freq: 1
 
 hypertune:
-  algorithm: hyperband  # random, bayesian, hyperband
+  algorithm: hyperband # random, bayesian, hyperband
   random:
     objective: val_loss
     max_trials: 100
@@ -217,9 +222,9 @@ hypertune:
     executions_per_trial: 1
 
 raytune:
-  local_dir: /voyager/ceph/users/jduarte/ray_results/  # Note: please specify an absolute path
-  sched: asha  # asha, hyperband
-  search_alg: hyperopt  # bayes, bohb, hyperopt, nevergrad, scikit
+  local_dir: /voyager/ceph/users/jduarte/ray_results/ # Note: please specify an absolute path
+  sched: asha # asha, hyperband
+  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
   # Tune schedule specific parameters

@@ -197,7 +197,8 @@ def get_num_gpus():
     return num_gpus, gpus
 
 
-def get_strategy(num_cpus=None):
+# retrieves the appropriate tf.distribute strategy for single-node training
+def get_singlenode_strategy(num_cpus=None):
 
     # Always use the correct number of threads that were requested
     if num_cpus == 1:
@@ -224,6 +225,8 @@ def get_strategy(num_cpus=None):
         logging.info("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
 
+    # tf.distribute strategies require the batch size to be increased by the number of devices,
+    # as the data of a single batch gets split across all the devices
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
@@ -288,10 +291,10 @@ def get_optimizer(config, lr_schedule=None, horovod_enabled=False):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        return tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        opt = tf.keras.optimizers.legacy.SGD(
+        return tf.keras.optimizers.legacy.SGD(
             learning_rate=lr,
             momentum=cfg_sgd["momentum"],
             nesterov=cfg_sgd["nesterov"],
@@ -300,11 +303,6 @@ def get_optimizer(config, lr_schedule=None, horovod_enabled=False):
         raise ValueError(
             "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
         )
-    if horovod_enabled:
-        # wrap the Keras optimizer with Horovod's Distributed Optimizer.
-        # https://horovod.readthedocs.io/en/latest/keras.html
-        opt = hvd.DistributedOptimizer(opt)
-    return opt
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
@@ -370,15 +368,12 @@ def targets_multi_output(num_output_classes):
 
 
 def load_and_interleave(
-    joint_dataset_name,
-    dataset_names,
-    config,
-    num_batches_multiplier,
-    split,
-    batch_size,
-    max_events,
+    joint_dataset_name, dataset_names, config, num_batches_multiplier, split, batch_size, max_events, horovod_enabled
 ):
-    datasets = [mlpf_dataset_from_config(ds_name, config, split, max_events) for ds_name in dataset_names]
+    datasets = [
+        mlpf_dataset_from_config(ds_name, config, split, max_events=max_events, horovod_enabled=horovod_enabled)
+        for ds_name in dataset_names
+    ]
     ds = interleave_datasets(joint_dataset_name, split, datasets)
     tensorflow_dataset = ds.tensorflow_dataset.map(get_map_to_supervised(config), num_parallel_calls=tf.data.AUTOTUNE)
 
@@ -436,13 +431,7 @@ def load_and_interleave(
 
 
 # Load multiple datasets and mix them together
-def get_datasets(
-    datasets_to_interleave,
-    config,
-    num_batches_multiplier,
-    split,
-    max_events=None,
-):
+def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, max_events=None, horovod_enabled=False):
     datasets = []
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
@@ -456,7 +445,8 @@ def get_datasets(
                 num_batches_multiplier,
                 split,
                 ds_conf["batch_per_gpu"],
-                max_events,
+                max_events=max_events,
+                horovod_enabled=horovod_enabled,
             )
             datasets.append(ds)
 
@@ -722,33 +712,36 @@ def get_loss_dict(config):
 
 
 # get the datasets for training, testing and validation
-def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None):
+def get_train_test_val_datasets(config, num_batches_multiplier, ntrain=None, ntest=None, horovod_enabled=False):
     ds_train = get_datasets(
         config["train_test_datasets"],
         config,
         num_batches_multiplier,
         "train",
-        ntrain,
+        max_events=ntrain,
+        horovod_enabled=horovod_enabled,
     )
     ds_test = get_datasets(
         config["train_test_datasets"],
         config,
         num_batches_multiplier,
         "test",
-        ntest,
+        max_events=ntest,
+        horovod_enabled=horovod_enabled,
     )
     ds_val = mlpf_dataset_from_config(
         config["validation_dataset"],
         config,
         "test",
-        config["validation_num_events"],
+        max_events=config["validation_num_events"],
+        horovod_enabled=horovod_enabled,
     )
     ds_val.tensorflow_dataset = ds_val.tensorflow_dataset.padded_batch(config["validation_batch_size"])
 
     return ds_train, ds_test, ds_val
 
 
-def model_scope(config, total_steps, weights=None, horovod_enabled=False, habana_enabled=False):
+def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
     opt = get_optimizer(config, lr_schedule, horovod_enabled)
 
@@ -800,12 +793,18 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False, habana
     config = set_config_loss(config, config["setup"]["trainable"])
     configure_model_weights(model, config["setup"]["trainable"])
 
-    logging.info("model weights follow")
-    tw_names = [m.name for m in model.trainable_weights]
-    for w in model.weights:
-        logging.info(
-            "layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape))
-        )
+    if horovod_enabled:
+        # wrap the Keras optimizer with Horovod's Distributed Optimizer.
+        # https://horovod.readthedocs.io/en/latest/keras.html
+        opt = hvd.DistributedOptimizer(opt)
+
+    if not horovod_enabled or hvd.rank() == 0:
+        logging.info("model weights follow")
+        tw_names = [m.name for m in model.trainable_weights]
+        for w in model.weights:
+            logging.info(
+                "layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape))
+            )
 
     loss_dict, loss_weights = get_loss_dict(config)
 
@@ -816,7 +815,8 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False, habana
         loss_weights=loss_weights,
     )
 
-    model.summary()
+    if not horovod_enabled or hvd.rank() == 0:
+        model.summary()
 
     return model, optim_callbacks, initial_epoch
 
@@ -830,8 +830,7 @@ def initialize_horovod(habana_enabled=False):
         if gpus:
             tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
 
+    # in horovod, we don't need to increase batch size, as the dataset is sharded
     num_batches_multiplier = 1
-    if hvd.size() > 1:
-        num_batches_multiplier = hvd.size()
 
     return hvd.size(), num_batches_multiplier

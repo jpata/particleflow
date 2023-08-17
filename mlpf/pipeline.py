@@ -38,7 +38,7 @@ from tfmodel.utils import (
     get_best_checkpoint,
     get_datasets,
     get_latest_checkpoint,
-    get_strategy,
+    get_singlenode_strategy,
     get_train_test_val_datasets,
     get_tuner,
     initialize_horovod,
@@ -226,14 +226,26 @@ def train(
     if horovod_enabled:
         num_gpus, num_batches_multiplier = initialize_horovod(habana_enabled)
     else:
-        strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
+        strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(num_cpus=num_cpus)
+
+    if num_gpus > 0:
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            # According to TensorFlow's best practices for optimal model performance,
+            # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
+            _libcudart = ctypes.CDLL("libcudart.so")
+            # Set device limit on the current device
+            # cudaLimitMaxL2FetchGranularity = 0x05
+            pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
+            _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
+            _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
+            assert pValue.contents.value == 128
 
     outdir = ""
+    experiment = None
     if not horovod_enabled or hvd.rank() == 0:
         outdir = create_experiment_dir(prefix=prefix + config_file_stem + "_", suffix=platform.node())
         shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
-
-    experiment = create_comet_experiment(comet_exp_name, comet_offline=comet_offline, outdir=outdir)
+        experiment = create_comet_experiment(comet_exp_name, comet_offline=comet_offline, outdir=outdir)
 
     if experiment:
         experiment.set_name(outdir)
@@ -245,7 +257,7 @@ def train(
         with open(f"{outdir}/{jobid}.txt", "w") as f:
             f.write(f"{jobid}\n")
 
-    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
+    ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest, horovod_enabled)
 
     ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
     ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
@@ -261,25 +273,11 @@ def train(
         experiment.log_parameter("num_test_steps", ds_test.num_steps())
         experiment.log_parameter("num_val_steps", ds_val.num_steps())
 
-    if horovod_enabled or habana_enabled:
-        model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights, horovod_enabled, habana_enabled)
-    else:
-        with strategy.scope():
-            model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights)
+    if horovod_enabled:
+        model, optim_callbacks, initial_epoch = model_scope(
+            config, total_steps, weights=weights, horovod_enabled=horovod_enabled,
+        )
 
-    if num_gpus > 0:
-        if "CUDA_VISIBLE_DEVICES" in os.environ:
-            # According to TensorFlow's best practices for optimal model performance,
-            # max out the L2 fetch granularity to 128 bytes when using NVIDIA GPUs
-            _libcudart = ctypes.CDLL("libcudart.so")
-            # Set device limit on the current device
-            # cudaLimitMaxL2FetchGranularity = 0x05
-            pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
-            _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
-            _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
-            assert pValue.contents.value == 128
-
-    with strategy.scope():
         callbacks = prepare_callbacks(
             config,
             outdir,
@@ -293,22 +291,18 @@ def train(
             train_samples=ds_train.num_samples,
         )
 
-        verbose = 1
-        if horovod_enabled:
-            # Horovod: broadcast initial variable states from rank 0 to all other
-            # processes. This is necessary to ensure consistent initialization of
-            # all workers when training is started with random weights or restored
-            # from a checkpoint.
-            callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
-            callbacks.append(hvd.callbacks.MetricAverageCallback())
-            verbose = 1 if hvd.rank() == 0 else 0
+        # Horovod: broadcast initial variable states from rank 0 to all other
+        # processes. This is necessary to ensure consistent initialization of
+        # all workers when training is started with random weights or restored
+        # from a checkpoint.
+        callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 
-            ds_train._num_steps /= hvd.size()
-            ds_test._num_steps /= hvd.size()
+        # For some reason, this hangs at the end of the epoch
+        # callbacks.append(hvd.callbacks.MetricAverageCallback())
 
         callbacks.append(optim_callbacks)
 
-        if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+        if hvd.rank() == 0 and not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
             logging.info(
                 "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
             )
@@ -326,15 +320,61 @@ def train(
         model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
         model.fit(
-            ds_train.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
-            validation_data=ds_test.tensorflow_dataset.repeat().prefetch(tf.data.AUTOTUNE),
+            ds_train.tensorflow_dataset.repeat(),
+            validation_data=ds_test.tensorflow_dataset.repeat(),
             epochs=config["setup"]["num_epochs"],
             callbacks=callbacks,
             steps_per_epoch=ds_train.num_steps(),
             validation_steps=ds_test.num_steps(),
             initial_epoch=initial_epoch,
-            verbose=verbose,
+            verbose=1,
         )
+    else:
+        with strategy.scope():
+            model, optim_callbacks, initial_epoch = model_scope(config, total_steps, weights=weights, horovod_enabled=False)
+
+            callbacks = prepare_callbacks(
+                config,
+                outdir,
+                ds_val,
+                comet_experiment=experiment,
+                horovod_enabled=horovod_enabled,
+                benchmark_dir=benchmark_dir,
+                num_train_steps=ds_train.num_steps(),
+                num_cpus=num_cpus,
+                num_gpus=num_gpus,
+                train_samples=ds_train.num_samples,
+            )
+
+            callbacks.append(optim_callbacks)
+
+            if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+                logging.info(
+                    "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
+                )
+                model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
+                print(model.normalizer.mean)
+                print(model.normalizer.variance)
+                np.savez(
+                    config["setup"]["normalizer_cache"],
+                    mean=model.normalizer.mean.numpy(),
+                    variance=model.normalizer.variance.numpy(),
+                )
+
+            cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+            model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+            model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+
+            model.fit(
+                ds_train.tensorflow_dataset.repeat(),
+                validation_data=ds_test.tensorflow_dataset.repeat(),
+                epochs=config["setup"]["num_epochs"],
+                callbacks=callbacks,
+                steps_per_epoch=ds_train.num_steps(),
+                validation_steps=ds_test.num_steps(),
+                initial_epoch=initial_epoch,
+                verbose=1,
+            )
 
 
 @main.command()
@@ -426,7 +466,9 @@ def evaluate(config, train_dir, weights, customize, nevents):
 def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs, output, cpus):
     import json
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=cpus)  # sets TF ENV variables to use num_cpus
+    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(
+        num_cpus=cpus
+    )  # sets TF ENV variables to use num_cpus
     assert num_gpus < 2, "Multi-GPU inference is not supported"
 
     if output:
@@ -592,7 +634,7 @@ def find_lr(config, outdir, figname, logscale):
     config, _ = parse_config(config)
 
     # Decide tf.distribute.strategy depending on number of available GPUs
-    strategy, num_gpus, num_batches_multiplier = get_strategy()
+    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy()
 
     ds_train = get_datasets(
         config["train_test_datasets"],
@@ -670,7 +712,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     if config["hypertune"]["algorithm"] == "hyperband":
         config["setup"]["num_epochs"] = config["hypertune"]["hyperband"]["max_epochs"]
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
+    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(num_cpus=num_cpus)
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest)
 
@@ -749,7 +791,7 @@ def raytune_build_model_and_train(
         experiment.log_code("mlpf/tfmodel/utils.py")
         experiment.log_code(config_file_path)
 
-    strategy, num_gpus, num_batches_multiplier = get_strategy(num_cpus=num_cpus)
+    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(num_cpus=num_cpus)
     ds_train, ds_test, ds_val = get_train_test_val_datasets(full_config, num_batches_multiplier, ntrain, ntest)
 
     logging.info("num_train_steps", ds_train.num_steps())

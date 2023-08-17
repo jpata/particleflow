@@ -133,8 +133,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 6
-  num_graph_layers_reg: 6
+  num_graph_layers_id: 7
+  num_graph_layers_reg: 7
   output_decoding:
     activation: elu
     regression_use_classification: yes
