@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mlpf-hpu-strategy-v19
+  name: mlpf-hpu-strategy-v19-short
 spec:
   completions: 1
   parallelism: 1
@@ -34,12 +34,12 @@ spec:
           requests:
             cpu: '8'
             memory: 200Gi
-            habana.ai/gaudi: '2'
+            habana.ai/gaudi: '8'
             hugepages-2Mi: 12000Mi
           limits:
             cpu: '12'
             memory: 200Gi
-            habana.ai/gaudi: '2'
+            habana.ai/gaudi: '8'
             hugepages-2Mi: 12000Mi
         volumeMounts:
         - name: home
@@ -96,4 +96,4 @@ spec:
             hl-smi;
             hl-smi -q;
 
-            time -p python3 mlpf/pipeline.py train -g -c habana/best_tuned_gnn_clic_v130/config.yaml --nepochs 2;
+            time -p python3 mlpf/pipeline.py train -g -c habana/best_tuned_gnn_clic_v130/config.yaml --nepochs 10 --ntrain 1000 --ntest 1000;

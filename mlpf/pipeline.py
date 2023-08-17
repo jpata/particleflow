@@ -213,12 +213,15 @@ def train(
         import habana_frameworks.tensorflow as htf
 
         htf.load_habana_module()
+        # initialize horovod
+        hvd.init()
         from habana_frameworks.tensorflow.distribute import HPUStrategy
 
         logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
         strategy = HPUStrategy()
-        physical_devices = tf.config.list_physical_devices("HPU")
-        num_gpus = len(physical_devices)
+        # physical_devices = tf.config.list_physical_devices("HPU")
+        # num_gpus = len(physical_devices)
+        num_gpus = 8
         logging.info(f"Number of HPUs: {len(physical_devices)}")
         num_batches_multiplier = num_gpus
         logging.info(f"Multiple HPUs detected, num_batches_multiplier={num_batches_multiplier}")

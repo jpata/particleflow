@@ -818,7 +818,7 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     return model, optim_callbacks, initial_epoch
 
 
-def initialize_horovod():
+def initialize_horovod(habana_enabled=False):
     hvd.init()
     gpus = tf.config.experimental.list_physical_devices("GPU")
     for gpu in gpus:
