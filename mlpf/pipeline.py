@@ -396,7 +396,7 @@ def train(
                 )
 
             cache = np.load(
-                config["setup"]["normalizer_cache"] + ".npz", allow_picke=True
+                config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True
             )
             model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
             model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
