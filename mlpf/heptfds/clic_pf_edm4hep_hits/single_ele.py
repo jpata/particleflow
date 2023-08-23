@@ -12,10 +12,13 @@ from utils_edm import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with single electron with raw hits
+CLIC EDM4HEP dataset with single electron with raw calorimeter hits.
 """
 
 _CITATION = """
+Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
+Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
+Zenodo. https://doi.org/10.5281/zenodo.8260741
 """
 
 
@@ -23,6 +26,9 @@ class ClicEdmSingleElectronHitsPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {"1.1.0": "Remove track referencepoint feature", "1.2.0": "Keep all interacting genparticels"}
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
+    For the raw input files in ROOT EDM4HEP format, please see the citation above.
+
+    The processed tensorflow_dataset can also be downloaded from:
     FIXME
     """
 

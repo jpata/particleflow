@@ -16,6 +16,9 @@ CLIC EDM4HEP dataset with single pi0 with raw hits
 """
 
 _CITATION = """
+Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
+Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
+Zenodo. https://doi.org/10.5281/zenodo.8260741
 """
 
 
@@ -26,6 +29,9 @@ class ClicEdmSinglePi0HitsPf(tfds.core.GeneratorBasedBuilder):
         "1.2.0": "Keep all interacting genparticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
+    For the raw input files in ROOT EDM4HEP format, please see the citation above.
+
+    The processed tensorflow_dataset can also be downloaded from:
     FIXME
     """
 

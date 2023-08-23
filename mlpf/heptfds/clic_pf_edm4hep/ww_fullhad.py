@@ -12,10 +12,13 @@ from utils_edm import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with WW fullhad
+CLIC EDM4HEP dataset with ee -> WW -> fully hadronic at 380 GeV.
 """
 
 _CITATION = """
+Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
+Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
+Zenodo. https://doi.org/10.5281/zenodo.8260741
 """
 
 
@@ -26,7 +29,10 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
         "1.4.0": "Fix ycand matching",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./
+    For the raw input files in ROOT EDM4HEP format, please see the citation above.
+
+    The processed tensorflow_dataset can also be downloaded from:
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep/ ./
     """
 
     def _info(self) -> tfds.core.DatasetInfo:

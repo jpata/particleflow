@@ -78,17 +78,17 @@ CLASS_NAMES_CLIC = [
 ]
 
 labels = {
-    "met": r"$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
-    "gen_met": r"$p_{\mathrm{T,gen}}^\text{miss}$ [GeV]",
-    "gen_mom": r"$p_{\mathrm{gen}}$ [GeV]",
-    "gen_jet": r"jet $p_{\mathrm{T,gen}}$ [GeV]",
-    "reco_met": r"$p_{\mathrm{T,reco}}^\text{miss}$ [GeV]",
-    "reco_gen_met_ratio": r"$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,gen}}^\mathrm{miss}$",
-    "reco_gen_mom_ratio": r"$p_{\mathrm{reco}} / p_{\\mathrm{gen}}$",
-    "reco_gen_jet_ratio": r"jet $p_{\mathrm{T,reco}} / p_{\\mathrm{T,gen}}$",
-    "gen_met_range": r"${} \less p_{{\mathrm{{T,gen}}}}^\mathrm{{miss}}\leq {}$",
-    "gen_mom_range": r"${} \less p_{{\mathrm{{gen}}}}\leq {}$",
-    "gen_jet_range": r"${} \less p_{{\mathrm{{T,gen}}}} \leq {}$",
+    "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
+    "gen_met": "$p_{\mathrm{T,gen}}^\text{miss}$ [GeV]",
+    "gen_mom": "$p_{\mathrm{gen}}$ [GeV]",
+    "gen_jet": "jet $p_{\mathrm{T,gen}}$ [GeV]",
+    "reco_met": "$p_{\mathrm{T,reco}}^\text{miss}$ [GeV]",
+    "reco_gen_met_ratio": "$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,gen}}^\mathrm{miss}$",
+    "reco_gen_mom_ratio": "$p_{\mathrm{reco}} / p_{\\mathrm{gen}}$",
+    "reco_gen_jet_ratio": "jet $p_{\mathrm{T,reco}} / p_{\\mathrm{T,gen}}$",
+    "gen_met_range": "${} \less p_{{\mathrm{{T,gen}}}}^\mathrm{{miss}}\leq {}$",
+    "gen_mom_range": "${} \less p_{{\mathrm{{gen}}}}\leq {}$",
+    "gen_jet_range": "${} \less p_{{\mathrm{{T,gen}}}} \leq {}$",
 }
 
 
@@ -645,8 +645,8 @@ def plot_rocs(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None
     ncls = len(yvals["gen_cls"][0, 0])
     plt.figure()
     for icls in range(ncls):
-        predvals = awkward.flatten(yvals["pred_cls"][:, :, icls])
-        truevals = awkward.flatten(yvals["gen_cls_id"] == icls)
+        predvals = awkward.to_numpy(awkward.flatten(yvals["pred_cls"][:, :, icls]))
+        truevals = awkward.to_numpy(awkward.flatten(yvals["gen_cls_id"] == icls))
         fpr, tpr, _ = sklearn.metrics.roc_curve(truevals, predvals)
         plt.plot(fpr, tpr, label=class_names[icls])
     plt.xlim(1e-7, 1)

@@ -3,16 +3,16 @@
 # Tallinn
 export MANUAL_DIR=/local/joosep/mlpf/cms/v2
 export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
-export IMG=/home/software/singularity/tf-2.11.0.simg
+export IMG=/home/software/singularity/tf-2.13.0.simg
 export PYTHONPATH=`pwd`/mlpf
 export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # Desktop
-# IMG=/home/joosep/HEP-KBFI/singularity/tf-2.10.0.simg
-# MANUAL_DIR=data/
-# DATA_DIR=/home/joosep/tensorflow_datasets
-# export PYTHONPATH="mlpf:$PYTHONPATH"
-# CMD="singularity exec --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
+#IMG=/home/joosep/HEP-KBFI/singularity/tf-2.13.0.simg
+#MANUAL_DIR=/media/joosep/data/mlpf/clic_edm4hep_2023_02_27
+#DATA_DIR=/home/joosep/tensorflow_datasets
+#export PYTHONPATH="mlpf:$PYTHONPATH"
+#CMD="singularity exec -B /media/joosep/data --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # CMS
 # $CMD mlpf/heptfds/cms_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
@@ -30,13 +30,13 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # CLIC cluster-based
-# export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_2023_05_09/
-# $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar_pu10 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_pu10.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ww_fullhad.log &
-# wait
+export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
+$CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite --file_format array_record &> logs/tfds_qq.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite --file_format array_record &> logs/tfds_ttbar.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite --file_format array_record &> logs/tfds_zh.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/ttbar_pu10 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite --file_format array_record &> logs/tfds_ttbar_pu10.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite --file_format array_record &> logs/tfds_ww_fullhad.log &
+wait
 
 # CLIC hit-based
 # export MANUAL_DIR=/local/joosep/mlpf_hits/clic_edm4hep/
