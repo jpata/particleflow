@@ -53,5 +53,6 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # Delphes
-# $CMD mlpf/heptfds/delphes_pf/delphes_pf &> logs/tfds_delphes.log &
+# export MANUAL_DIR=/local/joosep/mlpf/delphes/
+# $CMD mlpf/heptfds/delphes_pf/delphes_data_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite
 # wait
