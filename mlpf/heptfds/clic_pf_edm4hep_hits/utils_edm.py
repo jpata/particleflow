@@ -42,7 +42,7 @@ labels = [0, 211, 130, 22, 11, 13]
 
 
 def split_sample(path, test_frac=0.8):
-    files = sorted(list(path.glob("*.parquet")))
+    files = sorted(list(path.glob("*.parquet")))[:10]
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))

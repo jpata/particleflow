@@ -13,6 +13,9 @@ import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
 CLIC EDM4HEP dataset with single kaon0L with raw calorimeter hits.
+  - X: reconstructed tracks and calorimeter hits, variable number N per event
+  - ygen: stable generator particles, zero-padded to N per event
+  - ycand: baseline particle flow particles, zero-padded to N per event
 """
 
 _CITATION = """
@@ -23,10 +26,11 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmSingleKaon0lHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.5.0")
     RELEASE_NOTES = {
         "1.1.0": "Remove track referencepoint feature",
         "1.2.0": "Keep all interacting genparticles",
+        "1.5.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -34,6 +38,10 @@ class ClicEdmSingleKaon0lHitsPf(tfds.core.GeneratorBasedBuilder):
     The processed tensorflow_dataset can also be downloaded from:
     FIXME
     """
+
+    def __init__(self, *args, **kwargs):
+        kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
+        super(ClicEdmSingleKaon0lHitsPf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
