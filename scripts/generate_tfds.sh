@@ -9,7 +9,6 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 
 # Desktop
 # IMG=/home/joosep/HEP-KBFI/singularity/tf-2.13.0.simg
-# MANUAL_DIR=/media/joosep/data/mlpf/clic_edm4hep_2023_02_27
 # DATA_DIR=/home/joosep/tensorflow_datasets
 # export PYTHONPATH="mlpf:$PYTHONPATH"
 # CMD="singularity exec -B /media/joosep/data --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
@@ -31,6 +30,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 
 # CLIC cluster-based
 # export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
+# export MANUAL_DIR=/media/joosep/data/mlpf/clic_edm4hep_2023_02_27/
 # $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh.log &
