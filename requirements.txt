@@ -1,3 +1,4 @@
+array-record
 autopep8
 awkward
 boost_histogram
@@ -23,19 +24,15 @@ plotly
 pre-commit
 protobuf
 pyarrow
-ray[default]
 ray[tune]
 scikit-learn
 scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow
-tensorflow-datasets
-tensorflow-estimator
-tensorflow-probability
-tf-models-official
-tf2onnx
+tensorflow>=2.13.0
+tensorflow-datasets>=4.9.2
+tf2onnx>=1.15.0
 tqdm
 uproot
 vector
