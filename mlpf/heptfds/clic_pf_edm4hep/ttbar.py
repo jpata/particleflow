@@ -37,7 +37,6 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
     The processed tensorflow_dataset can also be downloaded from:
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep/ ./
     """
-    FILE_FORMAT = tfds.core.FileFormat.ARRAY_RECORD
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""

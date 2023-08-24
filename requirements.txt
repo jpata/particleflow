@@ -15,13 +15,13 @@ networkx
 nevergrad
 notebook
 numba
-numpy==1.23.5  # later versions are incompatible with tf2onnx v1.14.0 (latest as of this commit)
+numpy
 onnxruntime
 pandas
 papermill
 plotly
 pre-commit
-protobuf==3.20.3
+protobuf
 pyarrow
 ray[default]
 ray[tune]
@@ -31,7 +31,7 @@ scipy
 seaborn
 setGPU
 tensorflow
-tensorflow-datasets==4.8.0
+tensorflow-datasets
 tensorflow-estimator
 tensorflow-probability
 tf-models-official
