@@ -458,10 +458,6 @@ def eval_model(
 
 
 def freeze_model(model, config, outdir):
-    import tf2onnx
-
-    num_features = config["dataset"]["num_input_features"]
-
     def model_output(ret):
         return tf.concat(
             [
@@ -501,12 +497,19 @@ def freeze_model(model, config, outdir):
 
     # we need to use opset 12 for the version of ONNXRuntime in CMSSW
     # the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
-    model_proto, _ = tf2onnx.convert.from_function(
-        full_model,
-        opset=12,
-        input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
-        output_path=str(Path(outdir) / "model.onnx"),
-    )
+
+    # Note on 2023.08.24: currently there is a conflict between latest tensorflow and tf2onnx
+    # The conflict is caused by:
+    # onnxruntime 1.12.0 depends on flatbuffers
+    # tensorflow 2.13.0 depends on flatbuffers>=23.1.21
+    # tf2onnx 1.15.0 depends on flatbuffers<3.0 and >=1.12
+    # import tf2onnx
+    # model_proto, _ = tf2onnx.convert.from_function(
+    #     full_model,
+    #     opset=12,
+    #     input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
+    #     output_path=str(Path(outdir) / "model.onnx"),
+    # )
 
 
 class LearningRateLoggingCallback(tf.keras.callbacks.Callback):

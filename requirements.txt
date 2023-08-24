@@ -32,7 +32,6 @@ seaborn
 setGPU
 tensorflow>=2.13.0
 tensorflow-datasets>=4.9.2
-tf2onnx>=1.15.0
 tqdm
 uproot
 vector
