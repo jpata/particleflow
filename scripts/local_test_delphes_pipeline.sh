@@ -11,7 +11,7 @@ mv tev14_pythia8_ttbar_0_0.pkl.bz2 data/delphes_pf/pythia8_ttbar/
 wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
 mv tev14_pythia8_qcd_10_0.pkl.bz2 data/delphes_pf/pythia8_qcd/
 
-tfds build mlpf/heptfds/delphes_data_pf --download_dir data/ --manual_dir data/delphes_pf
+tfds build mlpf/heptfds/delphes_pf/delphes_data_pf --download_dir data/ --manual_dir data/delphes_pf
 
 #Run a simple training on a few events
 python mlpf/pipeline.py train --config parameters/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
