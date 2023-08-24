@@ -187,6 +187,8 @@ def get_num_gpus():
         num_gpus, gpus = _get_num_gpus("CUDA_VISIBLE_DEVICES")
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = _get_num_gpus("ROCR_VISIBLE_DEVICES")
+    elif "HABANA_VISIBLE_DEVICES" in os.environ:
+        num_gpus, gpus = _get_num_gpus("HABANA_VISIBLE_DEVICES")
     else:
         logging.warning(
             "CUDA/ROC variable is empty. \
