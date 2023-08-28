@@ -156,10 +156,7 @@ def prepare_callbacks(
 
     callbacks = []
     callbacks.append(tf.keras.callbacks.TerminateOnNaN())
-
-    # these checkpoints don't seem to work in horovod (maybe it's Tensorboard)
-    if not horovod_enabled:
-        callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run)
+    callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run)
 
     if not horovod_enabled or hvd.rank() == 0:
         if benchmark_dir:
@@ -201,49 +198,53 @@ def prepare_callbacks(
 
 
 def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run=False):
+
     callbacks = []
-    cp_dir = Path(outdir) / "weights"
-    cp_dir.mkdir(parents=True, exist_ok=True)
-    cp_callback = ModelOptimizerCheckpoint(
-        filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
-        save_weights_only=True,
-        verbose=0,
-        monitor=config["callbacks"]["checkpoint"]["monitor"],
-        save_best_only=False,
-    )
-    cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
-    callbacks += [cp_callback]
 
-    history_path = Path(outdir) / "history"
-    history_path.mkdir(parents=True, exist_ok=True)
-    history_path = str(history_path)
-    cb = CustomCallback(
-        history_path,
-        dataset.tensorflow_dataset.take(config["validation_num_events"]),
-        config,
-        plot_freq=config["callbacks"]["plot_freq"],
-        horovod_enabled=horovod_enabled,
-        comet_experiment=comet_experiment,
-        is_hpo_run=is_hpo_run,
-    )
+    if not horovod_enabled or hvd.rank() == 0:
+        cp_dir = Path(outdir) / "weights"
+        cp_dir.mkdir(parents=True, exist_ok=True)
+        cp_callback = ModelOptimizerCheckpoint(
+            filepath=str(cp_dir / "weights-{epoch:02d}-{val_loss:.6f}.hdf5"),
+            save_weights_only=True,
+            verbose=1,
+            monitor=config["callbacks"]["checkpoint"]["monitor"],
+            save_best_only=False,
+        )
+        cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
+        callbacks += [cp_callback]
 
-    if config.get("do_validation_callback", True):
-        callbacks += [cb]
+    if not horovod_enabled:
+        history_path = Path(outdir) / "history"
+        history_path.mkdir(parents=True, exist_ok=True)
+        history_path = str(history_path)
+        cb = CustomCallback(
+            history_path,
+            dataset.tensorflow_dataset.take(config["validation_num_events"]),
+            config,
+            plot_freq=config["callbacks"]["plot_freq"],
+            horovod_enabled=horovod_enabled,
+            comet_experiment=comet_experiment,
+            is_hpo_run=is_hpo_run,
+        )
 
-    tb = CustomTensorBoard(
-        log_dir=outdir + "/logs",
-        histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
-        write_graph=False,
-        write_images=False,
-        update_freq="batch",
-        profile_batch=config["callbacks"]["tensorboard"]["profile_batch"]
-        if "profile_batch" in config["callbacks"]["tensorboard"].keys()
-        else 0,
-        dump_history=config["callbacks"]["tensorboard"]["dump_history"],
-    )
-    # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
-    tb.__class__.__name__ = "TensorBoard"
-    callbacks += [tb]
+        if config.get("do_validation_callback", True):
+            callbacks += [cb]
+
+        tb = CustomTensorBoard(
+            log_dir=outdir + "/logs",
+            histogram_freq=config["callbacks"]["tensorboard"]["hist_freq"],
+            write_graph=False,
+            write_images=False,
+            update_freq="batch",
+            profile_batch=config["callbacks"]["tensorboard"]["profile_batch"]
+            if "profile_batch" in config["callbacks"]["tensorboard"].keys()
+            else 0,
+            dump_history=config["callbacks"]["tensorboard"]["dump_history"],
+        )
+        # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it
+        tb.__class__.__name__ = "TensorBoard"
+        callbacks += [tb]
 
     return callbacks
 
@@ -457,10 +458,6 @@ def eval_model(
 
 
 def freeze_model(model, config, outdir):
-    import tf2onnx
-
-    num_features = config["dataset"]["num_input_features"]
-
     def model_output(ret):
         return tf.concat(
             [
@@ -500,12 +497,19 @@ def freeze_model(model, config, outdir):
 
     # we need to use opset 12 for the version of ONNXRuntime in CMSSW
     # the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical
-    model_proto, _ = tf2onnx.convert.from_function(
-        full_model,
-        opset=12,
-        input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
-        output_path=str(Path(outdir) / "model.onnx"),
-    )
+
+    # Note on 2023.08.24: currently there is a conflict between latest tensorflow and tf2onnx
+    # The conflict is caused by:
+    # onnxruntime 1.12.0 depends on flatbuffers
+    # tensorflow 2.13.0 depends on flatbuffers>=23.1.21
+    # tf2onnx 1.15.0 depends on flatbuffers<3.0 and >=1.12
+    # import tf2onnx
+    # model_proto, _ = tf2onnx.convert.from_function(
+    #     full_model,
+    #     opset=12,
+    #     input_signature=(tf.TensorSpec((None, None, num_features), tf.float32, name="x:0"),),
+    #     output_path=str(Path(outdir) / "model.onnx"),
+    # )
 
 
 class LearningRateLoggingCallback(tf.keras.callbacks.Callback):

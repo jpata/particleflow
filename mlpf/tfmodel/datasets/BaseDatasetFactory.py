@@ -46,17 +46,29 @@ def unpack_target(y, num_output_classes, config):
     return ret
 
 
+def my_getitem(self, vals):
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+
 def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, horovod_enabled=False):
     dataset_config = full_config["datasets"][dataset_name]
-    tf_dataset = tfds.load(
-        "{}:{}".format(dataset_name, dataset_config["version"]),
-        split=split,
-        as_supervised=False,
-        data_dir=dataset_config["data_dir"],
-        with_info=False,
-        shuffle_files=False,
-        download=False,
-    )
+
+    def yield_from_ds():
+        for elem in dss:
+            yield {"X": elem["X"], "ygen": elem["ygen"], "ycand": elem["ycand"]}
+
+    # when the dataset is saved with file_format=array_record, we cannot do tfds.load, but instead must do the following
+    dss = tfds.builder(
+        "{}:{}".format(dataset_name, dataset_config["version"]), data_dir=dataset_config["data_dir"]
+    ).as_data_source(split)
+    # hack to prevent a warning from tfds about accessing sequences of indices
+    dss.__class__.__getitems__ = my_getitem
+
+    output_signature = {k: tf.TensorSpec(shape=(None, v.shape[1])) for (k, v) in dss.dataset_info.features.items()}
+
+    tf_dataset = tf.data.Dataset.from_generator(yield_from_ds, output_signature=output_signature)
+
     if max_events:
         tf_dataset = tf_dataset.take(max_events)
 

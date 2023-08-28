@@ -11,9 +11,11 @@ cd ~/particleflow
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py train -c parameters/clic-test.yaml \
-    --plot-freq 0 --num-cpus 32 --batch-multiplier 5 \
-    --ntrain 50000 --ntest 50000 --nepochs 11 --benchmark_dir exp_dir
+    $IMG python mlpf/pipeline.py train -c parameters/clic-hits.yaml \
+    --plot-freq 1 --num-cpus 32 --batch-multiplier 2 --ntrain 10000 --ntest 10000
+
+#     $IMG python mlpf/pipeline.py train -c parameters/clic-hits.yaml \
+#    --plot-freq 1 --num-cpus 32 --batch-multiplier 2
 
 #    --env TF_GPU_THREAD_MODE=gpu_private \
 #    --env TF_GPU_THREAD_COUNT=8 \
