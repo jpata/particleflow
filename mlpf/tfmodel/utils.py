@@ -230,7 +230,11 @@ def get_singlenode_strategy(num_cpus=None):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
-        logging.info("Multiple GPUs detected, batch size will be increased by num_batches_multiplier={}".format(num_batches_multiplier))
+        logging.info(
+            "Multiple GPUs detected, batch size will be increased by num_batches_multiplier={}".format(
+                num_batches_multiplier
+            )
+        )
 
     return strategy, num_gpus, num_batches_multiplier
 
