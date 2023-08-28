@@ -230,7 +230,11 @@ def get_singlenode_strategy(num_cpus=None):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
-        logging.info("Multiple GPUs detected, num_batches_multiplier={}".format(num_batches_multiplier))
+        logging.info(
+            "Multiple GPUs detected, batch size will be increased by num_batches_multiplier={}".format(
+                num_batches_multiplier
+            )
+        )
 
     return strategy, num_gpus, num_batches_multiplier
 
@@ -783,12 +787,13 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
                 if loaded_opt:
                     opt.set_weights(loaded_opt["weights"])
 
-            # FIXME: check that this still works with multiple GPUs
+            logging.info("distributing optimizer state")
             strategy = tf.distribute.get_strategy()
             strategy.run(model_weight_setting)
 
         initial_epoch = int(weights.split("/")[-1].split("-")[1])
 
+    logging.info("setting model weights")
     config = set_config_loss(config, config["setup"]["trainable"])
     configure_model_weights(model, config["setup"]["trainable"])
 
@@ -805,6 +810,7 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
 
     loss_dict, loss_weights = get_loss_dict(config)
 
+    logging.info("compiling model")
     model.compile(
         loss=loss_dict,
         optimizer=opt,
