@@ -231,21 +231,21 @@ train_test_datasets:
   delphes:
     batch_per_gpu: 5
     datasets:
-      - delphes_pf
+      - delphes_data_pf
 
-validation_dataset: delphes_pf
+validation_dataset: delphes_data_pf
 validation_batch_size: 5
 validation_num_events: 100
 
 evaluation_datasets:
-  delphes_pf:
+  delphes_data_pf:
     batch_size: 5
     num_events: -1
 
 evaluation_jet_algo: antikt_algorithm
 
 datasets:
-  delphes_pf:
-    version: 1.1.0
+  delphes_data_pf:
+    version: 1.2.0
     data_dir:
     manual_dir:

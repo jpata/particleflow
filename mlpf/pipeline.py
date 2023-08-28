@@ -1262,6 +1262,9 @@ def plots(train_dir, max_files):
         get_class_names,
         plot_rocs,
         plot_particle_multiplicity,
+        compute_3dmomentum_and_ratio,
+        plot_3dmomentum_ratio,
+        plot_3dmomentum_response_binned,
     )
 
     mplhep.set_style(mplhep.styles.CMS)
@@ -1353,6 +1356,16 @@ def plots(train_dir, max_files):
 
             plot_jet_response_binned(yvals, cp_dir=cp_dir, title=_title)
             plot_met_response_binned(met_data, cp_dir=cp_dir, title=_title)
+
+            mom_data = compute_3dmomentum_and_ratio(yvals)
+            plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
+            plot_3dmomentum_ratio(
+                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=True, file_modifier="_bins_0_2"
+            )
+            plot_3dmomentum_ratio(
+                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True, file_modifier="_bins_0_5"
+            )
+            plot_3dmomentum_response_binned(mom_data, cp_dir=cp_dir, title=_title)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ imageio-ffmpeg
 ipyparallel
 isort
 jupyter
+jupyterlab
+kaleido
 line_profiler
 lmfit
 lz4
@@ -45,6 +47,7 @@ pre-commit
 pyarrow
 pydot
 pygraphviz
+pyhf
 pymultinest
 pynbody
 pytest

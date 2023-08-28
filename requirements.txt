@@ -1,3 +1,4 @@
+array-record
 autopep8
 awkward
 boost_histogram
@@ -15,27 +16,22 @@ networkx
 nevergrad
 notebook
 numba
-numpy==1.23.5  # later versions are incompatible with tf2onnx v1.14.0 (latest as of this commit)
+numpy
 onnxruntime
 pandas
 papermill
 plotly
 pre-commit
-protobuf==3.20.3
+protobuf
 pyarrow
-ray[default]
 ray[tune]
 scikit-learn
 scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow
-tensorflow-datasets==4.8.0
-tensorflow-estimator
-tensorflow-probability
-tf-models-official
-tf2onnx
+tensorflow>=2.13.0
+tensorflow-datasets>=4.9.2
 tqdm
 uproot
 vector

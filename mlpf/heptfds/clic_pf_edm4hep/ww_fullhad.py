@@ -12,22 +12,36 @@ from utils_edm import (
 import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with WW fullhad
+CLIC EDM4HEP dataset with ee -> WW -> fully hadronic at 380 GeV.
+  - X: reconstructed tracks and clusters, variable number N per event
+  - ygen: stable generator particles, zero-padded to N per event
+  - ycand: baseline particle flow particles, zero-padded to N per event
 """
 
 _CITATION = """
+Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
+Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
+Zenodo. https://doi.org/10.5281/zenodo.8260741
 """
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.4.0")
+    VERSION = tfds.core.Version("1.5.0")
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
+        "1.5.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep_2023_02_27/ ./
+    For the raw input files in ROOT EDM4HEP format, please see the citation above.
+
+    The processed tensorflow_dataset can also be downloaded from:
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep/ ./
     """
+
+    def __init__(self, *args, **kwargs):
+        kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
+        super(ClicEdmWwFullhadPf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""

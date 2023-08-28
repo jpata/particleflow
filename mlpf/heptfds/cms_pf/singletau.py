@@ -23,17 +23,22 @@ PADDED_NUM_ELEM_SIZE = 256
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
 
-    VERSION = tfds.core.Version("1.5.1")
+    VERSION = tfds.core.Version("1.6.0")
     RELEASE_NOTES = {
         "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
         "1.4.0": "Add genjet information",
         "1.5.0": "Without padding",
         "1.5.1": "Remove outlier caps",
+        "1.6.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleTauFlatPt1To1000_cfi data/
     """
+
+    def __init__(self, *args, **kwargs):
+        kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
+        super(CmsPfSingleTau, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""

@@ -10,7 +10,7 @@ from torch_geometric.data import Data, Dataset
 
 sys.path.append(sys.path[0] + "/..")  # temp hack
 from heptfds.cms_pf.cms_utils import prepare_data_cms
-from heptfds.delphes_pf.delphes_utils import prepare_data_delphes
+from heptfds.delphes_pf.utils_delphes import prepare_data_delphes
 from heptfds.clic_pf_edm4hep.utils_edm import prepare_data_clic
 
 
