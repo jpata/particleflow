@@ -12,6 +12,5 @@ tensorflow-datasets
 tensorflow-estimator
 tensorflow-model-optimization
 tensorflow-text
-tf-models-official
 tf2onnx
 transformers

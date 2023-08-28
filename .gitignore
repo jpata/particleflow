@@ -29,3 +29,9 @@ nohup.out
 slurm-*.out
 
 .vscode
+
+models
+
+*.root
+
+logs
