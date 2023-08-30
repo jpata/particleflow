@@ -212,7 +212,8 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
             save_best_only=False,
         )
         cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
-        callbacks += [cp_callback]
+        if config.get("do_checkpoint_callback", True):
+            callbacks += [cp_callback]
 
     if not horovod_enabled:
         history_path = Path(outdir) / "history"
