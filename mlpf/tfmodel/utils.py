@@ -216,6 +216,11 @@ def get_singlenode_strategy(num_cpus=None):
 
     if num_gpus > 1:
         # multiple GPUs selected
+        # logging.info("Attempting to use multiple GPUs with tf.distribute.MultiWorkerMirroredStrategy()...")
+        # communication_options = tf.distribute.experimental.CommunicationOptions(
+        #    implementation=tf.distribute.experimental.CommunicationImplementation.NCCL
+        # )
+        # strategy = tf.distribute.MultiWorkerMirroredStrategy(communication_options=communication_options)
         logging.info("Attempting to use multiple GPUs with tf.distribute.MirroredStrategy()...")
         strategy = tf.distribute.MirroredStrategy()
     elif num_gpus == 1:

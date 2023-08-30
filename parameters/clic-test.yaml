@@ -48,7 +48,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
+  lr: 0.0005
   num_epochs: 11
   dtype: float32
   trainable:
@@ -60,26 +60,8 @@ setup:
   normalizer_cache: parameters/clic_normalizations
 
 batching:
-  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: no
-  # these sizes were sort of tuned for an 8GB GPU
-  # - max_sequence_length, batch_size_per_gpu
-
-  #on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 200
-    - 50, 100
-    - 100, 50
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
-  # use this batch multiplier to increase all batch sizes by a constant factor
+  bucket_by_sequence_length: yes
+  bucket_batch_sizes: auto
   batch_multiplier: 1
 
 optimizer:
@@ -238,7 +220,8 @@ train_test_datasets:
     datasets:
       - clic_edm_ttbar_pf
 
-do_validation_callback: false
+do_checkpoint_callback: no
+do_validation_callback: no
 validation_dataset: clic_edm_ttbar_pf
 validation_batch_size: 100
 validation_num_events: 2000
