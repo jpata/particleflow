@@ -187,6 +187,8 @@ def get_num_gpus():
         num_gpus, gpus = _get_num_gpus("CUDA_VISIBLE_DEVICES")
     elif "ROCR_VISIBLE_DEVICES" in os.environ:
         num_gpus, gpus = _get_num_gpus("ROCR_VISIBLE_DEVICES")
+    elif "HABANA_VISIBLE_DEVICES" in os.environ:
+        num_gpus, gpus = _get_num_gpus("HABANA_VISIBLE_DEVICES")
     else:
         logging.warning(
             "CUDA/ROC variable is empty. \
@@ -199,7 +201,6 @@ def get_num_gpus():
 
 # retrieves the appropriate tf.distribute strategy for single-node training
 def get_singlenode_strategy(num_cpus=None):
-
     # Always use the correct number of threads that were requested
     if num_cpus == 1:
         logging.warning("num_cpus==1, using explicitly only one CPU thread")
@@ -225,7 +226,7 @@ def get_singlenode_strategy(num_cpus=None):
     elif num_gpus == 1:
         # single GPU
         logging.info("Using a single GPU with tf.distribute.OneDeviceStrategy()")
-        strategy = tf.distribute.OneDeviceStrategy("gpu:{}".format(gpus[0]))
+        strategy = tf.distribute.OneDeviceStrategy(f"gpu:{gpus[0]}")
     else:
         logging.info("Fallback to CPU, using tf.distribute.OneDeviceStrategy('cpu')")
         strategy = tf.distribute.OneDeviceStrategy("cpu")
@@ -235,11 +236,7 @@ def get_singlenode_strategy(num_cpus=None):
     num_batches_multiplier = 1
     if num_gpus > 1:
         num_batches_multiplier = num_gpus
-        logging.info(
-            "Multiple GPUs detected, batch size will be increased by num_batches_multiplier={}".format(
-                num_batches_multiplier
-            )
-        )
+        logging.info(f"Multiple GPUs detected, num_batches_multiplier={num_batches_multiplier}")
 
     return strategy, num_gpus, num_batches_multiplier
 
@@ -298,8 +295,7 @@ def get_optimizer(config, lr_schedule=None):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
-        return opt
+        return tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
         return tf.keras.optimizers.legacy.SGD(
@@ -356,7 +352,6 @@ def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
 
 def targets_multi_output(num_output_classes):
     def func(X, y, w):
-
         msk = tf.expand_dims(tf.cast(y[:, :, 0] != 0, tf.float32), axis=-1)
         return (
             X,
@@ -376,10 +371,23 @@ def targets_multi_output(num_output_classes):
 
 
 def load_and_interleave(
-    joint_dataset_name, dataset_names, config, num_batches_multiplier, split, batch_size, max_events, horovod_enabled
+    joint_dataset_name,
+    dataset_names,
+    config,
+    num_batches_multiplier,
+    split,
+    batch_size,
+    max_events,
+    horovod_enabled,
 ):
     datasets = [
-        mlpf_dataset_from_config(ds_name, config, split, max_events=max_events, horovod_enabled=horovod_enabled)
+        mlpf_dataset_from_config(
+            ds_name,
+            config,
+            split,
+            max_events=max_events,
+            horovod_enabled=horovod_enabled,
+        )
         for ds_name in dataset_names
     ]
     ds = interleave_datasets(joint_dataset_name, split, datasets)
@@ -439,7 +447,14 @@ def load_and_interleave(
 
 
 # Load multiple datasets and mix them together
-def get_datasets(datasets_to_interleave, config, num_batches_multiplier, split, max_events=None, horovod_enabled=False):
+def get_datasets(
+    datasets_to_interleave,
+    config,
+    num_batches_multiplier,
+    split,
+    max_events=None,
+    horovod_enabled=False,
+):
     datasets = []
     for joint_dataset_name in datasets_to_interleave.keys():
         ds_conf = datasets_to_interleave[joint_dataset_name]
@@ -501,7 +516,6 @@ def get_loss_from_params(input_dict):
 # batched version of https://github.com/VinAIResearch/DSW/blob/master/gsw.py#L19
 @tf.function
 def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projections=200):
-
     # mask of true genparticles
     # msk_pid = y_true_pt_e_eta_phi[..., 6:7]
 
@@ -526,7 +540,6 @@ def sliced_wasserstein_loss(y_true_pt_e_eta_phi, y_pred_pt_e_eta_phi, num_projec
 
 @tf.function
 def hist_2d_loss(y_true, y_pred):
-
     mask = tf.cast(y_true[:, :, 6] != 0, tf.float32)
 
     eta_true = y_true[..., 2]
@@ -579,7 +592,6 @@ def hist_2d_loss(y_true, y_pred):
 
 @tf.function
 def jet_reco(px, py, jet_idx, max_jets):
-
     # tf.debugging.assert_shapes(
     #    [
     #        (px, ("N")),
@@ -658,7 +670,6 @@ def compute_jet_pt(y_true, y_pred, max_jets=201):
 
 @tf.function
 def gen_jet_mse_loss(y_true, y_pred):
-
     jet_pt = compute_jet_pt(y_true, y_pred)
     mse = tf.math.sqrt(tf.reduce_mean((jet_pt["true"] - jet_pt["pred"]) ** 2, axis=[-1, -2]))
     return mse
@@ -666,7 +677,6 @@ def gen_jet_mse_loss(y_true, y_pred):
 
 @tf.function
 def gen_jet_logcosh_loss(y_true, y_pred):
-
     jet_pt = compute_jet_pt(y_true, y_pred)
     loss = tf.keras.losses.log_cosh(jet_pt["true"], jet_pt["pred"])
     return loss
@@ -803,6 +813,8 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     configure_model_weights(model, config["setup"]["trainable"])
 
     if horovod_enabled:
+        # wrap the Keras optimizer with Horovod's Distributed Optimizer.
+        # https://horovod.readthedocs.io/en/latest/keras.html
         opt = hvd.DistributedOptimizer(opt)
 
     if not horovod_enabled or hvd.rank() == 0:
@@ -829,13 +841,14 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
     return model, optim_callbacks, initial_epoch
 
 
-def initialize_horovod():
+def initialize_horovod(habana_enabled=False):
     hvd.init()
-    gpus = tf.config.experimental.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    if gpus:
-        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
+    if not habana_enabled:
+        gpus = tf.config.experimental.list_physical_devices("GPU")
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        if gpus:
+            tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")
 
     # in horovod, we don't need to increase batch size, as the dataset is sharded
     num_batches_multiplier = 1

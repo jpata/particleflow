@@ -31,7 +31,12 @@ from tfmodel.datasets.BaseDatasetFactory import (
     unpack_target,
 )
 from tfmodel.lr_finder import LRFinder
-from tfmodel.model_setup import eval_model, freeze_model, prepare_callbacks, create_comet_experiment
+from tfmodel.model_setup import (
+    eval_model,
+    freeze_model,
+    prepare_callbacks,
+    create_comet_experiment,
+)
 from tfmodel.utils import (
     create_experiment_dir,
     delete_all_but_best_checkpoint,
@@ -146,7 +151,12 @@ def main():
 )
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=None)
 @click.option("--seeds", help="set the random seeds", is_flag=True, default=True)
-@click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-tf")
+@click.option(
+    "--comet-exp-name",
+    help="comet experiment name",
+    type=str,
+    default="particleflow-tf",
+)
 def train(
     config,
     weights,
@@ -167,7 +177,6 @@ def train(
     seeds,
     comet_exp_name,
 ):
-
     # tf.debugging.enable_check_numerics()
 
     # Configure GPU threads according to TensorFlow's best practices for optimal model performance
@@ -215,21 +224,16 @@ def train(
     if customize:
         config = customization_functions[customize](config)
 
+    if habana_enabled:
+        import habana_frameworks.tensorflow as htf
+
+        htf.load_habana_module()
+
     # Decide tf.distribute.strategy depending on number of available GPUs
     horovod_enabled = horovod_enabled or config["setup"]["horovod_enabled"]
 
     if horovod_enabled:
-        num_gpus, num_batches_multiplier = initialize_horovod()
-    elif habana_enabled:
-        import habana_frameworks.tensorflow as htf
-
-        htf.load_habana_module()
-        from habana_frameworks.tensorflow.distribute import HPUStrategy
-
-        logging.info("Using habana_frameworks.tensorflow.distribute.HPUStrategy")
-        strategy = HPUStrategy()
-        num_gpus = 1
-        num_batches_multiplier = 1
+        num_gpus, num_batches_multiplier = initialize_horovod(habana_enabled)
     else:
         strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(num_cpus=num_cpus)
 
@@ -286,7 +290,10 @@ def train(
 
     if horovod_enabled:
         model, optim_callbacks, initial_epoch = model_scope(
-            config, total_steps, weights=weights, horovod_enabled=horovod_enabled
+            config,
+            total_steps,
+            weights=weights,
+            horovod_enabled=horovod_enabled,
         )
 
         callbacks = prepare_callbacks(
@@ -302,6 +309,10 @@ def train(
             train_samples=ds_train.num_samples,
         )
 
+        # Horovod: broadcast initial variable states from rank 0 to all other
+        # processes. This is necessary to ensure consistent initialization of
+        # all workers when training is started with random weights or restored
+        # from a checkpoint.
         callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 
         # For some reason, this hangs at the end of the epoch
@@ -309,10 +320,9 @@ def train(
 
         callbacks.append(optim_callbacks)
 
+        # this may crash if the other ranks can't find this file...
         if hvd.rank() == 0 and not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
-            logging.info(
-                "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
-            )
+            logging.info(f"Could not find normalizer cache in {config['setup']['normalizer_cache'] + '.npz'}, recreating")
             model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
             print(model.normalizer.mean)
             print(model.normalizer.variance)
@@ -322,7 +332,7 @@ def train(
                 variance=model.normalizer.variance.numpy(),
             )
 
-        cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+        cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
         model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
         model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
@@ -368,7 +378,7 @@ def train(
                     variance=model.normalizer.variance.numpy(),
                 )
 
-            cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+            cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
             model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
             model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
@@ -425,7 +435,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
     print(model.normalizer.mean)
     print(model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")
@@ -508,7 +518,7 @@ def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs,
     print("model.normalizer.mean:", model.normalizer.mean)
     print("model.normalizer.variance:", model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz")
+    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")
@@ -915,7 +925,12 @@ def raytune_build_model_and_train(
 )
 @click.option("-s", "--seeds", help="set the random seeds", is_flag=True)
 @click.option("--comet-online", help="use comet-ml online logging", is_flag=True)
-@click.option("--comet-exp-name", help="comet experiment name", type=str, default="particleflow-raytune")
+@click.option(
+    "--comet-exp-name",
+    help="comet experiment name",
+    type=str,
+    default="particleflow-raytune",
+)
 def raytune(
     config,
     name,
@@ -1263,7 +1278,16 @@ def plots(train_dir, max_files):
     eval_dir = Path(train_dir) / "evaluation"
 
     history = load_loss_history(str(Path(train_dir) / "history/history_*.json"))
-    for loss in ["loss", "cls_loss", "pt_loss", "energy_loss", "eta_loss", "sin_phi_loss", "cos_phi_loss", "charge_loss"]:
+    for loss in [
+        "loss",
+        "cls_loss",
+        "pt_loss",
+        "energy_loss",
+        "eta_loss",
+        "sin_phi_loss",
+        "cos_phi_loss",
+        "charge_loss",
+    ]:
         loss_plot(
             history[loss].values,
             history["val_" + loss].values,
@@ -1277,7 +1301,6 @@ def plots(train_dir, max_files):
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir
         for dataset in sorted(os.listdir(str(eval_epoch_dir))):
-
             class_names = get_class_names(dataset)
 
             _title = format_dataset_name(dataset)
@@ -1293,7 +1316,13 @@ def plots(train_dir, max_files):
             plot_particle_multiplicity(X, yvals, class_names, cp_dir=cp_dir, title=_title)
             plot_rocs(yvals, class_names, cp_dir=cp_dir, title=_title)
 
-            plot_jet_ratio(yvals, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True)
+            plot_jet_ratio(
+                yvals,
+                cp_dir=cp_dir,
+                title=_title,
+                bins=np.linspace(0, 5, 100),
+                logy=True,
+            )
             plot_jet_ratio(
                 yvals,
                 cp_dir=cp_dir,
@@ -1305,12 +1334,28 @@ def plots(train_dir, max_files):
 
             met_data = compute_met_and_ratio(yvals)
             plot_met(met_data, cp_dir=cp_dir, title=_title)
-            plot_met_ratio(met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
             plot_met_ratio(
-                met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=False, file_modifier="_bins_0_2"
+                met_data,
+                cp_dir=cp_dir,
+                title=_title,
+                bins=np.linspace(0, 20, 100),
+                logy=True,
             )
             plot_met_ratio(
-                met_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=False, file_modifier="_bins_0_5"
+                met_data,
+                cp_dir=cp_dir,
+                title=_title,
+                bins=np.linspace(0, 2, 100),
+                logy=False,
+                file_modifier="_bins_0_2",
+            )
+            plot_met_ratio(
+                met_data,
+                cp_dir=cp_dir,
+                title=_title,
+                bins=np.linspace(0, 5, 100),
+                logy=False,
+                file_modifier="_bins_0_5",
             )
 
             plot_particles(yvals, cp_dir=cp_dir, title=_title)
