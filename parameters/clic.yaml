@@ -220,6 +220,7 @@ train_test_datasets:
       - clic_edm_ttbar_pf
       - clic_edm_qq_pf
 
+do_validation_callback: yes
 validation_dataset: clic_edm_ttbar_pf
 validation_batch_size: 100
 validation_num_events: 2000
