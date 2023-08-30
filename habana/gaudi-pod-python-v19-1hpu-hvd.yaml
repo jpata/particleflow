@@ -69,8 +69,6 @@ spec:
               value: "/opt/amazon/openmpi"
             - name: TFDS_DATA_DIR
               value: "/voyager/ceph/users/jduarte/tensorflow_datasets"
-            - name: COMET_API_KEY
-              value: "daUsmxWgJNd3Ty1FJ855mP5C5"
           workingDir: /home/jduarte/particleflow
           command: ["/bin/bash", "-c"]
           args:
