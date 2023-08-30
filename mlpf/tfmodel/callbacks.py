@@ -171,7 +171,7 @@ class BenchmarkLoggerCallback(tf.keras.callbacks.Callback):
         # mean epoch time
         #   - ignore first epoch (lazy graph construction)
         mean_epoch_time = round(np.mean(self.times[1:]), 2)
-        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_cpus)
+        batch_size_total = self.batch_size_per_gpu * (self.num_gpus or self.num_cpus or 1)
 
         data = {
             "wl-scores": {

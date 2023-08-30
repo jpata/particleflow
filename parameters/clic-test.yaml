@@ -53,7 +53,7 @@ setup:
   dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
-  optimizer: adam  # adam, adamw, sgd
+  optimizer: adam # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: yes
@@ -179,7 +179,7 @@ callbacks:
     hist_freq: 1
 
 hypertune:
-  algorithm: hyperband  # random, bayesian, hyperband
+  algorithm: hyperband # random, bayesian, hyperband
   random:
     objective: val_loss
     max_trials: 100
@@ -195,9 +195,9 @@ hypertune:
     executions_per_trial: 1
 
 raytune:
-  local_dir:  # Note: please specify an absolute path
-  sched:  asha # asha, hyperband
-  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  local_dir: # Note: please specify an absolute path
+  sched: asha # asha, hyperband
+  search_alg: # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
   # Tune schedule specific parameters
