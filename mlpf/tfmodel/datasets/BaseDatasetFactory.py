@@ -47,7 +47,9 @@ def unpack_target(y, num_output_classes, config):
 
 
 def my_getitem(self, vals):
-    print("reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self)))
+    print(
+        "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
+    )
     records = self.data_source.__getitems__(vals)
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
