@@ -219,11 +219,13 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 1
+    event_pad_size: 12800 #need to verify this
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
   gun:
     batch_per_gpu: 5
+    event_pad_size: 2048 #need to verify this
     datasets:
       - clic_edm_single_kaon0l_hits_pf
       - clic_edm_single_pi_hits_pf

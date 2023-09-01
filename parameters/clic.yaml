@@ -60,8 +60,10 @@ setup:
   normalizer_cache: parameters/clic_normalizations
 
 batching:
-  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  # if enabled, use variable-size batching instead of the fixed-size batches configured per-sample in batch_per_gpu
   bucket_by_sequence_length: no
+  bucket_batch_sizes: auto
+  batch_multiplier: 1.0
 
 optimizer:
   adam:
@@ -101,19 +103,6 @@ parameters:
     dist_activation: elu
     ffn_dist_num_layers: 3
     ffn_dist_hidden_dim: 64
-
-    # MPNN
-    #kernel:
-    # type: NodePairTrainableKernel
-    # activation: elu
-    #num_node_messages: 1
-    #node_message:
-    # type: NodeMessageLearnable
-    # output_dim: 64
-    # hidden_dim: 128
-    # num_layers: 2
-    # activation: elu
-    #activation: elu
 
     # GCN
     kernel:
@@ -216,6 +205,7 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 50
+    event_pad_size: -1
     datasets:
       - clic_edm_ttbar_pf
       - clic_edm_qq_pf

@@ -230,6 +230,7 @@ raytune:
 train_test_datasets:
   delphes:
     batch_per_gpu: 5
+    event_pad_size: -1
     datasets:
       - delphes_data_pf
 
