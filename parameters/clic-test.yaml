@@ -61,7 +61,7 @@ setup:
 
 batching:
   # if enabled, use variable-size batching instead of the fixed-size batches configured per-sample in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   bucket_batch_sizes: auto
   batch_multiplier: 1
 
@@ -205,7 +205,7 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 50
-    event_pad_size: -1
+    event_pad_size: 512
     datasets:
       - clic_edm_ttbar_pf
 
