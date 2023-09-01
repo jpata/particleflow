@@ -252,6 +252,7 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 1
+    event_pad_size: -1
     datasets:
       - cms_pf_ttbar
       - cms_pf_ztt
@@ -259,6 +260,7 @@ train_test_datasets:
       - cms_pf_qcd_high_pt
   gun:
     batch_per_gpu: 50
+    event_pad_size: -1
     datasets:
       - cms_pf_single_electron
       - cms_pf_single_gamma
