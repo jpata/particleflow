@@ -437,7 +437,7 @@ def load_and_interleave(
         # Multiply batch size by number of GPUs for MirroredStrategy
         if not config["setup"]["horovod_enabled"]:
             if num_batches_multiplier > 1:
-                bs = bs * num_batches_multiplier
+                bs = int(bs * num_batches_multiplier)
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
 
         # For padded_batch, either pad each batch of events to the largest event in each batch (if event_pad_size = None)
