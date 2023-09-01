@@ -1213,7 +1213,9 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        # tf.print(tf.shape(Xorig))
+        # zero_pad_fraction = tf.reduce_sum(
+        #     tf.cast(Xorig[:, :, 0]==0, dtype=tf.int32))/(tf.shape(Xorig)[0]*tf.shape(Xorig)[1])
+        # tf.print("PFNetDense.call Xorig=", tf.shape(Xorig), "zpf=", zero_pad_fraction)
 
         # normalize all features except the PFElement type (feature 0)
         # X = Xorig
@@ -1236,6 +1238,9 @@ class PFNetDense(tf.keras.Model):
             X = tf.cond(bins_to_pad_to > 1, lambda: tf.pad(X, pad_size), lambda: X)
         else:
             X = tf.pad(X, pad_size)
+
+        # zero_pad_fraction = tf.reduce_sum(tf.cast(X[:, :, 0]==0, dtype=tf.int32))/(tf.shape(X)[0]*tf.shape(X)[1])
+        # tf.print("PFNetDense.call X=", tf.shape(X), "zpf=", zero_pad_fraction)
 
         debugging_data = {}
 

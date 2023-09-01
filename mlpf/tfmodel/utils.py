@@ -414,7 +414,7 @@ def load_and_interleave(
 
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
         bucket_batch_sizes = [
-            int(x[1]) * num_batches_multiplier * config["batching"]["batch_multiplier"] for x in bucket_batch_sizes
+            int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]) for x in bucket_batch_sizes
         ]
         logging.info("Batching {}:{} with bucket_by_sequence_length".format(ds.name, ds.split))
         logging.info("bucket_boundaries={}".format(bucket_boundaries))
@@ -439,7 +439,21 @@ def load_and_interleave(
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
-        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, drop_remainder=True)
+
+        # For padded_batch, either pad each batch of events to the largest event in each batch (if event_pad_size = None)
+        # or pad all events to a fixed size for all batches (if event_pad_size>0).
+        # Note that in the latter case, all events must be smaller
+        # than the pad size, otherwise, tfds will throw an error.
+        padded_shapes = list(tensorflow_dataset.element_spec)
+        event_pad_size = config["train_test_datasets"][joint_dataset_name]["event_pad_size"]
+        if event_pad_size == -1:
+            event_pad_size = None
+        padded_shapes[0] = (event_pad_size, padded_shapes[0].shape[1])
+        padded_shapes[1] = {k: (event_pad_size, v.shape[1]) for k, v in padded_shapes[1].items()}
+        padded_shapes[2] = {k: (event_pad_size, v.shape[1]) for k, v in padded_shapes[2].items()}
+        padded_shapes = tuple(padded_shapes)
+
+        tensorflow_dataset = tensorflow_dataset.padded_batch(bs, padded_shapes=padded_shapes, drop_remainder=True)
 
     ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))

@@ -271,7 +271,7 @@ def train(
     ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
     ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
 
-    print("ensuring dataset cache is hot")
+    logging.info("ensuring dataset cache is hot")
     for elem in ds_train.tensorflow_dataset:
         pass
     for elem in ds_test.tensorflow_dataset:
@@ -321,16 +321,12 @@ def train(
         callbacks.append(optim_callbacks)
 
         # this may crash if the other ranks can't find this file...
-        if hvd.rank() == 0 and not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
-            logging.info(f"Could not find normalizer cache in {config['setup']['normalizer_cache'] + '.npz'}, recreating")
-            model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
-            print(model.normalizer.mean)
-            print(model.normalizer.variance)
-            np.savez(
-                config["setup"]["normalizer_cache"],
-                mean=model.normalizer.mean.numpy(),
-                variance=model.normalizer.variance.numpy(),
+        if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+            logging.error(
+                f"Could not find normalizer cache in {config['setup']['normalizer_cache'] + '.npz'}"
+                + "run once without horovod to create cache"
             )
+            return
 
         cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
         model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
