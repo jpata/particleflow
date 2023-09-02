@@ -146,7 +146,7 @@ def main():
 @click.option(
     "--batch-multiplier",
     help="batch size per device",
-    type=int,
+    type=float,
     default=None,
 )
 @click.option("--num-cpus", help="number of CPU threads to use", type=int, default=None)
