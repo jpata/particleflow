@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mlpf-hpu-strategy-v19-2hpu
+  name: mlpf-hpu-strategy-v19-2hpu-constbatch-bm2
 spec:
   completions: 1
   parallelism: 1
@@ -98,4 +98,4 @@ spec:
               hl-smi;
               hl-smi -q;
 
-              time -p mpirun -n 2 --allow-run-as-root --prefix "${MPI_ROOT}" -x "${VGR_POD_ID}" python3 -u mlpf/pipeline.py train -g -m -c parameters/clic-test.yaml --plot-freq 0 --batch-multiplier 1 --ntrain 50000 --ntest 50000 --nepochs 11 --benchmark_dir exp_dir;
+              time -p mpirun -n 2 --allow-run-as-root --prefix "${MPI_ROOT}" -x "${VGR_POD_ID}" python3 -u mlpf/pipeline.py train -g -m -c parameters/clic-test.yaml --plot-freq 0 --batch-multiplier 2 --ntrain 50000 --ntest 50000 --nepochs 11 --benchmark_dir exp_dir;
