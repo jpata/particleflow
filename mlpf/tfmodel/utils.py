@@ -414,7 +414,7 @@ def load_and_interleave(
 
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
         bucket_batch_sizes = [
-            int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]) for x in bucket_batch_sizes
+            max(int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]), 1) for x in bucket_batch_sizes
         ]
         logging.info("Batching {}:{} with bucket_by_sequence_length".format(ds.name, ds.split))
         logging.info("bucket_boundaries={}".format(bucket_boundaries))
@@ -422,10 +422,7 @@ def load_and_interleave(
         tensorflow_dataset = tensorflow_dataset.bucket_by_sequence_length(
             # length is determined by the number of elements in the input set
             element_length_func=lambda X, y, mask: tf.shape(X)[0],
-            # bucket boundaries are set by the max sequence length
-            # the last bucket size is implicitly 'inf'
             bucket_boundaries=bucket_boundaries,
-            # for multi-GPU, we need to multiply the batch size by the number of GPUs
             bucket_batch_sizes=bucket_batch_sizes,
             pad_to_bucket_boundary=True,
             drop_remainder=True,
@@ -439,6 +436,7 @@ def load_and_interleave(
             if num_batches_multiplier > 1:
                 bs = bs * num_batches_multiplier
         bs = int(bs)
+        assert bs > 0
         logging.info("Batching {}:{} with padded_batch, batch_size={}".format(ds.name, ds.split, bs))
 
         # For padded_batch, either pad each batch of events to the largest event in each batch (if event_pad_size = None)

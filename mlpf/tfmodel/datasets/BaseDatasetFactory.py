@@ -65,6 +65,8 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, 
     dss = tfds.builder(
         "{}:{}".format(dataset_name, dataset_config["version"]), data_dir=dataset_config["data_dir"]
     ).as_data_source(split)
+    num_samples = len(dss)
+
     # hack to prevent a warning from tfds about accessing sequences of indices
     dss.__class__.__getitems__ = my_getitem
 
@@ -74,13 +76,15 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, 
 
     if max_events:
         tf_dataset = tf_dataset.take(max_events)
+        num_samples = max_events
 
     if horovod_enabled:
         tf_dataset = tf_dataset.shard(num_shards=hvd.size(), index=hvd.rank())
 
-    num_samples = tf_dataset.cardinality().numpy()
     logging.info("Loaded {}:{} with {} samples".format(dataset_name, split, num_samples))
-    return MLPFDataset(dataset_name, split, tf_dataset, num_samples)
+    ds = MLPFDataset(dataset_name, split, tf_dataset, num_samples)
+    ds._num_steps = num_samples
+    return ds
 
 
 def get_map_to_supervised(config):
@@ -183,13 +187,7 @@ class MLPFDataset:
                 logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
                 # In case dynamic batching was applied, we don't know the number of steps for the dataset
                 # compute it using https://stackoverflow.com/a/61019377
-                self._num_steps = (
-                    self.tensorflow_dataset.map(
-                        lambda *args: 1,
-                        num_parallel_calls=tf.data.AUTOTUNE,
-                    )
-                    .reduce(tf.constant(0), lambda x, _: x + 1)
-                    .numpy()
-                )
+                self._num_steps = self.tensorflow_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+
                 assert self._num_steps > 0
             return self._num_steps

@@ -271,11 +271,11 @@ def train(
     ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
     ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
 
-    logging.info("ensuring dataset cache is hot")
-    for elem in ds_train.tensorflow_dataset:
-        pass
-    for elem in ds_test.tensorflow_dataset:
-        pass
+    # logging.info("ensuring dataset cache is hot")
+    # for elem in ds_train.tensorflow_dataset:
+    #     pass
+    # for elem in ds_test.tensorflow_dataset:
+    #     pass
 
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
