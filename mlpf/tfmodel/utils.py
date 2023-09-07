@@ -395,24 +395,18 @@ def load_and_interleave(
 
     # use dynamic batching depending on the sequence length
     if config["batching"]["bucket_by_sequence_length"]:
-        if config["batching"]["bucket_batch_sizes"] == "auto":
-            if "combined_graph_layer" in config["parameters"]:
-                bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
-            else:
-                bin_size = 256
-
-            # generate (max_elems, batch_size) pairs
-            # scale from bin_size to max_elems in steps of bin_size
-            max_elems = 75 * bin_size
-            max_n = 75
-            reduction_factor = 125
-            bucket_batch_sizes = [(bin_size * (n + 1) + 1, (max_elems) / (n + 1) // reduction_factor) for n in range(max_n)]
+        if "combined_graph_layer" in config["parameters"]:
+            bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
         else:
-            bucket_batch_sizes = [[float(v) for v in x.split(",")] for x in config["batching"]["bucket_batch_sizes"]]
+            bin_size = 256
 
-        # assert bucket_batch_sizes[-1][0] == float("inf")
-
+        # generate (max_elems, batch_size) pairs
+        # start from (bin_size+1, max_n*bin_size), and step down
+        max_n = 75
+        bucket_batch_sizes = [(bin_size * n + 1, int(max_n * bin_size / (n * bin_size))) for n in range(1, max_n + 1)]
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
+
+        # increase batch sizes for number of gpus, overall batch multiplier
         bucket_batch_sizes = [
             max(int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]), 1) for x in bucket_batch_sizes
         ]

@@ -133,8 +133,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 7
-  num_graph_layers_reg: 7
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -219,13 +219,13 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 1
-    event_pad_size: 15360 #need to verify this
+    event_pad_size: 15360
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
   gun:
     batch_per_gpu: 5
-    event_pad_size: 3840 #need to verify this
+    event_pad_size: 3840
     datasets:
       - clic_edm_single_kaon0l_hits_pf
       - clic_edm_single_pi_hits_pf
