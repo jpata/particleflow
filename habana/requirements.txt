@@ -1,3 +1,4 @@
+array-record
 autopep8
 awkward
 bayesian-optimization
@@ -23,7 +24,7 @@ papermill
 plotly
 pre-commit
 promise
-protobuf==3.19.6
+protobuf
 pyarrow
 ray[default]==1.6.0
 ray[tune]==1.6.0
@@ -34,7 +35,7 @@ seaborn
 setGPU
 tensorboard_plugin_profile
 tensorflow-addons
-tensorflow-datasets==4.8.0
+tensorflow-datasets==4.9.1
 tensorflow-estimator
 tensorflow-hub
 tensorflow-metadata
