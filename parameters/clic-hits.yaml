@@ -1,5 +1,7 @@
 backend: tensorflow
 
+cache: caches/clic_hits
+
 dataset:
   schema: clic
   target_particles: gen
@@ -57,7 +59,6 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
-  normalizer_cache: parameters/clic_hits_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu

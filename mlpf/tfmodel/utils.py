@@ -380,6 +380,9 @@ def load_and_interleave(
     max_events,
     horovod_enabled,
 ):
+
+    cachedir = config["cache"]
+
     datasets = [
         mlpf_dataset_from_config(
             ds_name,
@@ -402,11 +405,13 @@ def load_and_interleave(
 
         # generate (max_elems, batch_size) pairs
         # start from (bin_size+1, max_n*bin_size), and step down
-        max_n = 75
+        # this number was tuned for an A100,
+        # and means we can treat at most events with 60*bin_size elements in it (60*256 = 15360)
+        max_n = 60
         bucket_batch_sizes = [(bin_size * n + 1, int(max_n * bin_size / (n * bin_size))) for n in range(1, max_n + 1)]
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
 
-        # increase batch sizes for number of gpus, overall batch multiplier
+        # increase batch sizes for number of gpus and with the overall batch multiplier
         bucket_batch_sizes = [
             max(int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]), 1) for x in bucket_batch_sizes
         ]
@@ -448,8 +453,18 @@ def load_and_interleave(
 
         tensorflow_dataset = tensorflow_dataset.padded_batch(bs, padded_shapes=padded_shapes, drop_remainder=True)
 
-    ds = MLPFDataset(ds.name, split, tensorflow_dataset, ds.num_samples)
+    ds = MLPFDataset(
+        ds.name,
+        split,
+        tensorflow_dataset,
+        ds.num_samples,
+    )
+
+    statefile = f"{cachedir}/{ds.name}_{ds.split}.json"
+    if os.path.isfile(statefile):
+        ds.load_state(statefile)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
+    ds.save_state(statefile)
     return ds
 
 
