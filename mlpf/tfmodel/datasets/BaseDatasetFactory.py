@@ -203,7 +203,9 @@ class MLPFDataset:
                 logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
                 # In case dynamic batching was applied, we don't know the number of steps for the dataset
                 # compute it using https://stackoverflow.com/a/61019377
-                self._num_steps = self.tensorflow_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+                self._num_steps = (
+                    self.tensorflow_dataset.reduce(tf.constant(0), lambda x, _: x + 1).prefetch(tf.data.AUTOTUNE).numpy()
+                )
 
                 assert self._num_steps > 0
             return self._num_steps

@@ -271,14 +271,19 @@ def train(
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest, horovod_enabled)
 
+    if config["dataset"]["enable_tfds_caching"]:
+        ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache()
+        ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache()
+
     ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
     ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
 
-    # logging.info("ensuring dataset cache is hot")
-    # for elem in ds_train.tensorflow_dataset:
-    #     pass
-    # for elem in ds_test.tensorflow_dataset:
-    #     pass
+    if config["dataset"]["enable_tfds_caching"]:
+        logging.info("ensuring dataset cache is hot")
+        for elem in ds_train.tensorflow_dataset:
+            pass
+        for elem in ds_test.tensorflow_dataset:
+            pass
 
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
