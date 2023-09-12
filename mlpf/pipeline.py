@@ -442,7 +442,8 @@ def evaluate(config, train_dir, weights, customize, nevents):
     print(model.normalizer.mean)
     print(model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+    normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
+    cache = np.load(normalizer_cache_path, allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")
@@ -525,7 +526,8 @@ def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs,
     print("model.normalizer.mean:", model.normalizer.mean)
     print("model.normalizer.variance:", model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+    normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
+    cache = np.load(normalizer_cache_path, allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")
