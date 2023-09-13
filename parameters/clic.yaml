@@ -1,5 +1,7 @@
 backend: tensorflow
 
+cache: caches/clic
+
 dataset:
   schema: clic
   target_particles: gen
@@ -10,6 +12,7 @@ dataset:
   num_output_classes: 6
   cls_weight_by_pt: no
   reg_weight_by_pt: no
+  enable_tfds_caching: yes
 
 loss:
   classification_loss_coef: 200.0
@@ -57,7 +60,6 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
-  normalizer_cache: parameters/clic_normalizations
 
 batching:
   # if enabled, use variable-size batching instead of the fixed-size batches configured per-sample in batch_per_gpu

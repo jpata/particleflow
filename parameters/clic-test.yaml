@@ -1,5 +1,7 @@
 backend: tensorflow
 
+cache: caches/clic_test
+
 dataset:
   schema: clic
   target_particles: gen
@@ -10,6 +12,7 @@ dataset:
   num_output_classes: 6
   cls_weight_by_pt: no
   reg_weight_by_pt: no
+  enable_tfds_caching: yes
 
 loss:
   classification_loss_coef: 200.0

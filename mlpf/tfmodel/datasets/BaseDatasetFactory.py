@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import tensorflow as tf
+import json
 
 import tensorflow_datasets as tfds
 
@@ -47,7 +48,7 @@ def unpack_target(y, num_output_classes, config):
 
 
 def my_getitem(self, vals):
-    print(
+    tf.print(
         "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
     )
     records = self.data_source.__getitems__(vals)
@@ -61,26 +62,38 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, 
         for elem in dss:
             yield {"X": elem["X"], "ygen": elem["ygen"], "ycand": elem["ycand"]}
 
+    # def get_from_ds(i):
+    #    elem = dss[i]
+    #    return {"X": elem["X"], "ygen": elem["ygen"], "ycand": elem["ycand"]}
+
     # when the dataset is saved with file_format=array_record, we cannot do tfds.load, but instead must do the following
-    dss = tfds.builder(
-        "{}:{}".format(dataset_name, dataset_config["version"]), data_dir=dataset_config["data_dir"]
-    ).as_data_source(split)
+    ds_builder = tfds.builder("{}:{}".format(dataset_name, dataset_config["version"]), data_dir=dataset_config["data_dir"])
+    dss = ds_builder.as_data_source(split)
+    num_samples = len(dss)
+
     # hack to prevent a warning from tfds about accessing sequences of indices
     dss.__class__.__getitems__ = my_getitem
 
     output_signature = {k: tf.TensorSpec(shape=(None, v.shape[1])) for (k, v) in dss.dataset_info.features.items()}
 
+    # Note 2023-09-09
+    # from_generator uses tf.numpy_function, which creates issues with parallelization.
+    # This means that in an IO-bound loop over the dataset, the performance will be somewhat limited
+    # using range().map(get_from_ds) would be better, but currently the internals of array_record do not support jit.
     tf_dataset = tf.data.Dataset.from_generator(yield_from_ds, output_signature=output_signature)
+    # tf_dataset = tf.data.Dataset.range(len(dss)).map(get_from_ds, num_parallel_calls=tf.data.AUTOTUNE)
 
     if max_events:
         tf_dataset = tf_dataset.take(max_events)
+        num_samples = max_events
 
     if horovod_enabled:
         tf_dataset = tf_dataset.shard(num_shards=hvd.size(), index=hvd.rank())
 
-    num_samples = tf_dataset.cardinality().numpy()
     logging.info("Loaded {}:{} with {} samples".format(dataset_name, split, num_samples))
-    return MLPFDataset(dataset_name, split, tf_dataset, num_samples)
+    ds = MLPFDataset(dataset_name, split, tf_dataset, num_samples)
+    ds._num_steps = num_samples
+    return ds
 
 
 def get_map_to_supervised(config):
@@ -166,7 +179,14 @@ def interleave_datasets(joint_dataset_name, split, datasets):
 
 
 class MLPFDataset:
-    def __init__(self, name, split, tensorflow_dataset, num_samples):
+    def __init__(
+        self,
+        name: str,
+        split: str,
+        tensorflow_dataset: tf.data.Dataset,
+        num_samples: int,
+    ):
+
         self.name = name
         self.split = split
         self.tensorflow_dataset = tensorflow_dataset
@@ -183,13 +203,29 @@ class MLPFDataset:
                 logging.info("Checking the number of steps in {}:{}".format(self.name, self.split))
                 # In case dynamic batching was applied, we don't know the number of steps for the dataset
                 # compute it using https://stackoverflow.com/a/61019377
-                self._num_steps = (
-                    self.tensorflow_dataset.map(
-                        lambda *args: 1,
-                        num_parallel_calls=tf.data.AUTOTUNE,
-                    )
-                    .reduce(tf.constant(0), lambda x, _: x + 1)
-                    .numpy()
-                )
+                self._num_steps = self.tensorflow_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+
                 assert self._num_steps > 0
             return self._num_steps
+
+    def save_state(self, outfile):
+        logging.info(f"saving state to {outfile}")
+        with open(outfile, "w") as fi:
+            json.dump(
+                {
+                    "num_samples": int(self.num_samples),
+                    "num_steps": int(self._num_steps),
+                    "name": self.name,
+                    "split": self.split,
+                },
+                fi,
+            )
+
+    def load_state(self, infile):
+        logging.info(f"loading state from {infile}")
+        with open(infile, "r") as fi:
+            data = json.load(fi)
+            assert self.name == data["name"]
+            assert self.split == data["split"]
+            assert self.num_samples == data["num_samples"]
+            self._num_steps = data["num_steps"]
