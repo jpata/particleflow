@@ -201,6 +201,9 @@ def train(
     if plot_freq:
         config["callbacks"]["plot_freq"] = plot_freq
 
+    if not os.path.isdir(config["cache"]):
+        os.makedirs(config["cache"])
+
     if batch_multiplier:
         if config["batching"]["bucket_by_sequence_length"]:
             logging.info(
@@ -268,14 +271,19 @@ def train(
 
     ds_train, ds_test, ds_val = get_train_test_val_datasets(config, num_batches_multiplier, ntrain, ntest, horovod_enabled)
 
-    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
-    ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache().prefetch(tf.data.AUTOTUNE)
+    if config["dataset"]["enable_tfds_caching"]:
+        ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache()
+        ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache()
 
-    logging.info("ensuring dataset cache is hot")
-    for elem in ds_train.tensorflow_dataset:
-        pass
-    for elem in ds_test.tensorflow_dataset:
-        pass
+    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+    ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
+
+    if config["dataset"]["enable_tfds_caching"]:
+        logging.info("ensuring dataset cache is hot")
+        for elem in ds_train.tensorflow_dataset:
+            pass
+        for elem in ds_test.tensorflow_dataset:
+            pass
 
     epochs = config["setup"]["num_epochs"]
     total_steps = ds_train.num_steps() * epochs
@@ -321,14 +329,14 @@ def train(
         callbacks.append(optim_callbacks)
 
         # this may crash if the other ranks can't find this file...
-        if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
+        normalizer_cache = "{}/normalizations.npz".format(config["cache"])
+        if not os.path.isfile(normalizer_cache):
             logging.error(
-                f"Could not find normalizer cache in {config['setup']['normalizer_cache'] + '.npz'}"
-                + "run once without horovod to create cache"
+                f"Could not find normalizer cache in {normalizer_cache}" + "run once without horovod to create cache"
             )
             return
 
-        cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+        cache = np.load(normalizer_cache, allow_pickle=True)
         model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
         model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
@@ -361,20 +369,23 @@ def train(
 
             callbacks.append(optim_callbacks)
 
-            if not os.path.isfile(config["setup"]["normalizer_cache"] + ".npz"):
-                logging.info(
-                    "Could not find normalizer cache in {}, recreating".format(config["setup"]["normalizer_cache"] + ".npz")
+            normalizer_cache = "{}/normalizations.npz".format(config["cache"])
+            if not os.path.isfile(normalizer_cache):
+                logging.info(f"Could not find normalizer cache in {normalizer_cache}, recreating")
+                model.normalizer.adapt(
+                    ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE).map(
+                        lambda X, y, w: X[:, :, 1:], num_parallel_calls=tf.data.AUTOTUNE
+                    )
                 )
-                model.normalizer.adapt(ds_train.tensorflow_dataset.map(lambda X, y, w: X[:, :, 1:]))
                 print(model.normalizer.mean)
                 print(model.normalizer.variance)
                 np.savez(
-                    config["setup"]["normalizer_cache"],
+                    normalizer_cache,
                     mean=model.normalizer.mean.numpy(),
                     variance=model.normalizer.variance.numpy(),
                 )
 
-            cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+            cache = np.load(normalizer_cache, allow_pickle=True)
             model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
             model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
 
@@ -431,7 +442,8 @@ def evaluate(config, train_dir, weights, customize, nevents):
     print(model.normalizer.mean)
     print(model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+    normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
+    cache = np.load(normalizer_cache_path, allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")
@@ -514,7 +526,8 @@ def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs,
     print("model.normalizer.mean:", model.normalizer.mean)
     print("model.normalizer.variance:", model.normalizer.variance)
 
-    cache = np.load(config["setup"]["normalizer_cache"] + ".npz", allow_pickle=True)
+    normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
+    cache = np.load(normalizer_cache_path, allow_pickle=True)
     model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
     model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
     print("after loading")

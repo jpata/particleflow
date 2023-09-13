@@ -1,5 +1,7 @@
 backend: tensorflow
 
+cache: caches/clic_hits
+
 dataset:
   schema: clic
   target_particles: gen
@@ -10,6 +12,7 @@ dataset:
   num_output_classes: 6
   cls_weight_by_pt: no
   reg_weight_by_pt: no
+  enable_tfds_caching: no
 
 loss:
   classification_loss_coef: 100.0
@@ -57,7 +60,6 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
-  normalizer_cache: parameters/clic_hits_normalizations
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -133,8 +135,8 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 7
-  num_graph_layers_reg: 7
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -219,13 +221,13 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 1
-    event_pad_size: 12800 #need to verify this
+    event_pad_size: 15360
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
   gun:
     batch_per_gpu: 5
-    event_pad_size: 2048 #need to verify this
+    event_pad_size: 3840
     datasets:
       - clic_edm_single_kaon0l_hits_pf
       - clic_edm_single_pi_hits_pf
