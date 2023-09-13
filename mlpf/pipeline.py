@@ -373,7 +373,7 @@ def train(
             if not os.path.isfile(normalizer_cache):
                 logging.info(f"Could not find normalizer cache in {normalizer_cache}, recreating")
                 model.normalizer.adapt(
-                    ds_train.tensorflow_dataset.take(50000)
+                    ds_train.tensorflow_dataset
                     .prefetch(tf.data.AUTOTUNE)
                     .map(lambda X, y, w: X[:, :, 1:], num_parallel_calls=tf.data.AUTOTUNE)
                 )
