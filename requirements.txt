@@ -10,7 +10,7 @@ jupyter
 jupyter-book
 keras
 keras-tuner
-matplotlib
+matplotlib<=3.7.3
 mplhep
 networkx
 nevergrad
