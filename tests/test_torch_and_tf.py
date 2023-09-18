@@ -1,8 +1,9 @@
 import unittest
 import numpy as np
-import tensorflow as tf
 import torch
+import tensorflow as tf
 
+TOLERANCE = 1e-2
 
 class TestGNNTorchAndTensorflow(unittest.TestCase):
     def test_GHConvDense(self):
@@ -33,7 +34,7 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         out2 = nn2((torch.tensor(x), torch.tensor(adj), torch.tensor(msk))).detach().numpy()
 
         # this is only approximate, so it might fail in rare cases
-        self.assertLess(np.sum(out1 - out2), 1e-2)
+        self.assertLess(np.sum(out1 - out2), TOLERANCE)
 
     def test_MessageBuildingLayerLSH(self):
         from mlpf.tfmodel.model import MessageBuildingLayerLSH
@@ -59,8 +60,8 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         out2 = nn2(torch.tensor(x_dist), torch.tensor(x_node), torch.tensor(msk))
 
         self.assertTrue(np.all(out1[0].numpy() == out2[0].numpy()))
-        self.assertLess(np.sum(out1[1].numpy() - out2[1].detach().numpy()), 1e-2)
-        self.assertLess(np.sum(out1[2].numpy() - out2[2].detach().numpy()), 1e-2)
+        self.assertLess(np.sum(out1[1].numpy() - out2[1].detach().numpy()), TOLERANCE)
+        self.assertLess(np.sum(out1[2].numpy() - out2[2].detach().numpy()), TOLERANCE)
         self.assertEqual(np.sum(out1[3].numpy() - out2[3].detach().numpy()), 0.0)
 
         from mlpf.tfmodel.model import reverse_lsh
