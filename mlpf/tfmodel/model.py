@@ -66,10 +66,10 @@ def debugging_test_step(self, data):
 
 
 # @tf.function(jit_compile=True)
-@tf.function
+# @tf.function
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = tf.argmax(cmul, axis=-1) + tf.cast(tf.where(~msk, nbins - 1, 0), tf.int64)
-    bins_split = tf.reshape(tf.argsort(bin_idx), (tf.shape(cmul)[0], nbins, bin_size))
+    bins_split = tf.reshape(tf.argsort(bin_idx, stable=True), (tf.shape(cmul)[0], nbins, bin_size))
     return bins_split
 
 
@@ -494,6 +494,7 @@ class NodePairGaussianKernel(tf.keras.layers.Layer):
 
     """
     x_msg_binned: (n_batch, n_bins, n_points, n_msg_features)
+    msk: (n_batch, n_bins, n_points, 1)
 
     returns: (n_batch, n_bins, n_points, n_points, 1) message matrix
     """
