@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-
 import tensorflow as tf
 import torch
 
@@ -63,3 +62,15 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         self.assertLess(np.sum(out1[1].numpy() - out2[1].detach().numpy()), 1e-2)
         self.assertLess(np.sum(out1[2].numpy() - out2[2].detach().numpy()), 1e-2)
         self.assertEqual(np.sum(out1[3].numpy() - out2[3].detach().numpy()), 0.0)
+
+        from mlpf.tfmodel.model import reverse_lsh
+
+        bins_split, x, dm, msk_f = out1
+        ret = reverse_lsh(bins_split, x, False)
+        self.assertTrue(np.all(x_node == ret.numpy()))
+
+        from mlpf.pyg.model import reverse_lsh as reverse_lsh_torch
+
+        bins_split, x, dm, msk_f = out2
+        ret = reverse_lsh_torch(bins_split, x)
+        self.assertTrue(np.all(x_node == ret.detach().numpy()))

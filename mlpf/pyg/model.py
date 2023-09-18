@@ -2,6 +2,10 @@ import torch
 from torch import nn
 
 
+def index_dim(a, b):
+    return a[b]
+
+
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     bin_idx = torch.argmax(cmul, axis=-1) + torch.where(~msk, nbins - 1, 0).to(torch.int64)
     bins_split = torch.reshape(torch.argsort(bin_idx, stable=True), (cmul.shape[0], nbins, bin_size))
@@ -97,10 +101,6 @@ class NodePairGaussianKernel(nn.Module):
         return dm
 
 
-def index_dim(a, b):
-    return a[b]
-
-
 class MessageBuildingLayerLSH(nn.Module):
     def __init__(
         self,
@@ -181,3 +181,18 @@ class MessageBuildingLayerLSH(nn.Module):
         dm = torch.multiply(dm, msk_col)
 
         return bins_split, x_features_binned, dm, msk_f_binned
+
+
+def reverse_lsh(bins_split, points_binned_enc):
+    shp = points_binned_enc.shape
+    batch_dim = shp[0]
+    n_points = shp[1] * shp[2]
+    n_features = shp[-1]
+
+    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
+    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+
+    ret = torch.zeros(batch_dim, n_points, n_features)
+    for ibatch in range(batch_dim):
+        ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
+    return ret
