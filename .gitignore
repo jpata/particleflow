@@ -8,7 +8,6 @@ data/*
 experiments/*
 prp/*
 *.pth
-test/__pycache__/
 
 */__pycache__/*
 .DS_Store
