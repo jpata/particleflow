@@ -5,6 +5,7 @@ import tensorflow as tf
 
 TOLERANCE = 1e-2
 
+
 class TestGNNTorchAndTensorflow(unittest.TestCase):
     def test_GHConvDense(self):
         from mlpf.tfmodel.model import GHConvDense
