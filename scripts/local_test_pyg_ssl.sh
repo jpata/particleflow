@@ -1,5 +1,5 @@
 #!/bin/bash
-export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
+export PYTHONPATH=`pwd`:$PYTHONPATH
 
 set -e
 

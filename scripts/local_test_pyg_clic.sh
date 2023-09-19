@@ -1,5 +1,5 @@
 #!/bin/bash
-export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
+export PYTHONPATH=`pwd`:$PYTHONPATH
 
 set -e
 
@@ -39,4 +39,5 @@ echo -----------------------
 
 # run a supervised training of mlpf on CLIC dataset
 cd ../
+env
 python pyg_pipeline.py --dataset CLIC --data_path ../data/clic_edm4hep_2023_02_27/ --prefix MLPF_test --overwrite --n_train=1 --n_valid=1 --n_test=1
