@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
-from torch_geometric.nn.conv import GravNetConv  # also returns edge index
+from torch_geometric.nn.conv import GravNetConv
 
-# from pyg_ssl.gravnet import GravNetConv  # also returns edge index
+# from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
+
+from mlpf.pyg.model import CombinedGraphLayer
 
 
 class GravNetLayer(nn.Module):
@@ -126,7 +128,7 @@ class MLPF(nn.Module):
                 nn.Linear(width, embedding_dim),
             )
 
-            self.conv_type = "gravnet"
+            self.conv_type = "gnn-lsh"
             # GNN that uses the embeddings learnt by VICReg as the input features
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
@@ -141,6 +143,22 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     self.conv_id.append(SelfAttentionLayer(embedding_dim))
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
+            elif self.conv_type == "gnn-lsh":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+
+                for i in range(num_convs):
+                    gnn_conf = {
+                        "bin_size": 256,
+                        "max_num_bins": 200,
+                        "distance_dim": 128,
+                        "layernorm": True,
+                        "num_node_messages": 2,
+                        "dropout": 0.1,
+                        "ffn_dist_hidden_dim": 128,
+                    }
+                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
+                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         decoding_dim = input_dim + num_convs * embedding_dim
         if ssl:
@@ -183,7 +201,7 @@ class MLPF(nn.Module):
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     embeddings_reg.append(conv(conv_input, batch_idx))
-            elif self.conv_type == "attention":
+            else:
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
                     input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)

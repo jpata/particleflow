@@ -74,6 +74,7 @@ class TestGNN(unittest.TestCase):
         x_features = tf.random.normal((2, 256, 32))
         msk = tf.random.normal((2, 256)) > 0
 
+        # bin the x_features using the distances in x_dist, check shapes
         bins_split, x_features_binned, dm_binned, msk_f_binned = nn(x_dist, x_features, msk)
         self.assertEqual(bins_split.shape, (2, 4, 64))
         self.assertEqual(x_features_binned.shape, (2, 4, 64, 32))
@@ -82,5 +83,6 @@ class TestGNN(unittest.TestCase):
 
         from mlpf.tfmodel.model import reverse_lsh
 
+        # undo the LSH binning, check that the results is as before the binning
         x_features2 = reverse_lsh(bins_split, x_features_binned)
         self.assertEqual(tf.reduce_sum(x_features - x_features2).numpy(), 0)

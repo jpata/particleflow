@@ -2,6 +2,38 @@ import torch
 from torch import nn
 
 
+def point_wise_feed_forward_network(
+    d_in,
+    d_hidden,
+    d_out,
+    num_layers=1,
+    activation="ELU",
+    dropout=0.0,
+):
+
+    layers = []
+    layers.append(
+        nn.Linear(
+            d_in,
+            d_hidden,
+        )
+    )
+    layers.append(getattr(nn, activation)())
+    for ilayer in range(num_layers - 1):
+        layers.append(
+            nn.Linear(
+                d_hidden,
+                d_hidden,
+            )
+        )
+        layers.append(getattr(nn, activation)())
+        if dropout > 0.0:
+            layers.append(nn.Dropout(dropout))
+
+    layers.append(nn.Linear(d_hidden, d_out))
+    return nn.Sequential(*layers)
+
+
 def index_dim(a, b):
     return a[b]
 
@@ -35,19 +67,19 @@ class GHConvDense(nn.Module):
         super(GHConvDense, self).__init__(*args, **kwargs)
 
         self.W_t = torch.nn.Parameter(
-            data=torch.zeros(self.hidden_dim, self.output_dim),
+            data=torch.randn(self.hidden_dim, self.output_dim),
             requires_grad=True,
         )
         self.b_t = torch.nn.Parameter(
-            data=torch.zeros(self.output_dim),
+            data=torch.randn(self.output_dim),
             requires_grad=True,
         )
         self.W_h = torch.nn.Parameter(
-            data=torch.zeros(self.hidden_dim, self.output_dim),
+            data=torch.randn(self.hidden_dim, self.output_dim),
             requires_grad=True,
         )
         self.theta = torch.nn.Parameter(
-            data=torch.zeros(self.hidden_dim, self.output_dim),
+            data=torch.randn(self.hidden_dim, self.output_dim),
             requires_grad=True,
         )
 
@@ -102,15 +134,7 @@ class NodePairGaussianKernel(nn.Module):
 
 
 class MessageBuildingLayerLSH(nn.Module):
-    def __init__(
-        self,
-        distance_dim=128,
-        max_num_bins=200,
-        bin_size=128,
-        kernel=NodePairGaussianKernel(),
-        small_graph_opt=False,
-        **kwargs
-    ):
+    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
         self.initializer = kwargs.pop("initializer", "random_normal")
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
@@ -118,7 +142,6 @@ class MessageBuildingLayerLSH(nn.Module):
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.kernel = kernel
-        self.small_graph_opt = small_graph_opt
 
         # generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = nn.Parameter(
@@ -196,3 +219,71 @@ def reverse_lsh(bins_split, points_binned_enc):
     for ibatch in range(batch_dim):
         ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
     return ret
+
+
+class CombinedGraphLayer(nn.Module):
+    def __init__(self, *args, **kwargs):
+
+        self.max_num_bins = kwargs.pop("max_num_bins")
+        self.bin_size = kwargs.pop("bin_size")
+        self.distance_dim = kwargs.pop("distance_dim")
+        self.do_layernorm = kwargs.pop("layernorm")
+        self.num_node_messages = kwargs.pop("num_node_messages")
+        self.dropout = kwargs.pop("dropout")
+        self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
+        self.do_lsh = kwargs.pop("do_lsh", True)
+        self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
+        self.dist_activation = getattr(torch.nn.functional, kwargs.pop("dist_activation", "elu"))
+        super(CombinedGraphLayer, self).__init__(**kwargs)
+
+        input_dim = 256
+        if self.do_layernorm:
+            self.layernorm1 = torch.nn.LayerNorm(
+                input_dim,
+                eps=1e-6,
+            )
+
+        self.ffn_dist = point_wise_feed_forward_network(
+            input_dim,
+            self.ffn_dist_hidden_dim,
+            self.distance_dim,
+            num_layers=self.ffn_dist_num_layers,
+            dropout=self.dropout,
+        )
+
+        self.message_building_layer = MessageBuildingLayerLSH(
+            distance_dim=self.distance_dim,
+            max_num_bins=self.max_num_bins,
+            bin_size=self.bin_size,
+            kernel=NodePairGaussianKernel(),
+        )
+
+        self.message_passing_layers = [
+            GHConvDense(output_dim=256, hidden_dim=256, activation="elu") for iconv in range(self.num_node_messages)
+        ]
+        self.dropout_layer = None
+        if self.dropout:
+            self.dropout_layer = torch.nn.Dropout(self.dropout)
+
+    def forward(self, x, msk):
+
+        if self.do_layernorm:
+            x = self.layernorm1(x)
+
+        # compute node features for graph building
+        x_dist = self.dist_activation(self.ffn_dist(x))
+
+        # compute the element-to-element messages / distance matrix / graph structure
+        bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
+
+        # run the node update with message passing
+        for msg in self.message_passing_layers:
+            x_out = msg((x, dm, msk_f))
+            x = x_out
+            if self.dropout_layer:
+                x = self.dropout_layer(x)
+
+        # undo the binning according to the element-to-bin indices
+        x = reverse_lsh(bins_split, x)
+
+        return x
