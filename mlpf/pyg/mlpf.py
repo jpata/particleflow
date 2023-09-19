@@ -212,6 +212,7 @@ class MLPF(nn.Module):
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
+                    print(input_padded.shape)
                     out_padded = conv(input_padded, ~mask)
                     out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
                     assert out_stacked.shape[0] == conv_input.shape[0]

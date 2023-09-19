@@ -215,7 +215,7 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
 
-    ret = torch.zeros(batch_dim, n_points, n_features)
+    ret = torch.zeros(batch_dim, n_points, n_features).to(device=points_binned_enc.device)
     for ibatch in range(batch_dim):
         ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
     return ret
@@ -258,9 +258,9 @@ class CombinedGraphLayer(nn.Module):
             kernel=NodePairGaussianKernel(),
         )
 
-        self.message_passing_layers = [
-            GHConvDense(output_dim=256, hidden_dim=256, activation="elu") for iconv in range(self.num_node_messages)
-        ]
+        self.message_passing_layers = nn.ModuleList()
+        for iconv in range(self.num_node_messages):
+            self.message_passing_layers.append(GHConvDense(output_dim=256, hidden_dim=256, activation="elu"))
         self.dropout_layer = None
         if self.dropout:
             self.dropout_layer = torch.nn.Dropout(self.dropout)
