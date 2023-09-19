@@ -86,7 +86,7 @@ class PFGraphDataset(Dataset):
         proc_list = glob(osp.join(self.processed_dir, "*.pt"))
         return sorted([processed_path.replace(self.processed_dir, ".") for processed_path in proc_list])
 
-    def __len__(self):
+    def len(self):
         return len(self.processed_file_names)
 
     def download(self):
