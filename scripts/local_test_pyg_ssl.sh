@@ -1,4 +1,6 @@
 #!/bin/bash
+export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
+
 set -e
 
 # download and process the datasets under particleflow/data/clic_edm4hep_2023_02_27/

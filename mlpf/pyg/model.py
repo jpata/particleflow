@@ -150,21 +150,18 @@ class MessageBuildingLayerLSH(nn.Module):
         )
 
     def forward(self, x_msg, x_node, msk, training=False):
+
+        shp = x_msg.shape
+        n_points = shp[1]
+
+        if n_points % self.bin_size != 0:
+            raise Exception("Number of elements per event must be exactly divisible by the bin size")
+
+        # compute the number of LSH bins to divide the input points into on the fly
+        # n_points must be divisible by bin_size exactly due to the use of reshape
+        n_bins = torch.floor_divide(n_points, self.bin_size)
+
         msk_f = torch.unsqueeze(msk, -1)
-
-        shp = x_msg.shape
-        n_points = shp[1]
-
-        # compute the number of LSH bins to divide the input points into on the fly
-        # n_points must be divisible by bin_size exactly due to the use of reshape
-        n_bins = torch.floor_divide(n_points, self.bin_size)
-
-        shp = x_msg.shape
-        n_points = shp[1]
-
-        # compute the number of LSH bins to divide the input points into on the fly
-        # n_points must be divisible by bin_size exactly due to the use of reshape
-        n_bins = torch.floor_divide(n_points, self.bin_size)
         if n_bins > 1:
             mul = torch.linalg.matmul(
                 x_msg,
@@ -173,7 +170,7 @@ class MessageBuildingLayerLSH(nn.Module):
             cmul = torch.concatenate([mul, -mul], axis=-1)
             bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
 
-            # replace tf.gather with torch.vmap, indexing and reshape
+            # replaced tf.gather with torch.vmap, indexing and reshape
             bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
             x_msg_binned = torch.vmap(index_dim)(x_msg, bins_split_2)
             x_features_binned = torch.vmap(index_dim)(x_node, bins_split_2)
@@ -267,6 +264,16 @@ class CombinedGraphLayer(nn.Module):
 
     def forward(self, x, msk):
 
+        n_elems = x.shape[1]
+        bins_to_pad_to = -torch.floor_divide(-n_elems, self.bin_size)
+
+        # pad the element dimension
+        pad_size = (0, 0, 0, bins_to_pad_to * self.bin_size - n_elems)
+        x = torch.nn.functional.pad(x, pad_size)
+
+        pad_size = (0, bins_to_pad_to * self.bin_size - n_elems)
+        msk = torch.nn.functional.pad(msk, pad_size, value=True)
+
         if self.do_layernorm:
             x = self.layernorm1(x)
 
@@ -286,4 +293,4 @@ class CombinedGraphLayer(nn.Module):
         # undo the binning according to the element-to-bin indices
         x = reverse_lsh(bins_split, x)
 
-        return x
+        return x[:, :n_elems, :]

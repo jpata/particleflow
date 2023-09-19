@@ -1,4 +1,6 @@
 #!/bin/bash
+export PYTHONPATH=`pwd`/mlpf:$PYTHONPATH
+
 set -e
 
 # download and process the datasets under particleflow/data/delphes/
