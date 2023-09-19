@@ -18,8 +18,11 @@ MLPF focuses on developing full event reconstruction based on computationally sc
   <img src="images/cms/ak4jet_puppi_pt_ttbar.png" alt="PUPPI jets in ttbar" width="300"/>
 </p>
 
-  - ACAT 2022: http://cds.cern.ch/record/2842375
-  - ACAT 2021: http://dx.doi.org/10.1088/1742-6596/2438/1/012100
+  - ACAT 2022:
+    - CERN-CMS-DP-2022-061, http://cds.cern.ch/record/2842375
+  - ACAT 2021:
+    - J. Phys. Conf. Ser. 2438 012100, http://dx.doi.org/10.1088/1742-6596/2438/1/012100
+    - CERN-CMS-DP-2021-030, https://cds.cern.ch/record/2792320
 
 ## Initial development with Delphes
 
@@ -29,5 +32,5 @@ MLPF focuses on developing full event reconstruction based on computationally sc
 </p>
 
   - paper: https://doi.org/10.1140/epjc/s10052-021-09158-w
-    - code: https://doi.org/10.5281/zenodo.4559587
-    - dataset: https://doi.org/10.5281/zenodo.4559324
+  - code: https://doi.org/10.5281/zenodo.4559587
+  - dataset: https://doi.org/10.5281/zenodo.4559324
