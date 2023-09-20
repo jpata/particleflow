@@ -99,7 +99,7 @@ class MLPF(nn.Module):
         input_dim=34,
         NUM_CLASSES=8,
         embedding_dim=128,
-        width=126,
+        width=128,
         num_convs=2,
         k=32,
         propagate_dimensions=32,
@@ -139,7 +139,6 @@ class MLPF(nn.Module):
             elif self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
-
                 for i in range(num_convs):
                     self.conv_id.append(SelfAttentionLayer(embedding_dim))
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
@@ -149,6 +148,7 @@ class MLPF(nn.Module):
 
                 for i in range(num_convs):
                     gnn_conf = {
+                        "inout_dim": embedding_dim,
                         "bin_size": 128,
                         "max_num_bins": 200,
                         "distance_dim": 128,

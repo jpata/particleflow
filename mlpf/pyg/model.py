@@ -221,6 +221,7 @@ def reverse_lsh(bins_split, points_binned_enc):
 class CombinedGraphLayer(nn.Module):
     def __init__(self, *args, **kwargs):
 
+        self.inout_dim = kwargs.pop("inout_dim")
         self.max_num_bins = kwargs.pop("max_num_bins")
         self.bin_size = kwargs.pop("bin_size")
         self.distance_dim = kwargs.pop("distance_dim")
@@ -233,15 +234,14 @@ class CombinedGraphLayer(nn.Module):
         self.dist_activation = getattr(torch.nn.functional, kwargs.pop("dist_activation", "elu"))
         super(CombinedGraphLayer, self).__init__(**kwargs)
 
-        input_dim = 256
         if self.do_layernorm:
             self.layernorm1 = torch.nn.LayerNorm(
-                input_dim,
+                self.inout_dim,
                 eps=1e-6,
             )
 
         self.ffn_dist = point_wise_feed_forward_network(
-            input_dim,
+            self.inout_dim,
             self.ffn_dist_hidden_dim,
             self.distance_dim,
             num_layers=self.ffn_dist_num_layers,
@@ -257,7 +257,9 @@ class CombinedGraphLayer(nn.Module):
 
         self.message_passing_layers = nn.ModuleList()
         for iconv in range(self.num_node_messages):
-            self.message_passing_layers.append(GHConvDense(output_dim=256, hidden_dim=256, activation="elu"))
+            self.message_passing_layers.append(
+                GHConvDense(output_dim=self.inout_dim, hidden_dim=self.inout_dim, activation="elu")
+            )
         self.dropout_layer = None
         if self.dropout:
             self.dropout_layer = torch.nn.Dropout(self.dropout)
