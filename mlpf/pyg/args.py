@@ -9,7 +9,7 @@ def parse_args():
     parser.add_argument("--prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
 
     # for loading the data
-    parser.add_argument("--dataset", type=str, required=True, help="CMS or DELPHES?")
+    parser.add_argument("--dataset", type=str, required=True, help="CLIC, CMS or DELPHES")
     parser.add_argument("--data_path", type=str, default="../data/", help="path which contains the samples")
     parser.add_argument("--sample", type=str, default="QCD", help="sample to test on")
     parser.add_argument("--n_train", type=int, default=2, help="number of files to use for training")
@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("--width", type=int, default=256, help="hidden dimension of mlpf")
     parser.add_argument("--embedding_dim", type=int, default=256, help="first embedding of mlpf")
     parser.add_argument("--num_convs", type=int, default=3, help="number of graph layers for mlpf")
-    parser.add_argument("--dropout", type=float, default=0.4, help="dropout for MLPF model")
+    parser.add_argument("--dropout", type=float, default=0.0, help="dropout for MLPF model")
     parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")
     parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
     parser.add_argument("--nearest", type=int, default=32, help="k nearest neighbors in gravnet layer")

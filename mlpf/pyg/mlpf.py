@@ -48,49 +48,14 @@ class SelfAttentionLayer(nn.Module):
         return x
 
 
-def ffn(input_dim, output_dim, width, act, dropout, ssl):
-    if ssl:
-        return nn.Sequential(
-            nn.Linear(input_dim, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Linear(width, output_dim),
-        )
-    else:
-        return nn.Sequential(
-            nn.Linear(input_dim, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Linear(width, output_dim),
-        )
+def ffn(input_dim, output_dim, width, act, dropout):
+    return nn.Sequential(
+        nn.Linear(input_dim, width),
+        act(),
+        torch.nn.LayerNorm(width),
+        nn.Dropout(dropout),
+        nn.Linear(width, output_dim),
+    )
 
 
 class MLPF(nn.Module):
@@ -118,15 +83,7 @@ class MLPF(nn.Module):
 
         # embedding of the inputs
         if num_convs != 0:
-            self.nn0 = nn.Sequential(
-                nn.Linear(input_dim, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, embedding_dim),
-            )
+            self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
             self.conv_type = "gnn-lsh"
             # GNN that uses the embeddings learnt by VICReg as the input features
@@ -149,13 +106,13 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
-                        "bin_size": 128,
+                        "bin_size": 256,
                         "max_num_bins": 200,
                         "distance_dim": 128,
                         "layernorm": True,
                         "num_node_messages": 2,
-                        "dropout": 0.1,
-                        "ffn_dist_hidden_dim": 128,
+                        "dropout": 0.0,
+                        "ffn_dist_hidden_dim": 64,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
@@ -165,16 +122,16 @@ class MLPF(nn.Module):
             decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout, ssl)
+        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout, ssl)
-        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout)
+        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout, ssl)
+        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
 
     def forward(self, batch):
 

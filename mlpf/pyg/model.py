@@ -62,7 +62,7 @@ class GHConvDense(nn.Module):
     def __init__(self, *args, **kwargs):
         self.activation = getattr(nn.functional, kwargs.pop("activation"))
         self.output_dim = kwargs.pop("output_dim")
-        self.normalize_degrees = kwargs.pop("normalize_degrees", True)
+        self.normalize_degrees = kwargs.pop("normalize_degrees", False)
         self.hidden_dim = kwargs.pop("hidden_dim")
         super(GHConvDense, self).__init__(*args, **kwargs)
 
@@ -229,7 +229,6 @@ class CombinedGraphLayer(nn.Module):
         self.num_node_messages = kwargs.pop("num_node_messages")
         self.dropout = kwargs.pop("dropout")
         self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
-        self.do_lsh = kwargs.pop("do_lsh", True)
         self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.dist_activation = getattr(torch.nn.functional, kwargs.pop("dist_activation", "elu"))
         super(CombinedGraphLayer, self).__init__(**kwargs)
