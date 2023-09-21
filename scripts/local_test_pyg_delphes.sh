@@ -13,17 +13,17 @@ mkdir -p data/delphes/pythia8_qcd/raw
 
 # download some ttbar test data
 cd data/delphes/pythia8_ttbar/raw/
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_0.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_1.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_2.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_0.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_1.pkl.bz2
+wget -q --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_ttbar_0_2.pkl.bz2
 bzip2 -d *
 
-# download some qcd test data
-cd ../../pythia8_qcd/raw/
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_1.pkl.bz2
-wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_2.pkl.bz2
-bzip2 -d *
+# # download some qcd test data
+# cd ../../pythia8_qcd/raw/
+# wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_0.pkl.bz2
+# wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_1.pkl.bz2
+# wget --no-check-certificate -nc https://zenodo.org/record/4559324/files/tev14_pythia8_qcd_10_2.pkl.bz2
+# bzip2 -d *
 
 # setup directory for processed datafiles
 cd ../..
@@ -42,4 +42,4 @@ echo -----------------------
 
 # run a supervised training of mlpf on DELPHES dataset
 cd ../
-python pyg_pipeline.py --dataset DELPHES --data_path ../data/delphes/ --prefix MLPF_test --overwrite --bs=2 --n_train=1 --n_valid=1 --n_test=1 --num_convs=1
+python pyg_pipeline.py --dataset DELPHES --data_path ../data/delphes/ --prefix MLPF_test --overwrite --bs=2 --n_train=1 --n_valid=1 --n_test=1 --num_convs=1  --width=32 --embedding_dim=32
