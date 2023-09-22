@@ -17,8 +17,7 @@ from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
-from pyg.utils import (CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders,
-                       save_mlpf)
+from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -123,13 +122,13 @@ def train(rank, world_size, args, data, model, outpath):
 
         ds_train = [
             Datasett("clic_edm_ttbar_pf:1.5.0", "train"),
-            # Datasett("clic_edm_qq_pf:1.5.0", "train"),
+            Datasett("clic_edm_qq_pf:1.5.0", "train"),
             Datasett("clic_edm_ww_fullhad_pf:1.5.0", "train"),
             Datasett("clic_edm_zh_tautau_pf:1.5.0", "train"),
         ]
         ds_test = [
             Datasett("clic_edm_ttbar_pf:1.5.0", "test"),
-            # Datasett("clic_edm_qq_pf:1.5.0", "test"),
+            Datasett("clic_edm_qq_pf:1.5.0", "test"),
             Datasett("clic_edm_ww_fullhad_pf:1.5.0", "test"),
             Datasett("clic_edm_zh_tautau_pf:1.5.0", "test"),
         ]
@@ -139,13 +138,8 @@ def train(rank, world_size, args, data, model, outpath):
         for ds in ds_test:
             print("test_dataset: {}, {}".format(ds, len(ds)))
 
-        file_loader_train = [
-            ds.get_loader(batch_size=args.bs, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-        ]
-
-        file_loader_valid = [
-            ds.get_loader(batch_size=args.bs, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
-        ]
+        file_loader_train = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4)]
+        file_loader_valid = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4)]
 
     print("-----------------------------")
     if world_size > 1:
