@@ -156,10 +156,11 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
+        for i in range(1000):
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
 
-        c += 1
-        print(c)
+            c += 1
+            print(c)
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
