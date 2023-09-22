@@ -144,7 +144,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
                 "step_{}/num_elems".format(step_type),
-                batch.x.shape[0],
+                batch.X.shape[0],
                 ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
             )
 
