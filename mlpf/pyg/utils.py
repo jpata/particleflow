@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 CLASS_LABELS = {
     "CMS": [0, 211, 130, 1, 2, 22, 11, 13, 15],
     "DELPHES": [0, 211, 130, 22, 11, 13],
-    "CLIC": [0, 211, 130, 22, 11, 13],
+    "CLIC": [0, 211, 130, 22, 11, 13, 5000],  # TODO
 }
 
 CLASS_NAMES_LATEX = {
