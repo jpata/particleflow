@@ -68,8 +68,6 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         dropout=0.4,
-        ssl=False,
-        VICReg_embedding_dim=0,
     ):
         super(MLPF, self).__init__()
 
@@ -77,7 +75,6 @@ class MLPF(nn.Module):
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
-        self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
 
         # embedding of the inputs
         if num_convs != 0:
@@ -116,8 +113,6 @@ class MLPF(nn.Module):
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         decoding_dim = input_dim + num_convs * embedding_dim
-        if ssl:
-            decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
@@ -133,11 +128,8 @@ class MLPF(nn.Module):
 
     def forward(self, element_features, batch_idx):
         # unfold the Batch object
-        if self.ssl:
-            input_ = element_features.float()[:, : self.input_dim]
-            VICReg_embeddings = element_features.float()[:, self.input_dim :]
-        else:
-            input_ = element_features.float()
+
+        input_ = element_features.float()
 
         embeddings_id = []
         embeddings_reg = []
@@ -169,18 +161,12 @@ class MLPF(nn.Module):
                     # assert out_stacked.shape[0] == conv_input.shape[0]
                     embeddings_reg.append(out_stacked)
 
-        if self.ssl:
-            embedding_id = torch.cat([input_] + embeddings_id + [VICReg_embeddings], axis=-1)
-        else:
-            embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
+        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
 
         # predict the PIDs
         preds_id = self.nn_id(embedding_id)
 
-        if self.ssl:
-            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id] + [VICReg_embeddings], axis=-1)
-        else:
-            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
+        embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data
         # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi

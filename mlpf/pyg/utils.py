@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 CLASS_LABELS = {
     "CMS": [0, 211, 130, 1, 2, 22, 11, 13, 15],
     "DELPHES": [0, 211, 130, 22, 11, 13],
-    "CLIC": [0, 211, 130, 22, 11, 13, 5000],  # TODO
+    "CLIC": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -136,7 +136,7 @@ Y_FEATURES = {
         "cos_phi",
         "energy",
     ],
-    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "TODO"],
+    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
 }
 
 

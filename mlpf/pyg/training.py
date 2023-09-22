@@ -151,12 +151,15 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         print("batch", batch)
         event = batch.to(rank)
 
+        # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+        target_ids = event.ygen[:, 0].long()
+        target_charge = (event.ygen[:, 1] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
+        target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
+
         # make mlpf forward pass
         # t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
         # tf = tf + (time.time() - t0)
-
-        target_ids = event.ygen[:, 0].long()
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -166,8 +169,6 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
                     ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
                 )
 
-        target_charge = (event.ygen[:, 1] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
-        target_momentum = event.ygen[:, 2:].to(dtype=torch.float32)
         assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
         print("target_ids", target_ids.shape)
