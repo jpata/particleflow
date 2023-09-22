@@ -138,8 +138,16 @@ def train(rank, world_size, args, data, model, outpath):
         for ds in ds_test:
             print("test_dataset: {}, {}".format(ds, len(ds)))
 
-        file_loader_train = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4)]
-        file_loader_valid = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4)]
+        train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
+        test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
+
+        train_loaders = [train.torch.prepare_data_loader(dl) for dl in train_loaders]
+        test_loaders = [train.torch.prepare_data_loader(dl) for dl in test_loaders]
+
+        for dl in train_loaders:
+            print("train_loader: {}, {}".format(dl.dataset, len(dl)))
+        for dl in test_loaders:
+            print("test_loader: {}, {}".format(dl.dataset, len(dl)))
 
     print("-----------------------------")
     if world_size > 1:
@@ -160,11 +168,13 @@ def train(rank, world_size, args, data, model, outpath):
         model = model.to(rank)
     model.train()
 
+    model = train.torch.prepare_model(model)
+
     training_loop(
         rank,
         model,
-        file_loader_train,
-        file_loader_valid,
+        train_loaders,
+        test_loaders,
         args.bs,
         args.n_epochs,
         args.patience,
