@@ -7,6 +7,8 @@ sys.path.append("pyg/")
 
 import matplotlib
 import numpy as np
+import ray
+import ray.data
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -18,7 +20,10 @@ from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
 from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
-from ray import train as raytrain
+from ray import train
+from ray.air import Checkpoint, session
+from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
+from ray.train.torch import TorchConfig, TorchTrainer
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -84,7 +89,7 @@ def run_demo(demo_fn, world_size, args, dataset, model, outpath):
     )
 
 
-def train(rank, world_size, args, data, model, outpath):
+def train_(rank, world_size, args, data, model, outpath):
     """
     A function that may be passed as a demo_fn to run_demo() to perform training over
     multiple gpus using DDP in case there are multiple gpus available (world_size > 1).
@@ -142,8 +147,8 @@ def train(rank, world_size, args, data, model, outpath):
         train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
         test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
 
-        train_loaders = [raytrain.torch.prepare_data_loader(dl) for dl in train_loaders]
-        test_loaders = [raytrain.torch.prepare_data_loader(dl) for dl in test_loaders]
+        train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
+        test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
 
         for dl in train_loaders:
             print("train_loader: {}, {}".format(dl.dataset, len(dl)))
@@ -169,7 +174,7 @@ def train(rank, world_size, args, data, model, outpath):
         model = model.to(rank)
     model.train()
 
-    model = raytrain.torch.prepare_model(model)
+    model = ray.train.torch.prepare_model(model)
 
     training_loop(
         rank,
@@ -295,7 +300,7 @@ if __name__ == "__main__":
         # run the training using DDP if more than one gpu is available
         if world_size > 1:
             run_demo(
-                train,
+                train_,
                 world_size,
                 args,
                 data,
@@ -303,7 +308,7 @@ if __name__ == "__main__":
                 outpath,
             )
         else:
-            train(device, world_size, args, data, model, outpath)
+            train_(device, world_size, args, data, model, outpath)
 
     # load the best epoch state
     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
