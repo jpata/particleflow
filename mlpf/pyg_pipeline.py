@@ -185,7 +185,7 @@ def train_(rank, world_size, args, data, model, outpath):
 
         # TODO: remove
         # rank = "cpu"
-        print(f"Running training on {rank}")
+        print(f"Running a supervised training of MLPF on {rank}")
 
         model = model.to(rank)
     model.train()

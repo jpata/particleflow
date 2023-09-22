@@ -242,8 +242,6 @@ def training_loop(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr
 
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
 
-    logging.info("Will launch a supervised training of MLPF")
-
     for epoch in range(n_epochs):
         t0 = time.time()
 
