@@ -59,7 +59,7 @@ def make_predictions_awk(rank, dataset, mlpf, file_loader, batch_size, PATH, ssl
                 event = batch.to(rank)
 
             t0 = time.time()
-            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.x, event.batch)
             tf = tf + (time.time() - t0)
 
             pred_ids = torch.argmax(pred_ids_one_hot.detach(), axis=-1)

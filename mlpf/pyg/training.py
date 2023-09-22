@@ -173,7 +173,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
 
             # make mlpf forward pass
             t0 = time.time()
-            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.x, event.batch)
             tf = tf + (time.time() - t0)
 
             target_ids = event.ygen_id

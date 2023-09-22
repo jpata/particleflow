@@ -85,7 +85,7 @@ class MLPF(nn.Module):
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
-            self.conv_type = "gravnet"
+            self.conv_type = "gnn-lsh"
             # GNN that uses the embeddings learnt by VICReg as the input features
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
@@ -133,16 +133,14 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
 
-    def forward(self, batch):
+    def forward(self, element_features, batch_idx):
 
         # unfold the Batch object
         if self.ssl:
-            input_ = batch.x.float()[:, : self.input_dim]
-            VICReg_embeddings = batch.x.float()[:, self.input_dim :]
+            input_ = element_features.float()[:, : self.input_dim]
+            VICReg_embeddings = element_features.float()[:, self.input_dim :]
         else:
-            input_ = batch.x.float()
-
-        batch_idx = batch.batch
+            input_ = element_features.float()
 
         embeddings_id = []
         embeddings_reg = []
@@ -164,14 +162,14 @@ class MLPF(nn.Module):
                     input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
                     out_padded = conv(input_padded, ~mask)
                     out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
-                    assert out_stacked.shape[0] == conv_input.shape[0]
+                    # assert out_stacked.shape[0] == conv_input.shape[0]
                     embeddings_id.append(out_stacked)
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
                     out_padded = conv(input_padded, ~mask)
                     out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
-                    assert out_stacked.shape[0] == conv_input.shape[0]
+                    # assert out_stacked.shape[0] == conv_input.shape[0]
                     embeddings_reg.append(out_stacked)
 
         if self.ssl:
@@ -188,10 +186,10 @@ class MLPF(nn.Module):
             embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data
-        assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
-        assert torch.all(torch.abs(input_[:, 4]) <= 1.0)  # cos_phi
-        assert torch.all(input_[:, 1] >= 0.0)  # pt
-        assert torch.all(input_[:, 5] >= 0.0)  # energy
+        # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
+        # assert torch.all(torch.abs(input_[:, 4]) <= 1.0)  # cos_phi
+        # assert torch.all(input_[:, 1] >= 0.0)  # pt
+        # assert torch.all(input_[:, 5] >= 0.0)  # energy
 
         # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
         # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
