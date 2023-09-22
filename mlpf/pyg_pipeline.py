@@ -7,8 +7,9 @@ sys.path.append("pyg/")
 
 import matplotlib
 import numpy as np
-import ray
-import ray.data
+
+# import ray
+# import ray.data
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -20,10 +21,11 @@ from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
 from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
-from ray import train
-from ray.air import Checkpoint, session
-from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
-from ray.train.torch import TorchConfig, TorchTrainer
+
+# from ray import train
+# from ray.air import Checkpoint, session
+# from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
+# from ray.train.torch import TorchConfig, TorchTrainer
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -147,8 +149,8 @@ def train_(rank, world_size, args, data, model, outpath):
         train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
         test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
 
-        train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
-        test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
+        # train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
+        # test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
 
         for dl in train_loaders:
             print("train_loader: {}, {}".format(dl.dataset, len(dl)))
@@ -174,7 +176,7 @@ def train_(rank, world_size, args, data, model, outpath):
         model = model.to(rank)
     model.train()
 
-    model = ray.train.torch.prepare_model(model)
+    # model = ray.train.torch.prepare_model(model)
 
     training_loop(
         rank,
