@@ -197,7 +197,6 @@ def train_(rank, world_size, args, data, model, outpath):
         model,
         train_loader,
         valid_loader,
-        args.bs,
         args.n_epochs,
         args.patience,
         args.lr,
