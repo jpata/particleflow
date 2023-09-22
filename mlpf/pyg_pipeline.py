@@ -7,6 +7,7 @@ sys.path.append("pyg/")
 
 import matplotlib
 import numpy as np
+import ray
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -141,8 +142,8 @@ def train(rank, world_size, args, data, model, outpath):
         train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
         test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
 
-        train_loaders = [train.torch.prepare_data_loader(dl) for dl in train_loaders]
-        test_loaders = [train.torch.prepare_data_loader(dl) for dl in test_loaders]
+        train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
+        test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
 
         for dl in train_loaders:
             print("train_loader: {}, {}".format(dl.dataset, len(dl)))
@@ -168,7 +169,7 @@ def train(rank, world_size, args, data, model, outpath):
         model = model.to(rank)
     model.train()
 
-    model = train.torch.prepare_model(model)
+    model = ray.train.torch.prepare_model(model)
 
     training_loop(
         rank,
