@@ -139,7 +139,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
     for loss in losses_of_interest:
         losses[loss] = 0.0
 
-    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+    for i, batch in tqdm.tqdm(enumerate(loader), total=len(list(loader))):
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
                 "step_{}/num_elems".format(step_type),
