@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
@@ -139,7 +140,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
     for loss in losses_of_interest:
         losses[loss] = 0.0
 
-    for i, batch in enumerate(loader):
+    for i, batch in tqdm(enumerate(loader)):
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
                 "step_{}/num_elems".format(step_type),

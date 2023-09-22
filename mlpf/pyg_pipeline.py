@@ -125,14 +125,14 @@ def train_(rank, world_size, args, data, model, outpath):
     from pyg import tfds_utils
 
     ds_train = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+        # tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+        # tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
         tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
         tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
     ]
     ds_valid = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
+        # tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
+        # tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
         tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
         tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
     ]
