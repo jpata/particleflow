@@ -118,15 +118,33 @@ def train(rank, world_size, args, data, model, outpath):
         file_loader_train = make_file_loaders(world_size, train_dataset)
         file_loader_valid = make_file_loaders(world_size, valid_dataset)
     else:  # construct pyg DataLoaders directly
-        train_data = []
-        for file in train_dataset:
-            train_data += file
-        file_loader_train = [torch_geometric.loader.DataLoader(train_data, args.bs)]
+        from pyg.tfds import Dataset as Datasett
 
-        valid_data = []
-        for file in valid_dataset:
-            valid_data += file
-        file_loader_valid = [torch_geometric.loader.DataLoader(valid_data, args.bs)]
+        ds_train = [
+            Datasett("clic_edm_ttbar_pf:1.5.0", "train"),
+            Datasett("clic_edm_qq_pf:1.5.0", "train"),
+            Datasett("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+            Datasett("clic_edm_zh_tautau_pf:1.5.0", "train"),
+        ]
+        ds_test = [
+            Datasett("clic_edm_ttbar_pf:1.5.0", "test"),
+            Datasett("clic_edm_qq_pf:1.5.0", "test"),
+            Datasett("clic_edm_ww_fullhad_pf:1.5.0", "test"),
+            Datasett("clic_edm_zh_tautau_pf:1.5.0", "test"),
+        ]
+
+        for ds in ds_train:
+            print("train_dataset: {}, {}".format(ds, len(ds)))
+        for ds in ds_test:
+            print("test_dataset: {}, {}".format(ds, len(ds)))
+
+        file_loader_train = [
+            ds.get_loader(batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        ]
+
+        file_loader_valid = [
+            ds.get_loader(batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+        ]
 
     print("-----------------------------")
     if world_size > 1:
