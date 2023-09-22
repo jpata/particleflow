@@ -152,7 +152,11 @@ def train(rank, world_size, args, data, model, outpath):
             rank = torch.device("cuda:0")
         else:
             rank = "cpu"
+
+        # TODO: remove
+        rank = "cpu"
         print(f"Running training on {rank}")
+
         model = model.to(rank)
     model.train()
 
