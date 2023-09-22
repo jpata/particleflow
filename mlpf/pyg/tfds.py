@@ -81,7 +81,7 @@ class Collater:
 
 class Dataset:
     def __init__(self, name="clic_edm_ttbar_pf:1.5.0", split="train"):
-        builder = tfds.builder(name, data_dir="/pfvol/tensorflow_datasets/")
+        builder = tfds.builder(name, data_dir="/pfvol/tensorflow_datasets/clic/clusters/")
 
         self.ds = builder.as_data_source(split=split)
 
