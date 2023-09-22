@@ -126,28 +126,28 @@ def train_(rank, world_size, args, data, model, outpath):
         file_loader_train = make_file_loaders(world_size, train_dataset)
         file_loader_valid = make_file_loaders(world_size, valid_dataset)
     else:  # construct pyg DataLoaders directly
-        from pyg.tfds import Dataset as Datasett
+        from pyg.tfds import tfds
 
         ds_train = [
-            Datasett("clic_edm_ttbar_pf:1.5.0", "train"),
-            Datasett("clic_edm_qq_pf:1.5.0", "train"),
-            Datasett("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-            Datasett("clic_edm_zh_tautau_pf:1.5.0", "train"),
+            tfds.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+            tfds.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+            tfds.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+            tfds.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
         ]
-        ds_test = [
-            Datasett("clic_edm_ttbar_pf:1.5.0", "test"),
-            Datasett("clic_edm_qq_pf:1.5.0", "test"),
-            Datasett("clic_edm_ww_fullhad_pf:1.5.0", "test"),
-            Datasett("clic_edm_zh_tautau_pf:1.5.0", "test"),
+        ds_valid = [
+            tfds.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
+            tfds.Dataset("clic_edm_qq_pf:1.5.0", "test"),
+            tfds.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
+            tfds.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
         ]
 
         for ds in ds_train:
             print("train_dataset: {}, {}".format(ds, len(ds)))
-        for ds in ds_test:
+        for ds in ds_valid:
             print("test_dataset: {}, {}".format(ds, len(ds)))
 
         train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
-        test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
+        valid_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_valid]
 
         class InterleavedIterator(object):
             def __init__(self, data_loaders):
@@ -172,18 +172,8 @@ def train_(rank, world_size, args, data, model, outpath):
                 self.cur_index += 1
                 return next(self.data_loaders_iter[iloader])
 
-        data_iterator = InterleavedIterator(train_loaders)
-        for i in data_iterator:
-            print("LOL", i)
-            break
-
-        # train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
-        # test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
-
-        for dl in train_loaders:
-            print("train_loader: {}, {}".format(dl.dataset, len(dl)))
-        for dl in test_loaders:
-            print("test_loader: {}, {}".format(dl.dataset, len(dl)))
+        train_loader = InterleavedIterator(train_loaders)
+        valid_loader = InterleavedIterator(valid_loaders)
 
     print("-----------------------------")
     if world_size > 1:
@@ -209,8 +199,8 @@ def train_(rank, world_size, args, data, model, outpath):
     training_loop(
         rank,
         model,
-        train_loaders,
-        test_loaders,
+        train_loader,
+        valid_loader,
         args.bs,
         args.n_epochs,
         args.patience,
