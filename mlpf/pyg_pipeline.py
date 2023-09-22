@@ -175,6 +175,7 @@ def train_(rank, world_size, args, data, model, outpath):
         data_iterator = InterleavedIterator(train_loaders)
         for i in data_iterator:
             print("LOL", i)
+            break
 
         # train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
         # test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]

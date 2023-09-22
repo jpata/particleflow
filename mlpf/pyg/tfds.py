@@ -92,25 +92,15 @@ class Dataset:
         sampler = torch.utils.data.SequentialSampler(self.ds)
         return sampler
 
-    def get_loader(self, padded_data=True, batch_size=20, num_workers=0, prefetch_factor=2):
-        if padded_data:
-            return torch.utils.data.DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=collate_padded_batch,
-                sampler=self.get_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
+    def get_loader(self, batch_size=20, num_workers=0, prefetch_factor=2):
+        return DataLoader(
+            self.ds,
+            batch_size=batch_size,
+            collate_fn=Collater(),
+            sampler=self.get_sampler(),
+            num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+        )
 
     def __len__(self):
         return len(self.ds)
