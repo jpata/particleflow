@@ -2,11 +2,10 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
+from model import CombinedGraphLayer
 from torch_geometric.nn.conv import GravNetConv
 
 # from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
-
-from mlpf.pyg.model import CombinedGraphLayer
 
 
 class GravNetLayer(nn.Module):
@@ -40,7 +39,6 @@ class SelfAttentionLayer(nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):
-
         x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
         x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
@@ -134,7 +132,6 @@ class MLPF(nn.Module):
         self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
 
     def forward(self, element_features, batch_idx):
-
         # unfold the Batch object
         if self.ssl:
             input_ = element_features.float()[:, : self.input_dim]
