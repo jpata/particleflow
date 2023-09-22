@@ -835,6 +835,7 @@ def process_one_file(fn, ofn):
 
         sanitize(X_track)
         sanitize(X_cluster)
+        print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
         sanitize(ygen_track)
         sanitize(ygen_cluster)
         sanitize(ycand_track)

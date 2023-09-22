@@ -28,12 +28,25 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+
+  tf-unittest:
+    runs-on: ubuntu-22.04
+    needs: [deps]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: ./scripts/local_test_cms_pipeline.sh
+      - run: PYTHONPATH=. python3 -m unittest tests/test_tf.py
 
   tf-clic-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps]
+    needs: [tf-unittest]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -45,7 +58,7 @@ jobs:
 
   tf-clic-hits-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps]
+    needs: [tf-unittest]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -57,7 +70,7 @@ jobs:
 
   tf-delphes-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps]
+    needs: [tf-unittest]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -69,7 +82,7 @@ jobs:
 
   tf-cms-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps]
+    needs: [tf-unittest]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -79,7 +92,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ./scripts/local_test_cms_pipeline.sh
 
-  pyg-cms-pipeline:
+  pyg-unittests:
     runs-on: ubuntu-22.04
     needs: [deps-pyg]
     steps:
@@ -89,13 +102,27 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+      - run: PYTHONPATH=. python3 -m unittest tests/test_torch_and_tf.py
+
+  pyg-cms-pipeline:
+    runs-on: ubuntu-22.04
+    needs: [pyg-unittests]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
       - run: ./scripts/local_test_pyg_cms.sh
 
   pyg-delphes-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps-pyg]
+    needs: [pyg-unittests]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -103,13 +130,13 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
       - run: ./scripts/local_test_pyg_delphes.sh
 
   pyg-clic-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps-pyg]
+    needs: [pyg-unittests]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -117,13 +144,13 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
       - run: ./scripts/local_test_pyg_clic.sh
 
   pyg-ssl-pipeline:
     runs-on: ubuntu-22.04
-    needs: [deps-pyg]
+    needs: [pyg-unittests]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -131,6 +158,6 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==1.13.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric==2.2.0 -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
+      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
       - run: ./scripts/local_test_pyg_ssl.sh

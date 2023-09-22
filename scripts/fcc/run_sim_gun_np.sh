@@ -23,10 +23,10 @@ mkdir -p $WORKDIR
 cd $WORKDIR
 
 #cp $PFDIR/fcc/main ./
-cp $PFDIR/fcc/pythia.py ./
-cp $PFDIR/fcc/clic_steer.py ./
-cp -R $PFDIR/fcc/PandoraSettings ./
-cp -R $PFDIR/fcc/clicRec_e4h_input.py ./
+cp $PFDIR/scripts/fcc/pythia.py ./
+cp $PFDIR/scripts/fcc/clic_steer.py ./
+cp -R $PFDIR/scripts/fcc/PandoraSettings ./
+cp -R $PFDIR/scripts/fcc/clicRec_e4h_input.py ./
 
 #without PU
 source /cvmfs/sw.hsf.org/spackages6/key4hep-stack/2023-01-15/x86_64-centos7-gcc11.2.0-opt/csapx/setup.sh

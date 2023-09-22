@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
-from torch_geometric.nn.conv import GravNetConv  # also returns edge index
+from torch_geometric.nn.conv import GravNetConv
 
-# from pyg_ssl.gravnet import GravNetConv  # also returns edge index
+# from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
+
+from mlpf.pyg.model import CombinedGraphLayer
 
 
 class GravNetLayer(nn.Module):
@@ -46,49 +48,14 @@ class SelfAttentionLayer(nn.Module):
         return x
 
 
-def ffn(input_dim, output_dim, width, act, dropout, ssl):
-    if ssl:
-        return nn.Sequential(
-            nn.Linear(input_dim, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Linear(width, output_dim),
-        )
-    else:
-        return nn.Sequential(
-            nn.Linear(input_dim, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Dropout(dropout),
-            nn.Linear(width, width),
-            act(),
-            torch.nn.LayerNorm(width),
-            nn.Linear(width, output_dim),
-        )
+def ffn(input_dim, output_dim, width, act, dropout):
+    return nn.Sequential(
+        nn.Linear(input_dim, width),
+        act(),
+        torch.nn.LayerNorm(width),
+        nn.Dropout(dropout),
+        nn.Linear(width, output_dim),
+    )
 
 
 class MLPF(nn.Module):
@@ -97,7 +64,7 @@ class MLPF(nn.Module):
         input_dim=34,
         NUM_CLASSES=8,
         embedding_dim=128,
-        width=126,
+        width=128,
         num_convs=2,
         k=32,
         propagate_dimensions=32,
@@ -116,15 +83,7 @@ class MLPF(nn.Module):
 
         # embedding of the inputs
         if num_convs != 0:
-            self.nn0 = nn.Sequential(
-                nn.Linear(input_dim, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, width),
-                self.act(),
-                nn.Linear(width, embedding_dim),
-            )
+            self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
             self.conv_type = "gravnet"
             # GNN that uses the embeddings learnt by VICReg as the input features
@@ -137,26 +96,42 @@ class MLPF(nn.Module):
             elif self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
-
                 for i in range(num_convs):
                     self.conv_id.append(SelfAttentionLayer(embedding_dim))
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
+            elif self.conv_type == "gnn-lsh":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+
+                for i in range(num_convs):
+                    gnn_conf = {
+                        "inout_dim": embedding_dim,
+                        "bin_size": 256,
+                        "max_num_bins": 200,
+                        "distance_dim": 128,
+                        "layernorm": True,
+                        "num_node_messages": 2,
+                        "dropout": 0.0,
+                        "ffn_dist_hidden_dim": 64,
+                    }
+                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
+                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         decoding_dim = input_dim + num_convs * embedding_dim
         if ssl:
             decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout, ssl)
+        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout, ssl)
-        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout, ssl)
+        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout)
+        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout, ssl)
+        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
 
     def forward(self, batch):
 
@@ -183,7 +158,7 @@ class MLPF(nn.Module):
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     embeddings_reg.append(conv(conv_input, batch_idx))
-            elif self.conv_type == "attention":
+            else:
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
                     input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
