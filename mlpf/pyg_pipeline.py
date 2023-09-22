@@ -239,7 +239,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     world_size = torch.cuda.device_count()
-    world_size = 1
+    world_size = 0
 
     torch.backends.cudnn.benchmark = True
 
