@@ -122,13 +122,13 @@ def train(rank, world_size, args, data, model, outpath):
 
         ds_train = [
             Datasett("clic_edm_ttbar_pf:1.5.0", "train"),
-            Datasett("clic_edm_qq_pf:1.5.0", "train"),
+            # Datasett("clic_edm_qq_pf:1.5.0", "train"),
             Datasett("clic_edm_ww_fullhad_pf:1.5.0", "train"),
             Datasett("clic_edm_zh_tautau_pf:1.5.0", "train"),
         ]
         ds_test = [
             Datasett("clic_edm_ttbar_pf:1.5.0", "test"),
-            Datasett("clic_edm_qq_pf:1.5.0", "test"),
+            # Datasett("clic_edm_qq_pf:1.5.0", "test"),
             Datasett("clic_edm_ww_fullhad_pf:1.5.0", "test"),
             Datasett("clic_edm_zh_tautau_pf:1.5.0", "test"),
         ]
