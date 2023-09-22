@@ -281,15 +281,15 @@ def train(
     if config["dataset"]["enable_tfds_caching"]:
         logging.info("ensuring dataset cache is hot")
         for ielem, elem in enumerate(ds_train.tensorflow_dataset):
-            if ielem<5:
+            if ielem < 5:
                 msk = elem[0][..., 0].numpy() != 0
-                print('features {}'.format(np.sum(msk)))
+                print("features {}".format(np.sum(msk)))
                 for ifeat in range(elem[0].shape[-1]):
                     feat = elem[0][..., ifeat].numpy()[msk]
                     print(ifeat, feat.min(), feat.max(), np.mean(feat), np.std(feat))
-                print('targets')
+                print("targets")
                 print(elem[1])
-                print('weights')
+                print("weights")
                 print(elem[2])
         for elem in ds_test.tensorflow_dataset:
             pass
@@ -449,17 +449,18 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     model, _, initial_epoch = model_scope(config, 1, weights=weights)
 
-    print("before loading")
-    print(model.normalizer.mean)
-    print(model.normalizer.variance)
+    if config["setup"]["use_normalizer"]:
+        print("before loading")
+        print(model.normalizer.mean)
+        print(model.normalizer.variance)
 
-    normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
-    cache = np.load(normalizer_cache_path, allow_pickle=True)
-    model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
-    model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
-    print("after loading")
-    print(model.normalizer.mean)
-    print(model.normalizer.variance)
+        normalizer_cache_path = "{}/normalizations.npz".format(config["cache"])
+        cache = np.load(normalizer_cache_path, allow_pickle=True)
+        model.normalizer.mean = tf.convert_to_tensor(cache["mean"])
+        model.normalizer.variance = tf.convert_to_tensor(cache["variance"])
+        print("after loading")
+        print(model.normalizer.mean)
+        print(model.normalizer.variance)
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]

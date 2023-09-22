@@ -27,10 +27,10 @@ def unpack_target(y, num_output_classes, config):
     charge_as_int = tf.cast(y[..., 1] + 1, tf.int32)  # -1, 0, 1 -> 0, 1, 2
     tf.debugging.assert_greater_equal(charge_as_int, 0, message="charge", summarize=100)
     tf.debugging.assert_less_equal(charge_as_int, 2, message="charge", summarize=100)
-    
+
     tf.debugging.assert_greater_equal(type_as_int, 0, message="targettype", summarize=100)
     tf.debugging.assert_less_equal(type_as_int, num_output_classes, message="targettype", summarize=100)
-    
+
     tf.debugging.assert_less_equal(tf.math.abs(pt), 1e5)
     tf.debugging.assert_less_equal(tf.math.abs(eta), 1e5)
     tf.debugging.assert_less_equal(tf.math.abs(sin_phi), 1e5)
