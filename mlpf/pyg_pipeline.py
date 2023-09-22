@@ -154,7 +154,7 @@ def train(rank, world_size, args, data, model, outpath):
             rank = "cpu"
 
         # TODO: remove
-        rank = "cpu"
+        # rank = "cpu"
         print(f"Running training on {rank}")
 
         model = model.to(rank)
