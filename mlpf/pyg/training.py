@@ -170,11 +170,20 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         target_momentum = event.ygen[:, 2:].to(dtype=torch.float32)
         assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
+        print("target_ids", target_ids.shape)
+        print("target_momentum", target_momentum.shape)
+        print("target_charge", target_charge.shape)
+
         loss_ = {}
         # for CLASSIFYING PID
         loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
         # REGRESSING p4: mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+        print("msk_true_particle", msk_true_particle.shape)
+
+        print("pred_ids_one_hot", pred_ids_one_hot.shape)
+        print("pred_momentum", pred_momentum.shape)
+
         loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )
