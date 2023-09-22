@@ -23,9 +23,23 @@ def unpack_target(y, num_output_classes, config):
     sin_phi = y[..., 4:5] * msk_pid
     cos_phi = y[..., 5:6] * msk_pid
 
+    type_as_int = tf.cast(y[..., 0], tf.int32)
+    charge_as_int = tf.cast(y[..., 1] + 1, tf.int32)  # -1, 0, 1 -> 0, 1, 2
+    tf.debugging.assert_greater_equal(charge_as_int, 0, message="charge", summarize=100)
+    tf.debugging.assert_less_equal(charge_as_int, 2, message="charge", summarize=100)
+    
+    tf.debugging.assert_greater_equal(type_as_int, 0, message="targettype", summarize=100)
+    tf.debugging.assert_less_equal(type_as_int, num_output_classes, message="targettype", summarize=100)
+    
+    tf.debugging.assert_less_equal(tf.math.abs(pt), 1e5)
+    tf.debugging.assert_less_equal(tf.math.abs(eta), 1e5)
+    tf.debugging.assert_less_equal(tf.math.abs(sin_phi), 1e5)
+    tf.debugging.assert_less_equal(tf.math.abs(cos_phi), 1e5)
+    tf.debugging.assert_less_equal(tf.math.abs(energy), 1e5)
+
     ret = {
-        "cls": tf.one_hot(tf.cast(y[..., 0], tf.int32), num_output_classes),
-        "charge": tf.one_hot(tf.cast(y[..., 1] + 1, tf.int32), 3),  # -1, 0, 1 -> 0, 1, 2
+        "cls": tf.one_hot(type_as_int, num_output_classes),
+        "charge": tf.one_hot(charge_as_int, 3),
         "pt": pt,
         "eta": eta,
         "sin_phi": sin_phi,
@@ -99,6 +113,7 @@ def mlpf_dataset_from_config(dataset_name, full_config, split, max_events=None, 
 def get_map_to_supervised(config):
     target_particles = config["dataset"]["target_particles"]
     num_output_classes = config["dataset"]["num_output_classes"]
+    num_input_classes = config["dataset"]["num_input_classes"]
     assert target_particles in [
         "gen",
         "cand",
@@ -107,6 +122,9 @@ def get_map_to_supervised(config):
     def func(data_item):
         X = data_item["X"]
         y = data_item["y{}".format(target_particles)]
+
+        tf.debugging.assert_greater_equal(X[..., 0], 0.0, message="X", summarize=100)
+        tf.debugging.assert_less_equal(X[..., 0], float(num_input_classes), message="X", summarize=100)
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
         X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)
