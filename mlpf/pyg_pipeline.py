@@ -1,6 +1,9 @@
 import json
 import os
 import os.path as osp
+import sys
+
+sys.path.append("pyg/")
 
 import matplotlib
 import numpy as np
@@ -220,7 +223,6 @@ def load_data(data_path, dataset, sample):
 
 
 if __name__ == "__main__":
-
     args = parse_args()
 
     world_size = torch.cuda.device_count()
