@@ -306,6 +306,7 @@ def make_gnn_dense(config, dtype):
         met_output=config["loss"]["met_loss"] != "none",
         cls_output_as_logits=config["setup"].get("cls_output_as_logits", False),
         small_graph_opt=config["setup"].get("small_graph_opt", False),
+        use_normalizer=config["setup"].get("use_normalizer", True),
         **kwargs,
     )
 

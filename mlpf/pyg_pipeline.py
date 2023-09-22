@@ -281,6 +281,27 @@ if __name__ == "__main__":
     state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
     model.load_state_dict(state_dict)
 
+    try:
+        dummy_features = torch.randn(256, model_kwargs["input_dim"], device=device)
+        dummy_batch = torch.zeros(256, dtype=torch.int64, device=device)
+        torch.onnx.export(
+            model,
+            (dummy_features, dummy_batch),
+            "test.onnx",
+            verbose=True,
+            input_names=["features", "batch"],
+            output_names=["id", "momentum", "charge"],
+            dynamic_axes={
+                "features": {0: "num_elements"},
+                "batch": [0],
+                "id": [0],
+                "momentum": [0],
+                "charge": [0],
+            },
+        )
+    except Exception as e:
+        print("ONNX export failed: {}".format(e))
+
     # prepare for inference and plotting
     PATH = f"{outpath}/testing_epoch_{best_epoch}_{args.sample}/"
     pred_path = f"{PATH}/predictions/"

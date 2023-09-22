@@ -60,7 +60,7 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: yes
-  normalizer_cache: parameters/clic_normalizations
+  use_normalizer: no
 
 batching:
   # if enabled, use variable-size batching instead of the fixed-size batches configured per-sample in batch_per_gpu

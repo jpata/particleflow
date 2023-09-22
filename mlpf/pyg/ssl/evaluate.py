@@ -101,7 +101,8 @@ def evaluate(device, encoder, mlpf, batch_size_mlpf, mode, outpath, samples):
                     event = batch
 
                 # make mlpf forward pass
-                pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.to(device))
+                event_dev = event.to(device)
+                pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event_dev.x, event_dev.batch)
                 pred_charge = torch.argmax(pred_charge, axis=-1).unsqueeze(axis=-1) - 1
 
                 pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True) - 1

@@ -257,8 +257,11 @@ class InputEncodingCMS(tf.keras.layers.Layer):
             tf.one_hot(tf.cast(X[:, :, 0], tf.int32), self.num_input_classes),
             dtype=X.dtype,
         )
+
+        tf.debugging.assert_greater_equal(X[:, :, 1], 0.0, message="pt", summarize=100)
+        tf.debugging.assert_greater_equal(X[:, :, 5], 0.0, message="energy", summarize=100)
         Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
-        Xe = tf.expand_dims(tf.math.log(X[:, :, 4] + 1.0), axis=-1)
+        Xe = tf.expand_dims(tf.math.log(X[:, :, 5] + 1.0), axis=-1)
 
         Xpt_0p5 = tf.math.sqrt(Xpt)
         Xpt_2 = tf.math.pow(Xpt, 2)
@@ -1154,6 +1157,7 @@ class PFNetDense(tf.keras.Model):
         met_output=False,
         cls_output_as_logits=False,
         small_graph_opt=False,
+        use_normalizer=True,
         **kwargs
     ):
         super(PFNetDense, self).__init__()
@@ -1177,10 +1181,13 @@ class PFNetDense(tf.keras.Model):
         self.small_graph_opt = small_graph_opt
         self.activation = getattr(tf.keras.activations, activation)
 
+        self.use_normalizer = use_normalizer
+
         # if True, run small graphs (Nelem < bin_size) in a more optimal way
         combined_graph_layer["small_graph_opt"] = self.small_graph_opt
 
-        self.normalizer = tf.keras.layers.Normalization(axis=-1, dtype="float32")
+        if self.use_normalizer:
+            self.normalizer = tf.keras.layers.Normalization(axis=-1, dtype="float32")
 
         if self.do_node_encoding:
             self.node_encoding = point_wise_feed_forward_network(
@@ -1218,14 +1225,16 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        zero_pad_fraction = tf.reduce_sum(tf.cast(Xorig[:, :, 0] == 0, dtype=tf.int32)) / (
-            tf.shape(Xorig)[0] * tf.shape(Xorig)[1]
-        )
-        tf.print("PFNetDense.call Xorig=", tf.shape(Xorig), "zpf=", zero_pad_fraction)
+        # zero_pad_fraction = tf.reduce_sum(tf.cast(Xorig[:, :, 0] == 0, dtype=tf.int32)) / (
+        #     tf.shape(Xorig)[0] * tf.shape(Xorig)[1]
+        # )
+        # tf.print("PFNetDense.call Xorig=", tf.shape(Xorig), "zpf=", zero_pad_fraction)
 
         # normalize all features except the PFElement type (feature 0)
-        # X = Xorig
-        X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
+        if self.use_normalizer:
+            X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
+        else:
+            X = Xorig
 
         X = tf.where(tf.math.is_inf(X), tf.zeros_like(X), X)
         X = tf.where(tf.math.is_nan(X), tf.zeros_like(X), X)

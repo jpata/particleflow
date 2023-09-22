@@ -17,6 +17,7 @@ nevergrad
 notebook
 numba
 numpy
+onnx
 onnxruntime
 pandas
 papermill

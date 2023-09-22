@@ -77,29 +77,12 @@ setup:
   #if enabled, do not create LSH bins for small graphs (less than one bin size)
   #enabling results in some speedup for gun samples, but must be disabled for XLA
   small_graph_opt: no
-  normalizer_cache: parameters/cms_normalizations
+  use_normalizer: no
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
   bucket_by_sequence_length: yes
-  # these sizes were sort of tuned for an 8GB GPU
-  # - max_sequence_length, batch_size_per_gpu
-
-#on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 160
-    - 50, 80
-    - 100, 40
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
-  # use this batch multiplier to increase all batch sizes by a constant factor
+  bucket_batch_sizes: auto
   batch_multiplier: 1
 
 optimizer:
