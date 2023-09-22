@@ -136,12 +136,11 @@ Y_FEATURES = {
         "cos_phi",
         "energy",
     ],
-    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
+    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "TODO"],
 }
 
 
 def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
-
     if not osp.isdir(outpath):
         os.makedirs(outpath)
 
@@ -189,7 +188,6 @@ def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
 
 
 def load_mlpf(device, outpath):
-
     PATH = outpath + "/best_epoch_weights.pth"
     print("Loading a previously trained model..")
     with open(outpath + "/model_kwargs.pkl", "rb") as f:
