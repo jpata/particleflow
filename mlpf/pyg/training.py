@@ -156,7 +156,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
         # tf = tf + (time.time() - t0)
 
-        target_ids = event.ygen[:, 0]
+        target_ids = event.ygen[:, 0].long()
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
