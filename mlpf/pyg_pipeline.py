@@ -126,19 +126,19 @@ def train_(rank, world_size, args, data, model, outpath):
         file_loader_train = make_file_loaders(world_size, train_dataset)
         file_loader_valid = make_file_loaders(world_size, valid_dataset)
     else:  # construct pyg DataLoaders directly
-        from pyg.tfds import tfds
+        from pyg import tfds_utils
 
         ds_train = [
-            tfds.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-            tfds.Dataset("clic_edm_qq_pf:1.5.0", "train"),
-            tfds.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-            tfds.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
+            tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+            tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+            tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+            tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
         ]
         ds_valid = [
-            tfds.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
-            tfds.Dataset("clic_edm_qq_pf:1.5.0", "test"),
-            tfds.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
-            tfds.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
+            tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
+            tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
+            tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
+            tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
         ]
 
         for ds in ds_train:
