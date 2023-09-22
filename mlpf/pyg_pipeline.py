@@ -149,6 +149,33 @@ def train_(rank, world_size, args, data, model, outpath):
         train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
         test_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_test]
 
+        class InterleavedIterator(object):
+            def __init__(self, data_loaders):
+                self.idx = 0
+                self.data_loaders_iter = [iter(dl) for dl in data_loaders]
+                max_loader_size = max([len(dl) for dl in data_loaders])
+
+                # interleave loaders of different length
+                self.loader_ds_indices = []
+                for i in range(max_loader_size):
+                    for iloader, loader in enumerate(data_loaders):
+                        if i < len(loader):
+                            self.loader_ds_indices.append(iloader)
+
+                self.cur_index = 0
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                iloader = self.loader_ds_indices[self.cur_index]
+                self.cur_index += 1
+                return next(self.data_loaders_iter[iloader])
+
+        data_iterator = InterleavedIterator(train_loaders)
+        for i in data_iterator:
+            print("LOL", i)
+
         # train_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in train_loaders]
         # test_loaders = [ray.train.torch.prepare_data_loader(dl) for dl in test_loaders]
 
