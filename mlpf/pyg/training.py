@@ -1,4 +1,5 @@
 import json
+import logging
 import pickle as pkl
 import time
 from typing import Optional
@@ -7,7 +8,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
@@ -104,14 +104,14 @@ class FocalLoss(nn.Module):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, tensorboard_writer=None):
+def validation_run(rank, model, train_loader, valid_loader, tensorboard_writer=None):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, tensorboard_writer)
+        ret = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
     return ret
 
 
-def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorboard_writer=None):
+def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=None):
     """
     A training/validation run over a given epoch that gets called in the training_loop() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -125,13 +125,13 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
     step_type = "train" if is_train else "valid"
 
     if is_train:
-        print(f"---->Initiating a training run on rank {rank}")
-        mlpf.train()
+        logging.info("Initiating a training run on {}".format(rank))
         loader = train_loader
+        mlpf.train()
     else:
-        print(f"---->Initiating a validation run rank {rank}")
-        mlpf.eval()
+        logging.info("Initiating a validation run on {}".format(rank))
         loader = valid_loader
+        mlpf.eval()
 
     # initialize loss counters
     losses_of_interest = ["Total", "Classification", "Regression", "Charge"]
@@ -139,7 +139,6 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
     for loss in losses_of_interest:
         losses[loss] = 0.0
 
-    # for i, batch in tqdm.tqdm(enumerate(loader), total=len(list(loader))):
     for i, batch in enumerate(loader):
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
@@ -148,7 +147,6 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
                 ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
             )
 
-        print("batch", batch)
         event = batch.to(rank)
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
@@ -157,9 +155,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        # t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
-        # tf = tf + (time.time() - t0)
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -171,20 +167,11 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
 
         assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
-        print("target_ids", target_ids.shape)
-        print("target_momentum", target_momentum.shape)
-        print("target_charge", target_charge.shape)
-
         loss_ = {}
         # for CLASSIFYING PID
         loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
         # REGRESSING p4: mask the loss in cases there is no true particle
         msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        print("msk_true_particle", msk_true_particle.shape)
-
-        print("pred_ids_one_hot", pred_ids_one_hot.shape)
-        print("pred_momentum", pred_momentum.shape)
-
         loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
             pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )
@@ -213,12 +200,10 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         else:
             ISTEP_GLOBAL_VALID += 1
 
-    # print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
-
     for loss in losses_of_interest:
         losses[loss] = losses[loss].cpu().item() / (len(loader))
 
-    print(
+    logging.info(
         "loss_id={:.4f} loss_momentum={:.4f} loss_charge={:.4f}".format(
             losses["Classification"], losses["Regression"], losses["Charge"]
         )
@@ -227,17 +212,7 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
     return losses
 
 
-def training_loop(
-    rank,
-    mlpf,
-    train_loader,
-    valid_loader,
-    batch_size,
-    n_epochs,
-    patience,
-    lr,
-    outpath,
-):
+def training_loop(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath):
     """
     Main function to perform training. Will call the train() and validation_run() functions every epoch.
 
@@ -267,24 +242,24 @@ def training_loop(
 
     optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
 
-    print("Will launch a supervised training of MLPF.")
+    logging.info("Will launch a supervised training of MLPF")
 
     for epoch in range(n_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
-            print("breaking due to stale epochs")
+            logging.info("breaking due to stale epochs")
             break
 
         # training step
-        losses_t = train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorboard_writer)
+        losses_t = train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer)
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, tensorboard_writer)
+        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, tensorboard_writer)
         for loss in losses_of_interest:
             losses["valid"][loss].append(losses_v[loss])
         for k, v in losses_v.items():
@@ -324,7 +299,7 @@ def training_loop(
         time_per_epoch = (t1 - t0_initial) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
-        print(
+        logging.info(
             f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
             + f"train_loss={round(losses_t['Total'], 4)} "
             + f"valid_loss={round(losses_v['Total'], 4)} "
@@ -356,5 +331,4 @@ def training_loop(
         with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
 
-        print("----------------------------------------------------------")
-    print(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
+    logging.info(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
