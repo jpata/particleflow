@@ -17,7 +17,8 @@ from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
 from pyg.training import training_loop
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders, save_mlpf
+from pyg.utils import (CLASS_LABELS, X_FEATURES, load_mlpf, make_file_loaders,
+                       save_mlpf)
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 matplotlib.use("Agg")
@@ -139,11 +140,11 @@ def train(rank, world_size, args, data, model, outpath):
             print("test_dataset: {}, {}".format(ds, len(ds)))
 
         file_loader_train = [
-            ds.get_loader(batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+            ds.get_loader(batch_size=args.bs, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
         ]
 
         file_loader_valid = [
-            ds.get_loader(batch_size=args.batch_size, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
+            ds.get_loader(batch_size=args.bs, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor)
         ]
 
     print("-----------------------------")
