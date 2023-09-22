@@ -4,7 +4,6 @@ import pickle as pkl
 import time
 from typing import Optional
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -13,7 +12,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-matplotlib.use("Agg")
+logging.basicConfig(level=logging.INFO)
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
