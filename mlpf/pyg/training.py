@@ -139,7 +139,6 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
     for loss in losses_of_interest:
         losses[loss] = 0.0
 
-    c = 0
     for i, batch in tqdm.tqdm(enumerate(loader)):
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
@@ -156,11 +155,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        for i in range(1000):
-            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
-
-            c += 1
-            print(c)
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -205,6 +200,8 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         else:
             ISTEP_GLOBAL_VALID += 1
 
+        if i == 2:
+            break
     for loss in losses_of_interest:
         losses[loss] = losses[loss].cpu().item() / (len(loader))
 
