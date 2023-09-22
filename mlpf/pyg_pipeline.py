@@ -122,58 +122,54 @@ def train_(rank, world_size, args, data, model, outpath):
     print("train_dataset={}".format(len(train_dataset)))
     print("valid_dataset={}".format(len(valid_dataset)))
 
-    if args.dataset == "CMS":  # construct file loaders first because we need to set num_workers>0 and pre_fetch factors>2
-        file_loader_train = make_file_loaders(world_size, train_dataset)
-        file_loader_valid = make_file_loaders(world_size, valid_dataset)
-    else:  # construct pyg DataLoaders directly
-        from pyg import tfds_utils
+    from pyg import tfds_utils
 
-        ds_train = [
-            tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-            tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
-            tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-            tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
-        ]
-        ds_valid = [
-            tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
-            tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
-            tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
-            tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
-        ]
+    ds_train = [
+        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
+    ]
+    ds_valid = [
+        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
+    ]
 
-        for ds in ds_train:
-            print("train_dataset: {}, {}".format(ds, len(ds)))
-        for ds in ds_valid:
-            print("test_dataset: {}, {}".format(ds, len(ds)))
+    for ds in ds_train:
+        print("train_dataset: {}, {}".format(ds, len(ds)))
+    for ds in ds_valid:
+        print("test_dataset: {}, {}".format(ds, len(ds)))
 
-        train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
-        valid_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_valid]
+    train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
+    valid_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_valid]
 
-        class InterleavedIterator(object):
-            def __init__(self, data_loaders):
-                self.idx = 0
-                self.data_loaders_iter = [iter(dl) for dl in data_loaders]
-                max_loader_size = max([len(dl) for dl in data_loaders])
+    class InterleavedIterator(object):
+        def __init__(self, data_loaders):
+            self.idx = 0
+            self.data_loaders_iter = [iter(dl) for dl in data_loaders]
+            max_loader_size = max([len(dl) for dl in data_loaders])
 
-                # interleave loaders of different length
-                self.loader_ds_indices = []
-                for i in range(max_loader_size):
-                    for iloader, loader in enumerate(data_loaders):
-                        if i < len(loader):
-                            self.loader_ds_indices.append(iloader)
+            # interleave loaders of different length
+            self.loader_ds_indices = []
+            for i in range(max_loader_size):
+                for iloader, loader in enumerate(data_loaders):
+                    if i < len(loader):
+                        self.loader_ds_indices.append(iloader)
 
-                self.cur_index = 0
+            self.cur_index = 0
 
-            def __iter__(self):
-                return self
+        def __iter__(self):
+            return self
 
-            def __next__(self):
-                iloader = self.loader_ds_indices[self.cur_index]
-                self.cur_index += 1
-                return next(self.data_loaders_iter[iloader])
+        def __next__(self):
+            iloader = self.loader_ds_indices[self.cur_index]
+            self.cur_index += 1
+            return next(self.data_loaders_iter[iloader])
 
-        train_loader = InterleavedIterator(train_loaders)
-        valid_loader = InterleavedIterator(valid_loaders)
+    train_loader = InterleavedIterator(train_loaders)
+    valid_loader = InterleavedIterator(valid_loaders)
 
     print("-----------------------------")
     if world_size > 1:
