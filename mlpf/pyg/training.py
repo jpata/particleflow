@@ -156,7 +156,8 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
         # tf = tf + (time.time() - t0)
 
-        target_ids = event.ygen_id
+        target_ids = event.ygen[:, 0]
+
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
@@ -165,8 +166,8 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, tensorb
                     ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
                 )
 
-        target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
-        target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
+        target_charge = (event.ygen[:, 1] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
+        target_momentum = event.ygen[:, 2:].to(dtype=torch.float32)
         assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
         loss_ = {}
