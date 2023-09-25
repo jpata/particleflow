@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")
     parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
     parser.add_argument("--nearest", type=int, default=32, help="k nearest neighbors in gravnet layer")
+    parser.add_argument("--conv_type", type=int, default="gnn-lsh", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
 
     # for testing the model
     parser.add_argument(

@@ -68,8 +68,11 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         dropout=0.4,
+        conv_type="gnn-lsh",
     ):
         super(MLPF, self).__init__()
+
+        self.conv_type = conv_type
 
         self.act = nn.ELU
         self.dropout = dropout
@@ -80,8 +83,6 @@ class MLPF(nn.Module):
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
-            self.conv_type = "gnn-lsh"
-            # GNN that uses the embeddings learnt by VICReg as the input features
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()

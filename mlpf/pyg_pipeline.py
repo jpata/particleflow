@@ -296,6 +296,7 @@ if __name__ == "__main__":
             "propagate_dimensions": args.propagate_dim,
             "space_dimensions": args.space_dim,
             "dropout": args.dropout,
+            "conv_type": args.conv_type,
         }
 
         model = MLPF(**model_kwargs)
