@@ -80,7 +80,7 @@ class MLPF(nn.Module):
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
-            self.conv_type = "gnn-lsh"
+            self.conv_type = "gravnet"
             # GNN that uses the embeddings learnt by VICReg as the input features
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
