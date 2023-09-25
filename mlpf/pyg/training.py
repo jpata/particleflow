@@ -162,7 +162,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         for i in range(1000):
             t0 = time.time()
             pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
-            print(f"{time.time() - t0}s")
+            print(f"{event}: {(time.time() - t0):.2f}s")
             # c += 1
 
         for icls in range(pred_ids_one_hot.shape[1]):
