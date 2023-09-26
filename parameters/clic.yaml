@@ -12,10 +12,10 @@ dataset:
   num_output_classes: 6
   cls_weight_by_pt: no
   reg_weight_by_pt: no
-  enable_tfds_caching: yes
+  enable_tfds_caching: no
 
 loss:
-  classification_loss_coef: 200.0
+  classification_loss_coef: 100.0
   charge_loss_coef: 1.0
   pt_loss_coef: 10.0
   eta_loss_coef: 10.0
@@ -51,8 +51,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
-  num_epochs: 100
+  lr: 0.001
+  num_epochs: 150
   dtype: float32
   trainable:
   lr_schedule: cosinedecay # cosinedecay, exponentialdecay, onecycle, none
