@@ -76,7 +76,7 @@ setup:
   cls_output_as_logits: yes
   #if enabled, do not create LSH bins for small graphs (less than one bin size)
   #enabling results in some speedup for gun samples, but must be disabled for XLA
-  small_graph_opt: no
+  small_graph_opt: yes
   use_normalizer: no
 
 batching:
@@ -123,19 +123,6 @@ parameters:
     dist_activation: elu
     ffn_dist_num_layers: 2
     ffn_dist_hidden_dim: 128
-
-    # MPNN
-    #kernel:
-    # type: NodePairTrainableKernel
-    # activation: elu
-    #num_node_messages: 1
-    #node_message:
-    # type: NodeMessageLearnable
-    # output_dim: 64
-    # hidden_dim: 128
-    # num_layers: 2
-    # activation: elu
-    #activation: elu
 
     # GCN
     kernel:
