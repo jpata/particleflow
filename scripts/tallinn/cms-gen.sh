@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --gres gpu:a100:1
+#SBATCH --gres gpu:a100:2
 #SBATCH --mem-per-gpu=40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
