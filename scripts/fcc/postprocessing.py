@@ -353,7 +353,7 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ret["sigma_y"] = np.array(cl_sigma_y)
     ret["sigma_z"] = np.array(cl_sigma_z)
 
-    tt = np.tan(ret["iTheta"] / 2.0)
+    tt = awkward.to_numpy(np.tan(ret["iTheta"] / 2.0))
     eta = awkward.to_numpy(-np.log(tt, where=tt > 0))
     eta[tt <= 0] = 0.0
     ret["eta"] = eta
