@@ -250,7 +250,11 @@ def train(
             pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
             _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
             _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
-            assert pValue.contents.value == 128
+            if pValue.contents.value != 128:
+                logging.warning(
+                    "Could not set L2 cache hint for GPU. Likely the GPU is too old for this optimization"
+                    + ", you may experience slower training performance."
+                )
 
     outdir = ""
     experiment = None
