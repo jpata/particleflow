@@ -18,11 +18,13 @@ MLPF focuses on developing full event reconstruction based on computationally sc
   <img src="images/cms/ak4jet_puppi_pt_ttbar.png" alt="PUPPI jets in ttbar" width="300"/>
 </p>
 
-  - ACAT 2022:
-    - CERN-CMS-DP-2022-061, http://cds.cern.ch/record/2842375
-  - ACAT 2021:
-    - J. Phys. Conf. Ser. 2438 012100, http://dx.doi.org/10.1088/1742-6596/2438/1/012100
-    - CERN-CMS-DP-2021-030, https://cds.cern.ch/record/2792320
+  - 2022
+    - ML4Jets 2022: https://indico.cern.ch/event/1159913/contributions/5101642/attachments/2541214/4374683/ml4jets_2022_mlpf_dsr.pdf
+    - ACAT 2022: https://indico.cern.ch/event/1106990/contributions/4998026/attachments/2533513/4359689/mlpf_acat_v2.pdf
+    - CERN-CMS-DP-2022-061: http://cds.cern.ch/record/2842375
+  - 2021
+    - ACAT 2022: J. Phys. Conf. Ser. 2438 012100, http://dx.doi.org/10.1088/1742-6596/2438/1/012100
+    - CERN-CMS-DP-2021-030: https://cds.cern.ch/record/2792320
 
 ## Initial development with Delphes
 
