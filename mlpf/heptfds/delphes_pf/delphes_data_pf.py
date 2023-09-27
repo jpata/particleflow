@@ -3,6 +3,7 @@ from pathlib import Path
 from utils_delphes import prepare_data_delphes, X_FEATURES, Y_FEATURES
 import tensorflow_datasets as tfds
 import numpy as np
+import glob
 
 _DESCRIPTION = """
 Dataset generated with Delphes.
@@ -55,7 +56,7 @@ class DelphesDataPf(tfds.core.GeneratorBasedBuilder):
         }
 
     def _generate_examples(self, path):
-        for fi in list(path.glob("*.pkl.bz2")):
+        for fi in list(glob.glob("{}/*.pkl.bz2".format(path))) + list(glob.glob("{}/raw/*.pkl.bz2".format(path))):
             Xs, ygens, ycands = prepare_data_delphes(str(fi))
             for iev in range(len(Xs)):
                 yield str(fi) + "_" + str(iev), {

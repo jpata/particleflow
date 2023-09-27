@@ -1,15 +1,17 @@
 #!/bin/bash
-#SBATCH -p gpu
-#SBATCH --gpus 1
-#SBATCH --mem-per-gpu=8G
+#SBATCH --partition gpu
+#SBATCH --gres gpu:rtx:1
+#SBATCH --mem-per-gpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=docker://nvcr.io/nvidia/tensorflow:23.05-tf2-py3
+IMG=/home/software/singularity/tf-2.13.0.simg
 cd ~/particleflow
 
 #TF training
-singularity exec -B /scratch/persistent -B /local --nv \
+singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
-    --env TFDS_DATA_DIR=/local/joosep/mlpf/tensorflow_datasets \
-    --env TF_XLA_FLAGS="--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit" \
-    $IMG python mlpf/pipeline.py train -c parameters/clic-hits.yaml --plot-freq 1 --num-cpus 16 --batch-multiplier 1 --ntrain 100000 --ntest 100000
+    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
+    $IMG python mlpf/pipeline.py train -c parameters/clic.yaml \
+    --plot-freq 1 \
+    --weights ../test/particleflow/models/mlpf-clic-2023-results/clusters_best_tuned_gnn_clic_v130/weights/weights-96-5.346523.hdf5 \
+    --batch-multiplier 0.5
