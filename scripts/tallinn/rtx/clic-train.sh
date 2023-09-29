@@ -13,5 +13,4 @@ singularity exec -B /scratch/persistent --nv \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python mlpf/pipeline.py train -c parameters/clic.yaml \
     --plot-freq 1 \
-    --weights ../test/particleflow/models/mlpf-clic-2023-results/clusters_best_tuned_gnn_clic_v130/weights/weights-96-5.346523.hdf5 \
     --batch-multiplier 0.5
