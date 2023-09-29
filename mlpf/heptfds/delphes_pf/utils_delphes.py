@@ -140,3 +140,30 @@ def prepare_data_delphes(fname, with_jet_idx=True):
         ycands.append(ycand)
 
     return Xs, ygens, ycands
+
+
+def split_sample(path, test_frac=0.8):
+    files = sorted(list(path.glob("*.pkl.bz2")))
+    print("Found {} files in {}".format(len(files), path))
+    assert len(files) > 0
+    idx_split = int(test_frac * len(files))
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
+    assert len(files_train) > 0
+    assert len(files_test) > 0
+    return {
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
+    }
+
+
+def generate_examples(files):
+    for fi in files:
+        Xs, ygens, ycands = prepare_data_delphes(str(fi))
+        assert len(Xs) > 0
+        for iev in range(len(Xs)):
+            yield str(fi) + "_" + str(iev), {
+                "X": Xs[iev],
+                "ygen": ygens[iev],
+                "ycand": ycands[iev],
+            }

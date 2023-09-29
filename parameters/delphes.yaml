@@ -235,9 +235,9 @@ train_test_datasets:
     batch_per_gpu: 5
     event_pad_size: -1
     datasets:
-      - delphes_data_pf
+      - delphes_ttbar_pf
 
-validation_dataset: delphes_data_pf
+validation_dataset: delphes_qcd_pf
 validation_batch_size: 5
 validation_num_events: 100
 
@@ -249,7 +249,11 @@ evaluation_datasets:
 evaluation_jet_algo: antikt_algorithm
 
 datasets:
-  delphes_data_pf:
+  delphes_ttbar_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  delphes_qcd_pf:
     version: 1.2.0
     data_dir:
     manual_dir:

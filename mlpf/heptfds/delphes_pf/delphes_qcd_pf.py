@@ -1,14 +1,16 @@
 from pathlib import Path
 
-from utils_delphes import prepare_data_delphes, X_FEATURES, Y_FEATURES
 import tensorflow_datasets as tfds
 import numpy as np
-import glob
+
+from utils_delphes import X_FEATURES, Y_FEATURES
+from utils_delphes import split_sample, generate_examples
+
 
 _DESCRIPTION = """
 Dataset generated with Delphes.
 
-TTbar and QCD events with PU~200.
+QCD events with PU~200.
 """
 
 _CITATION = """
@@ -16,7 +18,7 @@ https://zenodo.org/record/4559324#.YTs853tRVH4
 """
 
 
-class DelphesDataPf(tfds.core.GeneratorBasedBuilder):
+class DelphesQcdPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
@@ -29,7 +31,7 @@ class DelphesDataPf(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(DelphesDataPf, self).__init__(*args, **kwargs)
+        super(DelphesQcdPf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         return tfds.core.DatasetInfo(
@@ -50,17 +52,7 @@ class DelphesDataPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = Path(dl_manager.manual_dir)
-        return {
-            "train": self._generate_examples(path / "pythia8_ttbar"),
-            "test": self._generate_examples(path / "pythia8_qcd"),
-        }
+        return split_sample(Path(path / "pythia8_qcd/raw"))
 
     def _generate_examples(self, path):
-        for fi in list(glob.glob("{}/*.pkl.bz2".format(path))) + list(glob.glob("{}/raw/*.pkl.bz2".format(path))):
-            Xs, ygens, ycands = prepare_data_delphes(str(fi))
-            for iev in range(len(Xs)):
-                yield str(fi) + "_" + str(iev), {
-                    "X": Xs[iev],
-                    "ygen": ygens[iev],
-                    "ycand": ycands[iev],
-                }
+        return generate_examples(path)
