@@ -29,8 +29,8 @@ rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cl
 python3 mlpf/pipeline.py train --config parameters/clic.yaml --batch-multiplier 0.5
 
 #Download and run the training from a checkpoint (optional)
-wget https://huggingface.co/jpata/particleflow/blob/main/weights-96-5.346523.hdf5
-wget https://huggingface.co/jpata/particleflow/blob/main/opt-96-5.346523.pkl
+wget https://huggingface.co/jpata/particleflow/resolve/main/weights-96-5.346523.hdf5
+wget https://huggingface.co/jpata/particleflow/resolve/main/opt-96-5.346523.pkl
 python3 mlpf/pipeline.py train --config parameters/clic.yaml --weights weights-96-5.346523.hdf5 --batch-multiplier 0.5
 
 #Run the evaluation for a given training directory, loading the best weight file in the directory
