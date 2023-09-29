@@ -242,7 +242,7 @@ validation_batch_size: 5
 validation_num_events: 100
 
 evaluation_datasets:
-  delphes_data_pf:
+  delphes_qcd_pf:
     batch_size: 5
     num_events: -1
 
