@@ -25,9 +25,6 @@ apptainer shell --nv https://hep.kbfi.ee/~joosep/tf-2.13.0.simg
 #Download the training datasets, about 50GB
 rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/clic/clusters/clic_* ~/tensorflow_datasets/
 
-#Download the dataset normalizations (optional, speeds up time to first training epoch)
-wget https://hep.kbfi.ee/~joosep/mlpf_clic_dataset_cache.tar.gz && tar xf mlpf_clic_dataset_cache.tar.gz
-
 #Run the training from scratch, tuning the batch size to be suitable for an 8GB GPU
 python3 mlpf/pipeline.py train --config parameters/clic.yaml --batch-multiplier 0.5
 
