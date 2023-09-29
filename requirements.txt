@@ -31,9 +31,9 @@ scikit-optimize
 scipy
 seaborn
 setGPU
-tf2onnx
 tensorflow
 tensorflow-datasets
+tf2onnx
 tqdm
 uproot
 vector
