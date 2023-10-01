@@ -262,3 +262,27 @@ def make_file_loaders(world_size, data, num_files=1, num_workers=0, prefetch_fac
         collate_fn=Collater(),
         pin_memory=pin_memory,
     )
+
+
+class InterleavedIterator(object):
+    def __init__(self, data_loaders):
+        self.idx = 0
+        self.data_loaders_iter = [iter(dl) for dl in data_loaders]
+        max_loader_size = max([len(dl) for dl in data_loaders])
+
+        # interleave loaders of different length
+        self.loader_ds_indices = []
+        for i in range(max_loader_size):
+            for iloader, loader in enumerate(data_loaders):
+                if i < len(loader):
+                    self.loader_ds_indices.append(iloader)
+
+        self.cur_index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        iloader = self.loader_ds_indices[self.cur_index]
+        self.cur_index += 1
+        return next(self.data_loaders_iter[iloader])
