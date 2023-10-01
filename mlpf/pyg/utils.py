@@ -2,16 +2,8 @@ import json
 import os
 import os.path as osp
 import pickle as pkl
-import shutil
-import sys
-from collections.abc import Sequence
 
-import matplotlib
 import torch
-from torch_geometric.data.data import BaseData
-
-matplotlib.use("Agg")
-
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -156,128 +148,15 @@ def save_mlpf(args, mlpf, model_kwargs):
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
-    print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
     with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump({**vars(args), **{"Num of mlpf parameters": num_mlpf_parameters}}, fp)
-        # json.dump(
-        #     {
-        #         "dataset": args.dataset,
-        #         "n_train": args.n_train,
-        #         "n_valid": args.n_valid,
-        #         "n_test": args.n_test,
-        #         "n_epochs": args.n_epochs,
-        #         "lr": args.lr,
-        #         "bs_mlpf": args.batch_size,
-        #         "width": args.width,
-        #         "embedding_dim": args.embedding_dim,
-        #         "num_convs": args.num_convs,
-        #         "space_dim": args.space_dim,
-        #         "propagate_dim": args.propagate_dim,
-        #         "k": args.nearest,
-        #         "num_mlpf_parameters": num_mlpf_parameters,
-        #         "mode": mode,
-        #     },
-        #     fp,
-        # )
+        json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
 
 
 def load_mlpf(device, outpath):
-    PATH = outpath + "/best_epoch_weights.pth"
-    print("Loading a previously trained model..")
     with open(outpath + "/model_kwargs.pkl", "rb") as f:
         model_kwargs = pkl.load(f)
 
-    state_dict = torch.load(PATH, map_location=device)
-
-    # # if the model was trained using DataParallel then we do this
-    # state_dict = torch.load(PATH, map_location=device)
-    # from collections import OrderedDict
-    # new_state_dict = OrderedDict()
-    # for k, v in state_dict.items():
-    #     name = k[7:]  # remove module.
-    #     new_state_dict[name] = v
-    # state_dict = new_state_dict
+    state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
 
     return state_dict, model_kwargs
-
-
-class Collater:
-    """
-    This function was copied from torch_geometric.loader.Dataloader() source code.
-    Edits were made such that the function can collate samples as a list of tuples
-    of Data() objects instead of Batch() objects. This is needed becase pyg Dataloaders
-    do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
-    """
-
-    def __init__(self):
-        pass
-
-    def __call__(self, batch):
-        elem = batch[0]
-        if isinstance(elem, BaseData):
-            return batch
-
-        elif isinstance(elem, Sequence) and not isinstance(elem, str):
-            return [self(s) for s in zip(*batch)]
-
-        raise TypeError(f"DataLoader found invalid type: {type(elem)}")
-
-
-def make_file_loaders(world_size, data, num_files=1, num_workers=0, prefetch_factor=2):
-    """
-    This function uses native torch Dataloaders with a custom collate_fn that allows loading
-    Data() objects from pt files in an efficient way. This is needed because pyg Dataloaders do
-    not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
-
-    Args:
-        world_size: number of gpus available.
-        dataset: custom dataset.
-        num_files: number of files to load with a single get() call.
-        num_workers: number of workers to use for fetching files.
-        prefetch_factor: number of files to fetch in advance.
-
-    Returns:
-        a torch iterable() that returns a list of 100 elements where each
-        element is a tuple of size=num_files containing Data() objects.
-    """
-
-    pin_memory = world_size > 0
-
-    # prevent a "too many open files" error
-    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-421146936
-    torch.multiprocessing.set_sharing_strategy("file_system")
-
-    return torch.utils.data.DataLoader(
-        data,
-        num_files,
-        shuffle=False,
-        num_workers=2,
-        prefetch_factor=4,
-        collate_fn=Collater(),
-        pin_memory=pin_memory,
-    )
-
-
-class InterleavedIterator(object):
-    def __init__(self, data_loaders):
-        self.idx = 0
-        self.data_loaders_iter = [iter(dl) for dl in data_loaders]
-        max_loader_size = max([len(dl) for dl in data_loaders])
-
-        # interleave loaders of different length
-        self.loader_ds_indices = []
-        for i in range(max_loader_size):
-            for iloader, loader in enumerate(data_loaders):
-                if i < len(loader):
-                    self.loader_ds_indices.append(iloader)
-
-        self.cur_index = 0
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        iloader = self.loader_ds_indices[self.cur_index]
-        self.cur_index += 1
-        return next(self.data_loaders_iter[iloader])

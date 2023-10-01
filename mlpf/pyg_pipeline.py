@@ -1,69 +1,42 @@
-import argparse
-import os
-import os.path as osp
-import sys
-
-sys.path.append("pyg/")
-
-import logging
-
-import matplotlib
-import numpy as np
-
-# import ray
-# import ray.data
-import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
-import yaml
-from pyg import tfds_utils
-
-# import torch_geometric
-# from pyg.evaluate import make_predictions_awk
-from pyg.logger import _logger
-
-logging.basicConfig(level=logging.INFO)
-from pyg.mlpf import MLPF
-from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, load_mlpf, save_mlpf
-
-# from ray import train
-# from ray.air import Checkpoint, session
-# from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
-# from ray.train.torch import TorchConfig, TorchTrainer
-# from torch.nn.parallel import DistributedDataParallel as DDP
-
-# Ignore divide by 0 errors
-np.seterr(divide="ignore", invalid="ignore")
-
-
-matplotlib.use("Agg")
-
-os.environ["MASTER_ADDR"] = "localhost"
-os.environ["MASTER_PORT"] = "12355"
-
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
+Developing a PyTorch Geometric supervised training of MLPF.
 
 Author: Farouk Mokhtar
 """
 
+import argparse
+import logging
+import os
+import sys
+
+sys.path.append("pyg/")
+
+import torch
+import torch.distributed as dist
+import yaml
+from pyg import tfds_utils
+from pyg.logger import _logger
+from pyg.mlpf import MLPF
+from pyg.training import train_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
+
+# import ray
+# import ray.data
+# # from ray import train
+# from ray.air import Checkpoint, session
+# from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
+# from ray.train.torch import TorchConfig, TorchTrainer
+
+logging.basicConfig(level=logging.INFO)
+
+os.environ["MASTER_ADDR"] = "localhost"
+os.environ["MASTER_PORT"] = "12355"
+
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument(
-    "--backend",
-    type=str,
-    choices=["gloo", "nccl"],
-    default=None,
-    help="backend for distributed training (nccl should be faster)",
-)
-parser.add_argument(
-    "--gpus",
-    type=str,
-    default="0",
-    help='to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `0,1`',
-)
+parser.add_argument("--backend", type=str, choices=["gloo", "nccl"], default=None, help="backend for distributed training")
+parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
 parser.add_argument("--dataset", type=str, required=True, help="CLIC, CMS or DELPHES")
 parser.add_argument("--data-path", type=str, default="../data/", help="path which contains the samples")
@@ -77,74 +50,6 @@ parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gnn-lsh", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
 parser.add_argument("--make-predictions", action="store_true", help="run inference on the test data")
 parser.add_argument("--make-plots", action="store_true", help="makes plots of the test predictions")
-
-
-def run_demo(demo_fn, world_size, args, dataset, model, outpath):
-    """
-    Necessary function that spawns a process group of size=world_size processes to run demo_fn()
-    on each gpu device that will be indexed by 'rank'.
-
-    Args:
-    demo_fn: function you wish to run on each gpu.
-    world_size: number of gpus available.
-    """
-
-    mp.spawn(
-        demo_fn,
-        args=(world_size, args, dataset, model, outpath),
-        nprocs=world_size,
-        join=True,
-    )
-
-
-# def inference(rank, world_size, args, data, model, PATH):
-#     """
-#     A function that may be passed as a demo_fn to run_demo() to perform inference over
-#     multiple gpus using DDP in case there are multiple gpus available (world_size > 1).
-
-#         . It divides and distributes the testing dataset appropriately.
-#         . Copies the model on each gpu.
-#         . Wraps the model with DDP on each gpu to allow synching of gradients.
-#         . Runs inference
-
-#     If there are NO multiple gpus available, the function should run fine
-#     and use the available device for inference.
-#     """
-
-#     if world_size > 1:
-#         setup(rank, world_size)
-#     else:  # hack in case there's no multigpu
-#         rank = 0
-#         world_size = 1
-
-#     # give each gpu a subset of the data
-#     hyper_test = int(args.n_test / world_size)
-
-#     test_dataset = torch.utils.data.Subset(data, np.arange(start=rank * hyper_test, stop=(rank + 1) * hyper_test))
-
-#     if args.dataset == "CMS":  # construct "file loaders" first because we need to set num_workers>0 and prefetch_factor>2
-#         file_loader_test = make_file_loaders(world_size, test_dataset)
-#     else:  # construct pyg DataLoaders directly because "file loaders" are not needed
-#         file_loader_test = torch_geometric.loader.DataLoader(test_dataset, args.batch_size)
-
-#     if world_size > 1:
-#         print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
-#         print(f"Copying the model on rank {rank}..")
-#         model = model.to(rank)
-#         model = DDP(model, device_ids=[rank])
-#     else:
-#         if torch.cuda.device_count():
-#             rank = torch.device("cuda:0")
-#         else:
-#             rank = "cpu"
-#         print(f"Running inference on {rank}")
-#         model = model.to(rank)
-#     model.eval()
-
-#     make_predictions_awk(rank, args.dataset, model, file_loader_test, args.batch_size, PATH)
-
-#     if world_size > 1:
-#         cleanup()
 
 
 def main():
@@ -197,18 +102,19 @@ def main():
         # save model_kwargs and hyperparameters
         save_mlpf(args, model, model_kwargs)
 
-    print(model)
-    print(f"Saving the model at {args.model_prefix}")
+    _logger.info(model, color="grey")
+    _logger.info(f"Saving the model at {args.model_prefix}", color="bold")
 
     # DistributedDataParallel
     if args.backend is not None:
+        _logger.info("Will use torch.nn.parallel.DistributedDataParallel()")
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
     # DataParallel
     if args.backend is None:
         if gpus is not None and len(gpus) > 1:
-            print("DataParallel", gpus)
+            _logger.info("Will use torch.nn.DataParallel()")
             model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
 
     if args.train:
@@ -224,7 +130,7 @@ def main():
                 )
             )
 
-        train_loader = InterleavedIterator(train_loaders)
+        train_loader = tfds_utils.InterleavedIterator(train_loaders)
         valid_loader = train_loader  # TODO: fix
 
         _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
@@ -244,15 +150,20 @@ def main():
         dist.destroy_process_group()
 
     if args.test:
-        ds_test = []
+        test_loaders = []
         for sample in config["test_dataset"][args.dataset]:
-            ds_test.append(tfds_utils.Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test"))
+            ds = tfds_utils.Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
+            _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
-        for ds in ds_test:
-            print("test_dataset: {}, {}".format(ds, len(ds)))
+            test_loaders.append(
+                ds.get_loader(
+                    batch_size=config["test_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
+                )
+            )
+        test_loader = tfds_utils.InterleavedIterator(test_loaders)
 
-        test_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_test]
-        test_loaders = InterleavedIterator(test_loaders)
+        model.eval()
+        make_predictions(device, args.dataset, model, test_loader, args.batch_size, PATH)
 
     #     # load the best epoch state
     #     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
@@ -296,26 +207,6 @@ def main():
     #     # load the qcd data for testing
     #     data = load_data(args.data_path, args.dataset, args.sample)
     #     print("loaded data={}".format(len(data)))
-
-    #     # run the inference using DDP if more than one gpu is available
-    #     if world_size > 1:
-    #         run_demo(
-    #             inference,
-    #             world_size,
-    #             args,
-    #             data,
-    #             model,
-    #             PATH,
-    #         )
-    #     else:
-    #         inference(
-    #             device,
-    #             world_size,
-    #             args,
-    #             data,
-    #             model,
-    #             PATH,
-    #         )
 
     # # load the predictions and make plots (must have ran make_predictions() beforehand)
     # if args.make_plots:

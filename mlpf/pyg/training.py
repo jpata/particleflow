@@ -275,10 +275,12 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
                     best_train_loss[loss] = losses_t[loss]
 
                     # save the model
-                    try:
+
+                    if isinstance(mlpf, torch.nn.parallel.DistributedDataParallel):
                         state_dict = mlpf.module.state_dict()
-                    except AttributeError:
+                    else:
                         state_dict = mlpf.state_dict()
+
                     torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
 
                     with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch

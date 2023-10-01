@@ -126,3 +126,27 @@ def collate_padded_batch(inputs):
 def my_getitem(self, vals):
     records = self.data_source.__getitems__(vals)
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+
+class InterleavedIterator(object):
+    def __init__(self, data_loaders):
+        self.idx = 0
+        self.data_loaders_iter = [iter(dl) for dl in data_loaders]
+        max_loader_size = max([len(dl) for dl in data_loaders])
+
+        # interleave loaders of different length
+        self.loader_ds_indices = []
+        for i in range(max_loader_size):
+            for iloader, loader in enumerate(data_loaders):
+                if i < len(loader):
+                    self.loader_ds_indices.append(iloader)
+
+        self.cur_index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        iloader = self.loader_ds_indices[self.cur_index]
+        self.cur_index += 1
+        return next(self.data_loaders_iter[iloader])
