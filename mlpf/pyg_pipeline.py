@@ -249,6 +249,10 @@ def main():
         gpus = None
         device = torch.device("cpu")
 
+    assert (
+        len(gpus) <= torch.cuda.device_count()
+    ), f"Lower gpu request ({len(gpus)}) to match availability ({torch.cuda.device_count()})"
+
     print("# of GPUS:", len(gpus))
 
     outpath = osp.join(args.outpath, args.prefix)
@@ -294,7 +298,6 @@ def main():
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
         # DataParallel
-        print("HOPPPPPP")
         if args.backend is None:
             print(gpus, len(gpus))
             if gpus is not None and len(gpus) > 1:
