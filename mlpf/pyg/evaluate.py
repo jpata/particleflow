@@ -43,6 +43,9 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
 
 
 def make_predictions(rank, mlpf, loader, model_prefix, sample):
+    if not osp.isdir(f"{model_prefix}/preds/{sample}"):
+        os.makedirs(f"{model_prefix}/preds/{sample}")
+
     ti = time.time()
 
     for i, batch in tqdm.tqdm(enumerate(loader)):
@@ -149,11 +152,9 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
             f"{model_prefix}/preds/{sample}/pred_{i}.parquet",
         )
 
-        if not osp.isdir(f"{model_prefix}/{sample}"):
-            os.makedirs(f"{model_prefix}/{sample}")
-
         if i == 10:
             break
+
     _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
     _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_*.parquet")
 
