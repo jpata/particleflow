@@ -23,7 +23,6 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
-from utils import CLASS_LABELS
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
@@ -164,11 +163,12 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
 def make_plots(model_prefix, sample, dataset):
     mplhep.set_style(mplhep.styles.CMS)
 
-    class_names = CLASS_LABELS[dataset]
+    from utils import CLASS_NAMES
+
+    class_names = CLASS_NAMES[dataset]
 
     # Use the dataset names from the common nomenclature
     _title = format_dataset_name(sample)
-    print(_title)
 
     if not os.path.isdir(f"{model_prefix}/plots/"):
         os.makedirs(f"{model_prefix}/plots/")
