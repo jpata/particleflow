@@ -205,11 +205,8 @@ def main():
             )
         )
 
-    # for ds in ds_train:
-    #     print("train_dataset: {}, {}".format(ds, len(ds)))
-
-    # train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
     train_loader = InterleavedIterator(train_loaders)
+    valid_loader = train_loader  # TODO: fix
 
     if args.load:  # load a pre-trained model
         model_state, model_kwargs = load_mlpf(device, outpath)
