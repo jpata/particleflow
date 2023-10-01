@@ -196,7 +196,6 @@ def main():
     train_loaders = []
     for sample in config["train_dataset"][args.dataset]:
         ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
-        print(sample)
         _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
         train_loaders.append(
