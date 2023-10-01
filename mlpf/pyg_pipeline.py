@@ -3,6 +3,8 @@ import os
 import os.path as osp
 import sys
 
+sys.path.append("pyg/")
+
 import matplotlib
 import numpy as np
 
@@ -28,7 +30,7 @@ from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
-sys.path.append("pyg/")
+
 
 matplotlib.use("Agg")
 
