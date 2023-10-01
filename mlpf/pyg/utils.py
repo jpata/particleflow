@@ -142,13 +142,14 @@ Y_FEATURES = {
 
 def save_mlpf(args, mlpf, model_kwargs):
     if not osp.isdir(args.model_prefix):
-        os.system(f"sudo mkdir -p {args.model_prefix}")
+        os.system(f"mkdir -p {args.model_prefix}")
 
     else:  # if directory already exists
         assert args.overwrite, f"model {args.model_prefix} already exists, please delete it"
 
         print("model already exists, deleting it")
-        os.system(f"sudo rm -rf {args.model_prefix}")
+        os.system(f"rm -rf {args.model_prefix}")
+        os.system(f"mkdir -p {args.model_prefix}")
 
     with open(f"{args.model_prefix}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
