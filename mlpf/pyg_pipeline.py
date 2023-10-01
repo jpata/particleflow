@@ -183,7 +183,7 @@ def main():
         for sample in config["test_dataset"][args.dataset]:
             _logger.info(f"Plotting distributions for {sample}")
 
-            make_plots(args.model_prefix, sample)
+            make_plots(args.model_prefix, sample, args.dataset)
 
     #     try:
     #         dummy_features = torch.randn(256, model_kwargs["input_dim"], device=device)

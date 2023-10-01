@@ -23,6 +23,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
+from utils import CLASS_LABELS
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
@@ -160,8 +161,10 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
     _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def make_plots(model_prefix, sample):
+def make_plots(model_prefix, sample, dataset):
     mplhep.set_style(mplhep.styles.CMS)
+
+    class_names = CLASS_LABELS[dataset]
 
     # Use the dataset names from the common nomenclature
     _title = format_dataset_name(sample)
@@ -175,7 +178,7 @@ def make_plots(model_prefix, sample):
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
     plot_num_elements(X, cp_dir=plots_path, title=_title)
-    plot_sum_energy(yvals, cp_dir=plots_path, title=_title)
+    plot_sum_energy(yvals, class_names, cp_dir=plots_path, title=_title)
 
     plot_jet_ratio(yvals, cp_dir=plots_path, title=_title)
 
