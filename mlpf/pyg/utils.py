@@ -141,6 +141,7 @@ Y_FEATURES = {
 
 
 def save_mlpf(args, mlpf, model_kwargs):
+    print(args.model_prefix)
     if not osp.isdir(args.model_prefix):
         os.system(f"mkdir -p {args.model_prefix}")
 
