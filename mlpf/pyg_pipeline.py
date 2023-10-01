@@ -107,23 +107,23 @@ def main():
 
     # DistributedDataParallel
     if args.backend is not None:
-        _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {len(gpus)} gpus")
+        _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {len(gpus)} gpus", color="purple")
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
     if args.backend is None:
         # DataParallel
         if gpus is not None and len(gpus) > 1:
-            _logger.info(f"Will use torch.nn.DataParallel() and {len(gpus)} gpus")
+            _logger.info(f"Will use torch.nn.DataParallel() and {len(gpus)} gpus", color="purple")
             model = torch.nn.DataParallel(model, device_ids=gpus)
 
         # Single GPU
         if gpus is not None and len(gpus) == 1:
-            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(0)}")
+            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(0)}", color="purple")
 
         # CPU
         if device == "cpu":
-            _logger.info("Will use cpu")
+            _logger.info("Will use cpu", color="purple")
 
     if args.train:
         # model = ray.train.torch.prepare_model(model)
