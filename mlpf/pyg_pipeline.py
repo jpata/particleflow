@@ -204,7 +204,7 @@ def main():
         save_mlpf(args, model, model_kwargs)
 
     print(model)
-    print(args.model_prefix)
+    print(f"Saving the model at {args.model_prefix}")
 
     # DistributedDataParallel
     if args.backend is not None:
@@ -218,8 +218,6 @@ def main():
             model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
 
     if args.train:
-        _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
-
         # model = ray.train.torch.prepare_model(model)
         train_loaders = []
         for sample in config["train_dataset"][args.dataset]:
@@ -234,6 +232,8 @@ def main():
 
         train_loader = InterleavedIterator(train_loaders)
         valid_loader = train_loader  # TODO: fix
+
+        _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
 
         train_mlpf(
             device,
