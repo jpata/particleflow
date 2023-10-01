@@ -65,33 +65,24 @@ parser.add_argument(
     help='to use CPU, set to empty string (""); to use multiple gpu, set it as a comma separated list, e.g., `0,1`',
 )
 parser.add_argument("--outpath", type=str, default="../experiments/", help="output folder")
-parser.add_argument("--prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
+parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
 parser.add_argument("--dataset", type=str, required=True, help="CLIC, CMS or DELPHES")
-parser.add_argument("--data_path", type=str, default="../data/", help="path which contains the samples")
+parser.add_argument("--data-path", type=str, default="../data/", help="path which contains the samples")
 parser.add_argument("--sample", type=str, default="QCD", help="sample to test on")
-parser.add_argument("--n_train", type=int, default=2, help="number of files to use for training")
-parser.add_argument("--n_valid", type=int, default=2, help="number of data files to use for validation")
-parser.add_argument("--n_test", type=int, default=2, help="number of data files to use for testing")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
-parser.add_argument("--load", dest="load", action="store_true", help="Load the model (no training)")
-parser.add_argument("--train", dest="train", action="store_true", help="Initiates a training")
-parser.add_argument("--test", dest="test", action="store_true", help="Tests the model")
-parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
-parser.add_argument("--batch_size", type=int, default=10, help="training minibatch size in number of events")
+parser.add_argument("--load", action="store_true", help="Load the model (no training)")
+parser.add_argument("--train", action="store_true", help="Initiates a training")
+parser.add_argument("--test", action="store_true", help="Tests the model")
+parser.add_argument("--num-epochs", type=int, default=3, help="number of training epochs")
+parser.add_argument("--batch-size", type=int, default=10, help="training minibatch size in number of events")
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--width", type=int, default=256, help="hidden dimension of mlpf")
-parser.add_argument("--embedding_dim", type=int, default=256, help="first embedding of mlpf")
-parser.add_argument("--num_convs", type=int, default=3, help="number of graph layers for mlpf")
 parser.add_argument("--dropout", type=float, default=0.0, help="dropout for MLPF model")
-parser.add_argument("--space_dim", type=int, default=4, help="Gravnet hyperparameter")
-parser.add_argument("--propagate_dim", type=int, default=22, help="Gravnet hyperparameter")
 parser.add_argument("--nearest", type=int, default=32, help="k nearest neighbors in gravnet layer")
-parser.add_argument("--conv_type", type=str, default="gnn-lsh", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
-parser.add_argument(
-    "--make_predictions", dest="make_predictions", action="store_true", help="run inference on the test data"
-)
-parser.add_argument("--make_plots", dest="make_plots", action="store_true", help="makes plots of the test predictions")
+parser.add_argument("--conv-type", type=str, default="gnn-lsh", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
+parser.add_argument("--make-predictions", action="store_true", help="run inference on the test data")
+parser.add_argument("--make-plots", action="store_true", help="makes plots of the test predictions")
 
 
 def run_demo(demo_fn, world_size, args, dataset, model, outpath):
@@ -186,10 +177,6 @@ def main():
         len(gpus) <= torch.cuda.device_count()
     ), f"--gpus must match availability (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
 
-    outpath = osp.join(args.outpath, args.prefix)
-
-    # get dataset
-
     # load config from yaml
     with open("pyg_pipeline_config.yaml", "r") as stream:
         config = yaml.safe_load(stream)
@@ -209,7 +196,7 @@ def main():
     valid_loader = train_loader  # TODO: fix
 
     if args.load:  # load a pre-trained model
-        model_state, model_kwargs = load_mlpf(device, outpath)
+        model_state, model_kwargs = load_mlpf(device, args.model_prefix)
 
         model = MLPF(**model_kwargs).to(device)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
@@ -224,10 +211,10 @@ def main():
         model = MLPF(**model_kwargs, **config["model"][args.conv_type]).to(device)
 
         # save model_kwargs and hyperparameters
-        save_mlpf(args, outpath, model, model_kwargs)
+        save_mlpf(args, args.model_prefix, model, model_kwargs)
 
     print(model)
-    print(args.prefix)
+    print(args.model_prefix)
 
     # DistributedDataParallel
     if args.backend is not None:
@@ -249,10 +236,10 @@ def main():
             model,
             train_loader,
             valid_loader,
-            args.n_epochs,
+            args.num_epochs,
             args.patience,
             args.lr,
-            outpath,
+            args.model_prefix,
         )
 
     if args.backend:
