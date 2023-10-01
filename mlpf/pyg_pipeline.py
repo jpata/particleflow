@@ -115,7 +115,7 @@ def main():
     if args.backend is None:
         if gpus is not None and len(gpus) > 1:
             _logger.info("Will use torch.nn.DataParallel()")
-            model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
+            model = torch.nn.DataParallel(model, device_ids=gpus)
 
     if args.train:
         # model = ray.train.torch.prepare_model(model)
