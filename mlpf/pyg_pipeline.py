@@ -16,6 +16,7 @@ import torch.multiprocessing as mp
 import torch_geometric
 from pyg.args import parse_args
 from pyg.evaluate import make_predictions_awk
+from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.plotting import make_plots
@@ -119,8 +120,8 @@ def train_(rank, world_size, args, data, model, outpath):
     valid_dataset = torch.utils.data.Subset(
         data, np.arange(start=args.n_train + rank * hyper_valid, stop=args.n_train + (rank + 1) * hyper_valid)
     )
-    print("train_dataset={}".format(len(train_dataset)))
-    print("valid_dataset={}".format(len(valid_dataset)))
+    _logger.info("train_dataset={}".format(len(train_dataset)), color="bold")
+    _logger.info("valid_dataset={}".format(len(valid_dataset)), color="bold")
 
     from pyg import tfds_utils
 
