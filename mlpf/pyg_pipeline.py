@@ -312,6 +312,7 @@ def main():
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
         # DataParallel
+        print("HOPPPPPP")
         if args.backend is None:
             print(gpus, len(gpus))
             if gpus is not None and len(gpus) > 1:
