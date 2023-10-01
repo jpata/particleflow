@@ -75,6 +75,7 @@ parser.add_argument("--n_test", type=int, default=2, help="number of data files 
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
 parser.add_argument("--load", dest="load", action="store_true", help="Load the model (no training)")
 parser.add_argument("--train", dest="train", action="store_true", help="Initiates a training")
+parser.add_argument("--test", dest="test", action="store_true", help="Tests the model")
 parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
 parser.add_argument("--batch_size", type=int, default=10, help="training minibatch size in number of events")
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
@@ -219,20 +220,8 @@ def main():
         model.load_state_dict(model_state)
 
     else:  # instantiate a new model
-        model_kwargs = {
-            "input_dim": len(X_FEATURES[args.dataset]),
-            "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
-            "embedding_dim": args.embedding_dim,
-            "width": args.width,
-            "num_convs": args.num_convs,
-            "k": args.nearest,
-            "propagate_dimensions": args.propagate_dim,
-            "space_dimensions": args.space_dim,
-            "dropout": args.dropout,
-            "conv_type": args.conv_type,
-        }
-
-        model = MLPF(**model_kwargs).to(device)
+        model_kwargs = {"input_dim": len(X_FEATURES[args.dataset]), "NUM_CLASSES": len(CLASS_LABELS[args.dataset])}
+        model = MLPF(**model_kwargs, **config["model"][args.conv_type]).to(device)
 
         # save model_kwargs and hyperparameters
         save_mlpf(args, outpath, model, model_kwargs)

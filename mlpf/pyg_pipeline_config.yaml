@@ -94,242 +94,39 @@ test_dataset:
       version: 1.6.0
       batch_size: 50
   clic:
-    # clic_edm_qq_pf:
-    #   version: 1.5.0
-    #   batch_size: 50
-    # clic_edm_ttbar_pf:
-    #   version: 1.5.0
-    #   batch_size: 50
-    # clic_edm_ttbar_pu10_pf:
-    #   version: 1.5.0
-    #   batch_size: 50
+    clic_edm_qq_pf:
+      version: 1.5.0
+      batch_size: 50
+    clic_edm_ttbar_pf:
+      version: 1.5.0
+      batch_size: 50
+    clic_edm_ttbar_pu10_pf:
+      version: 1.5.0
+      batch_size: 50
     clic_edm_ww_fullhad_pf:
       version: 1.5.0
       batch_size: 50
-    # clic_edm_zh_tautau_pf:
-    #   version: 1.5.0
-    #   batch_size: 50
+    clic_edm_zh_tautau_pf:
+      version: 1.5.0
+      batch_size: 50
 
-setup:
-  train: yes
-  weights:
-  weights_config:
-  lr: 0.00001
-  num_events_validation: 500
-  num_epochs: 50
-  dtype: float32
-  trainable:
-  classification_loss_type: sigmoid_focal_crossentropy
-  lr_schedule: none # cosinedecay, exponentialdecay, onecycle, none
-  optimizer: adam # adam, adamw, sgd
-  horovod_enabled: no
-  cls_output_as_logits: yes
-  small_graph_opt: yes
+model:
+  gnn-lsh:
+    conv_type: gnn-lsh
+    embedding_dim: 36
+    width: 128
+    num_convs: 2
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: True
 
-batching:
-  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
-  # these sizes were sort of tuned for an 8GB GPU
-  # - max_sequence_length, batch_size_per_gpu
-
-  #on 8GB GPU
-  bucket_batch_sizes:
-    - 25, 160
-    - 50, 80
-    - 100, 40
-    - 200, 20
-    - 500, 10
-    - 1000, 5
-    - 2000, 3
-    - 3000, 2
-    - 4000, 2
-    - 5000, 1
-    - 6000, 1
-    - inf, 1
-  # use this batch multiplier to increase all batch sizes by a constant factor
-  batch_multiplier: 1
-
-optimizer:
-  adam:
-    amsgrad: no
-  adamw:
-    amsgrad: yes
-    weight_decay: 0.001
-  sgd:
-    nesterov: no
-    momentum: 0.9
-
-# LR Schedules
-exponentialdecay:
-  decay_steps: 2000
-  decay_rate: 0.99
-  staircase: yes
-onecycle:
-  mom_min: 0.85
-  mom_max: 0.95
-  warmup_ratio: 0.3
-  div_factor: 25.0
-  final_div: 100000.0
-
-parameters:
-  model: transformer
-  input_encoding: cms
-  output_decoding:
-    activation: elu
-    regression_use_classification: yes
-    dropout: 0.0
-
-    pt_as_correction: yes
-
-    id_dim_decrease: yes
-    charge_dim_decrease: yes
-    pt_dim_decrease: yes
-    eta_dim_decrease: yes
-    phi_dim_decrease: yes
-    energy_dim_decrease: yes
-
-    id_hidden_dim: 512
-    charge_hidden_dim: 256
-    pt_hidden_dim: 512
-    eta_hidden_dim: 256
-    phi_hidden_dim: 256
-    energy_hidden_dim: 512
-
-    id_num_layers: 2
-    charge_num_layers: 2
-    pt_num_layers: 2
-    eta_num_layers: 2
-    phi_num_layers: 2
-    energy_num_layers: 2
-    layernorm: yes
-    mask_reg_cls0: no
-
-timing:
-  num_ev: 100
-  num_iter: 3
-
-callbacks:
-  checkpoint:
-    monitor: "val_loss"
-  plot_freq: 1
-  tensorboard:
-    dump_history: yes
-    hist_freq: 1
-
-hypertune:
-  algorithm: hyperband # random, bayesian, hyperband
-  random:
-    objective: val_loss
-    max_trials: 100
-  bayesian:
-    objective: val_loss
-    max_trials: 100
-    num_initial_points: 2
-  hyperband:
-    objective: val_loss
-    max_epochs: 10
-    factor: 3
-    iterations: 1
-    executions_per_trial: 1
-
-raytune:
-  local_dir: # Note: please specify an absolute path
-  sched: asha # asha, hyperband
-  search_alg: # bayes, bohb, hyperopt, nevergrad, scikit
-  default_metric: "val_loss"
-  default_mode: "min"
-  # Tune schedule specific parameters
-  asha:
-    max_t: 200
-    reduction_factor: 4
-    brackets: 1
-    grace_period: 10
-  hyperband:
-    max_t: 200
-    reduction_factor: 4
-  hyperopt:
-    n_random_steps: 10
-  nevergrad:
-    n_random_steps: 10
-
-train_test_datasets:
-  physical:
-    batch_per_gpu: 1
-    datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
-  gun:
-    batch_per_gpu: 50
-    datasets:
-      - cms_pf_single_electron
-      - cms_pf_single_gamma
-      - cms_pf_single_neutron
-      - cms_pf_single_pi0
-      - cms_pf_single_pi
-      - cms_pf_single_tau
-      - cms_pf_single_mu
-      - cms_pf_single_proton
-
-evaluation_datasets:
-  cms_pf_qcd_high_pt:
-    batch_size: 5
-    num_events: -1
-  cms_pf_single_neutron:
-    batch_size: 100
-    num_events: -1
-
-validation_dataset: cms_pf_qcd_high_pt
-validation_batch_size: 5
-validation_num_events: 500
-
-datasets:
-  cms_pf_ttbar:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_ztt:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_qcd:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_qcd_high_pt:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_electron:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_gamma:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi0:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_neutron:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_tau:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_mu:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
-  cms_pf_single_proton:
-    version: 1.5.1
-    data_dir:
-    manual_dir:
+  gravnet:
+    conv_type: gravnet
+    embedding_dim: 36
+    width: 128
+    num_convs: 2
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: True
