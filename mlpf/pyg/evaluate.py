@@ -1,13 +1,28 @@
+import os
+import os.path as osp
 import time
+from pathlib import Path
 
 import awkward
 import fastjet
+import mplhep
 import numpy as np
 import torch
 import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from logger import _logger
+from plotting.plot_utils import (
+    compute_met_and_ratio,
+    format_dataset_name,
+    load_eval_data,
+    plot_jet_ratio,
+    plot_met,
+    plot_met_ratio,
+    plot_num_elements,
+    plot_particles,
+    plot_sum_energy,
+)
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
@@ -28,7 +43,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
-def make_predictions(rank, mlpf, loader, PATH):
+def make_predictions(rank, mlpf, loader, model_prefix, sample):
     ti = time.time()
 
     for i, batch in tqdm.tqdm(enumerate(loader)):
@@ -133,7 +148,37 @@ def make_predictions(rank, mlpf, loader, PATH):
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{PATH}/pred_{i}.parquet",
+            f"{model_prefix}/preds/{sample}/pred_{i}.parquet",
         )
 
+        if not osp.isdir(f"{model_prefix}/{sample}"):
+            os.makedirs(f"{model_prefix}/{sample}")
+
     _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
+    _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_*.parquet")
+
+
+def make_plots(model_prefix, sample):
+    mplhep.set_style(mplhep.styles.CMS)
+
+    # Use the dataset names from the common nomenclature
+    _title = format_dataset_name(sample)
+
+    preds_path = f"{model_prefix}/preds/sample"
+    plots_path = f"{model_prefix}/plots/"
+
+    if not os.path.isdir(plots_path):
+        os.makedirs(plots_path)
+
+    yvals, X, _ = load_eval_data(str(preds_path / "*.parquet"), -1)
+
+    plot_num_elements(X, cp_dir=plots_path, title=_title)
+    plot_sum_energy(yvals, cp_dir=plots_path, title=_title)
+
+    plot_jet_ratio(yvals, cp_dir=plots_path, title=_title)
+
+    met_data = compute_met_and_ratio(yvals)
+    plot_met(met_data, cp_dir=plots_path, title=_title)
+    plot_met_ratio(met_data, cp_dir=plots_path, title=_title)
+
+    plot_particles(yvals, cp_dir=plots_path, title=_title)

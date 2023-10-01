@@ -15,7 +15,7 @@ import torch
 import torch.distributed as dist
 import yaml
 from pyg import tfds_utils
-from pyg.evaluate import make_predictions
+from pyg.evaluate import make_plots, make_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
@@ -151,17 +151,20 @@ def main():
         dist.destroy_process_group()
 
     if args.test:
-        test_loaders = []
+        test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
             ds = tfds_utils.Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
-            test_loaders.append(
-                ds.get_loader(
-                    batch_size=config["test_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
-                )
+            test_loaders[sample] = tfds_utils.InterleavedIterator(
+                [
+                    ds.get_loader(
+                        batch_size=config["test_dataset"][args.dataset][sample]["batch_size"],
+                        num_workers=2,
+                        prefetch_factor=4,
+                    )
+                ]
             )
-        test_loader = tfds_utils.InterleavedIterator(test_loaders)
 
         # load the best epoch state
         # best_epoch = json.load(open(f"{args.model_prefix}/best_epoch.json"))["best_epoch"]
@@ -172,7 +175,16 @@ def main():
             model.load_state_dict(model_state)
         model.eval()
 
-        make_predictions(device, model, test_loader, args.model_prefix)
+        for sample in test_loaders:
+            _logger.info(f"Running predictions on {sample}")
+            make_predictions(device, model, test_loaders[sample], args.model_prefix, sample)
+
+    # load the predictions and make plots (must have ran make_predictions() beforehand)
+    if args.make_plots:
+        for sample in config["test_dataset"][args.dataset]:
+            _logger.info(f"Plotting distributions for {sample}")
+
+            make_plots(args.model_prefix, sample)
 
     #     try:
     #         dummy_features = torch.randn(256, model_kwargs["input_dim"], device=device)
@@ -194,28 +206,6 @@ def main():
     #         )
     #     except Exception as e:
     #         print("ONNX export failed: {}".format(e))
-
-    # # prepare for inference and plotting
-    # PATH = f"{outpath}/testing_epoch_{best_epoch}_{args.sample}/"
-    # pred_path = f"{PATH}/predictions/"
-    # plot_path = f"{PATH}/plots/"
-
-    # if args.make_predictions:
-    #     print(f"Will run inference on the {args.dataset} {args.sample} sample.")
-
-    #     if not os.path.exists(PATH):
-    #         os.makedirs(PATH)
-    #     if not os.path.exists(pred_path):
-    #         os.makedirs(pred_path)
-
-    #     # load the qcd data for testing
-    #     data = load_data(args.data_path, args.dataset, args.sample)
-    #     print("loaded data={}".format(len(data)))
-
-    # # load the predictions and make plots (must have ran make_predictions() beforehand)
-    # if args.make_plots:
-    #     print(f"Will make plots of the {args.dataset} {args.sample} sample.")
-    #     make_plots(pred_path, plot_path, args.dataset, args.sample)
 
 
 if __name__ == "__main__":

@@ -200,7 +200,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i == 100:
+        if i == 10:
             break
 
     for loss in losses:
