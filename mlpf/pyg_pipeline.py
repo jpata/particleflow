@@ -232,7 +232,7 @@ def main():
             model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
 
     if args.train:
-        _logger.info(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset")
+        _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
         # model = ray.train.torch.prepare_model(model)
 
         train_mlpf(
