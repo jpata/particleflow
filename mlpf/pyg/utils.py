@@ -159,7 +159,7 @@ def save_mlpf(args, mlpf, model_kwargs):
     print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
     with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump({**args, **{"Num of mlpf parameters": num_mlpf_parameters}}, fp)
+        json.dump({**vars(args), **{"Num of mlpf parameters": num_mlpf_parameters}}, fp)
         # json.dump(
         #     {
         #         "dataset": args.dataset,
