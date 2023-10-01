@@ -181,20 +181,6 @@ def main():
     with open("pyg_pipeline_config.yaml", "r") as stream:
         config = yaml.safe_load(stream)
 
-    train_loaders = []
-    for sample in config["train_dataset"][args.dataset]:
-        ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
-        _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
-
-        train_loaders.append(
-            ds.get_loader(
-                batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
-            )
-        )
-
-    train_loader = InterleavedIterator(train_loaders)
-    valid_loader = train_loader  # TODO: fix
-
     if args.load:  # load a pre-trained model
         model_state, model_kwargs = load_mlpf(device, args.model_prefix)
 
@@ -233,7 +219,21 @@ def main():
 
     if args.train:
         _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
+
         # model = ray.train.torch.prepare_model(model)
+        train_loaders = []
+        for sample in config["train_dataset"][args.dataset]:
+            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
+            _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
+
+            train_loaders.append(
+                ds.get_loader(
+                    batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
+                )
+            )
+
+        train_loader = InterleavedIterator(train_loaders)
+        valid_loader = train_loader  # TODO: fix
 
         train_mlpf(
             device,
