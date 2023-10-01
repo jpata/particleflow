@@ -165,26 +165,27 @@ def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
     print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
     with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump(
-            {
-                "dataset": args.dataset,
-                "n_train": args.n_train,
-                "n_valid": args.n_valid,
-                "n_test": args.n_test,
-                "n_epochs": args.n_epochs,
-                "lr": args.lr,
-                "bs_mlpf": args.batch_size,
-                "width": args.width,
-                "embedding_dim": args.embedding_dim,
-                "num_convs": args.num_convs,
-                "space_dim": args.space_dim,
-                "propagate_dim": args.propagate_dim,
-                "k": args.nearest,
-                "num_mlpf_parameters": num_mlpf_parameters,
-                "mode": mode,
-            },
-            fp,
-        )
+        json.dump(args, fp)
+        # json.dump(
+        #     {
+        #         "dataset": args.dataset,
+        #         "n_train": args.n_train,
+        #         "n_valid": args.n_valid,
+        #         "n_test": args.n_test,
+        #         "n_epochs": args.n_epochs,
+        #         "lr": args.lr,
+        #         "bs_mlpf": args.batch_size,
+        #         "width": args.width,
+        #         "embedding_dim": args.embedding_dim,
+        #         "num_convs": args.num_convs,
+        #         "space_dim": args.space_dim,
+        #         "propagate_dim": args.propagate_dim,
+        #         "k": args.nearest,
+        #         "num_mlpf_parameters": num_mlpf_parameters,
+        #         "mode": mode,
+        #     },
+        #     fp,
+        # )
 
 
 def load_mlpf(device, outpath):
