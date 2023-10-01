@@ -48,7 +48,6 @@ parser.add_argument("--num-epochs", type=int, default=3, help="number of trainin
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gnn-lsh", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
-parser.add_argument("--make-predictions", action="store_true", help="run inference on the test data")
 parser.add_argument("--make-plots", action="store_true", help="makes plots of the test predictions")
 
 

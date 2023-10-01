@@ -165,13 +165,12 @@ def make_plots(model_prefix, sample):
     # Use the dataset names from the common nomenclature
     _title = format_dataset_name(sample)
 
-    preds_path = f"{model_prefix}/preds/sample"
     plots_path = f"{model_prefix}/plots/"
 
     if not os.path.isdir(plots_path):
         os.makedirs(plots_path)
 
-    yvals, X, _ = load_eval_data(str(preds_path / "*.parquet"), -1)
+    yvals, X, _ = load_eval_data(f"{model_prefix}/preds/sample/" + "*.parquet", -1)
 
     plot_num_elements(X, cp_dir=plots_path, title=_title)
     plot_sum_energy(yvals, cp_dir=plots_path, title=_title)
