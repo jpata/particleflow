@@ -35,12 +35,11 @@ os.environ["MASTER_PORT"] = "12355"
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
+parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
 parser.add_argument("--backend", type=str, choices=["gloo", "nccl"], default=None, help="backend for distributed training")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
-parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
-parser.add_argument("--dataset", type=str, required=True, help="CLIC, CMS or DELPHES")
-parser.add_argument("--data-path", type=str, default="../data/", help="path which contains the samples")
-parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
+parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset")
 parser.add_argument("--load", action="store_true", help="Load the model (no training)")
 parser.add_argument("--train", action="store_true", help="Initiates a training")
 parser.add_argument("--test", action="store_true", help="Tests the model")
@@ -56,25 +55,18 @@ def main():
     args = parser.parse_args()
 
     if args.gpus:
-        if args.backend is not None:  # distributed training
-            local_rank = args.local_rank
-            torch.cuda.set_device(local_rank)
-            gpus = [local_rank]
-            device = torch.device(local_rank)
-            import datetime
+        gpus = [int(i) for i in args.gpus.split(",")]
+        assert (
+            len(gpus) <= torch.cuda.device_count()
+        ), f"--gpus is too high (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
 
-            torch.distributed.init_process_group(backend=args.backend, timeout=datetime.timedelta(seconds=5400))
-            _logger.info(f"Using distributed PyTorch with {args.backend} backend")
+        if args.backend is not None:  # distributed training
+            torch.distributed.init_process_group(backend=args.backend, world_size=len(gpus))
         else:
-            gpus = [int(i) for i in args.gpus.split(",")]
             device = torch.device(gpus[0])
     else:
         gpus = None
         device = torch.device("cpu")
-
-    assert (
-        len(gpus) <= torch.cuda.device_count()
-    ), f"--gpus must match availability (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
 
     # load config from yaml
     with open("pyg_pipeline_config.yaml", "r") as stream:
