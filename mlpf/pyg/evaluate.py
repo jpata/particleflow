@@ -151,12 +151,12 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
             ),
             f"{model_prefix}/preds/{sample}/pred_{i}.parquet",
         )
+        _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_{i}.parquet")
 
-        if i == 10:
+        if i == 2:
             break
 
     _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
-    _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_*.parquet")
 
 
 def make_plots(model_prefix, sample):
