@@ -69,6 +69,7 @@ parser.add_argument("--n_valid", type=int, default=2, help="number of data files
 parser.add_argument("--n_test", type=int, default=2, help="number of data files to use for testing")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
 parser.add_argument("--load", dest="load", action="store_true", help="Load the model (no training)")
+parser.add_argument("--train", dest="train", action="store_true", help="Initiates a training")
 parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
 parser.add_argument("--batch_size", type=int, default=10, help="training minibatch size in number of events")
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
