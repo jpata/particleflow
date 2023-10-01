@@ -207,11 +207,15 @@ def main():
         model.load_state_dict(model_state)
 
     else:  # instantiate a new model
-        model_kwargs = {"input_dim": len(X_FEATURES[args.dataset]), "NUM_CLASSES": len(CLASS_LABELS[args.dataset])}
-        model = MLPF(**model_kwargs, **config["model"][args.conv_type]).to(device)
+        model_kwargs = {
+            "input_dim": len(X_FEATURES[args.dataset]),
+            "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
+            **config["model"][args.conv_type],
+        }
+        model = MLPF(**model_kwargs).to(device)
 
         # save model_kwargs and hyperparameters
-        save_mlpf(args, args.model_prefix, model, model_kwargs)
+        save_mlpf(args, model, model_kwargs)
 
     print(model)
     print(args.model_prefix)
