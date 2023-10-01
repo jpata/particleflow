@@ -13,6 +13,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import yaml
+from pyg import tfds_utils
 
 # import torch_geometric
 # from pyg.evaluate import make_predictions_awk
@@ -20,7 +22,7 @@ from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.PFGraphDataset import PFGraphDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, load_mlpf, save_mlpf
 
 # from ray import train
 # from ray.air import Checkpoint, session
@@ -156,19 +158,6 @@ def run_demo(demo_fn, world_size, args, dataset, model, outpath):
 #         cleanup()
 
 
-def load_data(data_path, dataset, sample):
-    """Loads the appropriate sample for a given dataset."""
-    dict_ = {
-        "CMS": {
-            "TTbar": f"{data_path}/TTbar_14TeV_TuneCUETP8M1_cfi/",
-            "QCD": f"{data_path}/QCDForPF_14TeV_TuneCUETP8M1_cfi/",
-        },
-        "DELPHES": {"TTbar": f"{data_path}/pythia8_ttbar/", "QCD": f"{data_path}/pythia8_qcd/"},
-        "CLIC": {"TTbar": f"{data_path}/p8_ee_tt_ecm380//", "QCD": f"{data_path}/p8_ee_qq_ecm380//"},
-    }
-    return PFGraphDataset(dict_[dataset][sample], dataset)
-
-
 def main():
     args = parser.parse_args()
 
@@ -196,9 +185,6 @@ def main():
     outpath = osp.join(args.outpath, args.prefix)
 
     # get dataset
-    import yaml
-    from pyg import tfds_utils
-    from pyg.utils import InterleavedIterator
 
     # load config from yaml
     with open("pyg_pipeline_config.yaml", "r") as stream:
@@ -208,32 +194,14 @@ def main():
     for sample in config["train_dataset"][args.dataset]:
         print(sample)
         ds_train.append(tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train"))
-        # ds_train = [
-        #     tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-        #     tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
-        #     tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-        #     tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
-        # ]
-    ds_valid = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
-    ]
 
     for ds in ds_train:
         print("train_dataset: {}, {}".format(ds, len(ds)))
-    for ds in ds_valid:
-        print("test_dataset: {}, {}".format(ds, len(ds)))
 
     train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
-    valid_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_valid]
-
     train_loader = InterleavedIterator(train_loaders)
-    valid_loader = InterleavedIterator(valid_loaders)
 
-    # load a pre-trained specified model, otherwise, instantiate and train a new model
-    if args.load:
+    if args.load:  # load a pre-trained model
         model_state, model_kwargs = load_mlpf(device, outpath)
 
         model = MLPF(**model_kwargs).to(device)
@@ -244,7 +212,7 @@ def main():
 
         model.load_state_dict(model_state)
 
-    else:
+    else:  # instantiate a new model
         model_kwargs = {
             "input_dim": len(X_FEATURES[args.dataset]),
             "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
@@ -263,8 +231,8 @@ def main():
         # save model_kwargs and hyperparameters
         save_mlpf(args, outpath, model, model_kwargs)
 
-        print(model)
-        print(args.prefix)
+    print(model)
+    print(args.prefix)
 
     # DistributedDataParallel
     if args.backend is not None:
@@ -294,6 +262,18 @@ def main():
 
     if args.backend:
         dist.destroy_process_group()
+
+    if args.test:
+        ds_test = []
+        for sample in config["test_dataset"][args.dataset]:
+            print(sample)
+            ds_test.append(tfds_utils.Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test"))
+
+        for ds in ds_test:
+            print("test_dataset: {}, {}".format(ds, len(ds)))
+
+        test_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_test]
+        test_loaders = InterleavedIterator(test_loaders)
 
     #     # load the best epoch state
     #     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]

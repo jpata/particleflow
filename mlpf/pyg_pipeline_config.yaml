@@ -55,6 +55,61 @@ train_dataset:
       version: 1.5.0
       batch_size: 50
 
+test_dataset:
+  cms:
+    cms_pf_ttbar:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_ztt:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_qcd:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_electron:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_gamma:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_pi0:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_neutron:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_pi:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_tau:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_mu:
+      version: 1.6.0
+      batch_size: 50
+    cms_pf_single_proton:
+      version: 1.6.0
+      batch_size: 50
+  clic:
+    # clic_edm_qq_pf:
+    #   version: 1.5.0
+    #   batch_size: 50
+    # clic_edm_ttbar_pf:
+    #   version: 1.5.0
+    #   batch_size: 50
+    # clic_edm_ttbar_pu10_pf:
+    #   version: 1.5.0
+    #   batch_size: 50
+    clic_edm_ww_fullhad_pf:
+      version: 1.5.0
+      batch_size: 50
+    # clic_edm_zh_tautau_pf:
+    #   version: 1.5.0
+    #   batch_size: 50
+
 setup:
   train: yes
   weights:

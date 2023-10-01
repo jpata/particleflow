@@ -16,29 +16,29 @@ matplotlib.use("Agg")
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS = {
-    "CMS": [0, 211, 130, 1, 2, 22, 11, 13, 15],
-    "DELPHES": [0, 211, 130, 22, 11, 13],
-    "CLIC": [0, 211, 130, 22, 11, 13],
+    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
+    "delphes": [0, 211, 130, 22, 11, 13],
+    "clic": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
-    "CMS": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    "DELPHES": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "CLIC": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
+    "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
-    "CMS": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
-    "DELPHES": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "CLIC": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
-    "CMS": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    "DELPHES": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "CLIC": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
+    "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
-    "CMS": [
+    "cms": [
         "typ_idx",
         "pt",
         "eta",
@@ -82,7 +82,7 @@ X_FEATURES = {
         "theta",
         "thetaerror",
     ],
-    "DELPHES": [
+    "delphes": [
         "Track|cluster",
         "$p_{T}|E_{T}$",
         r"$\eta$",
@@ -96,7 +96,7 @@ X_FEATURES = {
         "is_gen_mu",
         "is_gen_el",
     ],
-    "CLIC": [
+    "clic": [
         "type",
         "pt | et",
         "eta",
@@ -118,7 +118,7 @@ X_FEATURES = {
 }
 
 Y_FEATURES = {
-    "CMS": [
+    "cms": [
         "PDG",
         "charge",
         "pt",
@@ -127,7 +127,7 @@ Y_FEATURES = {
         "cos_phi",
         "energy",
     ],
-    "DELPHES": [
+    "delphes": [
         "PDG",
         "charge",
         "pt",
@@ -136,7 +136,7 @@ Y_FEATURES = {
         "cos_phi",
         "energy",
     ],
-    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
+    "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
 }
 
 
