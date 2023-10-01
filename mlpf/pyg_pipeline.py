@@ -196,15 +196,24 @@ def main():
     outpath = osp.join(args.outpath, args.prefix)
 
     # get dataset
+    import yaml
     from pyg import tfds_utils
     from pyg.utils import InterleavedIterator
 
-    ds_train = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
-    ]
+    # load config from yaml
+    with open("pyg_pipeline_config.yaml", "r") as stream:
+        config = yaml.safe_load(stream)
+
+    ds_train = []
+    for sample in config["train_dataset"][args.dataset]:
+        print(sample)
+        ds_train.append(tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train"))
+        # ds_train = [
+        #     tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+        #     tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+        #     tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+        #     tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
+        # ]
     ds_valid = [
         tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
         tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
@@ -264,7 +273,6 @@ def main():
 
     # DataParallel
     if args.backend is None:
-        print(gpus, len(gpus))
         if gpus is not None and len(gpus) > 1:
             print("DataParallel", gpus)
             model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
