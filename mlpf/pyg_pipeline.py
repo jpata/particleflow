@@ -288,6 +288,19 @@ def main():
         print(args.prefix)
 
         print(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset.")
+        # DistributedDataParallel
+        if args.backend is not None:
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
+
+        # DataParallel
+        print("HOPPPPPP")
+        if args.backend is None:
+            print(gpus, len(gpus))
+            if gpus is not None and len(gpus) > 1:
+                print("DataParallel", gpus)
+                model = torch.nn.DataParallel(model, device_ids=gpus)
+            # model = model.to(device)
 
         # load the ttbar data for training/validation
         data = load_data(args.data_path, args.dataset, "TTbar")
@@ -305,20 +318,6 @@ def main():
         #     )
         # else:
         train_(device, args, model, outpath)
-
-        # DistributedDataParallel
-        if args.backend is not None:
-            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
-
-        # DataParallel
-        print("HOPPPPPP")
-        if args.backend is None:
-            print(gpus, len(gpus))
-            if gpus is not None and len(gpus) > 1:
-                print("DataParallel", gpus)
-                model = torch.nn.DataParallel(model, device_ids=gpus)
-            # model = model.to(device)
 
     #     # load the best epoch state
     #     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
