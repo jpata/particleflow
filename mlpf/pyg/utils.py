@@ -140,31 +140,23 @@ Y_FEATURES = {
 }
 
 
-def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
-    if not osp.isdir(outpath):
-        os.makedirs(outpath)
+def save_mlpf(args, mlpf, model_kwargs, mode="native"):
+    if not osp.isdir(args.model_prefix):
+        os.system(f"sudo mkdir -p {args.model_prefix}")
 
     else:  # if directory already exists
-        if not args.overwrite:  # if not overwrite then exit
-            print(f"model {args.prefix} already exists, please delete it")
-            sys.exit(0)
+        assert args.overwrite, f"model {args.model_prefix} already exists, please delete it"
 
         print("model already exists, deleting it")
+        os.system(f"sudo rm -rf {args.model_prefix}")
 
-        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
-        for f in filelist:
-            try:
-                shutil.rmtree(os.path.join(outpath, f))
-            except Exception:
-                os.remove(os.path.join(outpath, f))
-
-    with open(f"{outpath}/model_kwargs.pkl", "wb") as f:  # dump model architecture
+    with open(f"{args.model_prefix}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
     print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
-    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
+    with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump(args, fp)
         # json.dump(
         #     {
