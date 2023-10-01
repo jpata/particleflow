@@ -69,7 +69,7 @@ def main():
         device = torch.device("cpu")
 
     # load config from yaml
-    with open("pyg_pipeline_config.yaml", "r") as stream:
+    with open("../parameters/pyg.yaml", "r") as stream:
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
