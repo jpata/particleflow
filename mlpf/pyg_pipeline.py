@@ -190,15 +190,19 @@ def main():
     with open("pyg_pipeline_config.yaml", "r") as stream:
         config = yaml.safe_load(stream)
 
-    ds_train = []
+    train_loaders = []
     for sample in config["train_dataset"][args.dataset]:
-        print(sample)
-        ds_train.append(tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train"))
+        ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
+        train_loaders.append(
+            ds.get_loader(
+                batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
+            )
+        )
 
-    for ds in ds_train:
-        print("train_dataset: {}, {}".format(ds, len(ds)))
+    # for ds in ds_train:
+    #     print("train_dataset: {}, {}".format(ds, len(ds)))
 
-    train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
+    # train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
     train_loader = InterleavedIterator(train_loaders)
 
     if args.load:  # load a pre-trained model
