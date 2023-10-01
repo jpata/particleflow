@@ -249,6 +249,8 @@ def main():
         gpus = None
         device = torch.device("cpu")
 
+    print("# of GPUS:", len(gpus))
+
     outpath = osp.join(args.outpath, args.prefix)
 
     # load a pre-trained specified model, otherwise, instantiate and train a new model
