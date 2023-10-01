@@ -1,7 +1,6 @@
 import os
 import os.path as osp
 import time
-from pathlib import Path
 
 import awkward
 import fastjet
@@ -51,8 +50,10 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
         target_ids = event.ygen[:, 0].long()
-        # target_charge = (event.ygen[:, 1] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
-        # target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
+        event.ygen = event.ygen[:, 1:]
+
+        cand_ids = event.ycand[:, 0].long()
+        event.ycand = event.ycand[:, 1:]
 
         # make mlpf forward pass
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
@@ -60,9 +61,6 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
         pred_ids = torch.argmax(pred_ids_one_hot.detach(), axis=-1)
         pred_charge = torch.argmax(pred_charge.detach(), axis=1, keepdim=True) - 1
         pred_p4 = torch.cat([pred_charge, pred_momentum.detach()], axis=-1)
-
-        target_ids = event.ygen_id
-        cand_ids = event.ycand_id
 
         batch_ids = event.batch.cpu().numpy()
         awkvals = {

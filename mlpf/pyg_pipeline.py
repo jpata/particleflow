@@ -96,13 +96,13 @@ def main():
         save_mlpf(args, model, model_kwargs)
 
     _logger.info(model)
-    _logger.info(f"Saving the model at {args.model_prefix}", color="bold")
+    _logger.info(f"Model directory {args.model_prefix}", color="bold")
 
     # DistributedDataParallel
     if args.backend is not None:
         _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {len(gpus)} gpus", color="purple")
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=0)
 
     if args.backend is None:
         # DataParallel
