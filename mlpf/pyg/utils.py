@@ -140,7 +140,7 @@ Y_FEATURES = {
 }
 
 
-def save_mlpf(args, mlpf, model_kwargs, mode="native"):
+def save_mlpf(args, mlpf, model_kwargs):
     if not osp.isdir(args.model_prefix):
         os.system(f"sudo mkdir -p {args.model_prefix}")
 
@@ -157,7 +157,7 @@ def save_mlpf(args, mlpf, model_kwargs, mode="native"):
     print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
     with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump(args, fp)
+        json.dump({**args, **{"Num of mlpf parameters": num_mlpf_parameters}}, fp)
         # json.dump(
         #     {
         #         "dataset": args.dataset,
