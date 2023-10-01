@@ -240,6 +240,8 @@ def particle_label(ax, pid):
 def load_eval_data(path, max_files=None):
     yvals = []
     filenames = []
+    print("path", path)
+
     filelist = list(glob.glob(path))
     print(filelist)
 
