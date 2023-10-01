@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import time
+from pathlib import Path
 
 import awkward
 import fastjet
@@ -165,12 +166,13 @@ def make_plots(model_prefix, sample):
     # Use the dataset names from the common nomenclature
     _title = format_dataset_name(sample)
 
-    plots_path = f"{model_prefix}/plots/"
+    if not os.path.isdir(f"{model_prefix}/plots/"):
+        os.makedirs(f"{model_prefix}/plots/")
 
-    if not os.path.isdir(plots_path):
-        os.makedirs(plots_path)
+    plots_path = Path(f"{model_prefix}/plots/")
+    pred_path = Path(f"{model_prefix}/preds/{sample}/")
 
-    yvals, X, _ = load_eval_data(f"{model_prefix}/preds/{sample}/*.parquet", -1)
+    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
     plot_num_elements(X, cp_dir=plots_path, title=_title)
     plot_sum_energy(yvals, cp_dir=plots_path, title=_title)
