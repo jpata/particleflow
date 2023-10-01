@@ -114,8 +114,7 @@ def main():
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(0)}", color="purple")
 
         # CPU
-        print(device)
-        if device == "cpu":
+        if device == torch.device("cpu"):
             _logger.info("Will use cpu", color="purple")
 
     if args.train:
