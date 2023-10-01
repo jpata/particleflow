@@ -1,5 +1,4 @@
 import json
-import logging
 import pickle as pkl
 import time
 from typing import Optional
@@ -8,11 +7,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
+from logger import _logger
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-logging.basicConfig(level=logging.INFO)
+# _logger.basicConfig(level=_logger.INFO)
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -121,23 +121,19 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
 
     loss_obj_id = FocalLoss(gamma=2.0)
 
-    is_train = not (optimizer is None)
-    step_type = "train" if is_train else "valid"
-
     if is_train:
-        logging.info("Initiating a training run on {}".format(rank))
+        _logger.info("Initiating a training run on {}".format(rank), color="red")
+        step_type = "train"
         loader = train_loader
         mlpf.train()
     else:
-        logging.info("Initiating a validation run on {}".format(rank))
+        _logger.info("Initiating a validation run on {}".format(rank), color="red")
+        step_type = "valid"
         loader = valid_loader
         mlpf.eval()
 
     # initialize loss counters
-    losses_of_interest = ["Total", "Classification", "Regression", "Charge"]
-    losses = {}
-    for loss in losses_of_interest:
-        losses[loss] = 0.0
+    losses = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
     num_iterations = 0
     for i, batch in tqdm.tqdm(enumerate(loader)):
@@ -158,12 +154,10 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        # c = 0
-        for i in range(1000):
-            t0 = time.time()
-            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
-            print(f"{event}: {(time.time() - t0):.2f}s")
-            # c += 1
+
+        # t0 = time.time()
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
+        # print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -190,14 +184,13 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         # TOTAL LOSS
         loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
-        # update parameters
         if is_train:
             for param in mlpf.parameters():
                 param.grad = None
             loss_["Total"].backward()
             optimizer.step()
 
-        for loss in losses_of_interest:
+        for loss in losses:
             losses[loss] += loss_[loss].detach()
 
         if tensorboard_writer:
@@ -211,13 +204,11 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         if i == 2:
             break
 
-    for loss in losses_of_interest:
+    for loss in losses:
         losses[loss] = losses[loss].cpu().item() / num_iterations
 
-    logging.info(
-        "loss_id={:.4f} loss_momentum={:.4f} loss_charge={:.4f}".format(
-            losses["Classification"], losses["Regression"], losses["Charge"]
-        )
+    _logger.info(
+        f"loss_id={losses['Classification']:.4f} loss_momentum={losses['Regression']:.4f} loss_charge={losses['Charge']:.4f}"
     )
 
     return losses
@@ -257,7 +248,7 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
         t0 = time.time()
 
         if stale_epochs > patience:
-            logging.info("breaking due to stale epochs")
+            _logger.info("breaking due to stale epochs")
             break
 
         # training step
@@ -308,7 +299,7 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
         time_per_epoch = (t1 - t0_initial) / (epoch + 1)
         eta = epochs_remaining * time_per_epoch / 60
 
-        logging.info(
+        _logger.info(
             f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
             + f"train_loss={round(losses_t['Total'], 4)} "
             + f"valid_loss={round(losses_v['Total'], 4)} "
@@ -340,196 +331,4 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
         with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
 
-    logging.info(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
-
-
-from collections import Counter, defaultdict
-
-from logger import _logger
-
-
-def _flatten_label(label, mask=None):
-    if label.ndim > 1:
-        label = label.view(-1)
-        if mask is not None:
-            label = label[mask.view(-1)]
-    # print('label', label.shape, label)
-    return label
-
-
-def _flatten_preds(preds, mask=None, label_axis=1):
-    if preds.ndim > 2:
-        # assuming axis=1 corresponds to the classes
-        preds = preds.transpose(label_axis, -1).contiguous()
-        preds = preds.view((-1, preds.shape[-1]))
-        if mask is not None:
-            preds = preds[mask.view(-1)]
-    # print('preds', preds.shape, preds)
-    return preds
-
-
-def train_hybrid(
-    model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None
-):
-    model.train()
-
-    data_config = train_loader.dataset.config
-
-    label_counter = Counter()
-    total_loss = 0
-    total_loss_cls = 0
-    total_loss_reg = 0
-    total_loss_reg_i = defaultdict(float)
-    num_batches = 0
-    total_correct = 0
-    sum_abs_err = 0
-    sum_sqr_err = 0
-    count = 0
-    start_time = time.time()
-    with tqdm.tqdm(train_loader) as tq:
-        for X, y, _ in tq:
-            inputs = [X[k].to(dev) for k in data_config.input_names]
-            # for classification
-            label_cls = y["_label_"].long()
-            try:
-                label_mask = y["_label_mask"].bool()
-            except KeyError:
-                label_mask = None
-            label_cls = _flatten_label(label_cls, label_mask)
-            label_counter.update(label_cls.cpu().numpy())
-            label_cls = label_cls.to(dev)
-
-            # for regression
-            label_reg = [y[n].float().to(dev).unsqueeze(1) for n in data_config.label_names[1:]]
-            label_reg = torch.cat(label_reg, dim=1)
-            n_reg = label_reg.shape[1]
-
-            num_examples = label_reg.shape[0]
-            opt.zero_grad()
-            with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
-                model_output = model(*inputs)
-                logits = _flatten_preds(model_output[:, :-n_reg], label_mask)
-                preds_reg = model_output[:, -n_reg:]
-                loss, loss_monitor = loss_func(logits, preds_reg, label_cls, label_reg)
-            if grad_scaler is None:
-                loss.backward()
-                opt.step()
-            else:
-                grad_scaler.scale(loss).backward()
-                grad_scaler.step(opt)
-                grad_scaler.update()
-
-            if scheduler and getattr(scheduler, "_update_per_step", False):
-                scheduler.step()
-
-            _, preds_cls = logits.max(1)
-            loss = loss.item()
-
-            num_batches += 1
-            count += num_examples
-            correct = (preds_cls == label_cls).sum().item()
-
-            total_loss += loss
-            total_loss_cls += loss_monitor["cls"]
-            total_loss_reg += loss_monitor["reg"]
-            if n_reg > 1:
-                for i in range(n_reg):
-                    total_loss_reg_i[i] += loss_monitor[f"reg_{i}"]
-            total_correct += correct
-
-            e = preds_reg - label_reg
-            abs_err = e.abs().sum().item()
-            sum_abs_err += abs_err
-            sqr_err = e.square().sum().item()
-            sum_sqr_err += sqr_err
-
-            tq.set_postfix(
-                {
-                    "lr": "%.2e" % scheduler.get_last_lr()[0] if scheduler else opt.defaults["lr"],
-                    "Loss": "%.5f" % loss_monitor["cls"],
-                    "LossReg": "%.5f" % loss_monitor["reg"],
-                    "LossTot": "%.5f" % loss,
-                    # 'AvgLoss': '%.5f' % (total_loss / num_batches),
-                    "Acc": "%.5f" % (correct / num_examples),
-                    # 'AvgAcc': '%.5f' % (total_correct / count),
-                    # 'MSE': '%.5f' % (sqr_err / num_examples),
-                    # 'AvgMSE': '%.5f' % (sum_sqr_err / count),
-                    # 'MAE': '%.5f' % (abs_err / num_examples),
-                    # 'AvgMAE': '%.5f' % (sum_abs_err / count),
-                }
-            )
-
-            # stop writing to tensorboard after 500 batches
-            if tb_helper and num_batches < 500:
-                tb_helper.write_scalars(
-                    [
-                        (
-                            "Loss/train",
-                            loss_monitor["cls"],
-                            tb_helper.batch_train_count + num_batches,
-                        ),  # to compare cls loss to previous loss
-                        ("LossReg/train", loss_monitor["reg"], tb_helper.batch_train_count + num_batches),
-                        # ("LossTot/train", loss, tb_helper.batch_train_count + num_batches),
-                        ("Acc/train", correct / num_examples, tb_helper.batch_train_count + num_batches),
-                        ("Acc/train", correct / num_examples, tb_helper.batch_train_count + num_batches),
-                        ("MSE/train", sqr_err / num_examples, tb_helper.batch_train_count + num_batches),
-                        # ("MAE/train", abs_err / num_examples, tb_helper.batch_train_count + num_batches),
-                    ]
-                )
-                if n_reg > 1:
-                    for i in range(n_reg):
-                        tb_helper.write_scalars(
-                            [
-                                (f"LossReg{i}/train", loss_monitor[f"reg_{i}"], tb_helper.batch_train_count + num_batches),
-                            ]
-                        )
-                if tb_helper.custom_fn:
-                    with torch.no_grad():
-                        tb_helper.custom_fn(
-                            model_output=model_output, model=model, epoch=epoch, i_batch=num_batches, mode="train"
-                        )
-
-            if steps_per_epoch is not None and num_batches >= steps_per_epoch:
-                break
-
-    time_diff = time.time() - start_time
-    _logger.info("Processed %d entries in total (avg. speed %.1f entries/s)" % (count, count / time_diff))
-    _logger.info(
-        "Train AvgLoss: %.5f, AvgLossReg: %.5f, AvgLossTot: %.5f, AvgAcc: %.5f, AvgMSE: %.5f, AvgMAE: %.5f"
-        % (
-            total_loss_cls / num_batches,
-            total_loss_reg / num_batches,
-            total_loss / num_batches,
-            total_correct / count,
-            sum_sqr_err / count,
-            sum_abs_err / count,
-        )
-    )
-    _logger.info("Train class distribution: \n    %s", str(sorted(label_counter.items())))
-
-    if tb_helper:
-        tb_helper.write_scalars(
-            [
-                ("Loss/train (epoch)", total_loss_cls / num_batches, epoch),  # to compare cls loss to previous loss
-                ("LossReg/train (epoch)", total_loss_reg / num_batches, epoch),
-                ("LossTot/train (epoch)", total_loss / num_batches, epoch),
-                ("Acc/train (epoch)", total_correct / count, epoch),
-                ("MSE/train (epoch)", sum_sqr_err / count, epoch),
-                ("MAE/train (epoch)", sum_abs_err / count, epoch),
-            ]
-        )
-        if n_reg > 1:
-            for i in range(n_reg):
-                tb_helper.write_scalars(
-                    [
-                        (f"LossReg{i}/train (epoch)", total_loss_reg_i[i] / num_batches, epoch),
-                    ]
-                )
-        if tb_helper.custom_fn:
-            with torch.no_grad():
-                tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode="train")
-        # update the batch state
-        tb_helper.batch_train_count += num_batches
-
-    if scheduler and not getattr(scheduler, "_update_per_step", False):
-        scheduler.step()
+    _logger.info(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")

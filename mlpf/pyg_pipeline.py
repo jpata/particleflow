@@ -105,66 +105,6 @@ def run_demo(demo_fn, world_size, args, dataset, model, outpath):
     )
 
 
-def train_(rank, args, model, outpath):
-    """
-    A function that may be passed as a demo_fn to run_demo() to perform training over
-    multiple gpus using DDP in case there are multiple gpus available (world_size > 1).
-
-        . It divides and distributes the training dataset appropriately.
-        . Copies the model on each gpu.
-        . Wraps the model with DDP on each gpu to allow synching of gradients.
-        . Invokes the train_mlpf() to run synchronized training among gpus.
-
-    If there are NO multiple gpus available, the function should run fine
-    and use the available device for training.
-    """
-
-    from pyg import tfds_utils
-    from pyg.utils import InterleavedIterator
-
-    ds_train = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
-        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
-    ]
-    ds_valid = [
-        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
-        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
-    ]
-
-    for ds in ds_train:
-        print("train_dataset: {}, {}".format(ds, len(ds)))
-    for ds in ds_valid:
-        print("test_dataset: {}, {}".format(ds, len(ds)))
-
-    train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
-    valid_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_valid]
-
-    train_loader = InterleavedIterator(train_loaders)
-    valid_loader = InterleavedIterator(valid_loaders)
-
-    model.train()
-
-    # model = ray.train.torch.prepare_model(model)
-
-    train_mlpf(
-        rank,
-        model,
-        train_loader,
-        valid_loader,
-        args.n_epochs,
-        args.patience,
-        args.lr,
-        outpath,
-    )
-
-    if args.backend:
-        dist.destroy_process_group()
-
-
 # def inference(rank, world_size, args, data, model, PATH):
 #     """
 #     A function that may be passed as a demo_fn to run_demo() to perform inference over
@@ -232,8 +172,7 @@ def main():
     args = parser.parse_args()
 
     if args.gpus:
-        # distributed training
-        if args.backend is not None:
+        if args.backend is not None:  # distributed training
             local_rank = args.local_rank
             torch.cuda.set_device(local_rank)
             gpus = [local_rank]
@@ -251,11 +190,37 @@ def main():
 
     assert (
         len(gpus) <= torch.cuda.device_count()
-    ), f"Lower gpu request ({len(gpus)}) to match availability ({torch.cuda.device_count()})"
-
-    print("# of GPUS:", len(gpus))
+    ), f"--gpus must match availability (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
 
     outpath = osp.join(args.outpath, args.prefix)
+
+    # get dataset
+    from pyg import tfds_utils
+    from pyg.utils import InterleavedIterator
+
+    ds_train = [
+        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "train"),
+        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "train"),
+    ]
+    ds_valid = [
+        tfds_utils.Dataset("clic_edm_ttbar_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_qq_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_ww_fullhad_pf:1.5.0", "test"),
+        tfds_utils.Dataset("clic_edm_zh_tautau_pf:1.5.0", "test"),
+    ]
+
+    for ds in ds_train:
+        print("train_dataset: {}, {}".format(ds, len(ds)))
+    for ds in ds_valid:
+        print("test_dataset: {}, {}".format(ds, len(ds)))
+
+    train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
+    valid_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_valid]
+
+    train_loader = InterleavedIterator(train_loaders)
+    valid_loader = InterleavedIterator(valid_loaders)
 
     # load a pre-trained specified model, otherwise, instantiate and train a new model
     if args.load:
@@ -292,35 +257,35 @@ def main():
         print(args.prefix)
 
         print(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset.")
-        # DistributedDataParallel
-        if args.backend is not None:
-            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
-        # DataParallel
-        if args.backend is None:
-            print(gpus, len(gpus))
-            if gpus is not None and len(gpus) > 1:
-                print("DataParallel", gpus)
-                model = torch.nn.DataParallel(model, device_ids=gpus)
-            # model = model.to(device)
+    # DistributedDataParallel
+    if args.backend is not None:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=local_rank)
 
-        # load the ttbar data for training/validation
-        data = load_data(args.data_path, args.dataset, "TTbar")
-        print("loaded data={}".format(len(data)))
+    # DataParallel
+    if args.backend is None:
+        print(gpus, len(gpus))
+        if gpus is not None and len(gpus) > 1:
+            print("DataParallel", gpus)
+            model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
 
-        # # run the training using DDP if more than one gpu is available
-        # if world_size > 1:
-        #     run_demo(
-        #         train_,
-        #         world_size,
-        #         args,
-        #         data,
-        #         model,
-        #         outpath,
-        #     )
-        # else:
-        train_(device, args, model, outpath)
+    if args.train:
+        # model = ray.train.torch.prepare_model(model)
+
+        train_mlpf(
+            device,
+            model,
+            train_loader,
+            valid_loader,
+            args.n_epochs,
+            args.patience,
+            args.lr,
+            outpath,
+        )
+
+    if args.backend:
+        dist.destroy_process_group()
 
     #     # load the best epoch state
     #     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
