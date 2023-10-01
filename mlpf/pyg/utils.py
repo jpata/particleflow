@@ -173,7 +173,7 @@ def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
                 "n_test": args.n_test,
                 "n_epochs": args.n_epochs,
                 "lr": args.lr,
-                "bs_mlpf": args.bs,
+                "bs_mlpf": args.batch_size,
                 "width": args.width,
                 "embedding_dim": args.embedding_dim,
                 "num_convs": args.num_convs,
