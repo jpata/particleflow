@@ -168,6 +168,7 @@ def make_plots(model_prefix, sample, dataset):
 
     # Use the dataset names from the common nomenclature
     _title = format_dataset_name(sample)
+    print(_title)
 
     if not os.path.isdir(f"{model_prefix}/plots/"):
         os.makedirs(f"{model_prefix}/plots/")
