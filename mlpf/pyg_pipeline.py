@@ -102,7 +102,7 @@ def main():
         # save model_kwargs and hyperparameters
         save_mlpf(args, model, model_kwargs)
 
-    _logger.info(model, color="grey")
+    _logger.info(model, color="lightgray")
     _logger.info(f"Saving the model at {args.model_prefix}", color="bold")
 
     # DistributedDataParallel
