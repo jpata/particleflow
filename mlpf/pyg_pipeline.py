@@ -314,6 +314,7 @@ def main():
         # DataParallel
         if args.backend is None:
             if gpus is not None and len(gpus) > 1:
+                print("DataParallel", gpus)
                 model = torch.nn.DataParallel(model, device_ids=gpus)
             # model = model.to(device)
 
