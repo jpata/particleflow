@@ -19,8 +19,9 @@ from pyg import tfds_utils
 # import torch_geometric
 # from pyg.evaluate import make_predictions_awk
 from pyg.logger import _logger
+
+_logger.basicConfig(level=_logger.INFO)
 from pyg.mlpf import MLPF
-from pyg.PFGraphDataset import PFGraphDataset
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, load_mlpf, save_mlpf
 
