@@ -193,6 +193,8 @@ def main():
     train_loaders = []
     for sample in config["train_dataset"][args.dataset]:
         ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
+        _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
+
         train_loaders.append(
             ds.get_loader(
                 batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
