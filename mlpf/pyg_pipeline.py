@@ -70,7 +70,7 @@ parser.add_argument("--n_test", type=int, default=2, help="number of data files 
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
 parser.add_argument("--load", dest="load", action="store_true", help="Load the model (no training)")
 parser.add_argument("--n_epochs", type=int, default=3, help="number of training epochs")
-parser.add_argument("--bs", type=int, default=100, help="training minibatch size in number of events")
+parser.add_argument("--batch_size", type=int, default=10, help="training minibatch size in number of events")
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--width", type=int, default=256, help="hidden dimension of mlpf")
@@ -140,8 +140,8 @@ def train_(rank, args, model, outpath):
     for ds in ds_valid:
         print("test_dataset: {}, {}".format(ds, len(ds)))
 
-    train_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_train]
-    valid_loaders = [ds.get_loader(batch_size=args.bs, num_workers=2, prefetch_factor=4) for ds in ds_valid]
+    train_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_train]
+    valid_loaders = [ds.get_loader(batch_size=args.batch_size, num_workers=2, prefetch_factor=4) for ds in ds_valid]
 
     train_loader = InterleavedIterator(train_loaders)
     valid_loader = InterleavedIterator(valid_loaders)
@@ -193,7 +193,7 @@ def train_(rank, args, model, outpath):
 #     if args.dataset == "CMS":  # construct "file loaders" first because we need to set num_workers>0 and prefetch_factor>2
 #         file_loader_test = make_file_loaders(world_size, test_dataset)
 #     else:  # construct pyg DataLoaders directly because "file loaders" are not needed
-#         file_loader_test = torch_geometric.loader.DataLoader(test_dataset, args.bs)
+#         file_loader_test = torch_geometric.loader.DataLoader(test_dataset, args.batch_size)
 
 #     if world_size > 1:
 #         print(f"Running inference on rank {rank}: {torch.cuda.get_device_name(rank)}")
@@ -209,7 +209,7 @@ def train_(rank, args, model, outpath):
 #         model = model.to(rank)
 #     model.eval()
 
-#     make_predictions_awk(rank, args.dataset, model, file_loader_test, args.bs, PATH)
+#     make_predictions_awk(rank, args.dataset, model, file_loader_test, args.batch_size, PATH)
 
 #     if world_size > 1:
 #         cleanup()
