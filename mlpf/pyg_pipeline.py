@@ -257,8 +257,6 @@ def main():
         print(model)
         print(args.prefix)
 
-        print(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset.")
-
     # DistributedDataParallel
     if args.backend is not None:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -272,6 +270,7 @@ def main():
             model = torch.nn.DataParallel(model, device_ids=gpus).to(device)
 
     if args.train:
+        _logger.info(f"Training over {args.n_epochs} epochs on the {args.dataset} dataset")
         # model = ray.train.torch.prepare_model(model)
 
         train_mlpf(
