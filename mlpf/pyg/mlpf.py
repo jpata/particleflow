@@ -60,7 +60,7 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
-        NUM_CLASSES=8,
+        num_classes=8,
         embedding_dim=128,
         width=128,
         num_convs=2,
@@ -116,16 +116,16 @@ class MLPF(nn.Module):
         decoding_dim = input_dim + num_convs * embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
+        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout)
-        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_pt = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
+        self.nn_eta = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
+        self.nn_phi = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
+        self.nn_energy = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
+        self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
     def forward(self, element_features, batch_idx):
         # unfold the Batch object
@@ -183,4 +183,5 @@ class MLPF(nn.Module):
         preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
+
         return preds_id, preds_momentum, pred_charge

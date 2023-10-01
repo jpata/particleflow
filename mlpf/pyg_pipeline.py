@@ -15,6 +15,7 @@ import torch
 import torch.distributed as dist
 import yaml
 from pyg import tfds_utils
+from pyg.evaluate import make_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
@@ -60,7 +61,7 @@ def main():
             len(gpus) <= torch.cuda.device_count()
         ), f"--gpus is too high (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
 
-        if args.backend is not None:  # distributed training
+        if args.backend is not None:  # TODO: distributed training
             torch.distributed.init_process_group(backend=args.backend, world_size=len(gpus))
         else:
             device = torch.device(gpus[0])
@@ -86,7 +87,7 @@ def main():
     else:  # instantiate a new model
         model_kwargs = {
             "input_dim": len(X_FEATURES[args.dataset]),
-            "NUM_CLASSES": len(CLASS_LABELS[args.dataset]),
+            "num_classes": len(CLASS_LABELS[args.dataset]),
             **config["model"][args.conv_type],
         }
         model = MLPF(**model_kwargs).to(device)
@@ -162,13 +163,16 @@ def main():
             )
         test_loader = tfds_utils.InterleavedIterator(test_loaders)
 
+        # load the best epoch state
+        # best_epoch = json.load(open(f"{args.model_prefix}/best_epoch.json"))["best_epoch"]
+        model_state = torch.load(args.model_prefix + "/best_epoch_weights.pth", map_location=device)
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model.module.load_state_dict(model_state)
+        else:
+            model.load_state_dict(model_state)
         model.eval()
-        make_predictions(device, args.dataset, model, test_loader, args.batch_size, PATH)
 
-    #     # load the best epoch state
-    #     best_epoch = json.load(open(f"{outpath}/best_epoch.json"))["best_epoch"]
-    #     model_state = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
-    #     model.load_state_dict(model_state)
+        make_predictions(device, model, test_loader, args.model_prefix)
 
     #     try:
     #         dummy_features = torch.randn(256, model_kwargs["input_dim"], device=device)

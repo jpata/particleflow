@@ -154,7 +154,6 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-
         # t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
         # print(f"{event}: {(time.time() - t0):.2f}s")
@@ -275,7 +274,6 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
                     best_train_loss[loss] = losses_t[loss]
 
                     # save the model
-
                     if isinstance(mlpf, torch.nn.parallel.DistributedDataParallel):
                         state_dict = mlpf.module.state_dict()
                     else:
@@ -330,6 +328,7 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
             plt.tight_layout()
             plt.savefig(f"{outpath}/mlpf_loss_{loss}.pdf")
             plt.close()
+
         with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
 
