@@ -78,7 +78,7 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
             msk_cand = cand_ids[msk_batch] != 0
             msk_pred = pred_ids[msk_batch] != 0
 
-            Xs.append(event.x[msk_batch].cpu().numpy())
+            Xs.append(event.X[msk_batch].cpu().numpy())
 
             gen_p4.append(event.ygen[msk_batch, 1:][msk_gen])
             gen_cls.append(target_ids[msk_batch][msk_gen])
@@ -152,6 +152,8 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
         if not osp.isdir(f"{model_prefix}/{sample}"):
             os.makedirs(f"{model_prefix}/{sample}")
 
+        if i == 10:
+            break
     _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
     _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_*.parquet")
 
