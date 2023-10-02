@@ -12,7 +12,7 @@ The current pytorch backend shares the same dataset format as the tensorflow bac
 
 # Supervised training or testing
 
-First make sure to update the config yaml `../../parameters/pyg_config.yaml` to your desired model parameter configuration and choice of physics samples for training and testing. 
+First make sure to update the config yaml `../../parameters/pyg_config.yaml` to your desired model parameter configuration and choice of physics samples for training and testing.
 
 After that, the entry point to launch training or testing for either CMS, DELPHES or CLIC is the same.
 
