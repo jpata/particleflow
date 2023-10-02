@@ -132,7 +132,7 @@ class MLPF(nn.Module):
 
         print(event)
 
-        # print("af", event.X.device)
+        print("af", event.X.device)
 
         input_ = event.X.float()
         batch_idx = event.batch
