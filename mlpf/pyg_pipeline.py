@@ -6,8 +6,6 @@ Author: Farouk Mokhtar
 
 import argparse
 import logging
-
-# import multiprocessing
 import os
 import pickle as pkl
 
@@ -47,8 +45,6 @@ def run(rank, world_size, args):
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        # multiprocessing.set_start_method("spawn")
-        # multiprocessing.get_context()
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
     with open("../parameters/pyg.yaml", "r") as stream:  # load config (includes: which physics samples, model params)
