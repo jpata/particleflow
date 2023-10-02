@@ -12,7 +12,9 @@ The current pytorch backend shares the same dataset format as the tensorflow bac
 
 # Supervised training
 
-The entry point to launch training/inference for either CMS, DELPHES or CLIC is the same.
+First make sure to update the config yaml `../../parameters/pyg.yaml` to your desired model parameter configurations, and physics samples for training and testing.
+
+After that, the entry point to launch training/inference for either CMS, DELPHES or CLIC is the same.
 
 ```bash
 cd ../
