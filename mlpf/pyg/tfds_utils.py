@@ -9,63 +9,6 @@
 # from torch_geometric.data.datapipes import DatasetAdapter
 
 
-# class DataLoader(torch.utils.data.DataLoader):
-#     """
-#     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
-#     because we need to implement our own Collater class (see below)
-#     """
-
-#     def __init__(
-#         self,
-#         dataset: Union[Dataset, Sequence[BaseData], DatasetAdapter],
-#         batch_size: int = 1,
-#         shuffle: bool = False,
-#         follow_batch: Optional[List[str]] = None,
-#         exclude_keys: Optional[List[str]] = None,
-#         **kwargs,
-#     ):
-#         # Remove for PyTorch Lightning:
-#         kwargs.pop("collate_fn", None)
-
-#         # Save for PyTorch Lightning < 1.6:
-#         self.follow_batch = follow_batch
-#         self.exclude_keys = exclude_keys
-
-#         super().__init__(
-#             dataset,
-#             batch_size,
-#             shuffle,
-#             collate_fn=Collater(follow_batch, exclude_keys),
-#             **kwargs,
-#         )
-
-
-# class Collater:
-#     """Based on the Collater found on torch_geometric docs we build our own"""
-
-#     def __init__(self, follow_batch=None, exclude_keys=None):
-#         self.follow_batch = follow_batch
-#         self.exclude_keys = exclude_keys
-
-#     def __call__(self, inputs):
-#         num_samples_in_batch = len(inputs)
-#         elem_keys = list(inputs[0].keys())
-
-#         batch = []
-#         for ev in range(num_samples_in_batch):
-#             batch.append(Data())
-#             for elem_key in elem_keys:
-#                 batch[ev][elem_key] = Tensor(inputs[ev][elem_key])
-#             batch[ev]["batch"] = torch.tensor([ev] * len(inputs[ev][elem_key]))
-
-#         elem = batch[0]
-
-#         if isinstance(elem, BaseData):
-#             return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
-
-#         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
-
-
 # class Dataset:
 #     def __init__(self, name="clic_edm_ttbar_pf:1.5.0", split="train"):
 #         builder = tfds.builder(name, data_dir="/pfvol/tensorflow_datasets/clic/clusters/")
@@ -150,23 +93,9 @@ from torch_geometric.data.datapipes import DatasetAdapter
 
 
 class DataLoader(torch.utils.data.DataLoader):
-    r"""A data loader which merges data objects from a
-    :class:`torch_geometric.data.Dataset` to a mini-batch.
-    Data objects can be either of type :class:`~torch_geometric.data.Data` or
-    :class:`~torch_geometric.data.HeteroData`.
-
-    Args:
-        dataset (Dataset): The dataset from which to load the data.
-        batch_size (int, optional): How many samples per batch to load.
-            (default: :obj:`1`)
-        shuffle (bool, optional): If set to :obj:`True`, the data will be
-            reshuffled at every epoch. (default: :obj:`False`)
-        follow_batch (List[str], optional): Creates assignment batch
-            vectors for each key in the list. (default: :obj:`None`)
-        exclude_keys (List[str], optional): Will exclude each key in the
-            list. (default: :obj:`None`)
-        **kwargs (optional): Additional arguments of
-            :class:`torch.utils.data.DataLoader`.
+    """
+    Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
+    because we need to implement our own Collater class (see below)
     """
 
     def __init__(
@@ -195,6 +124,8 @@ class DataLoader(torch.utils.data.DataLoader):
 
 
 class Collater:
+    """Based on the Collater found on torch_geometric docs we build our own"""
+
     def __init__(self, follow_batch=None, exclude_keys=None):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
