@@ -68,7 +68,7 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         dropout=0.4,
-        conv_type="gnn-lsh",
+        conv_type="gravnet",
     ):
         super(MLPF, self).__init__()
 
