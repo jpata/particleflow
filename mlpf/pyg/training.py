@@ -199,8 +199,8 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i == 10:
-            break
+        # if i == 10:
+        #     break
 
     for loss in losses:
         losses[loss] = losses[loss].cpu().item() / num_iterations
@@ -214,7 +214,7 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
 
 def train_mlpf(rank, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
     """
-    Will perform training by calling train() and validation_run() every epoch
+    Will run a full training by calling train() and validation_run() every epoch.
 
     Args:
         rank: 'cpu' or int representing the gpu device id

@@ -44,7 +44,7 @@ parser.add_argument("--export-onnx", action="store_true", help="exports the mode
 
 
 def run(rank, world_size, args):
-    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device"""
+    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
