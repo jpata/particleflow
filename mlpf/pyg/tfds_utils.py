@@ -156,7 +156,11 @@ class Dataset:
         self.ds = builder.as_data_source(split=split)
 
         # to prevent a warning from tfds about accessing sequences of indices
-        self.ds.__class__.__getitems__ = my_getitem
+        self.ds.__class__.__getitems__ = self.my_getitem
+
+    def my_getitem(self, vals):
+        records = self.data_source.__getitems__(vals)
+        return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
     def get_sampler(self):
         sampler = torch.utils.data.SequentialSampler(self.ds)
@@ -191,11 +195,6 @@ def collate_padded_batch(inputs):
     ret["mask"] = ret["X"][:, :, 0] == 0
 
     return ret
-
-
-def my_getitem(self, vals):
-    records = self.data_source.__getitems__(vals)
-    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class InterleavedIterator(object):
