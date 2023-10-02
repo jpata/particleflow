@@ -23,7 +23,7 @@ model:
 
   attention:
     conv_type: attention
-    embedding_dim: 36
+    embedding_dim: 128
     width: 128
     num_convs: 2
     k: 16
