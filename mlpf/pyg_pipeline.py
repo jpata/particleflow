@@ -10,9 +10,9 @@ import os
 import sys
 
 sys.path.append("pyg/")
-
 import torch
 import torch.distributed as dist
+import torch_geometric
 import yaml
 from pyg import tfds_utils
 from pyg.evaluate import make_plots, make_predictions
@@ -104,7 +104,7 @@ def main():
         # DataParallel
         if gpus is not None and len(gpus) > 1:
             _logger.info(f"Will use torch.nn.DataParallel() and {len(gpus)} gpus", color="purple")
-            model = torch.nn.DataParallel(model, device_ids=gpus)
+            model = torch_geometric.nn.DataParallel(model, device_ids=gpus)
 
         # Single GPU
         if gpus is not None and len(gpus) == 1:
