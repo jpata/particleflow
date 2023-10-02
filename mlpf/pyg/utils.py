@@ -218,7 +218,7 @@ class Dataset:
             data_dir += "cms/"
 
         if dataset == "clic":
-            data_dir += "clic/cluster/"
+            data_dir += "clic/clusters/"
 
         if dataset == "delphes":
             data_dir += "delphes/"
