@@ -118,18 +118,13 @@ def run(rank, world_size, args):
     if args.test:  # TODO: give each gpu a subset of the test dataset
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
+            version = config["test_dataset"][args.dataset][sample]["version"]
+            batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
+
             ds = Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
-            test_loaders[sample] = InterleavedIterator(
-                [
-                    ds.get_loader(
-                        batch_size=config["test_dataset"][args.dataset][sample]["batch_size"],
-                        num_workers=2,
-                        prefetch_factor=4,
-                    )
-                ]
-            )
+            test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
 
         model_state = torch.load(args.model_prefix + "/best_epoch_weights.pth", map_location=rank)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
