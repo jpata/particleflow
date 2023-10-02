@@ -220,7 +220,7 @@ class Dataset:
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_dir, name="clic_edm_ttbar_pf:1.5.0", split="train"):
-        builder = tfds.builder(name, data_dir)
+        builder = tfds.builder(name, data_dir=data_dir)
 
         self.ds = builder.as_data_source(split=split)
 
