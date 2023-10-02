@@ -12,7 +12,7 @@ The current pytorch backend shares the same dataset format as the tensorflow bac
 
 # Supervised training
 
-First make sure to update the config yaml `../../parameters/pyg.yaml` to your desired model parameter configurations, and physics samples for training and testing.
+First make sure to update the config yaml `../../parameters/pyg_config.yaml` to your desired model parameter configurations and physics samples for training and testing. 
 
 After that, the entry point to launch training/inference for either CMS, DELPHES or CLIC is the same.
 
@@ -23,7 +23,7 @@ python -u pyg_pipeline.py --dataset=${} --data_dir=${} --model-prefix=${} --gpus
 where:
 - `--dataset`: choices are `cms` or `delphes` or `clic`
 - `--data_dir`: path to the tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
-- `--model-prefix`: the path pointing to the model directory that holds the results (e.g. `../experiments/MLPF_test`)
+- `--model-prefix`: path pointing to the model directory that holds the results (e.g. `../experiments/MLPF_test`)
 - `--gpus`: to use CPU set to empty string ""; else to use gpus provide e.g. "0,1".
 
 Adding the arguments:
@@ -32,3 +32,5 @@ Adding the arguments:
 - `--test` will run inference and save the predictions as `.parquets`.
 - `--make-plots` will use the predictions stored after running with `--test` to make plots for evaluation.
 - `--export-onnx` will export the model to ONNX.
+
+You can also pass your own config yaml to `--config` (by default: `../../parameters/pyg_config.yaml`).

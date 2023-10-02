@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--config", type=str, default="../parameters/pyg_config.yaml", help="yaml config")
 parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
@@ -50,7 +51,7 @@ def run(rank, world_size, args):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    with open("../parameters/pyg.yaml", "r") as stream:  # load config (includes: which physics samples, model params)
+    with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
