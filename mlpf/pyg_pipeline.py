@@ -9,7 +9,7 @@ import logging
 import os
 import pickle as pkl
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import torch
 import torch.distributed as dist
