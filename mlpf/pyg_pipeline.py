@@ -96,15 +96,18 @@ def run(rank, world_size, args):
     if args.train:
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
-            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
+            version = config["train_dataset"][args.dataset][sample]["version"]
+            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
+
+            ds = tfds_utils.Dataset(f"{sample}:{version}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"]))
+            train_loaders.append(ds.get_loader(batch_size=batch_size))
 
-            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "test")
+            ds = tfds_utils.Dataset(f"{sample}:{version}", "test")
             _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-            valid_loaders.append(ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"]))
+            valid_loaders.append(ds.get_loader(batch_size=batch_size))
 
         print("Top")
         train_loader = tfds_utils.InterleavedIterator(train_loaders)
