@@ -79,6 +79,38 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
+class DataListLoader(torch.utils.data.DataLoader):
+    r"""A data loader which batches data objects from a
+    :class:`torch_geometric.data.dataset` to a Python list.
+    Data objects can be either of type :class:`~torch_geometric.data.Data` or
+    :class:`~torch_geometric.data.HeteroData`.
+
+    .. note::
+
+        This data loader should be used for multi-GPU support via
+        :class:`torch_geometric.nn.DataParallel`.
+
+    Args:
+        dataset (Dataset): The dataset from which to load the data.
+        batch_size (int, optional): How many samples per batch to load.
+            (default: :obj:`1`)
+        shuffle (bool, optional): If set to :obj:`True`, the data will be
+            reshuffled at every epoch. (default: :obj:`False`)
+        **kwargs (optional): Additional arguments of
+            :class:`torch.utils.data.DataLoader`, such as :obj:`drop_last` or
+            :obj:`num_workers`.
+    """
+
+    def __init__(self, dataset: Union[Dataset, List[BaseData]], batch_size: int = 1, shuffle: bool = False, **kwargs):
+        # Remove for PyTorch Lightning:
+        kwargs.pop("collate_fn", None)
+
+        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=self.collate_fn, **kwargs)
+
+    def collate_fn(data_list):
+        return data_list
+
+
 class Dataset:
     def __init__(self, name="clic_edm_ttbar_pf:1.5.0", split="train"):
         builder = tfds.builder(name, data_dir="/pfvol/tensorflow_datasets/clic/clusters/")
@@ -93,7 +125,16 @@ class Dataset:
         return sampler
 
     def get_loader(self, batch_size=20, num_workers=0, prefetch_factor=2):
-        return DataLoader(
+        # return DataLoader(
+        #     self.ds,
+        #     batch_size=batch_size,
+        #     collate_fn=Collater(),
+        #     sampler=self.get_sampler(),
+        #     num_workers=num_workers,
+        #     prefetch_factor=prefetch_factor,
+        # )
+
+        return DataListLoader(
             self.ds,
             batch_size=batch_size,
             collate_fn=Collater(),
