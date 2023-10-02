@@ -198,11 +198,9 @@ def run(rank, world_size, args):
 
 def main():
     args = parser.parse_args()
-    world_size = len(args.gpus.split(","))
-    print(world_size)
-    print("args.gpus", args.gpus)
-    print(args.gpus.split(","))
-    if world_size >= 1:
+    world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+
+    if args.gpus:
         assert (
             world_size <= torch.cuda.device_count()
         ), f"--gpus is too high (specefied {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
@@ -215,14 +213,14 @@ def main():
                 nprocs=world_size,
                 join=True,
             )
-        if world_size == 1:
+        elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
             run(rank, world_size, args)
 
-    if world_size == 0:
-        _logger.info("Will use cpu", color="purple")
+    else:
         rank = "cpu"
+        _logger.info("Will use cpu", color="purple")
         run(rank, world_size, args)
 
 
