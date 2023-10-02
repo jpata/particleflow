@@ -228,14 +228,14 @@ class Dataset:
             split: "train" or "test
         """
 
-        builder = tfds.builder(name, data_dir=data_dir)
-
         if dataset == "cms":
             data_dir += "cms/"
         if dataset == "clic":
             data_dir += "clic/cluster/"
         if dataset == "delphes":
             data_dir += "delphes/"
+
+        builder = tfds.builder(name, data_dir=data_dir)
 
         self.ds = builder.as_data_source(split=split)
 
