@@ -147,7 +147,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
             )
 
         event = batch  # h.to(rank)
-        print("b4", event.X.device)
+        # print("b4", event.X.device)
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
         target_ids = event.ygen[:, 0].long()
@@ -156,7 +156,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
 
         # make mlpf forward pass
         t0 = time.time()
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf([event])
         print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
