@@ -84,25 +84,31 @@ class Dataset:
         return sampler
 
     def get_loader(self, batch_size, world_size, num_workers=2, prefetch_factor=4):
-        if world_size > 1:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_sampler(),
-                # sampler=self.get_distributed_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
+        return DataLoader(
+            self.ds,
+            batch_size=batch_size,
+            collate_fn=Collater(),
+            sampler=self.get_sampler(),
+        )
+
+        # if world_size > 1:
+        #     return DataLoader(
+        #         self.ds,
+        #         batch_size=batch_size,
+        #         collate_fn=Collater(),
+        #         sampler=self.get_distributed_sampler(),
+        #         num_workers=num_workers,
+        #         prefetch_factor=prefetch_factor,
+        #     )
+        # else:
+        #     return DataLoader(
+        #         self.ds,
+        #         batch_size=batch_size,
+        #         collate_fn=Collater(),
+        #         sampler=self.get_sampler(),
+        #         num_workers=num_workers,
+        #         prefetch_factor=prefetch_factor,
+        #     )
 
     def __len__(self):
         return len(self.ds)
