@@ -13,8 +13,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
 
-# _logger.basicConfig(level=_logger.INFO)
-
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -201,8 +199,8 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        # if i == 10:
-        #     break
+        if i == 10:
+            break
 
     for loss in losses:
         losses[loss] = losses[loss].cpu().item() / num_iterations

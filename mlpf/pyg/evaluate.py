@@ -158,8 +158,8 @@ def run_predictions(rank, mlpf, loader, sample, outpath):
         )
         _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
-        # if i == 2:
-        #     break
+        if i == 2:
+            break
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
