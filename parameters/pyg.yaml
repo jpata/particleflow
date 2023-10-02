@@ -39,12 +39,12 @@ train_dataset:
       version: 1.6.0
       batch_size: 50
   clic:
-    clic_edm_qq_pf:
-      version: 1.5.0
-      batch_size: 50
+    # clic_edm_qq_pf:
+    #   version: 1.5.0
+    #   batch_size: 50
     clic_edm_ttbar_pf:
       version: 1.5.0
-      batch_size: 50
+      batch_size: 100
     # clic_edm_ttbar_pu10_pf:
     #   version: 1.5.0
     #   batch_size: 50
