@@ -120,6 +120,7 @@ def run(rank, world_size, args):
         train_loader = tfds_utils.InterleavedIterator(train_loaders)
         valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
 
+        print("HOP")
         train_mlpf(
             rank,
             model,
