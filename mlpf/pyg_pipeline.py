@@ -86,20 +86,9 @@ def run(rank, world_size, args):
 
     model.to(rank)
 
-    # DistributedDataParallel
-    if world_size > 1:
-        # _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
+    if world_size > 1:  # DistributedDataParallel
         # model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        # model = model.to(rank)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
-
-    # # Single GPU
-    # if world_size == 1:
-    #     _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-
-    # # CPU
-    # if world_size == 0:
-    #     _logger.info("Will use cpu", color="purple")
 
     _logger.info(model)
     _logger.info(f"Model directory {args.model_prefix}", color="bold")
@@ -117,10 +106,10 @@ def run(rank, world_size, args):
 
             valid_loaders.append(ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"]))
 
+        print("Top")
         train_loader = tfds_utils.InterleavedIterator(train_loaders)
         valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
 
-        print("HOP")
         train_mlpf(
             rank,
             model,
