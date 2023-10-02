@@ -7,22 +7,23 @@ Author: Farouk Mokhtar
 import argparse
 import logging
 import os
-import sys
 
-import torch.multiprocessing as mp
-
-sys.path.append("pyg/")
 import torch
 import torch.distributed as dist
-
-# import torch.distributed as dist
+import torch.multiprocessing as mp
 import yaml
-from pyg import tfds_utils
 from pyg.evaluate import make_plots, make_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
+from pyg.tfds_utils import Dataset, InterleavedIterator
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
+
+# import sys
+
+
+# sys.path.append("pyg/")
+
 
 # import ray
 # import ray.data
@@ -99,19 +100,19 @@ def run(rank, world_size, args):
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = tfds_utils.Dataset(f"{sample}:{version}", "train")
+            ds = Dataset(f"{sample}:{version}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-            ds = tfds_utils.Dataset(f"{sample}:{version}", "test")
+            ds = Dataset(f"{sample}:{version}", "test")
             _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
             valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
         print("Top")
-        train_loader = tfds_utils.InterleavedIterator(train_loaders)
-        valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
+        train_loader = InterleavedIterator(train_loaders)
+        valid_loader = InterleavedIterator(valid_loaders)
 
         train_mlpf(
             rank,
@@ -127,10 +128,10 @@ def run(rank, world_size, args):
     if args.test:
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
-            ds = tfds_utils.Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
+            ds = Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
-            test_loaders[sample] = tfds_utils.InterleavedIterator(
+            test_loaders[sample] = InterleavedIterator(
                 [
                     ds.get_loader(
                         batch_size=config["test_dataset"][args.dataset][sample]["batch_size"],
