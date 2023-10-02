@@ -127,14 +127,12 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward(self, element_features, batch_idx):
+    def forward(self, event):
         # unfold the Batch object
+        input_ = event.X.float()
+        batch_idx = event.batch
 
-        input_ = element_features.float()
-
-        embeddings_id = []
-        embeddings_reg = []
-
+        embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(input_)
 

@@ -60,7 +60,7 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
         event.ycand = event.ycand[:, 1:]
 
         # make mlpf forward pass
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
 
         pred_ids = torch.argmax(pred_ids_one_hot.detach(), axis=-1)
         pred_charge = torch.argmax(pred_charge.detach(), axis=1, keepdim=True) - 1
