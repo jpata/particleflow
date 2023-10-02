@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 or use the singularity/apptainer environment for CUDA GPUs:
 ```
-apptainer shell --nv https://hep.kbfi.ee/~joosep/tf-2.13.0.simg
+apptainer shell --nv https://hep.kbfi.ee/~joosep/tf-2.14.0.simg
 ```
 
 # CLIC cluster-based training
@@ -29,8 +29,8 @@ rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cl
 python3 mlpf/pipeline.py train --config parameters/clic.yaml --batch-multiplier 0.5
 
 #Download and run the training from a checkpoint (optional)
-wget https://huggingface.co/jpata/particleflow/resolve/main/weights-96-5.346523.hdf5
-wget https://huggingface.co/jpata/particleflow/resolve/main/opt-96-5.346523.pkl
+wget https://huggingface.co/jpata/particleflow/resolve/clic_clusters_v1.6/weights-96-5.346523.hdf5
+wget https://huggingface.co/jpata/particleflow/resolve/clic_clusters_v1.6/opt-96-5.346523.pkl
 python3 mlpf/pipeline.py train --config parameters/clic.yaml --weights weights-96-5.346523.hdf5 --batch-multiplier 0.5
 
 #Run the evaluation for a given training directory, loading the best weight file in the directory
