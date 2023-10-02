@@ -199,7 +199,7 @@ def run(rank, world_size, args):
 def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))
-
+    print(world_size)
     if world_size >= 1:
         assert (
             world_size <= torch.cuda.device_count()
