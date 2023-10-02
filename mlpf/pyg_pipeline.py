@@ -55,15 +55,13 @@ def run(rank, world_size, args):
         with open(f"{args.model_prefix}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
-        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
-
         model = MLPF(**model_kwargs)
+
+        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
-
-        model.load_state_dict(model_state)
 
     else:  # instantiate a new model
         model_kwargs = {
@@ -73,13 +71,12 @@ def run(rank, world_size, args):
         }
         model = MLPF(**model_kwargs)
 
-        # save model_kwargs and hyperparameters
-        save_mlpf(args, model, model_kwargs)
+        save_mlpf(args, model, model_kwargs)  # save model_kwargs and hyperparameters
 
     model.to(rank)
 
     if world_size > 1:
-        # model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     _logger.info(model)
@@ -126,12 +123,11 @@ def run(rank, world_size, args):
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
 
-        model_state = torch.load(args.model_prefix + "/best_epoch_weights.pth", map_location=rank)
+        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
-        model.eval()
 
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
