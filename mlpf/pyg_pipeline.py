@@ -119,7 +119,7 @@ def main():
 
     if args.train:
         # model = ray.train.torch.prepare_model(model)
-        train_loaders = []
+        train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
@@ -130,8 +130,19 @@ def main():
                 )
             )
 
+            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "test")
+            _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
+
+            valid_loaders.append(
+                ds.get_loader(
+                    batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
+                )
+            )
+
         train_loader = tfds_utils.InterleavedIterator(train_loaders)
-        valid_loader = train_loader  # TODO: fix
+        valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
+
+        print(train_loader)
 
         _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
 
