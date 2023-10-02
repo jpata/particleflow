@@ -137,7 +137,6 @@ class Dataset:
         return DataListLoader(
             self.ds,
             batch_size=batch_size,
-            collate_fn=Collater(),
             sampler=self.get_sampler(),
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
