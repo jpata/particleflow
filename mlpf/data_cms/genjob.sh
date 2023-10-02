@@ -1,8 +1,12 @@
 #!/bin/bash
+#SBATCH --partition main
+#SBATCH --cpus-per-task 1
+#SBATCH --mem-per-cpu 5G
+#SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
-CMSSWDIR=/home/joosep/reco/mlpf/CMSSW_12_3_0_pre6
+CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0

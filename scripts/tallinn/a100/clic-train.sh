@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH -p gpu
-#SBATCH --gres gpu:a100:1
-#SBATCH --mem-per-gpu=40G
+#SBATCH --partition gpu
+#SBATCH --gres gpu:a100:2
+#SBATCH --mem-per-gpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/tf-2.13.0.simg
@@ -11,4 +11,5 @@ cd ~/particleflow
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1 --num-cpus 32 --batch-multiplier 2 --ntrain 10000 --ntest 10000
+    $IMG python mlpf/pipeline.py train -c parameters/clic.yaml \
+    --plot-freq 1 --num-cpus 32 --batch-multiplier 5

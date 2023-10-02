@@ -353,7 +353,7 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ret["sigma_y"] = np.array(cl_sigma_y)
     ret["sigma_z"] = np.array(cl_sigma_z)
 
-    tt = np.tan(ret["iTheta"] / 2.0)
+    tt = awkward.to_numpy(np.tan(ret["iTheta"] / 2.0))
     eta = awkward.to_numpy(-np.log(tt, where=tt > 0))
     eta[tt <= 0] = 0.0
     ret["eta"] = eta
@@ -381,12 +381,12 @@ def track_to_features(prop_data, iev):
     trackstate_idx = prop_data[track_coll][track_coll + ".trackStates_begin"][iev]
     # get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
-        ret[k] = prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx]
+        ret[k] = awkward.to_numpy(prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx])
 
-    ret["pt"] = track_pt(ret["omega"])
-    ret["px"] = np.cos(ret["phi"]) * ret["pt"]
-    ret["py"] = np.sin(ret["phi"]) * ret["pt"]
-    ret["pz"] = ret["tanLambda"] * ret["pt"]
+    ret["pt"] = awkward.to_numpy(track_pt(ret["omega"]))
+    ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
+    ret["py"] = awkward.to_numpy(np.sin(ret["phi"])) * ret["pt"]
+    ret["pz"] = awkward.to_numpy(ret["tanLambda"]) * ret["pt"]
     ret["p"] = np.sqrt(ret["px"] ** 2 + ret["py"] ** 2 + ret["pz"] ** 2)
     cos_theta = np.divide(ret["pz"], ret["p"], where=ret["p"] > 0)
     theta = np.arccos(cos_theta)

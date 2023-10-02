@@ -1,18 +1,21 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:a100:1
+#SBATCH --gres gpu:rtx:1
 #SBATCH --mem-per-gpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/tf-2.11.0.simg
+#IMG=/home/software/singularity/tf-2.13.0.simg
+IMG=/home/joosep/singularity/tf-2.14.0.simg
 cd ~/particleflow
 
-EXPDIR=experiments/clic-hits_20230512_161010_875811.gpu1.local
-WEIGHTS=experiments/clic-hits_20230512_161010_875811.gpu1.local/weights/weights-06-0.076698.hdf5
+#change these
+EXPDIR=experiments/clic_20230927_171955_073632.gpu0.local
+WEIGHTS=../test/particleflow/models/mlpf-clic-2023-results/clusters_best_tuned_gnn_clic_v130/weights/weights-96-5.346523.hdf5
+
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-    $IMG python mlpf/pipeline.py evaluate \
+    $IMG python3.10 mlpf/pipeline.py evaluate \
     --train-dir $EXPDIR --weights $WEIGHTS
 
 singularity exec -B /scratch/persistent --nv \

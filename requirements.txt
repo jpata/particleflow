@@ -31,8 +31,9 @@ scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow>=2.13.0
-tensorflow-datasets>=4.9.2
+tensorflow
+tensorflow-datasets
+tf2onnx
 tqdm
 uproot
 vector

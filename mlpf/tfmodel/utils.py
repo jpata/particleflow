@@ -426,6 +426,7 @@ def load_and_interleave(
             pad_to_bucket_boundary=True,
             drop_remainder=True,
         )
+        num_steps = None
     # use fixed-size batching
     else:
         bs = batch_size
@@ -451,6 +452,7 @@ def load_and_interleave(
         padded_shapes[2] = {k: (event_pad_size, v.shape[1]) for k, v in padded_shapes[2].items()}
         padded_shapes = tuple(padded_shapes)
 
+        num_steps = ds.num_samples // bs
         tensorflow_dataset = tensorflow_dataset.padded_batch(bs, padded_shapes=padded_shapes, drop_remainder=True)
 
     ds = MLPFDataset(
@@ -459,6 +461,9 @@ def load_and_interleave(
         tensorflow_dataset,
         ds.num_samples,
     )
+
+    if not (num_steps is None):
+        ds._num_steps = num_steps
 
     statefile = f"{cachedir}/{ds.name}_{ds.split}.json"
     if os.path.isfile(statefile):

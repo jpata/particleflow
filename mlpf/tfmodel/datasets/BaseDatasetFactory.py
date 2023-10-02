@@ -24,7 +24,10 @@ def unpack_target(y, num_output_classes, config):
     cos_phi = y[..., 5:6] * msk_pid
 
     type_as_int = tf.cast(y[..., 0], tf.int32)
-    charge_as_int = tf.cast(y[..., 1] + 1, tf.int32)  # -1, 0, 1 -> 0, 1, 2
+
+    # JP: in cms_pf_single_proton, charge is sometimes 2. so I added clip here currently
+    charge_as_int = tf.clip_by_value(tf.cast(y[..., 1] + 1, tf.int32), 0, 2)
+
     tf.debugging.assert_greater_equal(charge_as_int, 0, message="charge", summarize=100)
     tf.debugging.assert_less_equal(charge_as_int, 2, message="charge", summarize=100)
 

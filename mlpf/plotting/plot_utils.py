@@ -104,7 +104,8 @@ def get_class_names(dataset_name):
 
 
 EVALUATION_DATASET_NAMES = {
-    "delphes_data_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",  # qcd is the validation set
+    "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
     "cms_pf_qcd_high_pt": r"CMS high-$p_T$ QCD+PU events",
     "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
     "cms_pf_single_neutron": r"CMS single neutron particle gun events",
