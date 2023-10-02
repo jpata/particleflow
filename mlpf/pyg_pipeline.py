@@ -19,7 +19,7 @@ from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, Dataset, InterleavedIterator, save_mlpf
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
