@@ -126,7 +126,7 @@ model:
     embedding_dim: 36
     width: 128
     num_convs: 2
-    k: 16
+    k: 11
     propagate_dimensions: 22
     space_dimensions: 4
     dropout: True
