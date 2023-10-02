@@ -147,7 +147,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
             )
 
         event = batch  # h.to(rank)
-        print("b4", event.device)
+        print("b4", event.X.device)
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
         target_ids = event.ygen[:, 0].long()

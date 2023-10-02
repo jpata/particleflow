@@ -129,7 +129,7 @@ class MLPF(nn.Module):
 
     def forward(self, event):
         # unfold the Batch object
-        print("af", event.device)
+        print("af", event.X.device)
 
         input_ = event.X.float()
         batch_idx = event.batch
