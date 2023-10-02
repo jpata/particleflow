@@ -117,29 +117,15 @@ X_FEATURES = {
 }
 
 Y_FEATURES = {
-    "cms": [
-        "PDG",
-        "charge",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "energy",
-    ],
-    "delphes": [
-        "PDG",
-        "charge",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "energy",
-    ],
+    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
+    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
     "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
 }
 
 
 def save_mlpf(args, mlpf, model_kwargs):
+    """Simple function to store the model parameters and training hyperparameters."""
+
     if not osp.isdir(args.model_prefix):
         os.system(f"mkdir -p {args.model_prefix}")
 
