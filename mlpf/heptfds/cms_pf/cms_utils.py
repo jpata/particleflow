@@ -270,6 +270,11 @@ def generate_examples(files):
             x = Xs[ii]
             yg = ygens[ii]
             yc = ycands[ii]
+
+            uniqs, counts = np.unique(yg[:, 0], return_counts=True)
+            print()
+            print("N={} uniqs={} counts={}".format(len(x), uniqs, counts))
+            print()
             yield str(fi) + "_" + str(ii), {
                 "X": x,
                 "ygen": yg,

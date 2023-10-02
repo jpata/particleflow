@@ -26,6 +26,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # $CMD mlpf/heptfds/cms_pf/singlepi --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singlepi.log &
 # $CMD mlpf/heptfds/cms_pf/singleproton --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singleproton.log &
 # $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singletau.log &
+$CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite
 # wait
 
 # CLIC cluster-based
