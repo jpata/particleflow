@@ -3,8 +3,6 @@ import os
 import os.path as osp
 import pickle as pkl
 
-import torch
-
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS = {
@@ -150,12 +148,3 @@ def save_mlpf(args, mlpf, model_kwargs):
 
     with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
-
-
-def load_mlpf(device, outpath):
-    with open(outpath + "/model_kwargs.pkl", "rb") as f:
-        model_kwargs = pkl.load(f)
-
-    state_dict = torch.load(outpath + "/best_epoch_weights.pth", map_location=device)
-
-    return state_dict, model_kwargs

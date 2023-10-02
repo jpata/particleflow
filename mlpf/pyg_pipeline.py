@@ -7,6 +7,7 @@ Author: Farouk Mokhtar
 import argparse
 import logging
 import os
+import pickle as pkl
 
 import torch
 import torch.distributed as dist
@@ -17,7 +18,7 @@ from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.tfds_utils import Dataset, InterleavedIterator
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_mlpf
 
 logging.basicConfig(level=logging.INFO)
 
@@ -51,7 +52,10 @@ def run(rank, world_size, args):
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
-        model_state, model_kwargs = load_mlpf(rank, args.model_prefix)
+        with open(f"{args.model_prefix}/model_kwargs.pkl", "rb") as f:
+            model_kwargs = pkl.load(f)
+
+        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
 
         model = MLPF(**model_kwargs)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
