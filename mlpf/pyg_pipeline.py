@@ -110,16 +110,12 @@ def run(rank, world_size, args):
             ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(
-                ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], world_size=world_size)
-            )
+            train_loaders.append(ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"]))
 
             ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "test")
             _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-            valid_loaders.append(
-                ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], world_size=world_size)
-            )
+            valid_loaders.append(ds.get_loader(batch_size=config["train_dataset"][args.dataset][sample]["batch_size"]))
 
         train_loader = tfds_utils.InterleavedIterator(train_loaders)
         valid_loader = tfds_utils.InterleavedIterator(valid_loaders)

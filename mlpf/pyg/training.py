@@ -122,12 +122,12 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
     loss_obj_id = FocalLoss(gamma=2.0)
 
     if is_train:
-        _logger.info("Initiating a training run on {}".format(rank), color="red")
+        _logger.info(f"Initiating a training run on {rank}", color="red")
         step_type = "train"
         loader = train_loader
         mlpf.train()
     else:
-        _logger.info("Initiating a validation run on {}".format(rank), color="red")
+        _logger.info(f"Initiating a validation run on {rank}", color="red")
         step_type = "valid"
         loader = valid_loader
         mlpf.eval()
@@ -155,7 +155,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
 
         # make mlpf forward pass
         t0 = time.time()
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf([event])
+        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
         print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
