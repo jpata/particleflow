@@ -200,6 +200,8 @@ def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))
     print(world_size)
+    print("args.gpus", args.gpus)
+    print(args.gpus.split(","))
     if world_size >= 1:
         assert (
             world_size <= torch.cuda.device_count()
