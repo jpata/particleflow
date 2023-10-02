@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
-from logger import _logger
+from pyg.logger import _logger
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter

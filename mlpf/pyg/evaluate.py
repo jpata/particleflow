@@ -11,7 +11,6 @@ import torch
 import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
-from logger import _logger
 from plotting.plot_utils import (
     compute_met_and_ratio,
     format_dataset_name,
@@ -23,6 +22,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
+from pyg.logger import _logger
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
