@@ -97,8 +97,6 @@ class Dataset:
                 batch_size=batch_size,
                 collate_fn=Collater(),
                 sampler=self.get_distributed_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
             )
         else:
             return DataLoader(
