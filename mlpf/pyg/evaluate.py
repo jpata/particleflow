@@ -24,6 +24,7 @@ from plotting.plot_utils import (
 )
 
 from .logger import _logger
+from .utils import CLASS_NAMES
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
@@ -163,8 +164,6 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
 
 def make_plots(model_prefix, sample, dataset):
     mplhep.set_style(mplhep.styles.CMS)
-
-    from utils import CLASS_NAMES
 
     class_names = CLASS_NAMES[dataset]
 
