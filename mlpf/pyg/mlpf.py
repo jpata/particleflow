@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch_geometric
 import torch_geometric.utils
-from model import CombinedGraphLayer
 from torch_geometric.nn.conv import GravNetConv
+
+from .model import CombinedGraphLayer
 
 # from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
 
