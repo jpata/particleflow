@@ -1,5 +1,5 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF.
+Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
 
 Author: Farouk Mokhtar
 """
@@ -19,48 +19,35 @@ from pyg.tfds_utils import Dataset, InterleavedIterator
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
 
-# import sys
-
-
-# sys.path.append("pyg/")
-
-
-# import ray
-# import ray.data
-# # from ray import train
-# from ray.air import Checkpoint, session
-# from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
-# from ray.train.torch import TorchConfig, TorchTrainer
-
 logging.basicConfig(level=logging.INFO)
-
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
-parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="Overwrites the model if True")
-parser.add_argument("--backend", type=str, choices=["gloo", "nccl"], default=None, help="backend for distributed training")
+parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
-parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset")
-parser.add_argument("--load", action="store_true", help="Load the model (no training)")
-parser.add_argument("--train", action="store_true", help="Initiates a training")
-parser.add_argument("--test", action="store_true", help="Tests the model")
+parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
+parser.add_argument("--load", action="store_true", help="load the model (no training)")
+parser.add_argument("--train", action="store_true", help="initiates a training")
+parser.add_argument("--test", action="store_true", help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=3, help="number of training epochs")
 parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gravnet", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
-parser.add_argument("--make-plots", action="store_true", help="makes plots of the test predictions")
+parser.add_argument("--make-plots", action="store_true", help="make plots of the test predictions")
+parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 
 
 def run(rank, world_size, args):
+    """Demo function that will be passed to each gpu if (world_size > 1)"""
+
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
 
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    # load config from yaml
-    with open("../parameters/pyg.yaml", "r") as stream:
+    with open("../parameters/pyg.yaml", "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
@@ -87,14 +74,14 @@ def run(rank, world_size, args):
 
     model.to(rank)
 
-    if world_size > 1:  # DistributedDataParallel
+    if world_size > 1:
         # model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     _logger.info(model)
     _logger.info(f"Model directory {args.model_prefix}", color="bold")
 
-    if args.train:
+    if args.train:  # TODO: give each gpu a subset of the train/val datasets
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
@@ -110,7 +97,6 @@ def run(rank, world_size, args):
 
             valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-        print("Top")
         train_loader = InterleavedIterator(train_loaders)
         valid_loader = InterleavedIterator(valid_loaders)
 
@@ -125,7 +111,7 @@ def run(rank, world_size, args):
             args.model_prefix,
         )
 
-    if args.test:
+    if args.test:  # TODO: give each gpu a subset of the test dataset
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
             ds = Dataset(f"{sample}:{config['test_dataset'][args.dataset][sample]['version']}", "test")
@@ -141,8 +127,6 @@ def run(rank, world_size, args):
                 ]
             )
 
-        # load the best epoch state
-        # best_epoch = json.load(open(f"{args.model_prefix}/best_epoch.json"))["best_epoch"]
         model_state = torch.load(args.model_prefix + "/best_epoch_weights.pth", map_location=rank)
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
@@ -154,33 +138,34 @@ def run(rank, world_size, args):
             _logger.info(f"Running predictions on {sample}")
             make_predictions(rank, model, test_loaders[sample], args.model_prefix, sample)
 
-    # load the predictions and make plots (must have ran make_predictions() beforehand)
-    if args.make_plots:
-        for sample in config["test_dataset"][args.dataset]:
-            _logger.info(f"Plotting distributions for {sample}")
+    if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
+        if args.make_plots:
+            for sample in config["test_dataset"][args.dataset]:
+                _logger.info(f"Plotting distributions for {sample}")
 
-            make_plots(args.model_prefix, sample, args.dataset)
+                make_plots(args.model_prefix, sample, args.dataset)
 
-    #     try:
-    #         dummy_features = torch.randn(256, model_kwargs["input_dim"], rank=rank)
-    #         dummy_batch = torch.zeros(256, dtype=torch.int64, rank=rank)
-    #         torch.onnx.export(
-    #             model,
-    #             (dummy_features, dummy_batch),
-    #             "test.onnx",
-    #             verbose=True,
-    #             input_names=["features", "batch"],
-    #             output_names=["id", "momentum", "charge"],
-    #             dynamic_axes={
-    #                 "features": {0: "num_elements"},
-    #                 "batch": [0],
-    #                 "id": [0],
-    #                 "momentum": [0],
-    #                 "charge": [0],
-    #             },
-    #         )
-    #     except Exception as e:
-    #         print("ONNX export failed: {}".format(e))
+        if args.export_onnx:
+            try:
+                dummy_features = torch.randn(256, model_kwargs["input_dim"], rank=rank)
+                dummy_batch = torch.zeros(256, dtype=torch.int64, rank=rank)
+                torch.onnx.export(
+                    model,
+                    (dummy_features, dummy_batch),
+                    "test.onnx",
+                    verbose=True,
+                    input_names=["features", "batch"],
+                    output_names=["id", "momentum", "charge"],
+                    dynamic_axes={
+                        "features": {0: "num_elements"},
+                        "batch": [0],
+                        "id": [0],
+                        "momentum": [0],
+                        "charge": [0],
+                    },
+                )
+            except Exception as e:
+                print("ONNX export failed: {}".format(e))
 
     if world_size > 1:
         dist.destroy_process_group()

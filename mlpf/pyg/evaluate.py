@@ -151,9 +151,9 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{model_prefix}/preds/{sample}/pred_{i}.parquet",
+            f"{model_prefix}/preds/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_{i}.parquet")
+        _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_{rank}_{i}.parquet")
 
         if i == 2:
             break
