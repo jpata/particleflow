@@ -231,7 +231,7 @@ class Dataset:
         sampler = torch.utils.data.SequentialSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size=20, num_workers=0, prefetch_factor=2):
+    def get_loader(self, batch_size=20, num_workers=2, prefetch_factor=4):
         return DataLoader(
             self.ds,
             batch_size=batch_size,
