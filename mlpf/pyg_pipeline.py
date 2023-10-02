@@ -138,8 +138,8 @@ def main():
             num_gpus <= torch.cuda.device_count()
         ), f"--gpus is too high (specefied {num_gpus} gpus but only {torch.cuda.device_count()} gpus are available)"
 
-        device = torch.device("cuda:0")
-        print(device)
+        device = 0
+
         if num_gpus > 1:
             is_distributed = True
 
