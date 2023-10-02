@@ -94,9 +94,6 @@ def main():
         # save model_kwargs and hyperparameters
         save_mlpf(args, model, model_kwargs)
 
-    _logger.info(model)
-    _logger.info(f"Model directory {args.model_prefix}", color="bold")
-
     # DistributedDataParallel
     if args.backend is not None:
         _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {len(gpus)} gpus", color="purple")
@@ -116,6 +113,9 @@ def main():
         # CPU
         if device == torch.device("cpu"):
             _logger.info("Will use cpu", color="purple")
+
+    _logger.info(model)
+    _logger.info(f"Model directory {args.model_prefix}", color="bold")
 
     if args.train:
         # model = ray.train.torch.prepare_model(model)
