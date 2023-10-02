@@ -84,13 +84,6 @@ class Dataset:
         return sampler
 
     def get_loader(self, batch_size, world_size, num_workers=2, prefetch_factor=4):
-        # return DataLoader(
-        #     self.ds,
-        #     batch_size=batch_size,
-        #     collate_fn=Collater(),
-        #     sampler=self.get_sampler(),
-        # )
-
         if world_size > 1:
             return DataLoader(
                 self.ds,
