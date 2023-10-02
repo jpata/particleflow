@@ -154,9 +154,9 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        # t0 = time.time()
+        t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.X, event.batch)
-        # print(f"{event}: {(time.time() - t0):.2f}s")
+        print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -200,7 +200,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i == 10:
+        if i == 100:
             break
 
     for loss in losses:
