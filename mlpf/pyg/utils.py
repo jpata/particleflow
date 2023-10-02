@@ -230,8 +230,10 @@ class Dataset:
 
         if dataset == "cms":
             data_dir += "cms/"
+
         if dataset == "clic":
             data_dir += "clic/cluster/"
+
         if dataset == "delphes":
             data_dir += "delphes/"
 
