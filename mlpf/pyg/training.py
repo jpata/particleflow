@@ -112,7 +112,7 @@ def validation_run(rank, model, train_loader, valid_loader, tensorboard_writer=N
     return ret
 
 
-def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=None):
+def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer=None):
     """
     A training/validation run over a given epoch that gets called in the train_mlpf() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -123,15 +123,15 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
     loss_obj_id = FocalLoss(gamma=2.0)
 
     if is_train:
-        _logger.info(f"Initiating a training run on {rank}", color="red")
+        _logger.info(f"Initiating a training run on device {rank}", color="red")
         step_type = "train"
         loader = train_loader
-        mlpf.train()
+        model.train()
     else:
-        _logger.info(f"Initiating a validation run on {rank}", color="red")
+        _logger.info(f"Initiating a validation run on device {rank}", color="red")
         step_type = "valid"
         loader = valid_loader
-        mlpf.eval()
+        model.eval()
 
     # initialize loss counters
     losses = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
@@ -155,9 +155,9 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        t0 = time.time()
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
-        print(f"{event}: {(time.time() - t0):.2f}s")
+        # t0 = time.time()
+        pred_ids_one_hot, pred_momentum, pred_charge = model(event)
+        # print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -185,7 +185,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
         if is_train:
-            for param in mlpf.parameters():
+            for param in model.parameters():
                 param.grad = None
             loss_["Total"].backward()
             optimizer.step()
@@ -201,8 +201,8 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i == 10:
-            break
+        # if i == 10:
+        #     break
 
     for loss in losses:
         losses[loss] = losses[loss].cpu().item() / num_iterations
@@ -214,18 +214,18 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
     return losses
 
 
-def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, outpath):
+def train_mlpf(rank, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
     """
-    Main function to perform training. Will call the train() and validation_run() functions every epoch.
+    Will perform training by calling train() and validation_run() every epoch
 
     Args:
-        rank: int representing the gpu device id, or str=='cpu' (both work, trust me).
-        mlpf: a pytorch model wrapped by DistributedDataParallel (DDP).
-        train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method.
-        valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method.
-        patience: number of stale epochs allowed before stopping the training.
-        lr: lr to use for training.
-        outpath: path to store the model weights and training plots.
+        rank: 'cpu' or int representing the gpu device id
+        model: a pytorch model that may be wrapped by DistributedDataParallel
+        train_loader: a pytorch Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
+        valid_loader: a pytorch Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
+        patience: number of stale epochs before stopping the training
+        lr: learning rate to use for training
+        outpath: path to store the model weights and training plots
     """
 
     tensorboard_writer = SummaryWriter(outpath)
@@ -242,7 +242,7 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
 
     stale_epochs = 0
 
-    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     for epoch in range(n_epochs):
         t0 = time.time()
@@ -252,14 +252,14 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
             break
 
         # training step
-        losses_t = train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer)
+        losses_t = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
         # validation step
-        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, tensorboard_writer)
+        losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
         for loss in losses_of_interest:
             losses["valid"][loss].append(losses_v[loss])
         for k, v in losses_v.items():
@@ -275,10 +275,10 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
                     best_train_loss[loss] = losses_t[loss]
 
                     # save the model
-                    if isinstance(mlpf, torch.nn.parallel.DistributedDataParallel):
-                        state_dict = mlpf.module.state_dict()
+                    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                        state_dict = model.module.state_dict()
                     else:
-                        state_dict = mlpf.state_dict()
+                        state_dict = model.state_dict()
 
                     torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
 
@@ -333,4 +333,4 @@ def train_mlpf(rank, mlpf, train_loader, valid_loader, n_epochs, patience, lr, o
         with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
             pkl.dump(losses, f)
 
-    _logger.info(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
+    _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")

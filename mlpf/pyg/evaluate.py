@@ -45,9 +45,11 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
-def make_predictions(rank, mlpf, loader, model_prefix, sample):
-    if not osp.isdir(f"{model_prefix}/preds/{sample}"):
-        os.makedirs(f"{model_prefix}/preds/{sample}")
+def run_predictions(rank, mlpf, loader, sample, outpath):
+    """Runs inference on the given sample and stores the output as .parquet files."""
+
+    if not osp.isdir(f"{outpath}/preds/{sample}"):
+        os.makedirs(f"{outpath}/preds/{sample}")
 
     ti = time.time()
 
@@ -152,29 +154,30 @@ def make_predictions(rank, mlpf, loader, model_prefix, sample):
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{model_prefix}/preds/{sample}/pred_{rank}_{i}.parquet",
+            f"{outpath}/preds/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {model_prefix}/preds/{sample}/pred_{rank}_{i}.parquet")
+        _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
-        if i == 2:
-            break
+        # if i == 2:
+        #     break
 
-    _logger.info(f"Time taken to make predictions on rank {rank} is: {((time.time() - ti) / 60):.2f} min")
+    _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def make_plots(model_prefix, sample, dataset):
+def make_plots(outpath, sample, dataset):
+    """Uses the predictions stored as .parquet files (see above) to make plots."""
+
     mplhep.set_style(mplhep.styles.CMS)
 
     class_names = CLASS_NAMES[dataset]
 
-    # Use the dataset names from the common nomenclature
-    _title = format_dataset_name(sample)
+    _title = format_dataset_name(sample)  # use the dataset names from the common nomenclature
 
-    if not os.path.isdir(f"{model_prefix}/plots/"):
-        os.makedirs(f"{model_prefix}/plots/")
+    if not os.path.isdir(f"{outpath}/plots/"):
+        os.makedirs(f"{outpath}/plots/")
 
-    plots_path = Path(f"{model_prefix}/plots/")
-    pred_path = Path(f"{model_prefix}/preds/{sample}/")
+    plots_path = Path(f"{outpath}/plots/")
+    pred_path = Path(f"{outpath}/preds/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
