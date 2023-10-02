@@ -146,8 +146,7 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
                 ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
             )
 
-        event = batch  # h.to(rank)
-        # print("b4", event.X.device)
+        event = batch.to(rank)
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
         target_ids = event.ygen[:, 0].long()
@@ -159,47 +158,47 @@ def train(rank, mlpf, train_loader, valid_loader, optimizer, tensorboard_writer=
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf([event])
         print(f"{event}: {(time.time() - t0):.2f}s")
 
-        # for icls in range(pred_ids_one_hot.shape[1]):
-        #     if tensorboard_writer:
-        #         tensorboard_writer.add_scalar(
-        #             "step_{}/num_cls_{}".format(step_type, icls),
-        #             torch.sum(target_ids == icls),
-        #             ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
-        #         )
+        for icls in range(pred_ids_one_hot.shape[1]):
+            if tensorboard_writer:
+                tensorboard_writer.add_scalar(
+                    "step_{}/num_cls_{}".format(step_type, icls),
+                    torch.sum(target_ids == icls),
+                    ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+                )
 
-        # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
+        assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
-        # loss_ = {}
-        # # for CLASSIFYING PID
-        # loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-        # # REGRESSING p4: mask the loss in cases there is no true particle
-        # msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        # loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-        #     pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-        # )
-        # # PREDICTING CHARGE
-        # loss_["Charge"] = torch.nn.functional.cross_entropy(
-        #     pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-        # )
-        # # TOTAL LOSS
-        # loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
+        loss_ = {}
+        # for CLASSIFYING PID
+        loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+        # REGRESSING p4: mask the loss in cases there is no true particle
+        msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+        loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+            pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+        )
+        # PREDICTING CHARGE
+        loss_["Charge"] = torch.nn.functional.cross_entropy(
+            pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        )
+        # TOTAL LOSS
+        loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
-        # if is_train:
-        #     for param in mlpf.parameters():
-        #         param.grad = None
-        #     loss_["Total"].backward()
-        #     optimizer.step()
+        if is_train:
+            for param in mlpf.parameters():
+                param.grad = None
+            loss_["Total"].backward()
+            optimizer.step()
 
-        # for loss in losses:
-        #     losses[loss] += loss_[loss].detach()
+        for loss in losses:
+            losses[loss] += loss_[loss].detach()
 
-        # if tensorboard_writer:
-        #     tensorboard_writer.flush()
+        if tensorboard_writer:
+            tensorboard_writer.flush()
 
-        # if is_train:
-        #     ISTEP_GLOBAL_TRAIN += 1
-        # else:
-        #     ISTEP_GLOBAL_VALID += 1
+        if is_train:
+            ISTEP_GLOBAL_TRAIN += 1
+        else:
+            ISTEP_GLOBAL_VALID += 1
 
         if i == 100:
             break

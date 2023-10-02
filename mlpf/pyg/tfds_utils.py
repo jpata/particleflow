@@ -124,23 +124,29 @@ class Dataset:
         sampler = torch.utils.data.SequentialSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size=20, num_workers=0, prefetch_factor=2):
-        # return DataLoader(
-        #     self.ds,
-        #     batch_size=batch_size,
-        #     collate_fn=Collater(),
-        #     sampler=self.get_sampler(),
-        #     num_workers=num_workers,
-        #     prefetch_factor=prefetch_factor,
-        # )
+    def get_distributed_sampler(self):
+        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
+        return sampler
 
-        return DataListLoader(
-            self.ds,
-            batch_size=batch_size,
-            sampler=self.get_sampler(),
-            num_workers=num_workers,
-            prefetch_factor=prefetch_factor,
-        )
+    def get_loader(self, batch_size=20, num_workers=2, prefetch_factor=4, num_gpus=0):
+        if num_gpus > 1:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_distributed_sampler(),
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
+        else:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_sampler(),
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
 
     def __len__(self):
         return len(self.ds)

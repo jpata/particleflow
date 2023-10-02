@@ -9,10 +9,11 @@ import logging
 import os
 import sys
 
+import torch.multiprocessing as mp
+
 sys.path.append("pyg/")
 import torch
 import torch.distributed as dist
-import torch_geometric
 import yaml
 from pyg import tfds_utils
 from pyg.evaluate import make_plots, make_predictions
@@ -29,9 +30,6 @@ from pyg.utils import CLASS_LABELS, X_FEATURES, load_mlpf, save_mlpf
 # from ray.train.torch import TorchConfig, TorchTrainer
 
 logging.basicConfig(level=logging.INFO)
-
-os.environ["MASTER_ADDR"] = "localhost"
-os.environ["MASTER_PORT"] = "12355"
 
 
 parser = argparse.ArgumentParser()
@@ -51,21 +49,102 @@ parser.add_argument("--conv-type", type=str, default="gnn-lsh", help="choices ar
 parser.add_argument("--make-plots", action="store_true", help="makes plots of the test predictions")
 
 
+def setup(rank, num_gpus):
+    """
+    Necessary setup function that sets up environment variables and initializes the process group
+    to perform training & inference using DistributedDataParallel (DDP). DDP relies on c10d ProcessGroup
+    for communications, hence, applications must create ProcessGroup instances before constructing DDP.
+
+    Args:
+        rank: the process id (or equivalently the gpu index)
+        num_gpus: number of gpus available
+    """
+
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+
+    dist.init_process_group("nccl", rank=rank, world_size=num_gpus)  # (nccl should be faster than gloo)
+
+
+def cleanup():
+    """Necessary function that destroys the spawned process group at the end."""
+
+    dist.destroy_process_group()
+
+
+def run_demo(demo_fn, num_gpus, config, dataset, num_epochs, patience, lr, model, model_prefix):
+    """
+    Necessary function that spawns a process group of size=world_size processes to run demo_fn()
+    on each gpu device that will be indexed by 'rank'.
+
+    Args:
+        demo_fn: function you wish to run on each gpu.
+        world_size: number of gpus available.
+    """
+
+    mp.spawn(
+        demo_fn,
+        args=(num_gpus, config, dataset, num_epochs, patience, lr, model, model_prefix),
+        nprocs=num_gpus,
+        join=True,
+    )
+
+
+def train(rank, num_gpus, config, dataset, num_epochs, patience, lr, model, model_prefix):
+    if num_gpus > 1:
+        setup(rank, num_gpus)
+
+    train_loaders, valid_loaders = [], []
+    for sample in config["train_dataset"][dataset]:
+        ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][dataset][sample]['version']}", "train")
+        _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
+
+        train_loaders.append(
+            ds.get_loader(batch_size=config["train_dataset"][dataset][sample]["batch_size"], num_gpus=num_gpus)
+        )
+
+        ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][dataset][sample]['version']}", "test")
+        _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
+
+        valid_loaders.append(
+            ds.get_loader(batch_size=config["train_dataset"][dataset][sample]["batch_size"], num_gpus=num_gpus)
+        )
+
+    train_loader = tfds_utils.InterleavedIterator(train_loaders)
+    valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
+
+    _logger.info(f"Training over {num_epochs} epochs on the {dataset} dataset")
+
+    model.train()
+    train_mlpf(
+        rank,
+        model,
+        train_loader,
+        valid_loader,
+        num_epochs,
+        patience,
+        lr,
+        model_prefix,
+    )
+
+
 def main():
     args = parser.parse_args()
 
+    is_distributed = False
     if args.gpus:
-        gpus = [int(i) for i in args.gpus.split(",")]
+        num_gpus = len(args.gpus.split(","))
         assert (
-            len(gpus) <= torch.cuda.device_count()
-        ), f"--gpus is too high (specefied {len(gpus)} gpus but only {torch.cuda.device_count()} gpus are available)"
+            num_gpus <= torch.cuda.device_count()
+        ), f"--gpus is too high (specefied {num_gpus} gpus but only {torch.cuda.device_count()} gpus are available)"
 
-        if args.backend is not None:  # TODO: distributed training
-            torch.distributed.init_process_group(backend=args.backend, world_size=len(gpus))
-        else:
-            device = torch.device(gpus[0])
+        device = torch.device("cuda:0")
+
+        if num_gpus > 1:
+            is_distributed = True
+
     else:
-        gpus = None
+        num_gpus = 0
         device = torch.device("cpu")
 
     # load config from yaml
@@ -95,67 +174,30 @@ def main():
         save_mlpf(args, model, model_kwargs)
 
     # DistributedDataParallel
-    if args.backend is not None:
+    if num_gpus > 1:
         _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {len(gpus)} gpus", color="purple")
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=gpus, output_device=0)
 
-    if args.backend is None:
-        # DataParallel
-        if gpus is not None and len(gpus) > 1:
-            _logger.info(f"Will use torch.nn.DataParallel() and {len(gpus)} gpus", color="purple")
-            model = torch_geometric.nn.DataParallel(model, device_ids=gpus)
+    # Single GPU
+    if num_gpus == 1:
+        _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(0)}", color="purple")
+        model.to(device)
 
-        # Single GPU
-        if gpus is not None and len(gpus) == 1:
-            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(0)}", color="purple")
-
-        # CPU
-        if device == torch.device("cpu"):
-            _logger.info("Will use cpu", color="purple")
+    # CPU
+    if num_gpus == 0:
+        _logger.info("Will use cpu", color="purple")
 
     _logger.info(model)
     _logger.info(f"Model directory {args.model_prefix}", color="bold")
 
     if args.train:
-        # model = ray.train.torch.prepare_model(model)
-        train_loaders, valid_loaders = [], []
-        for sample in config["train_dataset"][args.dataset]:
-            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "train")
-            _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
-
-            train_loaders.append(
-                ds.get_loader(
-                    batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
-                )
+        if is_distributed:
+            run_demo(
+                train, num_gpus, config, args.dataset, args.num_epochs, args.patience, args.lr, model, args.model_prefix
             )
-
-            ds = tfds_utils.Dataset(f"{sample}:{config['train_dataset'][args.dataset][sample]['version']}", "test")
-            _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
-
-            valid_loaders.append(
-                ds.get_loader(
-                    batch_size=config["train_dataset"][args.dataset][sample]["batch_size"], num_workers=2, prefetch_factor=4
-                )
-            )
-
-        train_loader = tfds_utils.InterleavedIterator(train_loaders)
-        valid_loader = tfds_utils.InterleavedIterator(valid_loaders)
-
-        print(train_loader)
-
-        _logger.info(f"Training over {args.num_epochs} epochs on the {args.dataset} dataset")
-
-        train_mlpf(
-            device,
-            model,
-            train_loader,
-            valid_loader,
-            args.num_epochs,
-            args.patience,
-            args.lr,
-            args.model_prefix,
-        )
+        else:
+            train(device, num_gpus, config, args.dataset, args.num_epochs, args.patience, args.lr, model, args.model_prefix)
 
     if args.backend:
         dist.destroy_process_group()
