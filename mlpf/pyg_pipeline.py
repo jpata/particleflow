@@ -207,7 +207,7 @@ def main():
 
         if world_size > 1:
             _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
-            for rank in world_size:
+            for rank in range(world_size):
                 _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
             mp.spawn(
