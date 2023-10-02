@@ -194,6 +194,7 @@ def main():
             world_size <= torch.cuda.device_count()
         ), f"--gpus is too high (specefied {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
 
+        torch.cuda.empty_cache()
         if world_size > 1:
             _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
             for rank in range(world_size):
