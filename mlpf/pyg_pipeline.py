@@ -9,13 +9,14 @@ import logging
 import os
 import pickle as pkl
 
+import yaml
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-import yaml
-from pyg.evaluate import make_plots, run_predictions
+from pyg.inference import make_plots, run_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
@@ -25,10 +26,9 @@ logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
-
 parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
-parser.add_argument("--data_dir", type=str, default="tensorflow_datasets/clic/clusters/", help="path to tensorflow_datasets")
+parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
 parser.add_argument("--load", action="store_true", help="load the model (no training)")
@@ -90,12 +90,12 @@ def run(rank, world_size, args):
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "train")
+            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "test")
             _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
             valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -120,7 +120,7 @@ def run(rank, world_size, args):
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "test")
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])

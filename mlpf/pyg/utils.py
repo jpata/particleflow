@@ -217,10 +217,25 @@ class Collater:
 
 
 class Dataset:
-    """Will combine DataLoaders of different lengths and batch sizes."""
+    """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name="clic_edm_ttbar_pf:1.5.0", split="train"):
+    def __init__(self, dataset, data_dir, name, split):
+        """
+        Args
+            dataset: "cms", "clic", or "delphes"
+            data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
+            name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
+            split: "train" or "test
+        """
+
         builder = tfds.builder(name, data_dir=data_dir)
+
+        if dataset == "cms":
+            data_dir += "cms/"
+        if dataset == "clic":
+            data_dir += "clic/cluster/"
+        if dataset == "delphes":
+            data_dir += "delphes/"
 
         self.ds = builder.as_data_source(split=split)
 
