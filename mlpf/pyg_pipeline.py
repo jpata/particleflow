@@ -26,8 +26,8 @@ logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--config", type=str, default="../parameters/pyg-config.yaml", help="yaml config")
-parser.add_argument("--model-prefix", type=str, default="MLPF_model", help="directory to hold the model and all plots")
+parser.add_argument("--config", type=str, default="parameters/pyg-config.yaml", help="yaml config")
+parser.add_argument("--model-prefix", type=str, default="experiments/MLPF_model", help="directory to hold the model")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
