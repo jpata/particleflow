@@ -14,6 +14,7 @@ SAMPLE=$1
 SEED=$2
 
 WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
+#WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 
 OUTDIR=/local/joosep/mlpf/cms/v2/$SAMPLE/raw

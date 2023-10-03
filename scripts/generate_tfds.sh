@@ -54,7 +54,7 @@ $CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MAN
 # wait
 
 # Delphes
-export MANUAL_DIR=/local/joosep/mlpf/delphes/
+# export MANUAL_DIR=/local/joosep/mlpf/delphes/
 # $CMD mlpf/heptfds/delphes_pf/delphes_ttbar_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_ttbar.log &
-$CMD mlpf/heptfds/delphes_pf/delphes_qcd_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_qcd.log &
-wait
+# $CMD mlpf/heptfds/delphes_pf/delphes_qcd_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_qcd.log &
+# wait

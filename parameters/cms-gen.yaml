@@ -223,26 +223,31 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  physical:
+  multiparticlegun:
     batch_per_gpu: 1
     event_pad_size: -1
     datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
-  gun:
-    batch_per_gpu: 50
-    event_pad_size: -1
-    datasets:
-      - cms_pf_single_electron
-      - cms_pf_single_gamma
-      - cms_pf_single_neutron
-      - cms_pf_single_pi0
-      - cms_pf_single_pi
-      - cms_pf_single_tau
-      - cms_pf_single_mu
-      - cms_pf_single_proton
+      - cms_pf_multi_particle_gun
+#  physical:
+#    batch_per_gpu: 1
+#    event_pad_size: -1
+#    datasets:
+#      - cms_pf_ttbar
+#      - cms_pf_ztt
+#      - cms_pf_qcd
+#      - cms_pf_qcd_high_pt
+#  gun:
+#    batch_per_gpu: 50
+#    event_pad_size: -1
+#    datasets:
+#      - cms_pf_single_electron
+#      - cms_pf_single_gamma
+#      - cms_pf_single_neutron
+#      - cms_pf_single_pi0
+#      - cms_pf_single_pi
+#      - cms_pf_single_tau
+#      - cms_pf_single_mu
+#      - cms_pf_single_proton
 
 evaluation_datasets:
   cms_pf_qcd_high_pt:
@@ -304,6 +309,10 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_single_proton:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_multi_particle_gun:
     version: 1.6.0
     data_dir:
     manual_dir:
