@@ -205,7 +205,7 @@ class Collater:
 class Dataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, dataset, data_dir, name, split):
+    def __init__(self, data_dir, name, split):
         """
         Args
             dataset: "cms", "clic", or "delphes"
@@ -213,15 +213,6 @@ class Dataset:
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test
         """
-
-        if dataset == "cms":
-            data_dir += "cms/"
-
-        if dataset == "clic":
-            data_dir += "clic/clusters/"
-
-        if dataset == "delphes":
-            data_dir += "delphes/"
 
         builder = tfds.builder(name, data_dir=data_dir)
 

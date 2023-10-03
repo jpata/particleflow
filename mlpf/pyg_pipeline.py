@@ -91,12 +91,12 @@ def run(rank, world_size, args):
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "train")
+            ds = Dataset(args.data_dir, f"{sample}:{version}", "train")
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "test")
+            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
             _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
             valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -121,7 +121,7 @@ def run(rank, world_size, args):
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = Dataset(args.dataset, args.data_dir, f"{sample}:{version}", "test")
+            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
