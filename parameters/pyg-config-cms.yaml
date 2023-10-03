@@ -1,0 +1,110 @@
+backend: pytorch
+
+model:
+  gnn-lsh:
+    conv_type: gnn-lsh
+    embedding_dim: 36
+    width: 128
+    num_convs: 2
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: True
+
+  gravnet:
+    conv_type: gravnet
+    embedding_dim: 36
+    width: 128
+    num_convs: 2
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: True
+
+  attention:
+    conv_type: attention
+    embedding_dim: 128
+    width: 128
+    num_convs: 2
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: True
+
+train_dataset:
+  cms:
+    cms_pf_ttbar:
+      version: 1.6.0
+      batch_size: 5
+    # cms_pf_qcd:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_ztt:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_qcd_high_pt:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_electron:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_gamma:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_pi0:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_neutron:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_pi:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_tau:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_mu:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_proton:
+    #   version: 1.6.0
+    #   batch_size: 5
+
+test_dataset:
+  cms:
+    # cms_pf_ttbar:
+    #   version: 1.6.0
+    #   batch_size: 5
+    cms_pf_qcd:
+      version: 1.6.0
+      batch_size: 5
+    # cms_pf_ztt:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_qcd_high_pt:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_electron:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_gamma:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_pi0:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_neutron:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_pi:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_tau:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_mu:
+    #   version: 1.6.0
+    #   batch_size: 5
+    # cms_pf_single_proton:
+    #   version: 1.6.0
+    #   batch_size: 5
