@@ -117,8 +117,8 @@ X_FEATURES = {
 }
 
 Y_FEATURES = {
-    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
-    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
+    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
+    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
     "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
 }
 
