@@ -189,7 +189,7 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
             optimizer.step()
 
         for loss in losses:
-            losses[loss] += loss_[loss].detach()
+            losses[loss] += loss_[loss].detach().cpu().item()
 
         if tensorboard_writer:
             tensorboard_writer.flush()
@@ -203,7 +203,7 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         #     break
 
     for loss in losses:
-        losses[loss] = losses[loss].cpu().item() / num_iterations
+        losses[loss] = losses[loss] / num_iterations
 
     _logger.info(
         f"loss_id={losses['Classification']:.4f} loss_momentum={losses['Regression']:.4f} loss_charge={losses['Charge']:.4f}"
