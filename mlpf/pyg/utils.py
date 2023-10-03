@@ -279,8 +279,10 @@ class InterleavedIterator(object):
         return self
 
     def __next__(self):
-        print("self.cur_index", self.cur_index)
-        print("self.loader_ds_indices", len(self.loader_ds_indices))
-        iloader = self.loader_ds_indices[self.cur_index]
+        try:
+            iloader = self.loader_ds_indices[self.cur_index]
+        except IndexError:
+            raise StopIteration
+
         self.cur_index += 1
         return next(self.data_loaders_iter[iloader])
