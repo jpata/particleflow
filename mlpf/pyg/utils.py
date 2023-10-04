@@ -282,7 +282,11 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
+            self._reset(self)
             raise StopIteration
 
         self.cur_index += 1
         return next(self.data_loaders_iter[iloader])
+
+    def _reset(self):
+        self.cur_index = 0
