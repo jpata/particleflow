@@ -6,6 +6,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.distributed as dist
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -153,9 +154,9 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        # t0 = time.time()
+        t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-        # print(f"{event}: {(time.time() - t0):.2f}s")
+        print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -212,7 +213,7 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
     return losses
 
 
-def train_mlpf(rank, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
+def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
     """
     Will run a full training by calling train() and validation_run() every epoch.
 
@@ -256,14 +257,20 @@ def train_mlpf(rank, model, train_loader, valid_loader, n_epochs, patience, lr, 
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
-        # validation step
-        losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
-        for loss in losses_of_interest:
-            losses["valid"][loss].append(losses_v[loss])
-        for k, v in losses_v.items():
-            tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
+        # validation step on a single machine
+        if world_size > 1:
+            dist.barrier()
+        if (rank == 0) or (rank == "cpu"):
+            losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
+            for loss in losses_of_interest:
+                losses["valid"][loss].append(losses_v[loss])
+            for k, v in losses_v.items():
+                tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
 
-        tensorboard_writer.flush()
+            tensorboard_writer.flush()
+
+        if world_size > 1:
+            dist.barrier()
 
         # save the lowest value of each component of the loss to print it on the legend of the loss plots
         for loss in losses_of_interest:

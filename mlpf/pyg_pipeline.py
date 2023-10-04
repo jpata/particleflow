@@ -96,16 +96,22 @@ def run(rank, world_size, args):
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
-            _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
+            if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
+                version = config["train_dataset"][args.dataset][sample]["version"]
+                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
 
-            valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
+                ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+                _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
+
+                valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
 
         train_loader = InterleavedIterator(train_loaders)
-        valid_loader = InterleavedIterator(valid_loaders)
+        if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
+            valid_loader = InterleavedIterator(valid_loaders)
 
         train_mlpf(
             rank,
+            world_size,
             model,
             train_loader,
             valid_loader,
