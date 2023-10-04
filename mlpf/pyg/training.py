@@ -136,7 +136,9 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
     losses = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
     num_iterations = 0
+    print("loader index:", loader.cur_index)
     for i, batch in tqdm.tqdm(enumerate(loader)):
+        print("loader index inside:", loader.cur_index)
         num_iterations += 1
 
         if tensorboard_writer:
@@ -200,8 +202,8 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        # if i == 10:
-        #     break
+        if i == 10:
+            break
 
     for loss in losses:
         losses[loss] = losses[loss] / num_iterations
@@ -253,14 +255,15 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
         # training step
         losses_t = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
         for k, v in losses_t.items():
-            tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
+            tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
         # validation step on a single machine
-        if world_size > 1:
-            dist.barrier()
         if (rank == 0) or (rank == "cpu"):
+            if world_size > 1:
+                dist.barrier()
+
             losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
             for loss in losses_of_interest:
                 losses["valid"][loss].append(losses_v[loss])
@@ -269,73 +272,73 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
 
             tensorboard_writer.flush()
 
-        if world_size > 1:
-            dist.barrier()
+            if world_size > 1:
+                dist.barrier()
 
-        # save the lowest value of each component of the loss to print it on the legend of the loss plots
-        for loss in losses_of_interest:
-            if loss == "Total":
-                if losses_v[loss] < best_val_loss[loss]:
-                    best_val_loss[loss] = losses_v[loss]
-                    best_train_loss[loss] = losses_t[loss]
+            # save the lowest value of each component of the loss to print it on the legend of the loss plots
+            for loss in losses_of_interest:
+                if loss == "Total":
+                    if losses_v[loss] < best_val_loss[loss]:
+                        best_val_loss[loss] = losses_v[loss]
+                        best_train_loss[loss] = losses_t[loss]
 
-                    # save the model
-                    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                        state_dict = model.module.state_dict()
+                        # save the model
+                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                            state_dict = model.module.state_dict()
+                        else:
+                            state_dict = model.state_dict()
+
+                        torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
+
+                        with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
+                            json.dump({"best_epoch": epoch}, fp)
+
+                        # for early-stopping purposes
+                        stale_epochs = 0
                     else:
-                        state_dict = model.state_dict()
-
-                    torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
-
-                    with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
-                        json.dump({"best_epoch": epoch}, fp)
-
-                    # for early-stopping purposes
-                    stale_epochs = 0
+                        stale_epochs += 1
                 else:
-                    stale_epochs += 1
-            else:
-                if losses_v[loss] < best_val_loss[loss]:
-                    best_val_loss[loss] = losses_v[loss]
-                    best_train_loss[loss] = losses_t[loss]
+                    if losses_v[loss] < best_val_loss[loss]:
+                        best_val_loss[loss] = losses_v[loss]
+                        best_train_loss[loss] = losses_t[loss]
 
-        t1 = time.time()
+            t1 = time.time()
 
-        epochs_remaining = n_epochs - (epoch + 1)
-        time_per_epoch = (t1 - t0_initial) / (epoch + 1)
-        eta = epochs_remaining * time_per_epoch / 60
+            epochs_remaining = n_epochs - (epoch + 1)
+            time_per_epoch = (t1 - t0_initial) / (epoch + 1)
+            eta = epochs_remaining * time_per_epoch / 60
 
-        _logger.info(
-            f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_t['Total'], 4)} "
-            + f"valid_loss={round(losses_v['Total'], 4)} "
-            + f"stale={stale_epochs} "
-            + f"time={round((t1-t0)/60, 2)}m "
-            + f"eta={round(eta, 1)}m"
-        )
-
-        # make loss plots
-        for loss in losses_of_interest:
-            fig, ax = plt.subplots()
-            ax.plot(
-                range(len(losses["train"][loss])),
-                losses["train"][loss],
-                label="training ({:.3f})".format(best_train_loss[loss]),
+            _logger.info(
+                f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
+                + f"train_loss={round(losses_t['Total'], 4)} "
+                + f"valid_loss={round(losses_v['Total'], 4)} "
+                + f"stale={stale_epochs} "
+                + f"time={round((t1-t0)/60, 2)}m "
+                + f"eta={round(eta, 1)}m"
             )
-            ax.plot(
-                range(len(losses["valid"][loss])),
-                losses["valid"][loss],
-                label="validation ({:.3f})".format(best_val_loss[loss]),
-            )
-            ax.set_xlabel("Epochs")
-            ax.set_ylabel(f"{loss} Loss")
-            ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
-            ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
-            plt.tight_layout()
-            plt.savefig(f"{outpath}/mlpf_loss_{loss}.pdf")
-            plt.close()
 
-        with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
-            pkl.dump(losses, f)
+            # make loss plots
+            for loss in losses_of_interest:
+                fig, ax = plt.subplots()
+                ax.plot(
+                    range(len(losses["train"][loss])),
+                    losses["train"][loss],
+                    label="training ({:.3f})".format(best_train_loss[loss]),
+                )
+                ax.plot(
+                    range(len(losses["valid"][loss])),
+                    losses["valid"][loss],
+                    label="validation ({:.3f})".format(best_val_loss[loss]),
+                )
+                ax.set_xlabel("Epochs")
+                ax.set_ylabel(f"{loss} Loss")
+                ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
+                ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
+                plt.tight_layout()
+                plt.savefig(f"{outpath}/mlpf_loss_{loss}.pdf")
+                plt.close()
+
+            with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
+                pkl.dump(losses, f)
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
