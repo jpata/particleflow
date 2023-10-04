@@ -313,12 +313,12 @@ def train_mlpf(rank, model, train_loader, valid_loader, n_epochs, patience, lr, 
             ax.plot(
                 range(len(losses["train"][loss])),
                 losses["train"][loss],
-                label="training ({:.3f})".format(best_train_loss["Total"]),
+                label="training ({:.3f})".format(best_train_loss[loss]),
             )
             ax.plot(
                 range(len(losses["valid"][loss])),
                 losses["valid"][loss],
-                label="validation ({:.3f})".format(best_val_loss["Total"]),
+                label="validation ({:.3f})".format(best_val_loss[loss]),
             )
             ax.set_xlabel("Epochs")
             ax.set_ylabel(f"{loss} Loss")

@@ -36,7 +36,7 @@ parser.add_argument("--load", action="store_true", help="load the model (no trai
 parser.add_argument("--train", action="store_true", help="initiates a training")
 parser.add_argument("--test", action="store_true", help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=3, help="number of training epochs")
-parser.add_argument("--patience", type=int, default=50, help="patience before early stopping")
+parser.add_argument("--patience", type=int, default=20, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gravnet", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
 parser.add_argument("--make-plots", action="store_true", help="make plots of the test predictions")
