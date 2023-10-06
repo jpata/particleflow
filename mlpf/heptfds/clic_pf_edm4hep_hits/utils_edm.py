@@ -41,8 +41,10 @@ Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 labels = [0, 211, 130, 22, 11, 13]
 
 
-def split_sample(path, test_frac=0.8):
+def split_sample(path, test_frac=0.8, max_files=0):
     files = sorted(list(path.glob("*.parquet")))
+    if max_files > 0:
+        files = files[:max_files]
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
