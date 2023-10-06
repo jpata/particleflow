@@ -3,7 +3,7 @@
 # Tallinn
 export MANUAL_DIR=/local/joosep/mlpf/cms/v2
 export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
-export IMG=/home/software/singularity/tf-2.13.0.simg
+export IMG=/home/software/singularity/tf-2.14.0.simg
 export PYTHONPATH=`pwd`/mlpf
 export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
@@ -26,6 +26,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # $CMD mlpf/heptfds/cms_pf/singlepi --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singlepi.log &
 # $CMD mlpf/heptfds/cms_pf/singleproton --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singleproton.log &
 # $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_singletau.log &
+# $CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite
 # wait
 
 # CLIC cluster-based
@@ -39,10 +40,11 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # CLIC hit-based
-# export MANUAL_DIR=/local/joosep/mlpf_hits/clic_edm4hep/
-# export MANUAL_DIR=/media/joosep/data/mlpf_hits/clic_edm4hep/
+# export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_hits/
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq_hits.log &
+# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq_hits_10k.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_hits.log &
+# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_hits_10k.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_kaon0L --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_kaon0L_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_ele --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_ele_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_pi0 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_pi0_hits.log &
@@ -53,7 +55,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # Delphes
-export MANUAL_DIR=/local/joosep/mlpf/delphes/
+# export MANUAL_DIR=/local/joosep/mlpf/delphes/
 # $CMD mlpf/heptfds/delphes_pf/delphes_ttbar_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_ttbar.log &
-$CMD mlpf/heptfds/delphes_pf/delphes_qcd_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_qcd.log &
-wait
+# $CMD mlpf/heptfds/delphes_pf/delphes_qcd_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_qcd.log &
+# wait
