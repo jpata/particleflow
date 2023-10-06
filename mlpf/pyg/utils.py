@@ -229,7 +229,7 @@ class Dataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, num_workers=2, prefetch_factor=4):
+    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
         if world_size > 1:
             return DataLoader(
                 self.ds,
@@ -237,7 +237,7 @@ class Dataset:
                 collate_fn=Collater(),
                 sampler=self.get_distributed_sampler(),
             )
-        else:
+        elif num_workers:
             return DataLoader(
                 self.ds,
                 batch_size=batch_size,
@@ -245,6 +245,13 @@ class Dataset:
                 sampler=self.get_sampler(),
                 num_workers=num_workers,
                 prefetch_factor=prefetch_factor,
+            )
+        else:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_sampler(),
             )
 
     def __len__(self):
@@ -264,6 +271,7 @@ class InterleavedIterator(object):
 
     def __init__(self, data_loaders):
         self.idx = 0
+        self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         max_loader_size = max([len(dl) for dl in data_loaders])
 
@@ -282,8 +290,16 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
-            self.cur_index = 0  # reset the loader
+            self.cur_index = 0  # reset the curser index
+            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
             raise StopIteration
 
         self.cur_index += 1
         return next(self.data_loaders_iter[iloader])
+
+    def __len__(self):
+        len_ = 0
+        for iloader in range(len(self.data_loaders_iter)):
+            len_ += len(self.data_loaders_iter[iloader])
+
+        return len_
