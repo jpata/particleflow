@@ -1,16 +1,16 @@
 import glob
+import json
 import math
 
 import awkward
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy
-import tqdm
-import vector
-import json
 import pandas
+import scipy
 import sklearn
 import sklearn.metrics
+import tqdm
+import vector
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -245,7 +245,11 @@ def particle_label(ax, pid):
 def load_eval_data(path, max_files=None):
     yvals = []
     filenames = []
+    print("path", path)
+
     filelist = list(glob.glob(path))
+    print(filelist)
+
     if max_files is not None:
         filelist = filelist[:max_files]
 
@@ -263,7 +267,6 @@ def load_eval_data(path, max_files=None):
             yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
 
     for typ in ["gen", "cand", "pred"]:
-
         # Compute phi, px, py, pz
         yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
         yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
@@ -672,7 +675,6 @@ def plot_rocs(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None
 
 
 def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     # compute the number of unpadded elements per event
     num_Xelems = awkward.sum(X[:, :, 0] != 0, axis=-1)
     maxval = np.max(num_Xelems)
@@ -692,7 +694,6 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
 
 
 def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
 
     for cls_id in cls_ids:
@@ -809,7 +810,6 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
 
 
 def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
 
     for cls_id in cls_ids:
@@ -980,7 +980,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
 
 
 def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     pf_genjet_pt = yvals["jet_gen_to_cand_genpt"]
     mlpf_genjet_pt = yvals["jet_gen_to_pred_genpt"]
 
@@ -1076,7 +1075,6 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
 
 def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     genmet = yvals["gen_met"]
 
     pf_response = yvals["ratio_cand"]
@@ -1174,7 +1172,6 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
 
 def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     genmet = yvals["gen_mom"]
 
     pf_response = yvals["ratio_cand"]

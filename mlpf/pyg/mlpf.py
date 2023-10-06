@@ -4,9 +4,9 @@ import torch_geometric
 import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv
 
-# from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
+from .model import CombinedGraphLayer
 
-from mlpf.pyg.model import CombinedGraphLayer
+# from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
 
 
 class GravNetLayer(nn.Module):
@@ -40,7 +40,6 @@ class SelfAttentionLayer(nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):
-
         x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
         x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
@@ -62,7 +61,7 @@ class MLPF(nn.Module):
     def __init__(
         self,
         input_dim=34,
-        NUM_CLASSES=8,
+        num_classes=8,
         embedding_dim=128,
         width=128,
         num_convs=2,
@@ -70,23 +69,21 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         dropout=0.4,
-        ssl=False,
-        VICReg_embedding_dim=0,
+        conv_type="gravnet",
     ):
         super(MLPF, self).__init__()
+
+        self.conv_type = conv_type
 
         self.act = nn.ELU
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
-        self.ssl = ssl  # boolean that is True for ssl and False for native mlpf
 
         # embedding of the inputs
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
 
-            self.conv_type = "gnn-lsh"
-            # GNN that uses the embeddings learnt by VICReg as the input features
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -118,33 +115,25 @@ class MLPF(nn.Module):
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         decoding_dim = input_dim + num_convs * embedding_dim
-        if ssl:
-            decoding_dim += VICReg_embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, NUM_CLASSES, width, self.act, dropout)
+        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_eta = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
-        self.nn_phi = ffn(decoding_dim + NUM_CLASSES, 2, width, self.act, dropout)
-        self.nn_energy = ffn(decoding_dim + NUM_CLASSES, 1, width, self.act, dropout)
+        self.nn_pt = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
+        self.nn_eta = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
+        self.nn_phi = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
+        self.nn_energy = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + NUM_CLASSES, 3, width, self.act, dropout)
+        self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward(self, element_features, batch_idx):
-
+    def forward(self, event):
         # unfold the Batch object
-        if self.ssl:
-            input_ = element_features.float()[:, : self.input_dim]
-            VICReg_embeddings = element_features.float()[:, self.input_dim :]
-        else:
-            input_ = element_features.float()
+        input_ = event.X.float()
+        batch_idx = event.batch
 
-        embeddings_id = []
-        embeddings_reg = []
-
+        embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(input_)
 
@@ -172,18 +161,12 @@ class MLPF(nn.Module):
                     # assert out_stacked.shape[0] == conv_input.shape[0]
                     embeddings_reg.append(out_stacked)
 
-        if self.ssl:
-            embedding_id = torch.cat([input_] + embeddings_id + [VICReg_embeddings], axis=-1)
-        else:
-            embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
+        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
 
         # predict the PIDs
         preds_id = self.nn_id(embedding_id)
 
-        if self.ssl:
-            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id] + [VICReg_embeddings], axis=-1)
-        else:
-            embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
+        embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data
         # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
@@ -199,4 +182,5 @@ class MLPF(nn.Module):
         preds_energy = self.nn_energy(embedding_reg) + input_[:, 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
+
         return preds_id, preds_momentum, pred_charge

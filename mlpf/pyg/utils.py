@@ -2,43 +2,42 @@ import json
 import os
 import os.path as osp
 import pickle as pkl
-import shutil
-import sys
-from collections.abc import Sequence
+from typing import List, Optional, Sequence, Union
 
-import matplotlib
+import tensorflow_datasets as tfds
 import torch
+import torch.utils.data
+from torch import Tensor
+from torch_geometric.data import Batch, Data, Dataset
 from torch_geometric.data.data import BaseData
-
-matplotlib.use("Agg")
-
+from torch_geometric.data.datapipes import DatasetAdapter
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 CLASS_LABELS = {
-    "CMS": [0, 211, 130, 1, 2, 22, 11, 13, 15],
-    "DELPHES": [0, 211, 130, 22, 11, 13],
-    "CLIC": [0, 211, 130, 22, 11, 13],
+    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
+    "delphes": [0, 211, 130, 22, 11, 13],
+    "clic": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
-    "CMS": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    "DELPHES": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "CLIC": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
+    "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
-    "CMS": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
-    "DELPHES": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "CLIC": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
-    "CMS": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    "DELPHES": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "CLIC": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
+    "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
-    "CMS": [
+    "cms": [
         "typ_idx",
         "pt",
         "eta",
@@ -82,7 +81,7 @@ X_FEATURES = {
         "theta",
         "thetaerror",
     ],
-    "DELPHES": [
+    "delphes": [
         "Track|cluster",
         "$p_{T}|E_{T}$",
         r"$\eta$",
@@ -96,7 +95,7 @@ X_FEATURES = {
         "is_gen_mu",
         "is_gen_el",
     ],
-    "CLIC": [
+    "clic": [
         "type",
         "pt | et",
         "eta",
@@ -118,149 +117,189 @@ X_FEATURES = {
 }
 
 Y_FEATURES = {
-    "CMS": [
-        "PDG",
-        "charge",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "energy",
-    ],
-    "DELPHES": [
-        "PDG",
-        "charge",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "energy",
-    ],
-    "CLIC": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"],
+    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
+    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
+    "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
 }
 
 
-def save_mlpf(args, outpath, mlpf, model_kwargs, mode="native"):
+def save_mlpf(args, mlpf, model_kwargs):
+    """Simple function to store the model parameters and training hyperparameters."""
 
-    if not osp.isdir(outpath):
-        os.makedirs(outpath)
+    if not osp.isdir(args.model_prefix):
+        os.system(f"mkdir -p {args.model_prefix}")
 
     else:  # if directory already exists
-        if not args.overwrite:  # if not overwrite then exit
-            print(f"model {args.prefix} already exists, please delete it")
-            sys.exit(0)
+        assert args.overwrite, f"model {args.model_prefix} already exists, please delete it"
 
         print("model already exists, deleting it")
+        os.system(f"rm -rf {args.model_prefix}")
+        os.system(f"mkdir -p {args.model_prefix}")
 
-        filelist = [f for f in os.listdir(outpath) if not f.endswith(".txt")]  # don't remove the newly created logs.txt
-        for f in filelist:
-            try:
-                shutil.rmtree(os.path.join(outpath, f))
-            except Exception:
-                os.remove(os.path.join(outpath, f))
-
-    with open(f"{outpath}/model_kwargs.pkl", "wb") as f:  # dump model architecture
+    with open(f"{args.model_prefix}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
-    print(f"Num of mlpf parameters: {num_mlpf_parameters}")
 
-    with open(f"{outpath}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump(
-            {
-                "dataset": args.dataset,
-                "n_train": args.n_train,
-                "n_valid": args.n_valid,
-                "n_test": args.n_test,
-                "n_epochs": args.n_epochs,
-                "lr": args.lr,
-                "bs_mlpf": args.bs,
-                "width": args.width,
-                "embedding_dim": args.embedding_dim,
-                "num_convs": args.num_convs,
-                "space_dim": args.space_dim,
-                "propagate_dim": args.propagate_dim,
-                "k": args.nearest,
-                "num_mlpf_parameters": num_mlpf_parameters,
-                "mode": mode,
-            },
-            fp,
+    with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
+        json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
+
+
+class DataLoader(torch.utils.data.DataLoader):
+    """
+    Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
+    because we need to implement our own Collater class to load the tensorflow_datasets (see below).
+    """
+
+    def __init__(
+        self,
+        dataset: Union[Dataset, Sequence[BaseData], DatasetAdapter],
+        batch_size: int = 1,
+        shuffle: bool = False,
+        follow_batch: Optional[List[str]] = None,
+        exclude_keys: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        # Remove for PyTorch Lightning:
+        kwargs.pop("collate_fn", None)
+
+        # Save for PyTorch Lightning < 1.6:
+        self.follow_batch = follow_batch
+        self.exclude_keys = exclude_keys
+
+        super().__init__(
+            dataset,
+            batch_size,
+            shuffle,
+            collate_fn=Collater(follow_batch, exclude_keys),
+            **kwargs,
         )
 
 
-def load_mlpf(device, outpath):
-
-    PATH = outpath + "/best_epoch_weights.pth"
-    print("Loading a previously trained model..")
-    with open(outpath + "/model_kwargs.pkl", "rb") as f:
-        model_kwargs = pkl.load(f)
-
-    state_dict = torch.load(PATH, map_location=device)
-
-    # # if the model was trained using DataParallel then we do this
-    # state_dict = torch.load(PATH, map_location=device)
-    # from collections import OrderedDict
-    # new_state_dict = OrderedDict()
-    # for k, v in state_dict.items():
-    #     name = k[7:]  # remove module.
-    #     new_state_dict[name] = v
-    # state_dict = new_state_dict
-
-    return state_dict, model_kwargs
-
-
 class Collater:
-    """
-    This function was copied from torch_geometric.loader.Dataloader() source code.
-    Edits were made such that the function can collate samples as a list of tuples
-    of Data() objects instead of Batch() objects. This is needed becase pyg Dataloaders
-    do not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
-    """
+    """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self):
-        pass
+    def __init__(self, follow_batch=None, exclude_keys=None):
+        self.follow_batch = follow_batch
+        self.exclude_keys = exclude_keys
 
-    def __call__(self, batch):
+    def __call__(self, inputs):
+        num_samples_in_batch = len(inputs)
+        elem_keys = list(inputs[0].keys())
+
+        batch = []
+        for ev in range(num_samples_in_batch):
+            batch.append(Data())
+            for elem_key in elem_keys:
+                batch[ev][elem_key] = Tensor(inputs[ev][elem_key])
+            batch[ev]["batch"] = torch.tensor([ev] * len(inputs[ev][elem_key]))
+
         elem = batch[0]
-        if isinstance(elem, BaseData):
-            return batch
 
-        elif isinstance(elem, Sequence) and not isinstance(elem, str):
-            return [self(s) for s in zip(*batch)]
+        if isinstance(elem, BaseData):
+            return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def make_file_loaders(world_size, data, num_files=1, num_workers=0, prefetch_factor=2):
-    """
-    This function uses native torch Dataloaders with a custom collate_fn that allows loading
-    Data() objects from pt files in an efficient way. This is needed because pyg Dataloaders do
-    not handle num_workers>0 since Batch() objects cannot be directly serialized using pkl.
+class Dataset:
+    """Builds a DataSource from tensorflow datasets."""
 
-    Args:
-        world_size: number of gpus available.
-        dataset: custom dataset.
-        num_files: number of files to load with a single get() call.
-        num_workers: number of workers to use for fetching files.
-        prefetch_factor: number of files to fetch in advance.
+    def __init__(self, data_dir, name, split):
+        """
+        Args
+            dataset: "cms", "clic", or "delphes"
+            data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
+            name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
+            split: "train" or "test
+        """
 
-    Returns:
-        a torch iterable() that returns a list of 100 elements where each
-        element is a tuple of size=num_files containing Data() objects.
-    """
+        builder = tfds.builder(name, data_dir=data_dir)
 
-    pin_memory = world_size > 0
+        self.ds = builder.as_data_source(split=split)
 
-    # prevent a "too many open files" error
-    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-421146936
-    torch.multiprocessing.set_sharing_strategy("file_system")
+        # to prevent a warning from tfds about accessing sequences of indices
+        self.ds.__class__.__getitems__ = my_getitem
 
-    return torch.utils.data.DataLoader(
-        data,
-        num_files,
-        shuffle=False,
-        num_workers=2,
-        prefetch_factor=4,
-        collate_fn=Collater(),
-        pin_memory=pin_memory,
-    )
+    def get_sampler(self):
+        sampler = torch.utils.data.RandomSampler(self.ds)
+        return sampler
+
+    def get_distributed_sampler(self):
+        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
+        return sampler
+
+    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
+        if world_size > 1:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_distributed_sampler(),
+            )
+        elif num_workers:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_sampler(),
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
+        else:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(),
+                sampler=self.get_sampler(),
+            )
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __repr__(self):
+        return self.ds.__repr__()
+
+
+def my_getitem(self, vals):
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+
+class InterleavedIterator(object):
+    """Will combine DataLoaders of different lengths and batch sizes."""
+
+    def __init__(self, data_loaders):
+        self.idx = 0
+        self.data_loaders = data_loaders
+        self.data_loaders_iter = [iter(dl) for dl in data_loaders]
+        max_loader_size = max([len(dl) for dl in data_loaders])
+
+        self.loader_ds_indices = []
+        for i in range(max_loader_size):
+            for iloader, loader in enumerate(data_loaders):
+                if i < len(loader):
+                    self.loader_ds_indices.append(iloader)
+
+        self.cur_index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            iloader = self.loader_ds_indices[self.cur_index]
+        except IndexError:
+            self.cur_index = 0  # reset the curser index
+            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
+            raise StopIteration
+
+        self.cur_index += 1
+        return next(self.data_loaders_iter[iloader])
+
+    def __len__(self):
+        len_ = 0
+        for iloader in range(len(self.data_loaders_iter)):
+            len_ += len(self.data_loaders_iter[iloader])
+
+        return len_
