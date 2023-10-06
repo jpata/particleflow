@@ -13,12 +13,16 @@ MLPF_PATH=/home/joosep/particleflow/
 SAMPLE=$1
 SEED=$2
 
-WORKDIR=`pwd`/$SAMPLE/$SEED
+WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
+#WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
+
+OUTDIR=/local/joosep/mlpf/cms/v2/$SAMPLE/raw
+mkdir -p $OUTDIR
 
 PILEUP=NoPileUp
 
-N=1000
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -73,4 +77,5 @@ cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
 python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
-#rm step*.root
+cp *.pkl.bz2 $OUTDIR/
+rm -Rf $WORKDIR

@@ -1,27 +1,15 @@
 backend: tensorflow
 
-cache: caches/cms_gen
+cache: caches/clic_hits
 
 dataset:
-  schema: cms
+  schema: clic
   target_particles: gen
-  num_input_features: 42
-#       NONE = 0,
-#       TRACK = 1,
-#       PS1 = 2,
-#       PS2 = 3,
-#       ECAL = 4,
-#       HCAL = 5,
-#       GSF = 6,
-#       BREM = 7,
-#       HFEM = 8,
-#       HFHAD = 9,
-#       SC = 10,
-#       HO = 11,
-  num_input_classes: 12
-  #(none=0, ch.had=1, n.had=2, hfem=3, hfhad=4, gamma=5, e=6, mu=7)
-  num_output_classes: 8
-  padded_num_elem_size: 6400
+  num_input_features: 15
+  #(none=0, track=1, hit=2)
+  num_input_classes: 3
+  #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
+  num_output_classes: 6
   cls_weight_by_pt: no
   reg_weight_by_pt: no
   enable_tfds_caching: no
@@ -29,11 +17,11 @@ dataset:
 loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
-  eta_loss_coef: 1.0
-  sin_phi_loss_coef: 1.0
-  cos_phi_loss_coef: 1.0
-  energy_loss_coef: 1.0
+  pt_loss_coef: 10.0
+  eta_loss_coef: 10.0
+  sin_phi_loss_coef: 10.0
+  cos_phi_loss_coef: 10.0
+  energy_loss_coef: 10.0
   cls_loss:
     type: SigmoidFocalCrossEntropy
     from_logits: yes
@@ -47,15 +35,12 @@ loss:
     type: Huber
   sin_phi_loss:
     type: Huber
-    delta: 0.1
   cos_phi_loss:
     type: Huber
-    delta: 0.1
   eta_loss:
     type: Huber
-    delta: 0.1
   event_loss: none #none, sliced_wasserstein, gen_jet_logcosh, gen_jet_mse, hist_2d
-  event_loss_coef: 1.0
+  event_loss_coef: 0.0
   met_loss: none
   met_loss_coef: 1.0
 
@@ -66,18 +51,16 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_epochs: 50
+  lr: 0.0005
+  num_epochs: 20
   dtype: float32
   trainable:
-  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
-  #if enabled, do not create LSH bins for small graphs (less than one bin size)
-  #enabling results in some speedup for gun samples, but must be disabled for XLA
-  small_graph_opt: yes
-  use_normalizer: no
+  small_graph_opt: no
+  use_normalizer: yes
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
@@ -109,13 +92,13 @@ onecycle:
 
 parameters:
   model: gnn_dense
-  input_encoding: cms
+  input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
   node_encoding_hidden_dim: 512
 
   combined_graph_layer:
-    bin_size: 640
+    bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
@@ -123,6 +106,19 @@ parameters:
     dist_activation: elu
     ffn_dist_num_layers: 2
     ffn_dist_hidden_dim: 128
+
+    # MPNN
+    #kernel:
+    # type: NodePairTrainableKernel
+    # activation: elu
+    #num_node_messages: 1
+    #node_message:
+    # type: NodeMessageLearnable
+    # output_dim: 64
+    # hidden_dim: 128
+    # num_layers: 2
+    # activation: elu
+    #activation: elu
 
     # GCN
     kernel:
@@ -139,14 +135,14 @@ parameters:
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 6
+  num_graph_layers_reg: 6
   output_decoding:
     activation: elu
     regression_use_classification: yes
     dropout: 0.1
 
-    pt_as_correction: yes
+    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -155,14 +151,14 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: yes
 
-    id_hidden_dim: 512
+    id_hidden_dim: 256
     charge_hidden_dim: 256
-    pt_hidden_dim: 512
+    pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 512
+    energy_hidden_dim: 256
 
-    id_num_layers: 3
+    id_num_layers: 2
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
@@ -223,96 +219,30 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  multiparticlegun:
-    batch_per_gpu: 1
-    event_pad_size: -1
-    datasets:
-      - cms_pf_multi_particle_gun
   physical:
     batch_per_gpu: 1
-    event_pad_size: -1
+    event_pad_size: 15360
     datasets:
-      - cms_pf_ttbar
-      - cms_pf_ztt
-      - cms_pf_qcd
-      - cms_pf_qcd_high_pt
-  gun:
-    batch_per_gpu: 50
-    event_pad_size: -1
-    datasets:
-      - cms_pf_single_electron
-      - cms_pf_single_gamma
-      - cms_pf_single_neutron
-      - cms_pf_single_pi0
-      - cms_pf_single_pi
-      - cms_pf_single_tau
-      - cms_pf_single_mu
-      - cms_pf_single_proton
+      - clic_edm_ttbar_hits_pf10k
+      - clic_edm_qq_hits_pf10k
+
+validation_dataset: clic_edm_ttbar_hits_pf10k
+validation_batch_size: 20
+validation_num_events: 2000
 
 evaluation_datasets:
-  cms_pf_qcd_high_pt:
-    batch_size: 5
-    num_events: -1
-  cms_pf_single_neutron:
-    batch_size: 100
-    num_events: -1
+  clic_edm_ttbar_hits_pf:
+    batch_size: 10
+    num_events: 10000
 
-validation_dataset: cms_pf_qcd_high_pt
-validation_batch_size: 5
-validation_num_events: 500
-
-evaluation_jet_algo: antikt_algorithm
+evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
-  cms_pf_ttbar:
-    version: 1.6.0
+  clic_edm_ttbar_hits_pf10k:
+    version: 1.5.0
     data_dir:
     manual_dir:
-  cms_pf_ztt:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_qcd:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_qcd_high_pt:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_electron:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_gamma:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi0:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_neutron:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_pi:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_tau:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_mu:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_single_proton:
-    version: 1.6.0
-    data_dir:
-    manual_dir:
-  cms_pf_multi_particle_gun:
-    version: 1.6.0
+  clic_edm_qq_hits_pf10k:
+    version: 1.5.0
     data_dir:
     manual_dir:
