@@ -3,18 +3,16 @@ import pickle as pkl
 import time
 from typing import Optional
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch_geometric
-from pyg.ssl.utils import combine_PFelements, distinguish_PFelements
+import torch.distributed as dist
+import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
-import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-matplotlib.use("Agg")
+from .logger import _logger
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -106,16 +104,16 @@ class FocalLoss(nn.Module):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, batch_size, ssl_encoder=None, tensorboard_writer=None):
+def validation_run(rank, model, train_loader, valid_loader, tensorboard_writer=None):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer)
+        ret = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
     return ret
 
 
-def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder=None, tensorboard_writer=None):
+def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer=None):
     """
-    A training/validation run over a given epoch that gets called in the training_loop() function.
+    A training/validation run over a given epoch that gets called in the train_mlpf() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
     global ISTEP_GLOBAL_TRAIN, ISTEP_GLOBAL_VALID
@@ -123,143 +121,112 @@ def train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_enc
 
     loss_obj_id = FocalLoss(gamma=2.0)
 
-    is_train = not (optimizer is None)
-    step_type = "train" if is_train else "valid"
-
     if is_train:
-        print(f"---->Initiating a training run on rank {rank}")
-        mlpf.train()
-        file_loader = train_loader
+        _logger.info(f"Initiating a training run on device {rank}", color="red")
+        step_type = "train"
+        loader = train_loader
+        model.train()
     else:
-        print(f"---->Initiating a validation run rank {rank}")
-        mlpf.eval()
-        file_loader = valid_loader
+        _logger.info(f"Initiating a validation run on device {rank}", color="red")
+        step_type = "valid"
+        loader = valid_loader
+        model.eval()
 
     # initialize loss counters
-    losses_of_interest = ["Total", "Classification", "Regression", "Charge"]
-    losses = {}
-    for loss in losses_of_interest:
-        losses[loss] = 0.0
+    losses = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-    tf_0, tf_f = time.time(), 0
-    for num, file in enumerate(file_loader):
-        if "utils" in str(type(file_loader)):  # it must be converted to a pyg DataLoader if it's not (only needed for CMS)
-            print(f"Time to load file {num+1}/{len(file_loader)} on rank {rank} is {round(time.time() - tf_0, 3)}s")
-            tf_f = tf_f + (time.time() - tf_0)
-            file = torch_geometric.loader.DataLoader([x for t in file for x in t], batch_size=batch_size)
+    num_iterations = 0
+    print("loader index:", loader.cur_index)
+    for i, batch in tqdm.tqdm(enumerate(loader)):
+        print("loader index inside:", loader.cur_index)
+        num_iterations += 1
 
-        tf = 0
-        for i, batch in tqdm.tqdm(enumerate(file), total=len(file)):
+        if tensorboard_writer:
+            tensorboard_writer.add_scalar(
+                "step_{}/num_elems".format(step_type),
+                batch.X.shape[0],
+                ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+            )
+
+        event = batch.to(rank)
+
+        # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+        target_ids = event.ygen[:, 0].long()
+        target_charge = (event.ygen[:, 1] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
+        target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
+
+        # make mlpf forward pass
+        t0 = time.time()
+        pred_ids_one_hot, pred_momentum, pred_charge = model(event)
+        print(f"{event}: {(time.time() - t0):.2f}s")
+
+        for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
-                    "step_{}/num_elems".format(step_type),
-                    batch.x.shape[0],
+                    "step_{}/num_cls_{}".format(step_type, icls),
+                    torch.sum(target_ids == icls),
                     ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
                 )
 
-            if ssl_encoder is not None:
-                # separate PF-elements
-                tracks, clusters = distinguish_PFelements(batch.to(rank))
-                # ENCODE
-                embedding_tracks, embedding_clusters = ssl_encoder(tracks, clusters)
-                # concat the inputs with embeddings
-                tracks.x = torch.cat([batch.x[batch.x[:, 0] == 1], embedding_tracks], axis=1)
-                clusters.x = torch.cat([batch.x[batch.x[:, 0] == 2], embedding_clusters], axis=1)
-                # combine PF-elements
-                event = combine_PFelements(tracks, clusters).to(rank)
+        assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
-            else:
-                event = batch.to(rank)
-
-            # make mlpf forward pass
-            t0 = time.time()
-            pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event.x, event.batch)
-            tf = tf + (time.time() - t0)
-
-            target_ids = event.ygen_id
-            for icls in range(pred_ids_one_hot.shape[1]):
-                if tensorboard_writer:
-                    tensorboard_writer.add_scalar(
-                        "step_{}/num_cls_{}".format(step_type, icls),
-                        torch.sum(target_ids == icls),
-                        ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
-                    )
-
-            target_momentum = event.ygen[:, 1:].to(dtype=torch.float32)
-            target_charge = (event.ygen[:, 0] + 1).to(dtype=torch.float32)  # -1, 0, 1 -> 0, 1, 2
-            assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
-
-            loss_ = {}
-            # for CLASSIFYING PID
-            loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-            # REGRESSING p4: mask the loss in cases there is no true particle
-            msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-            loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-                pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-            )
-            # PREDICTING CHARGE
-            loss_["Charge"] = torch.nn.functional.cross_entropy(
-                pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-            )
-            # TOTAL LOSS
-            loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
-
-            # update parameters
-            if is_train:
-                for param in mlpf.parameters():
-                    param.grad = None
-                loss_["Total"].backward()
-                optimizer.step()
-
-            for loss in losses_of_interest:
-                losses[loss] += loss_[loss].detach()
-
-            if tensorboard_writer:
-                tensorboard_writer.flush()
-
-            if is_train:
-                ISTEP_GLOBAL_TRAIN += 1
-            else:
-                ISTEP_GLOBAL_VALID += 1
-
-        print(f"Average inference time per batch on rank {rank} is {(tf / len(file)):.3f}s")
-
-    for loss in losses_of_interest:
-        losses[loss] = losses[loss].cpu().item() / (len(file) * (len(file_loader)))
-
-    print(
-        "loss_id={:.4f} loss_momentum={:.4f} loss_charge={:.4f}".format(
-            losses["Classification"], losses["Regression"], losses["Charge"]
+        loss_ = {}
+        # for CLASSIFYING PID
+        loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+        # REGRESSING p4: mask the loss in cases there is no true particle
+        msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+        loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
+            pred_momentum * msk_true_particle, target_momentum * msk_true_particle
         )
+        # PREDICTING CHARGE
+        loss_["Charge"] = torch.nn.functional.cross_entropy(
+            pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        )
+        # TOTAL LOSS
+        loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
+
+        if is_train:
+            for param in model.parameters():
+                param.grad = None
+            loss_["Total"].backward()
+            optimizer.step()
+
+        for loss in losses:
+            losses[loss] += loss_[loss].detach().cpu().item()
+
+        if tensorboard_writer:
+            tensorboard_writer.flush()
+
+        if is_train:
+            ISTEP_GLOBAL_TRAIN += 1
+        else:
+            ISTEP_GLOBAL_VALID += 1
+
+        if i == 10:
+            break
+
+    for loss in losses:
+        losses[loss] = losses[loss] / num_iterations
+
+    _logger.info(
+        f"loss_id={losses['Classification']:.4f} loss_momentum={losses['Regression']:.4f} loss_charge={losses['Charge']:.4f}"
     )
 
     return losses
 
 
-def training_loop(
-    rank,
-    mlpf,
-    train_loader,
-    valid_loader,
-    batch_size,
-    n_epochs,
-    patience,
-    lr,
-    outpath,
-    ssl_encoder=None,
-):
+def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
     """
-    Main function to perform training. Will call the train() and validation_run() functions every epoch.
+    Will run a full training by calling train() and validation_run() every epoch.
 
     Args:
-        rank: int representing the gpu device id, or str=='cpu' (both work, trust me).
-        mlpf: a pytorch model wrapped by DistributedDataParallel (DDP).
-        train_loader: a pytorch Dataloader that loads .pt files for training when you invoke the get() method.
-        valid_loader: a pytorch Dataloader that loads .pt files for validation when you invoke the get() method.
-        patience: number of stale epochs allowed before stopping the training.
-        lr: lr to use for training.
-        outpath: path to store the model weights and training plots.
-        ssl_encoder: the encoder part of VICReg. If None is provided then the function will run a supervised training.
+        rank: 'cpu' or int representing the gpu device id
+        model: a pytorch model that may be wrapped by DistributedDataParallel
+        train_loader: a pytorch Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
+        valid_loader: a pytorch Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
+        patience: number of stale epochs before stopping the training
+        lr: learning rate to use for training
+        outpath: path to store the model weights and training plots
     """
 
     tensorboard_writer = SummaryWriter(outpath)
@@ -276,104 +243,102 @@ def training_loop(
 
     stale_epochs = 0
 
-    optimizer = torch.optim.AdamW(mlpf.parameters(), lr=lr)
-
-    if ssl_encoder is not None:
-        mode = "ssl"
-        ssl_encoder.eval()
-    else:
-        mode = "native"
-    print(f"Will launch a {mode} training of MLPF.")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     for epoch in range(n_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
-            print("breaking due to stale epochs")
+            _logger.info("breaking due to stale epochs")
             break
 
         # training step
-        losses_t = train(rank, mlpf, train_loader, valid_loader, batch_size, optimizer, ssl_encoder, tensorboard_writer)
+        losses_t = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
         for k, v in losses_t.items():
-            tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
+            tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
 
-        # validation step
-        losses_v = validation_run(rank, mlpf, train_loader, valid_loader, batch_size, ssl_encoder, tensorboard_writer)
-        for loss in losses_of_interest:
-            losses["valid"][loss].append(losses_v[loss])
-        for k, v in losses_v.items():
-            tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
+        # validation step on a single machine
+        if (rank == 0) or (rank == "cpu"):
+            if world_size > 1:
+                dist.barrier()
 
-        tensorboard_writer.flush()
+            losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
+            for loss in losses_of_interest:
+                losses["valid"][loss].append(losses_v[loss])
+            for k, v in losses_v.items():
+                tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
 
-        # save the lowest value of each component of the loss to print it on the legend of the loss plots
-        for loss in losses_of_interest:
-            if loss == "Total":
-                if losses_v[loss] < best_val_loss[loss]:
-                    best_val_loss[loss] = losses_v[loss]
-                    best_train_loss[loss] = losses_t[loss]
+            tensorboard_writer.flush()
 
-                    # save the model
-                    try:
-                        state_dict = mlpf.module.state_dict()
-                    except AttributeError:
-                        state_dict = mlpf.state_dict()
-                    torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
+            if world_size > 1:
+                dist.barrier()
 
-                    with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
-                        json.dump({"best_epoch": epoch}, fp)
+            # save the lowest value of each component of the loss to print it on the legend of the loss plots
+            for loss in losses_of_interest:
+                if loss == "Total":
+                    if losses_v[loss] < best_val_loss[loss]:
+                        best_val_loss[loss] = losses_v[loss]
+                        best_train_loss[loss] = losses_t[loss]
 
-                    # for early-stopping purposes
-                    stale_epochs = 0
+                        # save the model
+                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                            state_dict = model.module.state_dict()
+                        else:
+                            state_dict = model.state_dict()
+
+                        torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
+
+                        with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
+                            json.dump({"best_epoch": epoch}, fp)
+
+                        # for early-stopping purposes
+                        stale_epochs = 0
+                    else:
+                        stale_epochs += 1
                 else:
-                    stale_epochs += 1
-            else:
-                if losses_v[loss] < best_val_loss[loss]:
-                    best_val_loss[loss] = losses_v[loss]
-                    best_train_loss[loss] = losses_t[loss]
+                    if losses_v[loss] < best_val_loss[loss]:
+                        best_val_loss[loss] = losses_v[loss]
+                        best_train_loss[loss] = losses_t[loss]
 
-        t1 = time.time()
+            t1 = time.time()
 
-        epochs_remaining = n_epochs - (epoch + 1)
-        time_per_epoch = (t1 - t0_initial) / (epoch + 1)
-        eta = epochs_remaining * time_per_epoch / 60
+            epochs_remaining = n_epochs - (epoch + 1)
+            time_per_epoch = (t1 - t0_initial) / (epoch + 1)
+            eta = epochs_remaining * time_per_epoch / 60
 
-        print(
-            f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
-            + f"train_loss={round(losses_t['Total'], 4)} "
-            + f"valid_loss={round(losses_v['Total'], 4)} "
-            + f"stale={stale_epochs} "
-            + f"time={round((t1-t0)/60, 2)}m "
-            + f"eta={round(eta, 1)}m"
-        )
-
-        # make loss plots
-        for loss in losses_of_interest:
-            fig, ax = plt.subplots()
-            ax.plot(
-                range(len(losses["train"][loss])),
-                losses["train"][loss],
-                label="training ({:.3f})".format(best_train_loss["Total"]),
+            _logger.info(
+                f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
+                + f"train_loss={round(losses_t['Total'], 4)} "
+                + f"valid_loss={round(losses_v['Total'], 4)} "
+                + f"stale={stale_epochs} "
+                + f"time={round((t1-t0)/60, 2)}m "
+                + f"eta={round(eta, 1)}m"
             )
-            ax.plot(
-                range(len(losses["valid"][loss])),
-                losses["valid"][loss],
-                label="validation ({:.3f})".format(best_val_loss["Total"]),
-            )
-            ax.set_xlabel("Epochs")
-            ax.set_ylabel(f"{loss} Loss")
-            ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
-            if mode == "ssl":
-                ax.legend(title="SSL-based MLPF", loc="best", title_fontsize=20, fontsize=15)
-            else:
-                ax.legend(title="Native MLPF", loc="best", title_fontsize=20, fontsize=15)
-            plt.tight_layout()
-            plt.savefig(f"{outpath}/mlpf_{mode}_loss_{loss}.pdf")
-            plt.close()
-        with open(f"{outpath}/mlpf_{mode}_losses.pkl", "wb") as f:
-            pkl.dump(losses, f)
 
-        print("----------------------------------------------------------")
-    print(f"Done with training. Total training time on rank {rank} is {round((time.time() - t0_initial)/60,3)}min")
+            # make loss plots
+            for loss in losses_of_interest:
+                fig, ax = plt.subplots()
+                ax.plot(
+                    range(len(losses["train"][loss])),
+                    losses["train"][loss],
+                    label="training ({:.3f})".format(best_train_loss[loss]),
+                )
+                ax.plot(
+                    range(len(losses["valid"][loss])),
+                    losses["valid"][loss],
+                    label="validation ({:.3f})".format(best_val_loss[loss]),
+                )
+                ax.set_xlabel("Epochs")
+                ax.set_ylabel(f"{loss} Loss")
+                ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
+                ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
+                plt.tight_layout()
+                plt.savefig(f"{outpath}/mlpf_loss_{loss}.pdf")
+                plt.close()
+
+            with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
+                pkl.dump(losses, f)
+
+    _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
