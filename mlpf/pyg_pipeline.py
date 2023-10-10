@@ -89,9 +89,9 @@ def run(rank, world_size, args):
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
-            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
+            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]*config["batching"]["gpu_size_multiplier"]
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "train")
+            ds = Dataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -100,12 +100,13 @@ def run(rank, world_size, args):
                 version = config["train_dataset"][args.dataset][sample]["version"]
                 batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
 
-                ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+                ds = Dataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
 
         train_loader = InterleavedIterator(train_loaders)
+        valid_loader = None
         if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
             valid_loader = InterleavedIterator(valid_loaders)
 
@@ -127,7 +128,7 @@ def run(rank, world_size, args):
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+            ds = Dataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
