@@ -201,8 +201,8 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i>1000:
-            _logger.info("debug mode, terminating training loop early") 
+        if i > 1000:
+            _logger.info("debug mode, terminating training loop early")
             break
 
     for loss in losses:

@@ -89,7 +89,9 @@ def run(rank, world_size, args):
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
-            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]*config["batching"]["gpu_size_multiplier"]
+            batch_size = (
+                config["train_dataset"][args.dataset][sample]["batch_size"] * config["batching"]["gpu_size_multiplier"]
+            )
 
             ds = Dataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
