@@ -143,6 +143,7 @@ def run(rank, world_size, args):
 
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
+            torch.cuda.empty_cache()
             run_predictions(rank, model, test_loaders[sample], sample, args.model_prefix)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine

@@ -45,6 +45,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     return ret
 
 
+@torch.no_grad()
 def run_predictions(rank, mlpf, loader, sample, outpath):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
@@ -53,8 +54,9 @@ def run_predictions(rank, mlpf, loader, sample, outpath):
 
     ti = time.time()
 
-    for i, batch in tqdm.tqdm(enumerate(loader)):
-        event = batch.to(rank)
+    for i, event in tqdm.tqdm(enumerate(loader), total=len(loader)):
+        event.X = event.X.to(rank)
+        event.batch = event.batch.to(rank)
 
         # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
         target_ids = event.ygen[:, 0].long()
@@ -65,10 +67,13 @@ def run_predictions(rank, mlpf, loader, sample, outpath):
 
         # make mlpf forward pass
         pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
+        pred_ids_one_hot = pred_ids_one_hot.detach().cpu()
+        pred_momentum = pred_momentum.detach().cpu()
+        pred_charge = pred_charge.detach().cpu()
 
-        pred_ids = torch.argmax(pred_ids_one_hot.detach(), axis=-1)
-        pred_charge = torch.argmax(pred_charge.detach(), axis=1, keepdim=True) - 1
-        pred_p4 = torch.cat([pred_charge, pred_momentum.detach()], axis=-1)
+        pred_ids = torch.argmax(pred_ids_one_hot, axis=-1)
+        pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True) - 1
+        pred_p4 = torch.cat([pred_charge, pred_momentum], axis=-1)
 
         batch_ids = event.batch.cpu().numpy()
         awkvals = {
@@ -80,22 +85,22 @@ def run_predictions(rank, mlpf, loader, sample, outpath):
         gen_p4, cand_p4, pred_p4 = [], [], []
         gen_cls, cand_cls, pred_cls = [], [], []
         Xs = []
-        for _ibatch in np.unique(event.batch.cpu().numpy()):
-            msk_batch = event.batch == _ibatch
-            msk_gen = target_ids[msk_batch] != 0
-            msk_cand = cand_ids[msk_batch] != 0
-            msk_pred = pred_ids[msk_batch] != 0
+        for _ibatch in np.unique(batch_ids):
+            msk_batch = batch_ids == _ibatch
+            msk_gen = (target_ids[msk_batch] != 0).numpy()
+            msk_cand = (cand_ids[msk_batch] != 0).numpy()
+            msk_pred = (pred_ids[msk_batch] != 0).numpy()
 
             Xs.append(event.X[msk_batch].cpu().numpy())
 
-            gen_p4.append(event.ygen[msk_batch, 1:][msk_gen])
-            gen_cls.append(target_ids[msk_batch][msk_gen])
+            gen_p4.append(event.ygen[msk_batch, 1:][msk_gen].numpy())
+            gen_cls.append(target_ids[msk_batch][msk_gen].numpy())
 
-            cand_p4.append(event.ycand[msk_batch, 1:][msk_cand])
-            cand_cls.append(cand_ids[msk_batch][msk_cand])
+            cand_p4.append(event.ycand[msk_batch, 1:][msk_cand].numpy())
+            cand_cls.append(cand_ids[msk_batch][msk_cand].numpy())
 
-            pred_p4.append(pred_momentum[msk_batch, :][msk_pred])
-            pred_cls.append(pred_ids[msk_batch][msk_pred])
+            pred_p4.append(pred_momentum[msk_batch, :][msk_pred].numpy())
+            pred_cls.append(pred_ids[msk_batch][msk_pred].numpy())
 
         Xs = awkward.from_iter(Xs)
         gen_p4 = awkward.from_iter(gen_p4)
@@ -158,7 +163,7 @@ def run_predictions(rank, mlpf, loader, sample, outpath):
         )
         _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
-        if i == 2:
+        if i == 100:
             break
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")

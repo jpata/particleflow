@@ -82,6 +82,7 @@ labels = {
     "gen_met": "$p_{\mathrm{T,gen}}^\text{miss}$ [GeV]",
     "gen_mom": "$p_{\mathrm{gen}}$ [GeV]",
     "gen_jet": "jet $p_{\mathrm{T,gen}}$ [GeV]",
+    "gen_jet_eta": "jet $\eta_{\mathrm{gen}}$ [GeV]",
     "reco_met": "$p_{\mathrm{T,reco}}^\text{miss}$ [GeV]",
     "reco_gen_met_ratio": "$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,gen}}^\mathrm{miss}$",
     "reco_gen_mom_ratio": "$p_{\mathrm{reco}} / p_{\\mathrm{gen}}$",
@@ -89,6 +90,7 @@ labels = {
     "gen_met_range": "${} \less p_{{\mathrm{{T,gen}}}}^\mathrm{{miss}}\leq {}$",
     "gen_mom_range": "${} \less p_{{\mathrm{{gen}}}}\leq {}$",
     "gen_jet_range": "${} \less p_{{\mathrm{{T,gen}}}} \leq {}$",
+    "gen_jet_range_eta": "${} \less \eta_{{\mathrm{{gen}}}} \leq {}$",
 }
 
 
@@ -296,6 +298,12 @@ def compute_jet_ratio(data, yvals):
             axis=1,
         )
     )
+    ret["jet_gen_to_pred_geneta"] = awkward.to_numpy(
+        awkward.flatten(
+            vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_pred"]["gen"]]).eta,
+            axis=1,
+        )
+    )
     ret["jet_gen_to_pred_predpt"] = awkward.to_numpy(
         awkward.flatten(
             vector.awk(data["jets"]["pred"][data["matched_jets"]["gen_to_pred"]["pred"]]).pt,
@@ -305,6 +313,12 @@ def compute_jet_ratio(data, yvals):
     ret["jet_gen_to_cand_genpt"] = awkward.to_numpy(
         awkward.flatten(
             vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).pt,
+            axis=1,
+        )
+    )
+    ret["jet_gen_to_cand_geneta"] = awkward.to_numpy(
+        awkward.flatten(
+            vector.awk(data["jets"]["gen"][data["matched_jets"]["gen_to_cand"]["gen"]]).eta,
             axis=1,
         )
     )
@@ -1067,6 +1081,101 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.tight_layout()
     save_img(
         "jet_response_med_iqr.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
+def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    pf_genjet_eta = yvals["jet_gen_to_cand_geneta"]
+    mlpf_genjet_eta = yvals["jet_gen_to_pred_geneta"]
+
+    pf_response = yvals["jet_ratio_cand"]
+    mlpf_response = yvals["jet_ratio_pred"]
+
+    genjet_bins = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+
+    x_vals = []
+    pf_vals = []
+    mlpf_vals = []
+    b = np.linspace(0, 2, 100)
+
+    fig, axs = plt.subplots(3, 3, figsize=(3 * 5, 3 * 5))
+    axs = axs.flatten()
+    for ibin in range(len(genjet_bins) - 1):
+        lim_low = genjet_bins[ibin]
+        lim_hi = genjet_bins[ibin + 1]
+        x_vals.append(np.mean([lim_low, lim_hi]))
+
+        mask_genjet = (pf_genjet_eta > lim_low) & (pf_genjet_eta <= lim_hi)
+        pf_subsample = pf_response[mask_genjet]
+        if len(pf_subsample) > 0:
+            pf_p25 = np.percentile(pf_subsample, 25)
+            pf_p50 = np.percentile(pf_subsample, 50)
+            pf_p75 = np.percentile(pf_subsample, 75)
+        else:
+            pf_p25 = 0
+            pf_p50 = 0
+            pf_p75 = 0
+        pf_vals.append([pf_p25, pf_p50, pf_p75])
+
+        mask_genjet = (mlpf_genjet_eta > lim_low) & (mlpf_genjet_eta <= lim_hi)
+        mlpf_subsample = mlpf_response[mask_genjet]
+
+        if len(mlpf_subsample) > 0:
+            mlpf_p25 = np.percentile(mlpf_subsample, 25)
+            mlpf_p50 = np.percentile(mlpf_subsample, 50)
+            mlpf_p75 = np.percentile(mlpf_subsample, 75)
+        else:
+            mlpf_p25 = 0
+            mlpf_p50 = 0
+            mlpf_p75 = 0
+        mlpf_vals.append([mlpf_p25, mlpf_p50, mlpf_p75])
+
+        plt.sca(axs[ibin])
+        plt.hist(pf_subsample, bins=b, histtype="step", lw=2, label="PF")
+        plt.hist(mlpf_subsample, bins=b, histtype="step", lw=2, label="MLPF")
+        plt.xlim(0, 2)
+        plt.xticks([0, 0.5, 1, 1.5, 2])
+        plt.ylabel("Matched jets / bin")
+        plt.xlabel(labels["reco_gen_jet_ratio"])
+        plt.axvline(1.0, ymax=0.7, color="black", ls="--")
+        plt.legend(loc=1, fontsize=16)
+        plt.title(labels["gen_jet_range_eta"].format(lim_low, lim_hi))
+        plt.yscale("log")
+
+    plt.tight_layout()
+    save_img(
+        "jet_response_binned_eta.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+    x_vals = np.array(x_vals)
+    pf_vals = np.array(pf_vals)
+    mlpf_vals = np.array(mlpf_vals)
+
+    # Plot median and IQR as a function of gen pt
+    fig, axs = plt.subplots(2, 1, sharex=True)
+    plt.sca(axs[0])
+    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.ylim(0.75, 1.25)
+    plt.axhline(1.0, color="black", ls="--")
+    plt.ylabel("Response median")
+    plt.legend(title=title)
+
+    plt.sca(axs[1])
+    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
+    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
+    plt.ylabel("Response IQR")
+    plt.xlabel(labels["gen_jet_eta"])
+
+    plt.tight_layout()
+    save_img(
+        "jet_response_med_iqr_eta.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,

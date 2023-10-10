@@ -12,6 +12,8 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
+# from torch.profiler import profile, record_function, ProfilerActivity
+
 from .logger import _logger
 
 # Ignore divide by 0 errors
@@ -154,9 +156,9 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
         # make mlpf forward pass
-        t0 = time.time()
+        # t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-        print(f"{event}: {(time.time() - t0):.2f}s")
+        # print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
@@ -201,9 +203,9 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         else:
             ISTEP_GLOBAL_VALID += 1
 
-        if i > 1000:
-            _logger.info("debug mode, terminating training loop early")
-            break
+        # if i > 100:
+        #     _logger.info("debug mode, terminating training loop early")
+        #     break
 
     for loss in losses:
         losses[loss] = losses[loss] / num_iterations
@@ -254,6 +256,10 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
 
         # training step
         losses_t = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
+        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+        #     with record_function("model_train"):
+        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
         for loss in losses_of_interest:
