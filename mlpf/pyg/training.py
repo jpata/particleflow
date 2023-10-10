@@ -156,7 +156,7 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         # make mlpf forward pass
         t0 = time.time()
         pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-        # print(f"{event}: {(time.time() - t0):.2f}s")
+        print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
