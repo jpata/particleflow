@@ -236,6 +236,7 @@ train_test_datasets:
       - cms_pf_ztt
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
+      - cms_pf_sms_t1tttt
   gun:
     batch_per_gpu: 50
     event_pad_size: -1
@@ -313,6 +314,10 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_multi_particle_gun:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_sms_t1tttt:
     version: 1.6.0
     data_dir:
     manual_dir:

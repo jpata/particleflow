@@ -23,7 +23,7 @@ samples_pu = [
     #    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     #    "QCDForPF_14TeV_TuneCUETP8M1_cfi",
     #    "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",
-    #    "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi",
+    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 200000, 202050),
     #    "ZpTT_1500_14TeV_TuneCP5_cfi",
 ]
 

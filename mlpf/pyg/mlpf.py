@@ -103,13 +103,13 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
-                        "bin_size": 256,
+                        "bin_size": 640,
                         "max_num_bins": 200,
                         "distance_dim": 128,
                         "layernorm": True,
                         "num_node_messages": 2,
                         "dropout": 0.0,
-                        "ffn_dist_hidden_dim": 64,
+                        "ffn_dist_hidden_dim": 128,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))

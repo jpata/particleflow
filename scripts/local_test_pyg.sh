@@ -27,4 +27,4 @@ mkdir -p experiments
 
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
-python mlpf/pyg_pipeline.py --dataset cms --data_dir ./tensorflow_datasets/ --model-prefix ./experiments/MLPF_test --gpus "" --train --test --make-plots
+python mlpf/pyg_pipeline.py --config parameters/pyg-config-test.yaml --dataset cms --data_dir ./tensorflow_datasets/ --model-prefix ./experiments/MLPF_test --gpus "" --train --test --make-plots

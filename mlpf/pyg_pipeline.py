@@ -20,7 +20,7 @@ from pyg.inference import make_plots, run_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, Dataset, InterleavedIterator, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, PFDataset, InterleavedIterator, save_mlpf
 
 logging.basicConfig(level=logging.INFO)
 
@@ -31,6 +31,9 @@ parser.add_argument("--model-prefix", type=str, default="experiments/MLPF_model"
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
+parser.add_argument(
+    "--gpu-batch-multiplier", type=int, default=1, help="Increase batch size per GPU by this constant factor"
+)
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
 parser.add_argument("--load", action="store_true", help="load the model (no training)")
 parser.add_argument("--train", action="store_true", help="initiates a training")
@@ -89,23 +92,24 @@ def run(rank, world_size, args):
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
-            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
+            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "train")
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
             if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
                 version = config["train_dataset"][args.dataset][sample]["version"]
-                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
+                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-                ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
 
         train_loader = InterleavedIterator(train_loaders)
+        valid_loader = None
         if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
             valid_loader = InterleavedIterator(valid_loaders)
 
@@ -125,9 +129,9 @@ def run(rank, world_size, args):
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
             version = config["test_dataset"][args.dataset][sample]["version"]
-            batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
+            batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test")
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
@@ -140,6 +144,7 @@ def run(rank, world_size, args):
 
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
+            torch.cuda.empty_cache()
             run_predictions(rank, model, test_loaders[sample], sample, args.model_prefix)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
