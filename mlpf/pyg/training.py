@@ -186,6 +186,12 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         # TOTAL LOSS
         loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
+        if tensorboard_writer:
+            tensorboard_writer.add_scalar(
+                "step_{}/loss".format(step_type),
+                loss_["Total"],
+                ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+            )
         if is_train:
             for param in model.parameters():
                 param.grad = None
@@ -202,10 +208,6 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
             ISTEP_GLOBAL_TRAIN += 1
         else:
             ISTEP_GLOBAL_VALID += 1
-
-        # if i > 100:
-        #     _logger.info("debug mode, terminating training loop early")
-        #     break
 
     for loss in losses:
         losses[loss] = losses[loss] / num_iterations

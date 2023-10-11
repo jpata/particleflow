@@ -20,7 +20,7 @@ from pyg.inference import make_plots, run_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, Dataset, InterleavedIterator, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, PFDataset, InterleavedIterator, save_mlpf
 
 logging.basicConfig(level=logging.INFO)
 
@@ -94,16 +94,16 @@ def run(rank, world_size, args):
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
             if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
                 version = config["train_dataset"][args.dataset][sample]["version"]
-                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"]
+                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-                ds = Dataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
@@ -129,9 +129,9 @@ def run(rank, world_size, args):
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
             version = config["test_dataset"][args.dataset][sample]["version"]
-            batch_size = config["test_dataset"][args.dataset][sample]["batch_size"]
+            batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = Dataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])

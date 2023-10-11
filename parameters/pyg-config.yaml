@@ -44,31 +44,31 @@ train_dataset:
       batch_size: 1
     cms_pf_single_electron:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_gamma:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_pi0:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_neutron:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_pi:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_tau:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_mu:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_single_proton:
       version: 1.6.0
-      batch_size: 25
+      batch_size: 20
     cms_pf_multi_particle_gun:
       version: 1.6.0
-      batch_size: 10
+      batch_size: 5
   clic:
     clic_edm_qq_pf:
       version: 1.5.0
@@ -112,31 +112,31 @@ test_dataset:
       batch_size: 1
     cms_pf_single_electron:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_gamma:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_pi0:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_neutron:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_pi:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_tau:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_mu:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_single_proton:
       version: 1.6.0
-      batch_size: 50
+      batch_size: 20
     cms_pf_multi_particle_gun:
       version: 1.6.0
-      batch_size: 10
+      batch_size: 5
   clic:
     clic_edm_qq_pf:
       version: 1.5.0
