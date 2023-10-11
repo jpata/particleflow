@@ -1,8 +1,5 @@
 backend: pytorch
 
-batching:
-  gpu_size_multiplier: 1
-
 model:
   gnn-lsh:
     conv_type: gnn-lsh

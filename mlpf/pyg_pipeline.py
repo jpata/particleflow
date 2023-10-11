@@ -31,6 +31,9 @@ parser.add_argument("--model-prefix", type=str, default="experiments/MLPF_model"
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
+parser.add_argument(
+    "--gpu-batch-multiplier", type=int, default=1, help="Increase batch size per GPU by this constant factor"
+)
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
 parser.add_argument("--load", action="store_true", help="load the model (no training)")
 parser.add_argument("--train", action="store_true", help="initiates a training")
@@ -89,9 +92,7 @@ def run(rank, world_size, args):
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
-            batch_size = (
-                config["train_dataset"][args.dataset][sample]["batch_size"] * config["batching"]["gpu_size_multiplier"]
-            )
+            batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
             ds = Dataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")

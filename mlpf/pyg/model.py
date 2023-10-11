@@ -39,7 +39,17 @@ def index_dim(a, b):
 
 
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
-    bin_idx = torch.argmax(cmul, axis=-1) + torch.where(~msk, nbins - 1, 0).to(torch.int64)
+    a = torch.argmax(cmul, axis=-1)
+
+    # This gives a CUDA error for some reason
+    # b = torch.where(~msk, nbins - 1, 0)
+    # b = b.to(torch.int64)
+
+    b = torch.zeros(msk.shape, dtype=torch.int64, device=cmul.device)
+    # JP: check if this should be ~msk or msk (both here and in the TF implementation)
+    b[~msk] = nbins - 1
+
+    bin_idx = a + b
     bins_split = torch.reshape(torch.argsort(bin_idx, stable=True), (cmul.shape[0], nbins, bin_size))
     return bins_split
 
