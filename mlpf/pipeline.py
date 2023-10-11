@@ -1290,6 +1290,7 @@ def plots(train_dir, max_files):
         load_loss_history,
         loss_plot,
         plot_jet_response_binned,
+        plot_jet_response_binned_separate,
         plot_jet_response_binned_eta,
         plot_met_response_binned,
         get_class_names,
@@ -1389,6 +1390,7 @@ def plots(train_dir, max_files):
 
             plot_jet_response_binned(yvals, cp_dir=cp_dir, title=_title)
             plot_jet_response_binned_eta(yvals, cp_dir=cp_dir, title=_title)
+            plot_jet_response_binned_separate(yvals, cp_dir=cp_dir, title=_title)
             plot_met_response_binned(met_data, cp_dir=cp_dir, title=_title)
 
             mom_data = compute_3dmomentum_and_ratio(yvals)
