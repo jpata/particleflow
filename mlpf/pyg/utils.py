@@ -2,15 +2,14 @@ import json
 import os
 import os.path as osp
 import pickle as pkl
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 from torch import Tensor
-from torch_geometric.data import Batch, Data, Dataset
+from torch_geometric.data import Batch, Data
 from torch_geometric.data.data import BaseData
-from torch_geometric.data.datapipes import DatasetAdapter
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -145,6 +144,69 @@ def save_mlpf(args, mlpf, model_kwargs):
         json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
 
 
+class PFDataset:
+    """Builds a DataSource from tensorflow datasets."""
+
+    def __init__(self, data_dir, name, split, keys_to_get):
+        """
+        Args
+            dataset: "cms", "clic", or "delphes"
+            data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
+            name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
+            split: "train" or "test
+        """
+
+        builder = tfds.builder(name, data_dir=data_dir)
+
+        self.ds = builder.as_data_source(split=split)
+
+        # to prevent a warning from tfds about accessing sequences of indices
+        self.ds.__class__.__getitems__ = my_getitem
+
+        self.keys_to_get = keys_to_get
+
+        # self.ds = torch.utils.data.Subset(self.ds, range(100))
+
+    def get_sampler(self):
+        sampler = torch.utils.data.RandomSampler(self.ds)
+        return sampler
+
+    def get_distributed_sampler(self):
+        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
+        return sampler
+
+    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
+        if world_size > 1:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get),
+                sampler=self.get_distributed_sampler(),
+            )
+        elif num_workers:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get),
+                sampler=self.get_sampler(),
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
+        else:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get),
+                sampler=self.get_sampler(),
+            )
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __repr__(self):
+        return self.ds.__repr__()
+
+
 class DataLoader(torch.utils.data.DataLoader):
     """
     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
@@ -153,7 +215,7 @@ class DataLoader(torch.utils.data.DataLoader):
 
     def __init__(
         self,
-        dataset: Union[Dataset, Sequence[BaseData], DatasetAdapter],
+        dataset: PFDataset,
         batch_size: int = 1,
         shuffle: bool = False,
         follow_batch: Optional[List[str]] = None,
@@ -161,7 +223,7 @@ class DataLoader(torch.utils.data.DataLoader):
         **kwargs,
     ):
         # Remove for PyTorch Lightning:
-        kwargs.pop("collate_fn", None)
+        collate_fn = kwargs.pop("collate_fn", None)
 
         # Save for PyTorch Lightning < 1.6:
         self.follow_batch = follow_batch
@@ -171,7 +233,7 @@ class DataLoader(torch.utils.data.DataLoader):
             dataset,
             batch_size,
             shuffle,
-            collate_fn=Collater(follow_batch, exclude_keys),
+            collate_fn=collate_fn,
             **kwargs,
         )
 
@@ -179,13 +241,14 @@ class DataLoader(torch.utils.data.DataLoader):
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, follow_batch=None, exclude_keys=None):
+    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
+        self.keys_to_get = keys_to_get
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
-        elem_keys = list(inputs[0].keys())
+        elem_keys = self.keys_to_get
 
         batch = []
         for ev in range(num_samples_in_batch):
@@ -202,66 +265,10 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-class Dataset:
-    """Builds a DataSource from tensorflow datasets."""
-
-    def __init__(self, data_dir, name, split):
-        """
-        Args
-            dataset: "cms", "clic", or "delphes"
-            data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
-            name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
-            split: "train" or "test
-        """
-
-        builder = tfds.builder(name, data_dir=data_dir)
-
-        self.ds = builder.as_data_source(split=split)
-
-        # to prevent a warning from tfds about accessing sequences of indices
-        self.ds.__class__.__getitems__ = my_getitem
-
-    def get_sampler(self):
-        sampler = torch.utils.data.RandomSampler(self.ds)
-        return sampler
-
-    def get_distributed_sampler(self):
-        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
-        return sampler
-
-    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
-        if world_size > 1:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_distributed_sampler(),
-            )
-        elif num_workers:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_sampler(),
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(),
-                sampler=self.get_sampler(),
-            )
-
-    def __len__(self):
-        return len(self.ds)
-
-    def __repr__(self):
-        return self.ds.__repr__()
-
-
 def my_getitem(self, vals):
+    # print(
+    #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
+    # )
     records = self.data_source.__getitems__(vals)
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 

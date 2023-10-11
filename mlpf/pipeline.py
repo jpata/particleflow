@@ -9,6 +9,7 @@ try:
 except ModuleNotFoundError:
     logging.warning("horovod not found, ignoring")
 
+import ctypes
 import os
 import pickle
 import platform
@@ -17,7 +18,6 @@ import shutil
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-import ctypes
 
 import boost_histogram as bh
 import click
@@ -26,16 +26,14 @@ import tensorflow as tf
 import tqdm
 from customizations import customization_functions
 from tfmodel import hypertuning
-from tfmodel.datasets.BaseDatasetFactory import (
-    mlpf_dataset_from_config,
-    unpack_target,
-)
+from tfmodel.callbacks import NpEncoder
+from tfmodel.datasets.BaseDatasetFactory import mlpf_dataset_from_config, unpack_target
 from tfmodel.lr_finder import LRFinder
 from tfmodel.model_setup import (
+    create_comet_experiment,
     eval_model,
     freeze_model,
     prepare_callbacks,
-    create_comet_experiment,
 )
 from tfmodel.utils import (
     create_experiment_dir,
@@ -58,7 +56,6 @@ from tfmodel.utils_analysis import (
     summarize_top_k,
     topk_summary_plot_v2,
 )
-from tfmodel.callbacks import NpEncoder
 
 
 @click.group()
@@ -1283,25 +1280,27 @@ def test_datasets(config):
 def plots(train_dir, max_files):
     import mplhep
     from plotting.plot_utils import (
+        compute_3dmomentum_and_ratio,
         compute_met_and_ratio,
         format_dataset_name,
+        get_class_names,
         load_eval_data,
-        plot_jet_ratio,
-        plot_met,
-        plot_met_ratio,
-        plot_num_elements,
-        plot_particles,
-        plot_sum_energy,
         load_loss_history,
         loss_plot,
-        plot_jet_response_binned,
-        plot_met_response_binned,
-        get_class_names,
-        plot_rocs,
-        plot_particle_multiplicity,
-        compute_3dmomentum_and_ratio,
         plot_3dmomentum_ratio,
         plot_3dmomentum_response_binned,
+        plot_jet_ratio,
+        plot_jet_response_binned,
+        plot_jet_response_binned_eta,
+        plot_jet_response_binned_separate,
+        plot_met,
+        plot_met_ratio,
+        plot_met_response_binned,
+        plot_num_elements,
+        plot_particle_multiplicity,
+        plot_particles,
+        plot_rocs,
+        plot_sum_energy,
     )
 
     mplhep.set_style(mplhep.styles.CMS)
