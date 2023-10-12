@@ -107,14 +107,14 @@ class FocalLoss(nn.Module):
 
 
 @torch.no_grad()
-def validation_run(rank, model, train_loader, valid_loader, tensorboard_writer=None):
+def validation_run(rank, world_size, model, train_loader, valid_loader, tensorboard_writer=None):
     with torch.no_grad():
         optimizer = None
-        ret = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
+        ret = train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer)
     return ret
 
 
-def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer=None):
+def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer=None):
     """
     A training/validation run over a given epoch that gets called in the train_mlpf() function.
     When optimizer is set to None, it freezes the model for a validation_run.
@@ -160,8 +160,11 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
         # t0 = time.time()
         if is_train:
             pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-        else:  # validation run is only run on a single machine
-            pred_ids_one_hot, pred_momentum, pred_charge = model.module(event)
+        else:
+            if world_size > 1:  # validation run is only run on a single machine
+                pred_ids_one_hot, pred_momentum, pred_charge = model.module(event)
+            else:
+                pred_ids_one_hot, pred_momentum, pred_charge = model(event)
         # print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
@@ -261,7 +264,7 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             break
 
         # training step
-        losses_t = train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer)
+        losses_t = train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer)
         # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
         #     with record_function("model_train"):
         # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
@@ -275,7 +278,7 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
         if world_size > 1:
             dist.barrier()
         if (rank == 0) or (rank == "cpu"):
-            losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
+            losses_v = validation_run(rank, world_size, model, train_loader, valid_loader, tensorboard_writer)
         if world_size > 1:
             dist.barrier()
 
