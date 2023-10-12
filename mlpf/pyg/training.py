@@ -12,9 +12,10 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
+from .logger import _logger
+
 # from torch.profiler import profile, record_function, ProfilerActivity
 
-from .logger import _logger
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -157,7 +158,10 @@ def train(rank, model, train_loader, valid_loader, optimizer, tensorboard_writer
 
         # make mlpf forward pass
         # t0 = time.time()
-        pred_ids_one_hot, pred_momentum, pred_charge = model(event)
+        if is_train:
+            pred_ids_one_hot, pred_momentum, pred_charge = model(event)
+        else:  # validation run is only run on a single machine
+            pred_ids_one_hot, pred_momentum, pred_charge = model.module(event)
         # print(f"{event}: {(time.time() - t0):.2f}s")
 
         for icls in range(pred_ids_one_hot.shape[1]):
@@ -268,20 +272,20 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             losses["train"][loss].append(losses_t[loss])
 
         # validation step on a single machine
+        if world_size > 1:
+            dist.barrier()
         if (rank == 0) or (rank == "cpu"):
-            if world_size > 1:
-                dist.barrier()
-
             losses_v = validation_run(rank, model, train_loader, valid_loader, tensorboard_writer)
+        if world_size > 1:
+            dist.barrier()
+
+        if (rank == 0) or (rank == "cpu"):
             for loss in losses_of_interest:
                 losses["valid"][loss].append(losses_v[loss])
             for k, v in losses_v.items():
                 tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
 
             tensorboard_writer.flush()
-
-            if world_size > 1:
-                dist.barrier()
 
             # save the lowest value of each component of the loss to print it on the legend of the loss plots
             for loss in losses_of_interest:
