@@ -26,7 +26,9 @@ class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
         "1.6.0": "Initial release",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_multi_particle_gun ~/tensorflow_datasets/
+    rsync -r --progress \
+        lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_multi_particle_gun \
+        ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
