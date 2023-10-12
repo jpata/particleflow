@@ -737,6 +737,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.ylabel("events / bin")
         if title:
             plt.title(title + ", " + clname)
+        plt.legend(loc="best")
         save_img(
             "sum_energy_cls{}.png".format(cls_id),
             epoch,

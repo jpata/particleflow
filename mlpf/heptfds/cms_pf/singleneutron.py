@@ -31,7 +31,7 @@ class CmsPfSingleNeutron(tfds.core.GeneratorBasedBuilder):
         "1.6.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/SingleNeutronFlatPt0p7To1000_cfi/data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_single_neutron ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):

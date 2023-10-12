@@ -1,4 +1,4 @@
-"""CMS PF SinglePi dataset."""
+"""CMS PF TTbar dataset."""
 import cms_utils
 import tensorflow as tf
 
@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-Multi-particle gun events.
+SMS-T1tttt events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -18,20 +18,20 @@ _CITATION = """
 """
 
 
-class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_multi_particle_gun dataset."""
+class CmsPfSmsT1tttt(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf dataset."""
 
     VERSION = tfds.core.Version("1.6.0")
     RELEASE_NOTES = {
-        "1.6.0": "Initial release",
+        "1.6.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_multi_particle_gun ~/tensorflow_datasets/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_sms_t1tttt ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CmsPfMultiParticleGun, self).__init__(*args, **kwargs)
+        super(CmsPfSmsT1tttt, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -55,7 +55,7 @@ class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "MultiParticlePFGun50_cfi"
+        sample_dir = "SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):

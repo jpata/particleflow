@@ -8,8 +8,8 @@ IMG=/home/software/singularity/tf-2.14.0.simg
 cd ~/particleflow
 
 #change these
-EXPDIR=experiments/cms-gen_20230926_205923_762855.gpu1.local
-WEIGHTS=experiments/cms-gen_20230926_205923_762855.gpu1.local/weights/weights-31-0.417710.hdf5
+EXPDIR=experiments/cms-gen_20231009_130326_744193.gpu1.local
+WEIGHTS=experiments/cms-gen_20231009_130326_744193.gpu1.local/weights/weights-51-1.401646.hdf5
 
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
