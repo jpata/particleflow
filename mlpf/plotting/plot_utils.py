@@ -79,11 +79,11 @@ CLASS_NAMES_CLIC = [
 
 labels = {
     "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
-    "gen_met": "$p_{\mathrm{T,gen}}^\text{miss}$ [GeV]",
+    "gen_met": "$p_{\mathrm{T,gen}}^\mathrm{miss}$ [GeV]",
     "gen_mom": "$p_{\mathrm{gen}}$ [GeV]",
     "gen_jet": "jet $p_{\mathrm{T,gen}}$ [GeV]",
     "gen_jet_eta": "jet $\eta_{\mathrm{gen}}$ [GeV]",
-    "reco_met": "$p_{\mathrm{T,reco}}^\text{miss}$ [GeV]",
+    "reco_met": "$p_{\mathrm{T,reco}}^\mathrm{miss}$ [GeV]",
     "reco_gen_met_ratio": "$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,gen}}^\mathrm{miss}$",
     "reco_gen_mom_ratio": "$p_{\mathrm{reco}} / p_{\\mathrm{gen}}$",
     "reco_gen_jet_ratio": "jet $p_{\mathrm{T,reco}} / p_{\\mathrm{T,gen}}$",
@@ -1130,9 +1130,9 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.figure()
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.legend(loc=1, fontsize=16, title=title)
     plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_jet"])
-
     plt.tight_layout()
     save_img(
         "jet_response_med_iqr.png",
@@ -1219,6 +1219,7 @@ def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experimen
     plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_jet_eta"])
     plt.tight_layout()
+    plt.legend(loc=1, fontsize=16, title=title)
     save_img(
         "jet_response_med_iqr_eta.png",
         epoch,
@@ -1299,11 +1300,8 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.ylabel("Response IQR / median")
-    plt.legend()
-    if title:
-        plt.title(title)
+    plt.legend(loc=1, fontsize=16, title=title)
     plt.xlabel(labels["gen_met"])
-
     plt.tight_layout()
     save_img(
         "met_response_med_iqr.png",
@@ -1386,7 +1384,7 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.ylabel("Response IQR")
     plt.xlabel(labels["gen_mom"])
-
+    plt.legend(loc=1, fontsize=16, title=title)
     plt.tight_layout()
     save_img(
         "mom_response_med_iqr.png",
