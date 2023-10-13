@@ -44,6 +44,8 @@ parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gravnet", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
 parser.add_argument("--make-plots", action="store_true", help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
+parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
+parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 
 
 def run(rank, world_size, args):
@@ -94,7 +96,7 @@ def run(rank, world_size, args):
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"])
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=args.ntrain)
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -103,7 +105,7 @@ def run(rank, world_size, args):
                 version = config["train_dataset"][args.dataset][sample]["version"]
                 batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
@@ -131,7 +133,7 @@ def run(rank, world_size, args):
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"])
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])

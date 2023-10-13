@@ -147,7 +147,7 @@ def save_mlpf(args, mlpf, model_kwargs):
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, keys_to_get):
+    def __init__(self, data_dir, name, split, keys_to_get, num_samples=None):
         """
         Args
             dataset: "cms", "clic", or "delphes"
@@ -165,7 +165,8 @@ class PFDataset:
 
         self.keys_to_get = keys_to_get
 
-        # self.ds = torch.utils.data.Subset(self.ds, range(100))
+        if num_samples:
+            self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
 
     def get_sampler(self):
         sampler = torch.utils.data.RandomSampler(self.ds)
