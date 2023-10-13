@@ -8,10 +8,8 @@ import argparse
 import logging
 import os
 import pickle as pkl
-
+import numpy as np
 import yaml
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import torch
 import torch.distributed as dist
@@ -76,6 +74,10 @@ def run(rank, world_size, args):
             **config["model"][args.conv_type],
         }
         model = MLPF(**model_kwargs)
+
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        _logger.info("Model trainable parameters: {}".format(params))
 
         save_mlpf(args, model, model_kwargs)  # save model_kwargs and hyperparameters
 
