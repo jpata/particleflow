@@ -7,6 +7,7 @@ Author: Farouk Mokhtar
 import argparse
 import logging
 import os
+from pathlib import Path
 import pickle as pkl
 
 import yaml
@@ -21,13 +22,14 @@ from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, PFDataset, InterleavedIterator, save_mlpf
+from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--config", type=str, default="parameters/pyg-config.yaml", help="yaml config")
-parser.add_argument("--model-prefix", type=str, default="experiments/MLPF_model", help="directory to hold the model")
+parser.add_argument("--prefix", type=str, default="test_", help="prefix appended to result dir name")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
@@ -35,7 +37,7 @@ parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=1, help="Increase batch size per GPU by this constant factor"
 )
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
-parser.add_argument("--load", action="store_true", help="load the model (no training)")
+parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", help="initiates a training")
 parser.add_argument("--test", action="store_true", help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=3, help="number of training epochs")
@@ -56,20 +58,24 @@ def run(rank, world_size, args):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
+
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
-        with open(f"{args.model_prefix}/model_kwargs.pkl", "rb") as f:
+        outdir = args.load
+
+        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
         model = MLPF(**model_kwargs)
 
-        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
+        model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
+        if (rank == 0) or (rank == "cpu"): _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
 
     else:  # instantiate a new model
         model_kwargs = {
@@ -79,18 +85,23 @@ def run(rank, world_size, args):
         }
         model = MLPF(**model_kwargs)
 
-        save_mlpf(args, model, model_kwargs)  # save model_kwargs and hyperparameters
-
     model.to(rank)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
-    _logger.info(model)
-    _logger.info(f"Model directory {args.model_prefix}", color="bold")
+    if (rank == 0) or (rank == "cpu"): _logger.info(model)
 
     if args.train:
+        # always create a new outdir when training a model to never overwrite
+        # loaded weights from previous trainings
+        if (rank == 0) or (rank == "cpu"):
+            outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
+            save_mlpf(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            _logger.info("Creating experiment dir {}".format(outdir))
+            _logger.info(f"Model directory {outdir}", color="bold")
+
         train_loaders, valid_loaders = [], []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
@@ -124,10 +135,14 @@ def run(rank, world_size, args):
             args.num_epochs,
             args.patience,
             args.lr,
-            args.model_prefix,
+            outdir,
         )
 
     if args.test:
+
+        assert args.load is not None, "Please load a model with --load"
+        outdir = args.load
+
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
             version = config["test_dataset"][args.dataset][sample]["version"]
@@ -138,7 +153,7 @@ def run(rank, world_size, args):
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
 
-        model_state = torch.load(f"{args.model_prefix}/best_epoch_weights.pth", map_location=torch.device(rank))
+        model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
         else:
@@ -147,14 +162,14 @@ def run(rank, world_size, args):
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
             torch.cuda.empty_cache()
-            run_predictions(rank, model, test_loaders[sample], sample, args.model_prefix)
+            run_predictions(rank, model, test_loaders[sample], sample, outdir)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
             for sample in config["test_dataset"][args.dataset]:
                 _logger.info(f"Plotting distributions for {sample}")
 
-                make_plots(args.model_prefix, sample, args.dataset)
+                make_plots(outdir, sample, args.dataset)
 
         if args.export_onnx:
             try:
