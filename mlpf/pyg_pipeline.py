@@ -58,7 +58,6 @@ def run(rank, world_size, args):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
 
@@ -75,7 +74,8 @@ def run(rank, world_size, args):
             model.module.load_state_dict(model_state)
         else:
             model.load_state_dict(model_state)
-        if (rank == 0) or (rank == "cpu"): _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
+        if (rank == 0) or (rank == "cpu"):
+            _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
 
     else:  # instantiate a new model
         model_kwargs = {
@@ -91,7 +91,8 @@ def run(rank, world_size, args):
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
-    if (rank == 0) or (rank == "cpu"): _logger.info(model)
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(model)
 
     if args.train:
         # always create a new outdir when training a model to never overwrite
