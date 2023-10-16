@@ -200,7 +200,8 @@ def train(
 
             _logger.info(
                 f"Rank {rank}: "
-                + f"train_loss_id={train_loss['Total']/N_STEPS:.2f} "
+                + f"train_loss_tot={train_loss['Total']/N_STEPS:.2f} "
+                + f"train_loss_id={train_loss['Classification']/N_STEPS:.2f} "
                 + f"train_loss_momentum={train_loss['Regression']/N_STEPS:.2f} "
                 + f"train_loss_charge={train_loss['Charge']/N_STEPS:.2f} "
             )
@@ -260,9 +261,10 @@ def train(
 
                     _logger.info(
                         f"Rank {rank}: "
-                        + f"valid_loss_id={valid_loss['Total']/len(valid_loader):.2f} "
-                        + f"valid_loss_momentum={valid_loss['Total']/len(valid_loader):.2f} "
-                        + f"valid_loss_charge={valid_loss['Total']/len(valid_loader):.2f} "
+                        + f"val_loss_tot={valid_loss['Total']/len(valid_loader):.2f} "
+                        + f"val_loss_id={valid_loss['Classification']/len(valid_loader):.2f} "
+                        + f"val_loss_momentum={valid_loss['Regression']/len(valid_loader):.2f} "
+                        + f"val_loss_charge={valid_loss['Charge']/len(valid_loader):.2f} "
                         + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
