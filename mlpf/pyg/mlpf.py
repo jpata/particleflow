@@ -57,7 +57,7 @@ def ffn(input_dim, output_dim, width, act, dropout):
     )
 
 
-@torch.compile
+# @torch.compile
 def unpad(data_padded, mask):
     return torch.cat([data_padded[i][mask[i]] for i in range(data_padded.shape[0])])
 
