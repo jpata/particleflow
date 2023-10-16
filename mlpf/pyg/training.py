@@ -199,10 +199,10 @@ def train(
                 tensorboard_writer.flush()
 
             _logger.info(
-                f"Rank {rank}:"
-                + f"train_loss_id={train_loss['Total']/N_STEPS:.4f} "
-                + f"train_loss_momentum={train_loss['Regression']/N_STEPS:.4f} "
-                + f"train_loss_charge={train_loss['Charge']/N_STEPS:.4f} "
+                f"Rank {rank}: "
+                + f"train_loss_id={train_loss['Total']/N_STEPS:.2f} "
+                + f"train_loss_momentum={train_loss['Regression']/N_STEPS:.2f} "
+                + f"train_loss_charge={train_loss['Charge']/N_STEPS:.2f} "
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
@@ -250,18 +250,20 @@ def train(
                             {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
                             f"{outpath}/best_weights.pth",
                         )
-                        _logger.info(f"finished the iteration # {itrain} and saved the model at {outpath}/best_weights.pth")
+                        _logger.info(
+                            f"finished {itrain}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
+                        )
                         stale_epochs = 0
                     else:
-                        _logger.info(f"finished the iteration # {itrain}")
+                        _logger.info(f"finished {itrain}/{len(train_loader)} iterations")
                         stale_epochs += 1
 
                     _logger.info(
-                        f"Rank {rank}:"
-                        + f"valid_loss_id={valid_loss['Total']/N_STEPS:.4f} "
-                        + f"valid_loss_momentum={valid_loss['Total']/N_STEPS:.4f} "
-                        + f"valid_loss_charge={valid_loss['Total']/N_STEPS:.4f} "
-                        + f"best_val_loss={best_val_loss:.4f}"
+                        f"Rank {rank}: "
+                        + f"valid_loss_id={valid_loss['Total']/len(valid_loader):.2f} "
+                        + f"valid_loss_momentum={valid_loss['Total']/len(valid_loader):.2f} "
+                        + f"valid_loss_charge={valid_loss['Total']/len(valid_loader):.2f} "
+                        + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
 
@@ -355,11 +357,11 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             eta = epochs_remaining * time_per_epoch / 60
 
             _logger.info(
-                f"Rank {rank}: epoch={epoch + 1} / {num_epochs}"
-                + f"train_loss={losses_t['Total']:.4f}"
-                + f"valid_loss={losses_v['Total']:.4f}"
-                + f"stale={stale_epochs}"
-                + f"time={round((t1-t0)/60, 2)}m"
+                f"Rank {rank}: epoch={epoch + 1} / {num_epochs} "
+                + f"train_loss={losses_t['Total']:.4f} "
+                + f"valid_loss={losses_v['Total']:.4f} "
+                + f"stale={stale_epochs} "
+                + f"time={round((t1-t0)/60, 2)}m "
                 + f"eta={round(eta, 1)}m"
             )
 
