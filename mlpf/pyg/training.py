@@ -1,6 +1,4 @@
 import json
-import os
-import os.path as osp
 import pickle as pkl
 import time
 from typing import Optional
@@ -22,10 +20,23 @@ from .logger import _logger
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
-# keep track of step across epochs
-ISTEP_GLOBAL_TRAIN = 0
-ISTEP_GLOBAL_VALID = 0
-N_STEPS = 100  # save loss after 100 passes
+
+def mlpf_loss(target_ids, target_momentum, target_charge, pred_ids_one_hot, pred_momentum, pred_charge):
+    loss = {}
+    loss_obj_id = FocalLoss(gamma=2.0)
+    loss["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
+
+    msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
+
+    loss["Regression"] = 10 * torch.nn.functional.huber_loss(
+        pred_momentum * msk_true_particle, target_momentum * msk_true_particle
+    )
+    loss["Charge"] = torch.nn.functional.cross_entropy(
+        pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
+    )
+
+    loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
+    return loss
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
@@ -109,48 +120,25 @@ class FocalLoss(nn.Module):
         return loss
 
 
-@torch.no_grad()
-def validation_run(rank, world_size, model, train_loader, valid_loader, outpath, save_index, tensorboard_writer=None):
-    with torch.no_grad():
-        optimizer = None
-        ret = train(rank, world_size, model, train_loader, valid_loader, optimizer, outpath, save_index, tensorboard_writer)
-    return ret
-
-
-def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpath, save_index, tensorboard_writer=None):
+def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpath, tensorboard_writer=None):
     """
     A training/validation run over a given epoch that gets called in the train_mlpf() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
-    global ISTEP_GLOBAL_TRAIN, ISTEP_GLOBAL_VALID
-    is_train = not (optimizer is None)
-
-    loss_obj_id = FocalLoss(gamma=2.0)
-
-    if is_train:
-        _logger.info(f"Initiating a training run on device {rank}", color="red")
-        step_type = "train"
-        loader = train_loader
-        model.train()
-    else:
-        _logger.info(f"Initiating a validation run on device {rank}", color="red")
-        step_type = "valid"
-        loader = valid_loader
-        model.eval()
+    N_STEPS = 2
+    _logger.info(f"Initiating a training run on device {rank}", color="red")
 
     # initialize loss counters
-    nsteps = 0
     step_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    best_step_val_loss = 99999.9  # to save the model
 
-    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        nsteps += 1
-
+    model.train()
+    for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
-                f"step_{step_type}/num_elems",
+                "step_train/num_elems",
                 batch.X.shape[0],
-                ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
             )
 
         event = batch.to(rank)
@@ -160,117 +148,120 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
         target_charge = torch.clamp((event.ygen[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
         target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
 
-        # make mlpf forward pass
-        # for i in range(1000):
-        # t0 = time.time()
-        if is_train:
-            pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-        else:
-            if world_size > 1:  # validation run is only run on a single machine
-                pred_ids_one_hot, pred_momentum, pred_charge = model.module(event)
-            else:
-                pred_ids_one_hot, pred_momentum, pred_charge = model(event)
-            # print(f"{event}: {(time.time() - t0):.2f}s")
+        pred_ids_one_hot, pred_momentum, pred_charge = model(event)
 
         for icls in range(pred_ids_one_hot.shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
-                    f"step_{step_type}/num_cls_{icls}",
+                    f"step_train/num_cls_{icls}",
                     torch.sum(target_ids == icls),
-                    ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
                 )
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
+        loss = mlpf_loss(target_ids, target_momentum, target_charge, pred_ids_one_hot, pred_momentum, pred_charge)
 
-        loss_ = {}
-        # for CLASSIFYING PID
-        loss_["Classification"] = 100 * loss_obj_id(pred_ids_one_hot, target_ids)
-        # REGRESSING p4: mask the loss in cases there is no true particle
-        msk_true_particle = torch.unsqueeze((target_ids != 0).to(dtype=torch.float32), axis=-1)
-        loss_["Regression"] = 10 * torch.nn.functional.huber_loss(
-            pred_momentum * msk_true_particle, target_momentum * msk_true_particle
-        )
-        # PREDICTING CHARGE
-        loss_["Charge"] = torch.nn.functional.cross_entropy(
-            pred_charge * msk_true_particle, (target_charge * msk_true_particle[:, 0]).to(dtype=torch.int64)
-        )
-        # TOTAL LOSS
-        loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
+        for param in model.parameters():
+            param.grad = None
+        loss["Total"].backward()
+        optimizer.step()
 
-        if nsteps >= N_STEPS:
+        for loss_ in step_loss:
+            step_loss[loss_] += loss[loss_].detach().cpu().item()
+        for loss_ in epoch_loss:
+            epoch_loss[loss_] += loss[loss_].detach().cpu().item()
+
+        # run quick validation runs at intervals of N_STEPS
+        if ((itrain % N_STEPS) == 0) and (itrain != 0):
+            if world_size > 1:
+                dist.barrier()
+
             if tensorboard_writer:
-                for loss in step_loss:
+                for loss_ in step_loss:
                     tensorboard_writer.add_scalar(
-                        f"step_{step_type}/loss_{loss}",
-                        step_loss[loss] / N_STEPS,
-                        ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+                        f"step_train/loss_{loss_}",
+                        step_loss[loss_] / N_STEPS,
                     )
-            nsteps = 0
+                tensorboard_writer.flush()
+
             step_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-        if is_train:
-            for param in model.parameters():
-                param.grad = None
-            loss_["Total"].backward()
-            optimizer.step()
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
+                model.eval()
 
-        for loss in step_loss:
-            step_loss[loss] += loss_[loss].detach().cpu().item()
-        for loss in epoch_loss:
-            epoch_loss[loss] += loss_[loss].detach().cpu().item()
+                with torch.no_grad():
+                    valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+                    for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
+                        event = batch.to(rank)
+
+                        target_ids = event.ygen[:, 0].long()
+                        target_charge = torch.clamp((event.ygen[:, 1] + 1).to(dtype=torch.float32), 0, 2)
+                        target_momentum = event.ygen[:, 2:-1].to(dtype=torch.float32)
+
+                        if world_size > 1:  # validation is only run on a single machine
+                            pred_ids_one_hot, pred_momentum, pred_charge = model.module(event)
+                        else:
+                            pred_ids_one_hot, pred_momentum, pred_charge = model(event)
+
+                        loss = mlpf_loss(
+                            target_ids, target_momentum, target_charge, pred_ids_one_hot, pred_momentum, pred_charge
+                        )
+
+                        for loss_ in valid_loss:
+                            valid_loss[loss_] += loss[loss_].detach().cpu().item()
+
+                    if tensorboard_writer:
+                        for loss_ in step_loss:
+                            tensorboard_writer.add_scalar(
+                                f"step_valid/loss_{loss_}",
+                                valid_loss[loss_] / len(valid_loader),
+                            )
+
+                    if valid_loss["Total"] < best_step_val_loss:
+                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                            model_state_dict = model.module.state_dict()
+                        else:
+                            model_state_dict = model.state_dict()
+
+                        torch.save(
+                            {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                            f"{outpath}/best_step_weights.pth",
+                        )
+                        _logger.info(
+                            f"finished the iteration # {itrain} and saved the model at {outpath}/best_step_weights.pth"
+                        )
+                    else:
+                        _logger.info(f"finished the iteration # {itrain}")
 
         if tensorboard_writer:
             tensorboard_writer.flush()
 
-        if is_train:
-            ISTEP_GLOBAL_TRAIN += 1
-        else:
-            ISTEP_GLOBAL_VALID += 1
+        if world_size > 1:
+            dist.barrier()
 
-        # save the model at intervals of 5000
-        if is_train and ((i % 5000) == 0):
-            if (rank == 0) or (rank == "cpu"):
-                # with torch.no_grad():
+        model.train()  # prepare for next training loop
 
-                if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                    model_state_dict = model.module.state_dict()
-                else:
-                    model_state_dict = model.state_dict()
-
-                if not osp.isdir(f"{outpath}/step_weights"):
-                    os.system(f"mkdir -p {outpath}/step_weights")
-
-                torch.save(
-                    {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                    f"{outpath}/step_weights/step{save_index}_weights.pth",
-                )
-                _logger.info(
-                    f"finished the iteration # {i} and saved the model at {outpath}/step_weights/step{save_index}_weights.pth"  # noqa
-                )
-                save_index += 1
-
-    for loss in epoch_loss:
-        epoch_loss[loss] = epoch_loss[loss] / len(loader)
+    for loss_ in epoch_loss:
+        epoch_loss[loss_] = epoch_loss[loss_] / len(train_loader)
 
     _logger.info(
         f"loss_id={epoch_loss['Classification']:.4f} loss_momentum={epoch_loss['Regression']:.4f} loss_charge={epoch_loss['Charge']:.4f}"  # noqa
     )
 
-    return epoch_loss, save_index
+    return epoch_loss, valid_loss
 
 
-def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, patience, optimizer, outpath):
+def train_mlpf(rank, world_size, model, train_loader, valid_loader, num_epochs, patience, optimizer, outpath):
     """
-    Will run a full training by calling train() and validation_run() every epoch.
+    Will run a full training by calling train().
 
     Args:
         rank: 'cpu' or int representing the gpu device id
-        model: a pytorch model that may be wrapped by DistributedDataParallel
+        model: a pytorch model (may be wrapped by DistributedDataParallel)
         train_loader: a pytorch Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
         valid_loader: a pytorch Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
         patience: number of stale epochs before stopping the training
-        lr: learning rate to use for training
         outpath: path to store the model weights and training plots
     """
 
@@ -288,8 +279,7 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
 
     stale_epochs = 0
 
-    save_index = 0  # to save the weights at different steps
-    for epoch in range(n_epochs):
+    for epoch in range(num_epochs):
         t0 = time.time()
 
         if stale_epochs > patience:
@@ -297,8 +287,8 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             break
 
         # training step
-        losses_t, save_index = train(
-            rank, world_size, model, train_loader, valid_loader, optimizer, outpath, save_index, tensorboard_writer
+        losses_t, losses_v = train(
+            rank, world_size, model, train_loader, valid_loader, optimizer, outpath, tensorboard_writer
         )
         # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
         #     with record_function("model_train"):
@@ -308,16 +298,6 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
         for loss in losses_of_interest:
             losses["train"][loss].append(losses_t[loss])
-
-        # validation step on a single machine
-        if world_size > 1:
-            dist.barrier()
-        if (rank == 0) or (rank == "cpu"):
-            losses_v, _ = validation_run(
-                rank, world_size, model, train_loader, valid_loader, outpath, save_index, tensorboard_writer
-            )
-        if world_size > 1:
-            dist.barrier()
 
         if (rank == 0) or (rank == "cpu"):
             for loss in losses_of_interest:
@@ -359,12 +339,12 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
 
             t1 = time.time()
 
-            epochs_remaining = n_epochs - (epoch + 1)
+            epochs_remaining = num_epochs - (epoch + 1)
             time_per_epoch = (t1 - t0_initial) / (epoch + 1)
             eta = epochs_remaining * time_per_epoch / 60
 
             _logger.info(
-                f"Rank {rank}: epoch={epoch + 1} / {n_epochs} "
+                f"Rank {rank}: epoch={epoch + 1} / {num_epochs} "
                 + f"train_loss={round(losses_t['Total'], 4)} "
                 + f"valid_loss={round(losses_v['Total'], 4)} "
                 + f"stale={stale_epochs} "
@@ -376,7 +356,7 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
                 fig, ax = plt.subplots()
 
                 if best_train_loss:
-                    lab = "training ({:.3f})".format(best_train_loss[loss])
+                    lab = f"training ({best_train_loss[loss]:.3f})"
                 else:
                     lab = "training"
                 ax.plot(
@@ -386,7 +366,7 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
                 )
 
                 if best_val_loss:
-                    lab = "validation ({:.3f})".format(best_val_loss[loss])
+                    lab = f"validation ({best_val_loss[loss]:.3f})"
                 else:
                     lab = "validation"
                 ax.plot(

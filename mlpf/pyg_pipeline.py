@@ -49,7 +49,8 @@ parser.add_argument("--conv-type", type=str, default="gravnet", help="choices ar
 parser.add_argument("--make-plots", action="store_true", help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
-parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
+parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
+parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
 parser.add_argument("--log-file", type=str, default="log.log", help="path to the log file")
 
 
@@ -123,11 +124,11 @@ def run(rank, world_size, args, outdir):
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
 
-            if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
-                version = config["train_dataset"][args.dataset][sample]["version"]
-                batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
+            if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
+                version = config["valid_dataset"][args.dataset][sample]["version"]
+                batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))

@@ -93,6 +93,12 @@ train_dataset:
       version: 1.2.0
       batch_size: 10
 
+valid_dataset:
+  cms:
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 1
+
 test_dataset:
   cms:
     cms_pf_ttbar:
