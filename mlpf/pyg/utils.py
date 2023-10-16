@@ -120,7 +120,7 @@ Y_FEATURES = {
 }
 
 
-def save_mlpf(args, mlpf, model_kwargs, outdir):
+def save_HPs(args, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
     with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture

@@ -8,6 +8,7 @@ import argparse
 import logging
 import os
 import pickle as pkl
+import sys
 from pathlib import Path
 
 import yaml
@@ -18,10 +19,10 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from pyg.inference import make_plots, run_predictions
-from pyg.logger import _logger
+from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -48,10 +49,14 @@ parser.add_argument("--make-plots", action="store_true", help="make plots of the
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
+parser.add_argument("--log-file", type=str, default="log.log", help="path to the log file")
 
 
 def run(rank, world_size, args, outdir):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+
+    if (rank == 0) or (rank == "cpu"):  # write the logs
+        _configLogger("mlpf", stdout=sys.stdout, filename=f"{args.model_prefix}/{args.log_file}")
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -98,7 +103,7 @@ def run(rank, world_size, args, outdir):
         # use the outdir that was created in main()
         # loaded weights from previous trainings
         if (rank == 0) or (rank == "cpu"):
-            save_mlpf(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info(f"Creating experiment dir {outdir}")
             _logger.info(f"Model directory {outdir}", color="bold")
 
