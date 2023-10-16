@@ -7,10 +7,12 @@ Author: Farouk Mokhtar
 import argparse
 import logging
 import os
-from pathlib import Path
 import pickle as pkl
 
 import yaml
+
+# from pathlib import Path
+
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -21,7 +23,7 @@ from pyg.inference import make_plots, run_predictions
 from pyg.logger import _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, PFDataset, InterleavedIterator, save_mlpf
+from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_mlpf
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -97,10 +99,11 @@ def run(rank, world_size, args):
     if args.train:
         # always create a new outdir when training a model to never overwrite
         # loaded weights from previous trainings
+        # outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")  # TODO: fix
+        outdir = create_experiment_dir(prefix=args.prefix, backend="pyg", rank=rank)  # TODO: fix
         if (rank == 0) or (rank == "cpu"):
-            outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
             save_mlpf(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
-            _logger.info("Creating experiment dir {}".format(outdir))
+            _logger.info(f"Creating experiment dir {outdir}")
             _logger.info(f"Model directory {outdir}", color="bold")
 
         train_loaders, valid_loaders = [], []
@@ -140,7 +143,6 @@ def run(rank, world_size, args):
         )
 
     if args.test:
-
         if args.load is None:
             # if we don't load, we must have a newly trained model
             assert args.train, "Please train a model before testing, or load a model with --load"
