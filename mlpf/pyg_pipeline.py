@@ -77,10 +77,7 @@ def run(rank, world_size, args, outdir):
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-        if os.path.isfile(f"{outdir}/best_epoch_weights.pth"):
-            checkpoint = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
-        else:
-            checkpoint = torch.load(f"{outdir}/best_step_weights.pth", map_location=torch.device(rank))
+        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
 
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(checkpoint["model_state_dict"])
@@ -176,7 +173,7 @@ def run(rank, world_size, args, outdir):
                 if (rank == 0) or (rank == "cpu"):
                     os.system(f"mkdir -p {outdir}/preds/{sample}")
 
-        checkpoint = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
+        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
 
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(checkpoint["model_state_dict"])
