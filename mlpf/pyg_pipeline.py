@@ -141,8 +141,12 @@ def run(rank, world_size, args):
 
     if args.test:
 
-        assert args.load is not None, "Please load a model with --load"
-        outdir = args.load
+        if args.load is None:
+            # if we don't load, we must have a newly trained model
+            assert args.train, "Please train a model before testing, or load a model with --load"
+            assert outdir is not None, "Error: no outdir to evaluate model from"
+        else:
+            outdir = args.load
 
         test_loaders = {}
         for sample in config["test_dataset"][args.dataset]:
