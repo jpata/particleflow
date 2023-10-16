@@ -186,12 +186,12 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
 
             step_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
+            valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
                 model.eval()
 
                 with torch.no_grad():
-                    valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
                         event = batch.to(rank)
 
