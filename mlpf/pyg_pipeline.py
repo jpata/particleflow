@@ -171,11 +171,13 @@ def run(rank, world_size, args, outdir):
                 if (rank == 0) or (rank == "cpu"):
                     os.system(f"mkdir -p {outdir}/preds/{sample}")
 
-        model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
+        checkpoint = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
+
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(model_state)
+            model.module.load_state_dict(checkpoint["model_state_dict"])
         else:
-            model.load_state_dict(model_state)
+            model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
