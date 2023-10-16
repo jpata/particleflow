@@ -231,18 +231,23 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
         # save the model at intervals of 5000
         if is_train and ((i % 5000) == 0):
             if (rank == 0) or (rank == "cpu"):
+                # with torch.no_grad():
+
                 if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                    state_dict = model.module.state_dict()
+                    model_state_dict = model.module.state_dict()
                 else:
-                    state_dict = model.state_dict()
+                    model_state_dict = model.state_dict()
 
                 if not osp.isdir(f"{outpath}/step_weights"):
                     os.system(f"mkdir -p {outpath}/step_weights")
 
-                _logger.info(
-                    f"finished the iteration # {i} and saving the model at {outpath}/step_weights/step{save_index}_weights.pth"  # noqa
+                torch.save(
+                    {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                    f"{outpath}/step_weights/step{save_index}_weights.pth",
                 )
-                torch.save(state_dict, f"{outpath}/step_weights/step{save_index}_weights.pth")
+                _logger.info(
+                    f"finished the iteration # {i} and saved the model at {outpath}/step_weights/step{save_index}_weights.pth"  # noqa
+                )
                 save_index += 1
 
     for loss in epoch_loss:
@@ -255,7 +260,7 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
     return epoch_loss, save_index
 
 
-def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, patience, lr, outpath):
+def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, patience, optimizer, outpath):
     """
     Will run a full training by calling train() and validation_run() every epoch.
 
@@ -282,8 +287,6 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
         best_val_loss[loss] = 99999.9
 
     stale_epochs = 0
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     save_index = 0  # to save the weights at different steps
     for epoch in range(n_epochs):
@@ -333,11 +336,14 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
 
                         # save the model
                         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                            state_dict = model.module.state_dict()
+                            model_state_dict = model.module.state_dict()
                         else:
-                            state_dict = model.state_dict()
+                            model_state_dict = model.state_dict()
 
-                        torch.save(state_dict, f"{outpath}/best_epoch_weights.pth")
+                        torch.save(
+                            {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                            f"{outpath}/best_epoch_weights.pth",
+                        )
 
                         with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
                             json.dump({"best_epoch": epoch}, fp)

@@ -74,12 +74,16 @@ def run(rank, world_size, args, outdir):
             model_kwargs = pkl.load(f)
 
         model = MLPF(**model_kwargs)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-        model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
+        checkpoint = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
+
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(model_state)
+            model.module.load_state_dict(checkpoint["model_state_dict"])
         else:
-            model.load_state_dict(model_state)
+            model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
         if (rank == 0) or (rank == "cpu"):
             _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
 
@@ -90,6 +94,7 @@ def run(rank, world_size, args, outdir):
             **config["model"][args.conv_type],
         }
         model = MLPF(**model_kwargs)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     model.to(rank)
 
@@ -140,7 +145,7 @@ def run(rank, world_size, args, outdir):
             valid_loader,
             args.num_epochs,
             args.patience,
-            args.lr,
+            optimizer,
             outdir,
         )
 
