@@ -1383,7 +1383,7 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     plt.figure()
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylabel("Response IQR")
+    plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_mom"])
     plt.legend(loc=1, fontsize=16, title=title)
     plt.tight_layout()
