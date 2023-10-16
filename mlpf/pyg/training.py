@@ -137,15 +137,14 @@ def train(
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
-    N_STEPS = 2
+    N_STEPS = 10
     _logger.info(f"Initiating a training run on device {rank}", color="red")
 
     # initialize loss counters (note: these will be reset after N_STEPS)
     train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
     valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-    # this will one will keep accumulating train_loss and then take average
-    # the train() function will return the last valid_loss values
+    # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
     model.train()
