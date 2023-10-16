@@ -114,7 +114,7 @@ def run(rank, world_size, args, outdir):
             _logger.info(f"Creating experiment dir {outdir}")
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        train_loaders, valid_loaders = [], []
+        train_loaders = []
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
@@ -123,8 +123,11 @@ def run(rank, world_size, args, outdir):
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
+        train_loader = InterleavedIterator(train_loaders)
 
-            if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
+        valid_loaders = []
+        if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
+            for sample in config["valid_dataset"][args.dataset]:
                 version = config["valid_dataset"][args.dataset][sample]["version"]
                 batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
@@ -132,10 +135,6 @@ def run(rank, world_size, args, outdir):
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
-
-        train_loader = InterleavedIterator(train_loaders)
-        valid_loader = None
-        if (rank == 0) or (rank == "cpu"):  # validation only on a single machine
             valid_loader = InterleavedIterator(valid_loaders)
 
         train_mlpf(
