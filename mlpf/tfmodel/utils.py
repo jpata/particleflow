@@ -1,8 +1,6 @@
-import datetime
 import logging
 import os
 import pickle
-import platform
 import re
 from pathlib import Path
 
@@ -122,20 +120,6 @@ def parse_config(config, ntrain=None, ntest=None, nepochs=None, weights=None):
         config["setup"]["weights"] = weights
 
     return config, config_file_stem
-
-
-def create_experiment_dir(prefix=None, suffix=None):
-    if prefix is None:
-        train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    else:
-        train_dir = Path("experiments") / (prefix + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
-
-    if suffix is not None:
-        train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
-
-    train_dir.mkdir(parents=True)
-    logging.info("Creating experiment dir {}".format(train_dir))
-    return str(train_dir)
 
 
 def get_best_checkpoint(train_dir):
