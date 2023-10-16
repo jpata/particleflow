@@ -50,7 +50,7 @@ parser.add_argument("--ntrain", type=int, default=None, help="training samples t
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 
 
-def run(rank, world_size, args):
+def run(rank, world_size, args, outdir):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
@@ -95,12 +95,8 @@ def run(rank, world_size, args):
         _logger.info(model)
 
     if args.train:
-        # always create a new outdir when training a model to never overwrite
+        # use the outdir that was created in main()
         # loaded weights from previous trainings
-        # outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")  # TODO: fix
-        outdir = create_experiment_dir(
-            prefix=args.prefix + Path(args.config).stem + "_", backend="pyg", rank=rank
-        )  # TODO: fix
         if (rank == 0) or (rank == "cpu"):
             save_mlpf(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info(f"Creating experiment dir {outdir}")
@@ -208,6 +204,11 @@ def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 
+    if args.train:  # create a new outdir when training a model to never overwrite
+        outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
+    else:
+        outdir = None
+
     if args.gpus:
         assert (
             world_size <= torch.cuda.device_count()
@@ -221,19 +222,19 @@ def main():
 
             mp.spawn(
                 run,
-                args=(world_size, args),
+                args=(world_size, args, outdir),
                 nprocs=world_size,
                 join=True,
             )
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            run(rank, world_size, args)
+            run(rank, world_size, args, outdir)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, args)
+        run(rank, world_size, args, outdir)
 
 
 if __name__ == "__main__":

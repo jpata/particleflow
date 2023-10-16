@@ -3,7 +3,7 @@ import platform
 from pathlib import Path
 
 
-def create_experiment_dir(prefix=None, suffix=None, backend="tf", rank=0):
+def create_experiment_dir(prefix=None, suffix=None):
     if prefix is None:
         train_dir = Path("experiments") / datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     else:
@@ -12,10 +12,6 @@ def create_experiment_dir(prefix=None, suffix=None, backend="tf", rank=0):
     if suffix is not None:
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
-    if backend == "pyg":
-        if (rank == 0) or (rank == "cpu"):
-            train_dir.mkdir(parents=True)
-    else:
-        train_dir.mkdir(parents=True)
+    train_dir.mkdir(parents=True)
 
     return str(train_dir)
