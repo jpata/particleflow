@@ -162,9 +162,9 @@ def run(rank, world_size, args, outdir):
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
 
-            if not osp.isdir(f"{args.model_prefix}/preds/{sample}"):
+            if not osp.isdir(f"{outdir}/preds/{sample}"):
                 if (rank == 0) or (rank == "cpu"):
-                    os.system(f"mkdir -p {args.model_prefix}/preds/{sample}")
+                    os.system(f"mkdir -p {outdir}/preds/{sample}")
 
         model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
