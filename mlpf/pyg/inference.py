@@ -176,8 +176,10 @@ def make_plots(outpath, sample, dataset):
 
     if not os.path.isdir(f"{outpath}/plots/"):
         os.makedirs(f"{outpath}/plots/")
+    if not os.path.isdir(f"{outpath}/plots/{sample}"):
+        os.makedirs(f"{outpath}/plots/{sample}")
 
-    plots_path = Path(f"{outpath}/plots/")
+    plots_path = Path(f"{outpath}/plots/{sample}/")
     pred_path = Path(f"{outpath}/preds/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
