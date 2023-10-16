@@ -228,7 +228,8 @@ def main():
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
         _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/train.log")
     else:
-        outdir = None
+        outdir = args.load
+        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/test.log")
 
     if args.gpus:
         assert (

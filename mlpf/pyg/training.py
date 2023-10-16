@@ -217,7 +217,7 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
                                 f"step_valid/loss_{loss_}",
                                 valid_loss[loss_] / len(valid_loader),
                             )
-                    print(valid_loss["Total"], best_step_val_loss)
+
                     if valid_loss["Total"] < best_step_val_loss:
                         best_step_val_loss = valid_loss["Total"]
                         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
