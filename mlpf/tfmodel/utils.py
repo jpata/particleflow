@@ -716,20 +716,24 @@ def get_loss_dict(config):
     loss_dict = {
         "cls": cls_loss,
         "charge": get_loss_from_params(config["loss"].get("charge_loss", default_loss)),
-        "pt": get_loss_from_params(config["loss"].get("pt_loss", default_loss)),
+        # "pt": get_loss_from_params(config["loss"].get("pt_loss", default_loss)),
         "eta": get_loss_from_params(config["loss"].get("eta_loss", default_loss)),
         "sin_phi": get_loss_from_params(config["loss"].get("sin_phi_loss", default_loss)),
         "cos_phi": get_loss_from_params(config["loss"].get("cos_phi_loss", default_loss)),
-        "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
+        # "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
+        "energy_bins": tf.keras.losses.CategoricalCrossentropy(from_logits=True),
+        "pt_bins": tf.keras.losses.CategoricalCrossentropy(from_logits=True),
     }
     loss_weights = {
         "cls": config["loss"]["classification_loss_coef"],
         "charge": config["loss"]["charge_loss_coef"],
-        "pt": config["loss"]["pt_loss_coef"],
+        # "pt": config["loss"]["pt_loss_coef"],
         "eta": config["loss"]["eta_loss_coef"],
         "sin_phi": config["loss"]["sin_phi_loss_coef"],
         "cos_phi": config["loss"]["cos_phi_loss_coef"],
-        "energy": config["loss"]["energy_loss_coef"],
+        "energy_bins": 1e-5,
+        "pt_bins": 1e-5,
+        # "energy": config["loss"]["energy_loss_coef"],
     }
 
     if config["loss"]["event_loss"] != "none":

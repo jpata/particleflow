@@ -830,8 +830,9 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout,
         )
 
+        self.pt_bins = tf.cast(tf.linspace(0, 1000, 100), dtype=tf.float32)
         self.ffn_pt = point_wise_feed_forward_network(
-            2,
+            100,
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
@@ -861,8 +862,9 @@ class OutputDecoding(tf.keras.Model):
             dropout=dropout,
         )
 
+        self.energy_bins = tf.cast(tf.linspace(0, 1000, 100), dtype=tf.float32)
         self.ffn_energy = point_wise_feed_forward_network(
-            1,
+            100,
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
@@ -940,18 +942,15 @@ class OutputDecoding(tf.keras.Model):
             )
 
         pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)
-        pred_energy_corr = pred_energy_corr * msk_input_outtype
+        pred_energy = (
+            tf.reduce_sum(self.energy_bins * tf.nn.softmax(pred_energy_corr, axis=-1), axis=-1, keepdims=True)
+            * msk_input_outtype
+        )
 
-        # In case of a multimodal prediction, weight the per-class energy predictions by the approximately one-hot vector
-        pred_energy = orig_energy + pred_energy_corr
-        pred_energy = tf.abs(pred_energy)
-
-        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
-        if self.pt_as_correction:
-            pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
-        else:
-            pred_pt = pred_pt_corr[..., 0:1]
-        pred_pt = tf.abs(pred_pt)
+        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training)
+        pred_pt = (
+            tf.reduce_sum(self.pt_bins * tf.nn.softmax(pred_pt_corr, axis=-1), axis=-1, keepdims=True) * msk_input_outtype
+        )
 
         # mask the regression outputs for the nodes with a class prediction 0
 
@@ -959,9 +958,11 @@ class OutputDecoding(tf.keras.Model):
             "cls": out_id_transformed,
             "charge": out_charge,
             "pt": pred_pt * msk_input_outtype,
+            "pt_bins": pred_pt_corr,
             "eta": pred_eta * msk_input_outtype,
             "sin_phi": pred_sin_phi * msk_input_outtype,
             "cos_phi": pred_cos_phi * msk_input_outtype,
+            "energy_bins": pred_energy_corr,
             "energy": pred_energy * msk_input_outtype,
         }
 
