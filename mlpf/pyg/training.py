@@ -219,6 +219,7 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
                             )
 
                     if valid_loss["Total"] < best_step_val_loss:
+                        best_step_val_loss = valid_loss["Total"]
                         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
                             model_state_dict = model.module.state_dict()
                         else:
