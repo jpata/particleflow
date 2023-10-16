@@ -70,7 +70,7 @@ def run(rank, world_size, args, outdir):
         outdir = args.load
 
         if (rank == 0) or (rank == "cpu"):  # write the logs
-            _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/test.log")
+            _logger.addHandler({f"{outdir}/test.log"})
 
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
@@ -86,6 +86,9 @@ def run(rank, world_size, args, outdir):
             _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
 
     else:  # instantiate a new model
+        if (rank == 0) or (rank == "cpu"):  # write the logs
+            _logger.addHandler({f"{outdir}/train.log"})
+
         model_kwargs = {
             "input_dim": len(X_FEATURES[args.dataset]),
             "num_classes": len(CLASS_LABELS[args.dataset]),
