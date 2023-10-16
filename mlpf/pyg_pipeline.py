@@ -8,11 +8,9 @@ import argparse
 import logging
 import os
 import pickle as pkl
+from pathlib import Path
 
 import yaml
-
-# from pathlib import Path
-
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -100,7 +98,9 @@ def run(rank, world_size, args):
         # always create a new outdir when training a model to never overwrite
         # loaded weights from previous trainings
         # outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")  # TODO: fix
-        outdir = create_experiment_dir(prefix=args.prefix, backend="pyg", rank=rank)  # TODO: fix
+        outdir = create_experiment_dir(
+            prefix=args.prefix + Path(args.config).stem + "_", backend="pyg", rank=rank
+        )  # TODO: fix
         if (rank == 0) or (rank == "cpu"):
             save_mlpf(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info(f"Creating experiment dir {outdir}")
