@@ -1,5 +1,5 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
+Simple script that tests if CUDA is installed on the number of gpus specefied.
 
 Author: Farouk Mokhtar
 """
