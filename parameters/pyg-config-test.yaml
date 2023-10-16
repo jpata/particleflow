@@ -36,6 +36,11 @@ train_dataset:
     cms_pf_ttbar:
       version: 1.6.0
       batch_size: 2
+valid_dataset:
+  cms:
+    cms_pf_ttbar:
+      version: 1.6.0
+      batch_size: 2
 test_dataset:
   cms:
     cms_pf_ttbar:
