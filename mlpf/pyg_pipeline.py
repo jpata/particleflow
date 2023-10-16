@@ -7,6 +7,7 @@ Author: Farouk Mokhtar
 import argparse
 import logging
 import os
+import os.path as osp
 import pickle as pkl
 import sys
 from pathlib import Path
@@ -161,6 +162,10 @@ def run(rank, world_size, args, outdir):
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
 
+            if not osp.isdir(f"{args.model_prefix}/preds/{sample}"):
+                if (rank == 0) or (rank == "cpu"):
+                    os.system(f"mkdir -p {args.model_prefix}/preds/{sample}")
+
         model_state = torch.load(f"{outdir}/best_epoch_weights.pth", map_location=torch.device(rank))
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(model_state)
@@ -170,6 +175,7 @@ def run(rank, world_size, args, outdir):
         for sample in test_loaders:
             _logger.info(f"Running predictions on {sample}")
             torch.cuda.empty_cache()
+
             run_predictions(rank, model, test_loaders[sample], sample, outdir)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine

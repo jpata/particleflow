@@ -1,5 +1,4 @@
 import os
-import os.path as osp
 import time
 from pathlib import Path
 
@@ -48,9 +47,6 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
 @torch.no_grad()
 def run_predictions(rank, mlpf, loader, sample, outpath):
     """Runs inference on the given sample and stores the output as .parquet files."""
-
-    if not osp.isdir(f"{outpath}/preds/{sample}"):
-        os.makedirs(f"{outpath}/preds/{sample}")
 
     ti = time.time()
 
