@@ -1,6 +1,4 @@
 import json
-import os
-import os.path as osp
 import pickle as pkl
 from typing import List, Optional
 
@@ -122,25 +120,15 @@ Y_FEATURES = {
 }
 
 
-def save_mlpf(args, mlpf, model_kwargs):
+def save_mlpf(args, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
-    if not osp.isdir(args.model_prefix):
-        os.system(f"mkdir -p {args.model_prefix}")
-
-    else:  # if directory already exists
-        assert args.overwrite, f"model {args.model_prefix} already exists, please delete it"
-
-        print("model already exists, deleting it")
-        os.system(f"rm -rf {args.model_prefix}")
-        os.system(f"mkdir -p {args.model_prefix}")
-
-    with open(f"{args.model_prefix}/model_kwargs.pkl", "wb") as f:  # dump model architecture
+    with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture
         pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
 
-    with open(f"{args.model_prefix}/hyperparameters.json", "w") as fp:  # dump hyperparameters
+    with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
 
 
