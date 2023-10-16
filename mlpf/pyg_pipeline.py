@@ -55,8 +55,8 @@ parser.add_argument("--log-file", type=str, default="log.log", help="path to the
 def run(rank, world_size, args, outdir):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
-    if (rank == 0) or (rank == "cpu"):  # write the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{args.model_prefix}/{args.log_file}")
+    # if (rank == 0) or (rank == "cpu"):  # write the logs
+    #     _configLogger("mlpf", stdout=sys.stdout, filename=f"{args.prefix}/{args.log_file}")
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -68,6 +68,9 @@ def run(rank, world_size, args, outdir):
 
     if args.load:  # load a pre-trained model
         outdir = args.load
+
+        if (rank == 0) or (rank == "cpu"):  # write the logs
+            _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/test.log")
 
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
@@ -211,6 +214,7 @@ def main():
 
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
+        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/train.log")
     else:
         outdir = None
 
