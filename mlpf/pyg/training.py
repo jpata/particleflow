@@ -400,4 +400,5 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
+    # rank_zero_logging(rank, _logger, f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")  # noqa
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")

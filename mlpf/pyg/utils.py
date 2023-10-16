@@ -120,6 +120,11 @@ Y_FEATURES = {
 }
 
 
+def rank_zero_logging(rank, _logger, msg):
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(msg)
+
+
 def save_HPs(args, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
