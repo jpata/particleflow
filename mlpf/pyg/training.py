@@ -1,4 +1,3 @@
-import json
 import pickle as pkl
 import time
 from typing import Optional
@@ -120,18 +119,34 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpath, tensorboard_writer=None):
+def train(
+    rank,
+    world_size,
+    model,
+    optimizer,
+    train_loader,
+    valid_loader,
+    outpath,
+    best_val_loss,
+    stale_epochs,
+    patience,
+    tensorboard_writer=None,
+):
     """
     A training/validation run over a given epoch that gets called in the train_mlpf() function.
     When optimizer is set to None, it freezes the model for a validation_run.
     """
+
     N_STEPS = 2
     _logger.info(f"Initiating a training run on device {rank}", color="red")
 
-    # initialize loss counters
-    step_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    # initialize loss counters (note: these will be reset after N_STEPS)
+    train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+
+    # this will one will keep accumulating train_loss and then take average
+    # the train() function will return the last valid_loss values
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-    best_step_val_loss = 99999.9  # to save the model
 
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
@@ -166,31 +181,37 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
         loss["Total"].backward()
         optimizer.step()
 
-        for loss_ in step_loss:
-            step_loss[loss_] += loss[loss_].detach().cpu().item()
+        for loss_ in train_loss:
+            train_loss[loss_] += loss[loss_].detach().cpu().item()
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach().cpu().item()
 
-        # run quick validation runs at intervals of N_STEPS
+        # run a quick validation run at intervals of N_STEPS
         if ((itrain % N_STEPS) == 0) and (itrain != 0):
             if world_size > 1:
                 dist.barrier()
 
             if tensorboard_writer:
-                for loss_ in step_loss:
+                for loss_ in train_loss:
                     tensorboard_writer.add_scalar(
                         f"step_train/loss_{loss_}",
-                        step_loss[loss_] / N_STEPS,
+                        train_loss[loss_] / N_STEPS,
                     )
                 tensorboard_writer.flush()
 
-            step_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+            _logger.info(
+                f"Rank {rank}:"
+                + f"train_loss_id={train_loss['Total']/N_STEPS:.4f} "
+                + f"train_loss_momentum={train_loss['Regression']/N_STEPS:.4f} "
+                + f"train_loss_charge={train_loss['Charge']/N_STEPS:.4f} "
+            )
+            train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-            valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
                 model.eval()
 
+                valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
                         event = batch.to(rank)
@@ -212,14 +233,15 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
                             valid_loss[loss_] += loss[loss_].detach().cpu().item()
 
                     if tensorboard_writer:
-                        for loss_ in step_loss:
+                        for loss_ in valid_loss:
                             tensorboard_writer.add_scalar(
                                 f"step_valid/loss_{loss_}",
                                 valid_loss[loss_] / len(valid_loader),
                             )
 
-                    if valid_loss["Total"] < best_step_val_loss:
-                        best_step_val_loss = valid_loss["Total"]
+                    if valid_loss["Total"] < best_val_loss:
+                        best_val_loss = valid_loss["Total"]
+
                         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
                             model_state_dict = model.module.state_dict()
                         else:
@@ -227,13 +249,26 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
 
                         torch.save(
                             {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                            f"{outpath}/best_step_weights.pth",
+                            f"{outpath}/best_weights.pth",
                         )
-                        _logger.info(
-                            f"finished the iteration # {itrain} and saved the model at {outpath}/best_step_weights.pth"
-                        )
+                        _logger.info(f"finished the iteration # {itrain} and saved the model at {outpath}/best_weights.pth")
+                        stale_epochs = 0
                     else:
                         _logger.info(f"finished the iteration # {itrain}")
+                        stale_epochs += 1
+
+                    _logger.info(
+                        f"Rank {rank}:"
+                        + f"valid_loss_id={valid_loss['Total']/N_STEPS:.4f} "
+                        + f"valid_loss_momentum={valid_loss['Total']/N_STEPS:.4f} "
+                        + f"valid_loss_charge={valid_loss['Total']/N_STEPS:.4f} "
+                        + f"best_val_loss={best_val_loss:.4f}"
+                        + f"stale={stale_epochs} "
+                    )
+
+                    if stale_epochs > patience:
+                        _logger.info("breaking due to stale epochs")
+                        break
 
         if tensorboard_writer:
             tensorboard_writer.flush()
@@ -246,14 +281,10 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, outpat
     for loss_ in epoch_loss:
         epoch_loss[loss_] = epoch_loss[loss_] / len(train_loader)
 
-    _logger.info(
-        f"loss_id={epoch_loss['Classification']:.4f} loss_momentum={epoch_loss['Regression']:.4f} loss_charge={epoch_loss['Charge']:.4f}"  # noqa
-    )
-
-    return epoch_loss, valid_loss
+    return epoch_loss, valid_loss, best_val_loss, stale_epochs
 
 
-def train_mlpf(rank, world_size, model, train_loader, valid_loader, num_epochs, patience, optimizer, outpath):
+def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, num_epochs, patience, outpath):
     """
     Will run a full training by calling train().
 
@@ -273,35 +304,44 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, num_epochs, 
     losses_of_interest = ["Total", "Classification", "Regression"]
 
     losses = {}
-    losses["train"], losses["valid"], best_val_loss, best_train_loss = {}, {}, {}, {}
+    losses["train"], losses["valid"] = {}, {}
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
-        best_val_loss[loss] = 99999.9
 
     stale_epochs = 0
-
+    best_val_loss = 99999.9
     for epoch in range(num_epochs):
+        _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
 
+        # training step
+        losses_t, losses_v, best_val_loss, stale_epochs = train(
+            rank,
+            world_size,
+            model,
+            optimizer,
+            train_loader,
+            valid_loader,
+            outpath,
+            best_val_loss,
+            stale_epochs,
+            patience,
+            tensorboard_writer,
+        )
+
         if stale_epochs > patience:
-            _logger.info("breaking due to stale epochs")
             break
 
-        # training step
-        losses_t, losses_v = train(
-            rank, world_size, model, train_loader, valid_loader, optimizer, outpath, tensorboard_writer
-        )
         # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
         #     with record_function("model_train"):
         # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
 
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
-        for loss in losses_of_interest:
-            losses["train"][loss].append(losses_t[loss])
 
         if (rank == 0) or (rank == "cpu"):
             for loss in losses_of_interest:
+                losses["train"][loss].append(losses_t[loss])
                 losses["valid"][loss].append(losses_v[loss])
             for k, v in losses_v.items():
                 tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
@@ -309,35 +349,6 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, num_epochs, 
             tensorboard_writer.flush()
 
             # save the lowest value of each component of the loss to print it on the legend of the loss plots
-            for loss in losses_of_interest:
-                if loss == "Total":
-                    if losses_v[loss] < best_val_loss[loss]:
-                        best_val_loss[loss] = losses_v[loss]
-                        best_train_loss[loss] = losses_t[loss]
-
-                        # save the model
-                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                            model_state_dict = model.module.state_dict()
-                        else:
-                            model_state_dict = model.state_dict()
-
-                        torch.save(
-                            {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                            f"{outpath}/best_epoch_weights.pth",
-                        )
-
-                        with open(f"{outpath}/best_epoch.json", "w") as fp:  # dump best epoch
-                            json.dump({"best_epoch": epoch}, fp)
-
-                        # for early-stopping purposes
-                        stale_epochs = 0
-                    else:
-                        stale_epochs += 1
-                else:
-                    if losses_v[loss] < best_val_loss[loss]:
-                        best_val_loss[loss] = losses_v[loss]
-                        best_train_loss[loss] = losses_t[loss]
-
             t1 = time.time()
 
             epochs_remaining = num_epochs - (epoch + 1)
@@ -345,35 +356,26 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, num_epochs, 
             eta = epochs_remaining * time_per_epoch / 60
 
             _logger.info(
-                f"Rank {rank}: epoch={epoch + 1} / {num_epochs} "
-                + f"train_loss={round(losses_t['Total'], 4)} "
-                + f"valid_loss={round(losses_v['Total'], 4)} "
-                + f"stale={stale_epochs} "
-                + f"time={round((t1-t0)/60, 2)}m "
+                f"Rank {rank}: epoch={epoch + 1} / {num_epochs}"
+                + f"train_loss={losses_t['Total']:.4f}"
+                + f"valid_loss={losses_v['Total']:.4f}"
+                + f"stale={stale_epochs}"
+                + f"time={round((t1-t0)/60, 2)}m"
                 + f"eta={round(eta, 1)}m"
             )
 
             for loss in losses_of_interest:
                 fig, ax = plt.subplots()
 
-                if best_train_loss:
-                    lab = f"training ({best_train_loss[loss]:.3f})"
-                else:
-                    lab = "training"
                 ax.plot(
                     range(len(losses["train"][loss])),
                     losses["train"][loss],
-                    label=lab,
+                    label="training",
                 )
-
-                if best_val_loss:
-                    lab = f"validation ({best_val_loss[loss]:.3f})"
-                else:
-                    lab = "validation"
                 ax.plot(
                     range(len(losses["valid"][loss])),
                     losses["valid"][loss],
-                    label=lab,
+                    label=f"validation ({best_val_loss:.3f})",
                 )
 
                 ax.set_xlabel("Epochs")
