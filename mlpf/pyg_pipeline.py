@@ -125,8 +125,8 @@ def run(rank, world_size, args, outdir):
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
         train_loader = InterleavedIterator(train_loaders)
 
-        valid_loaders = []
         if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
+            valid_loaders = []
             for sample in config["valid_dataset"][args.dataset]:
                 version = config["valid_dataset"][args.dataset][sample]["version"]
                 batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
@@ -136,6 +136,8 @@ def run(rank, world_size, args, outdir):
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
             valid_loader = InterleavedIterator(valid_loaders)
+        else:
+            valid_loader = None
 
         train_mlpf(
             rank,
