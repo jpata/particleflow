@@ -12,11 +12,10 @@ import pickle as pkl
 import sys
 from pathlib import Path
 
-import fastjet
 import yaml
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
+import fastjet
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
