@@ -87,7 +87,7 @@ def run(rank, world_size, args, outdir):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         if (rank == 0) or (rank == "cpu"):
-            _logger.info(f"Loaded model weights from {outdir}/best_epoch_weight.pth")
+            _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
 
     else:  # instantiate a new model
         model_kwargs = {
