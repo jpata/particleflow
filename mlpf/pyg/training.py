@@ -147,8 +147,10 @@ def train(
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
+    istep = 0
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
+        istep += 1
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
                 "step_train/num_elems",
@@ -185,8 +187,14 @@ def train(
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach().cpu().item()
 
-        # run a quick validation run at intervals of N_STEPS
-        if ((itrain % N_STEPS) == 0) and (itrain != 0):
+        # run a quick validation run at intervals of N_STEPS or at the last step
+        if (((itrain % N_STEPS) == 0) and (itrain != 0)) or (itrain == (len(train_loader) - 1)):
+            if itrain == (len(train_loader) - 1):
+                nsteps = istep
+            else:
+                nsteps = N_STEPS
+                istep = 0
+
             if world_size > 1:
                 dist.barrier()
 
@@ -194,16 +202,16 @@ def train(
                 for loss_ in train_loss:
                     tensorboard_writer.add_scalar(
                         f"step_train/loss_{loss_}",
-                        train_loss[loss_] / N_STEPS,
+                        train_loss[loss_] / nsteps,
                     )
                 tensorboard_writer.flush()
 
             _logger.info(
                 f"Rank {rank}: "
-                + f"train_loss_tot={train_loss['Total']/N_STEPS:.2f} "
-                + f"train_loss_id={train_loss['Classification']/N_STEPS:.2f} "
-                + f"train_loss_momentum={train_loss['Regression']/N_STEPS:.2f} "
-                + f"train_loss_charge={train_loss['Charge']/N_STEPS:.2f} "
+                + f"train_loss_tot={train_loss['Total']/nsteps:.2f} "
+                + f"train_loss_id={train_loss['Classification']/nsteps:.2f} "
+                + f"train_loss_momentum={train_loss['Regression']/nsteps:.2f} "
+                + f"train_loss_charge={train_loss['Charge']/nsteps:.2f} "
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
