@@ -137,7 +137,7 @@ def train(
     When optimizer is set to None, it freezes the model for a validation_run.
     """
 
-    N_STEPS = 10
+    N_STEPS = 100
     _logger.info(f"Initiating a training run on device {rank}", color="red")
 
     # initialize loss counters (note: these will be reset after N_STEPS)
