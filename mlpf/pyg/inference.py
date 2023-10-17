@@ -25,7 +25,6 @@ from plotting.plot_utils import (
 from .logger import _logger
 from .utils import CLASS_NAMES
 
-jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 jet_pt = 5.0
 jet_match_dr = 0.1
 
@@ -45,7 +44,7 @@ def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
 
 
 @torch.no_grad()
-def run_predictions(rank, mlpf, loader, sample, outpath):
+def run_predictions(rank, mlpf, loader, sample, outpath, jetdef):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     ti = time.time()

@@ -12,6 +12,7 @@ import pickle as pkl
 import sys
 from pathlib import Path
 
+import fastjet
 import yaml
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -185,7 +186,12 @@ def run(rank, world_size, args, outdir):
             _logger.info(f"Running predictions on {sample}")
             torch.cuda.empty_cache()
 
-            run_predictions(rank, model, test_loaders[sample], sample, outdir)
+            if args.dataset == "clic":
+                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+            else:
+                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
+            run_predictions(rank, model, test_loaders[sample], sample, outdir, jetdef)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
