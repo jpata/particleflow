@@ -49,13 +49,11 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
 
     ti = time.time()
 
-    for i, event in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        event.X = event.X.to(rank)
+    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+        ygen = unpack_target(batch.ygen)
+        ycand = unpack_target(batch.ycand)
 
-        ygen = unpack_target(event.ygen)
-        ycand = unpack_target(event.ycand)
-
-        ypred = unpack_predictions(model(event))
+        ypred = unpack_predictions(model(batch.to(rank)))
 
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
@@ -69,32 +67,33 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
         jets_coll = {}
         Xs, p4s = [], []
         # loop over each batch to disentangle the events
-        batch_ids = event.batch.cpu().numpy()
-        for _ibatch in np.unique(batch_ids):
-            for typ in ["gen", "cand", "pred"]:
+        batch_ids = batch.batch.cpu().numpy()
+        for typ in ["gen", "cand", "pred"]:
+            for _ibatch in np.unique(batch_ids):
                 msk_batch = batch_ids == _ibatch
 
-                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
+                Xs.append(batch.X[msk_batch].cpu().numpy())
 
-                Xs.append(event.X[msk_batch].cpu().numpy())
+                # mask nulls for jet reconstruction
+                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
                 p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
 
-            Xs = awkward.from_iter(Xs)
+                Xs = awkward.from_iter(Xs)
 
-            # in case of no predicted particles in the batch
-            if torch.sum(awkvals[typ]["ids"] != 0) == 0:
-                pt = build_dummy_array(len(p4s), np.float64)
-                eta = build_dummy_array(len(p4s), np.float64)
-                phi = build_dummy_array(len(p4s), np.float64)
-                energy = build_dummy_array(len(p4s), np.float64)
-            else:
-                p4s = awkward.from_iter(p4s)
-                pt = p4s[:, :, 0]
-                eta = p4s[:, :, 1]
-                phi = p4s[:, :, 2]
-                energy = p4s[:, :, 3]
+                # in case of no predicted particles in the batch
+                if torch.sum(awkvals[typ]["ids"] != 0) == 0:
+                    pt = build_dummy_array(len(p4s), np.float64)
+                    eta = build_dummy_array(len(p4s), np.float64)
+                    phi = build_dummy_array(len(p4s), np.float64)
+                    energy = build_dummy_array(len(p4s), np.float64)
+                else:
+                    p4s = awkward.from_iter(p4s)
+                    pt = p4s[:, :, 0]
+                    eta = p4s[:, :, 1]
+                    phi = p4s[:, :, 2]
+                    energy = p4s[:, :, 3]
 
-            awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+                awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
 
             cluster = fastjet.ClusterSequence(awkward.Array(awk_p4s.to_xyzt()), jetdef)
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_pt)
