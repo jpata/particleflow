@@ -33,7 +33,6 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
     ti = time.time()
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        print("batch", batch)
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
 
@@ -62,10 +61,11 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
             p4s = []
             for _ibatch in np.unique(batch_ids):
                 msk_batch = batch_ids == _ibatch
+
                 # mask nulls for jet reconstruction
-                # msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
-                # p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
-                p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
+                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
+                p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
+                # p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
 
             # in case of no predicted particles in the batch
             if torch.sum(awkvals[typ]["ids"] != 0) == 0:
@@ -92,8 +92,8 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
 
         awkvals = {
             "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-            "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-            "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+            "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ycand.keys()} for b in np.unique(batch_ids)]),
+            "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ypred.keys()} for b in np.unique(batch_ids)]),
         }
 
         awkward.to_parquet(
