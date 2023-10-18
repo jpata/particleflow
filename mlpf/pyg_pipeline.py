@@ -106,8 +106,6 @@ def run(rank, world_size, args, outdir):
         _logger.info(model)
 
     if args.train:
-        # use the outdir that was created in main()
-
         if (rank == 0) or (rank == "cpu"):
             save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info(f"Creating experiment dir {outdir}")
@@ -117,9 +115,8 @@ def run(rank, world_size, args, outdir):
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
-            max_events = config["train_dataset"][args.dataset][sample]["max_events"]
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=max_events)
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=args.ntrain)
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -130,9 +127,8 @@ def run(rank, world_size, args, outdir):
             for sample in config["valid_dataset"][args.dataset]:
                 version = config["valid_dataset"][args.dataset][sample]["version"]
                 batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
-                max_events = config["valid_dataset"][args.dataset][sample]["max_events"]
 
-                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=max_events)
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
@@ -164,9 +160,8 @@ def run(rank, world_size, args, outdir):
         for sample in config["test_dataset"][args.dataset]:
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
-            max_events = config["test_dataset"][args.dataset][sample]["max_events"]
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=max_events)
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])

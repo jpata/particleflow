@@ -30,26 +30,21 @@ train_dataset:
     delphes_ttbar_pf:
       version: 1.2.0
       batch_size: 10
-      max_events: -1
     delphes_qcd_pf:
       version: 1.2.0
       batch_size: 10
-      max_events: -1
 
 valid_dataset:
   delphes:
     delphes_qcd_pf:
       version: 1.2.0
       batch_size: 10
-      max_events: -1
 
 test_dataset:
   delphes:
     delphes_ttbar_pf:
       version: 1.2.0
       batch_size: 10
-      max_events: -1
     delphes_qcd_pf:
       version: 1.2.0
       batch_size: 10
-      max_events: -1

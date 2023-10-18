@@ -30,50 +30,39 @@ train_dataset:
     clic_edm_qq_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ttbar_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ttbar_pu10_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ww_fullhad_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_zh_tautau_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
 
 valid_dataset:
   clic:
     clic_edm_qq_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
 
 test_dataset:
   clic:
     clic_edm_qq_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ttbar_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ttbar_pu10_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_ww_fullhad_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
     clic_edm_zh_tautau_pf:
       version: 1.5.0
       batch_size: 100
-      max_events: -1
