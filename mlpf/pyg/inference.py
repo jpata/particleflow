@@ -42,6 +42,15 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
 
+        batch_ids = batch.batch.cpu().numpy()
+
+        # loop over each batch to disentangle the events
+        Xs = []
+        for _ibatch in np.unique(batch_ids):
+            msk_batch = batch_ids == _ibatch
+            Xs.append(batch.X[msk_batch].cpu().numpy())
+        Xs = awkward.from_iter(Xs)
+
         awkvals = {
             "gen": ygen,
             "cand": ycand,
@@ -49,24 +58,14 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
         }
 
         jets_coll = {}
-        Xs, p4s = [], []
-        # loop over each batch to disentangle the events
-        batch_ids = batch.batch.cpu().numpy()
         for typ in ["gen", "cand", "pred"]:
+            p4s = []
             for _ibatch in np.unique(batch_ids):
                 msk_batch = batch_ids == _ibatch
-                print("batch.X", batch.X.shape)
-
-                Xs.append(batch.X[msk_batch].cpu().numpy())
-
-                print("awkvals[typ][p4]", awkvals[typ]["p4"].shape)
-
                 # mask nulls for jet reconstruction
                 # msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
                 # p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
                 p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
-
-            Xs = awkward.from_iter(Xs)
 
             # in case of no predicted particles in the batch
             if torch.sum(awkvals[typ]["ids"] != 0) == 0:
