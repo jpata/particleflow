@@ -108,27 +108,20 @@ def make_plots(outpath, sample, dataset):
 
     mplhep.set_style(mplhep.styles.CMS)
 
-    class_names = CLASS_NAMES[dataset]
-
-    _title = format_dataset_name(sample)  # use the dataset names from the common nomenclature
-
-    if not os.path.isdir(f"{outpath}/plots/"):
-        os.makedirs(f"{outpath}/plots/")
-    if not os.path.isdir(f"{outpath}/plots/{sample}"):
-        os.makedirs(f"{outpath}/plots/{sample}")
+    os.system(f"mkdir -p {outpath}/plots/{sample}")
 
     plots_path = Path(f"{outpath}/plots/{sample}/")
     pred_path = Path(f"{outpath}/preds/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
-    plot_num_elements(X, cp_dir=plots_path, title=_title)
-    plot_sum_energy(yvals, class_names, cp_dir=plots_path, title=_title)
+    plot_num_elements(X, cp_dir=plots_path, title=format_dataset_name(sample))
+    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=format_dataset_name(sample))
 
-    plot_jet_ratio(yvals, cp_dir=plots_path, title=_title)
+    plot_jet_ratio(yvals, cp_dir=plots_path, title=format_dataset_name(sample))
 
     met_data = compute_met_and_ratio(yvals)
-    plot_met(met_data, cp_dir=plots_path, title=_title)
-    plot_met_ratio(met_data, cp_dir=plots_path, title=_title)
+    plot_met(met_data, cp_dir=plots_path, title=format_dataset_name(sample))
+    plot_met_ratio(met_data, cp_dir=plots_path, title=format_dataset_name(sample))
 
-    plot_particles(yvals, cp_dir=plots_path, title=_title)
+    plot_particles(yvals, cp_dir=plots_path, title=format_dataset_name(sample))
