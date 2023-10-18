@@ -3,7 +3,7 @@ import sys
 from functools import lru_cache
 
 
-def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO, append=False):
+def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)
     logger.setLevel(loglevel)
@@ -13,10 +13,7 @@ def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO,
         console.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
         logger.addHandler(console)
     if filename:
-        if append:
-            logfile = logging.FileHandler(filename, "w+")
-        else:
-            logfile = logging.FileHandler(filename)
+        logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)
         logfile.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
         logger.addHandler(logfile)
