@@ -1,5 +1,4 @@
 import logging
-import sys
 from functools import lru_cache
 
 
@@ -9,15 +8,10 @@ def _logging(rank, _logger, msg):
         _logger.info(msg)
 
 
-def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO):
+def _configLogger(name, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)
     logger.setLevel(loglevel)
-    # if stdout:
-    #     console = logging.StreamHandler(stdout)
-    #     console.setLevel(loglevel)
-    #     console.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
-    #     logger.addHandler(console)
     if filename:
         logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)

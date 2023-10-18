@@ -9,7 +9,6 @@ import logging
 import os
 import os.path as osp
 import pickle as pkl
-import sys
 from pathlib import Path
 
 import yaml
@@ -21,7 +20,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from pyg.inference import make_plots, run_predictions
-from pyg.logger import _configLogger, _logger, _logging
+from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
@@ -63,7 +62,7 @@ def run(rank, world_size, args, outdir, logfile):
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
+        _configLogger("mlpf", filename=logfile)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
@@ -229,13 +228,13 @@ def main():
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
         logfile = f"{outdir}/train.log"
-        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
+        _configLogger("mlpf", filename=logfile)
 
         os.system(f"cp {args.config} {outdir}/train-config.yaml")
     else:
         outdir = args.load
         logfile = f"{outdir}/test.log"
-        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
+        _configLogger("mlpf", filename=logfile)
 
         os.system(f"cp {args.config} {outdir}/test-config.yaml")
 
