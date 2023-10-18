@@ -59,7 +59,7 @@ def run(rank, world_size, args, outdir):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if (rank == 0) or (rank == "cpu"):  # write the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}")
+        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
