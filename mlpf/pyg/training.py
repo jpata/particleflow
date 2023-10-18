@@ -163,10 +163,8 @@ def train(
                 batch.X.shape[0],
             )
 
-        event = batch.to(rank)
-        ygen = unpack_target(event.ygen)
-
-        ypred = unpack_predictions(model(event))
+        ygen = unpack_target(batch.to(rank).ygen)
+        ypred = unpack_predictions(model(batch.to(rank)))
 
         for icls in range(ypred["ids_onehot"].shape[1]):
             if tensorboard_writer:
@@ -224,15 +222,11 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        event = batch.to(rank)
-
-                        ygen = unpack_target(event.ygen)
-
-                        ypred = {}
+                        ygen = unpack_target(batch.to(rank).ygen)
                         if world_size > 1:  # validation is only run on a single machine
-                            ypred["ids_onehot"], ypred["momentum"], ypred["charge"] = model.module(event)
+                            ypred = unpack_predictions(model.module(batch.to(rank)))
                         else:
-                            ypred["ids_onehot"], ypred["momentum"], ypred["charge"] = model(event)
+                            ypred = unpack_predictions(model(batch.to(rank)))
 
                         loss = mlpf_loss(ygen, ypred)
 

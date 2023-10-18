@@ -35,7 +35,6 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
-
         ypred = unpack_predictions(model(batch.to(rank)))
 
         for k, v in ypred.items():
