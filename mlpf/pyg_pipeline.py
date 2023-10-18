@@ -39,6 +39,9 @@ parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=1, help="increase batch size per GPU by this constant factor"
 )
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
+parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
+parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
+parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", help="initiates a training")
 parser.add_argument("--test", action="store_true", help="tests the model")
@@ -48,9 +51,6 @@ parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
 parser.add_argument("--conv-type", type=str, default="gravnet", help="choices are ['gnn-lsh', 'gravnet', 'attention']")
 parser.add_argument("--make-plots", action="store_true", help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
-parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
-parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
-parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
 
 
 def run(rank, world_size, args, outdir, logfile):
