@@ -168,9 +168,6 @@ def train(
 
         ypred = unpack_predictions(model(event))
 
-        for k, v in ypred.items():
-            ypred[k] = v.detach().cpu()
-
         for icls in range(ypred["ids_onehot"].shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
