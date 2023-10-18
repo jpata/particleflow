@@ -158,7 +158,7 @@ def unpack_predictions(preds):
     # recall ~ target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
 
     ret = {}
-    ret["cls_ids_onehot"], ret["momentum"], ret["charge"] = preds
+    ret["cls_id_onehot"], ret["momentum"], ret["charge"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
