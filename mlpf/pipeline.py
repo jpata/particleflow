@@ -37,8 +37,8 @@ from tfmodel.model_setup import (
     prepare_callbacks,
     create_comet_experiment,
 )
+from utils import create_experiment_dir
 from tfmodel.utils import (
-    create_experiment_dir,
     delete_all_but_best_checkpoint,
     get_best_checkpoint,
     get_datasets,
