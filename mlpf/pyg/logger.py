@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 from functools import lru_cache
 
@@ -14,9 +13,6 @@ def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO)
         console.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
         logger.addHandler(console)
     if filename:
-        dirname = os.path.dirname(filename)
-        if dirname and not os.path.exists(dirname):
-            os.makedirs(os.path.dirname(filename))
         logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)
         logfile.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
