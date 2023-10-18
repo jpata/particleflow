@@ -40,33 +40,26 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
 
+        # loop over the batch to disentangle the events
         batch_ids = batch.batch.cpu().numpy()
-
-        # loop over each batches to disentangle the events
         Xs = []
         for _ibatch in np.unique(batch_ids):
             msk_batch = batch_ids == _ibatch
             Xs.append(batch.X[msk_batch].cpu().numpy())
         Xs = awkward.from_iter(Xs)
 
-        awkvals = {
-            "gen": ygen,
-            "cand": ycand,
-            "pred": ypred,
-        }
-
         jets_coll = {}
-        for typ in ["gen", "cand", "pred"]:
+        for typ, y in {"gen": ygen, "cand": ycand, "pred": ypred}.items():
             p4s = []
             for _ibatch in np.unique(batch_ids):
                 msk_batch = batch_ids == _ibatch
 
                 # mask nulls for jet reconstruction
-                msk = (awkvals[typ]["cls_id"][msk_batch] != 0).numpy()
-                p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
+                msk = (y["cls_id"][msk_batch] != 0).numpy()
+                p4s.append(y["p4"][msk_batch][msk].numpy())
 
             # in case of no predicted particles in the batch
-            if torch.sum(awkvals[typ]["cls_id"] != 0) == 0:
+            if torch.sum(y["cls_id"] != 0) == 0:
                 pt = build_dummy_array(len(p4s), np.float64)
                 eta = build_dummy_array(len(p4s), np.float64)
                 phi = build_dummy_array(len(p4s), np.float64)
@@ -125,7 +118,7 @@ def make_plots(outpath, sample, dataset):
         os.makedirs(f"{outpath}/plots/{sample}")
 
     plots_path = Path(f"{outpath}/plots/{sample}/")
-    pred_path = Path(f"{outpath}/ypred/{sample}/")
+    pred_path = Path(f"{outpath}/preds/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
