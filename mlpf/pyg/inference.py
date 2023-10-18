@@ -30,8 +30,9 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
-    ti = time.time()
+    model.eval()
 
+    ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)

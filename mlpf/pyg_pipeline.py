@@ -21,7 +21,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from pyg.inference import make_plots, run_predictions
-from pyg.logger import _configLogger, _logger
+from pyg.logger import _configLogger, _logger, _logging
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
@@ -37,7 +37,7 @@ parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument(
-    "--gpu-batch-multiplier", type=int, default=1, help="Increase batch size per GPU by this constant factor"
+    "--gpu-batch-multiplier", type=int, default=1, help="increase batch size per GPU by this constant factor"
 )
 parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], required=True, help="which dataset?")
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
@@ -103,6 +103,7 @@ def run(rank, world_size, args, outdir, logfile):
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)
+        # _logging(rank, _logger, msg)
 
     if args.train:
         if (rank == 0) or (rank == "cpu"):

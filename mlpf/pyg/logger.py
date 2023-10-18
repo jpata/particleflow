@@ -3,6 +3,12 @@ import sys
 from functools import lru_cache
 
 
+def _logging(rank, _logger, msg):
+    """Will log the message only on rank 0 or cpu."""
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(msg)
+
+
 def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)

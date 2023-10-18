@@ -142,7 +142,7 @@ def train(
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
 
-    N_STEPS = 3
+    N_STEPS = 100
     _logger.info(f"Initiating a training run on device {rank}", color="red")
 
     # initialize loss counters (note: these will be reset after N_STEPS)
