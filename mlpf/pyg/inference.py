@@ -64,7 +64,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                 # mask nulls for jet reconstruction
                 # msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
                 # p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
-                p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
+                p4s.append(awkvals[typ]["p4"][:, msk_batch].numpy())
 
                 Xs = awkward.from_iter(Xs)
 
