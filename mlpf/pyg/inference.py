@@ -103,7 +103,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{outpath}/ypred/{sample}/pred_{rank}_{i}.parquet",
+            f"{outpath}/preds/{sample}/pred_{rank}_{i}.parquet",
         )
         _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
