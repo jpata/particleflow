@@ -66,11 +66,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_epochs: 50
+  lr: 0.001
+  num_epochs: 10
   dtype: float32
   trainable:
-  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
@@ -146,14 +146,12 @@ parameters:
     regression_use_classification: yes
     dropout: 0.1
 
-    pt_as_correction: yes
-
     id_dim_decrease: yes
     charge_dim_decrease: yes
-    pt_dim_decrease: yes
+    pt_dim_decrease: no
     eta_dim_decrease: yes
     phi_dim_decrease: yes
-    energy_dim_decrease: yes
+    energy_dim_decrease: no
 
     id_hidden_dim: 512
     charge_hidden_dim: 256
@@ -171,7 +169,7 @@ parameters:
     layernorm: yes
     mask_reg_cls0: yes
 
-  skip_connection: no
+  skip_connection: yes
   debug: no
 
 timing:
@@ -223,32 +221,32 @@ raytune:
     n_random_steps: 10
 
 train_test_datasets:
-  # multiparticlegun:
-  #   batch_per_gpu: 1
-  #   event_pad_size: -1
-  #   datasets:
-  #     - cms_pf_multi_particle_gun
+  multiparticlegun:
+    batch_per_gpu: 1
+    event_pad_size: -1
+    datasets:
+      - cms_pf_multi_particle_gun
   physical:
     batch_per_gpu: 1
     event_pad_size: -1
     datasets:
       - cms_pf_ttbar
-  #     - cms_pf_ztt
-  #     - cms_pf_qcd
-  #     - cms_pf_qcd_high_pt
-  #     - cms_pf_sms_t1tttt
-  # gun:
-  #   batch_per_gpu: 50
-  #   event_pad_size: -1
-  #   datasets:
-  #     - cms_pf_single_electron
-  #     - cms_pf_single_gamma
-  #     - cms_pf_single_neutron
-  #     - cms_pf_single_pi0
-  #     - cms_pf_single_pi
-  #     - cms_pf_single_tau
-  #     - cms_pf_single_mu
-  #     - cms_pf_single_proton
+      - cms_pf_ztt
+      - cms_pf_qcd
+      - cms_pf_qcd_high_pt
+      - cms_pf_sms_t1tttt
+  gun:
+    batch_per_gpu: 50
+    event_pad_size: -1
+    datasets:
+      - cms_pf_single_electron
+      - cms_pf_single_gamma
+      - cms_pf_single_neutron
+      - cms_pf_single_pi0
+      - cms_pf_single_pi
+      - cms_pf_single_tau
+      - cms_pf_single_mu
+      - cms_pf_single_proton
 
 evaluation_datasets:
   cms_pf_qcd_high_pt:
@@ -269,55 +267,55 @@ datasets:
     version: 1.6.0
     data_dir:
     manual_dir:
-  # cms_pf_ztt:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_qcd:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
+  cms_pf_ztt:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_qcd:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
   cms_pf_qcd_high_pt:
     version: 1.6.0
     data_dir:
     manual_dir:
-  # cms_pf_single_electron:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_gamma:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_pi0:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_neutron:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_pi:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_tau:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_mu:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_single_proton:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_multi_particle_gun:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
-  # cms_pf_sms_t1tttt:
-  #   version: 1.6.0
-  #   data_dir:
-  #   manual_dir:
+  cms_pf_single_electron:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_gamma:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi0:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_neutron:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_pi:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_tau:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_mu:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_single_proton:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_multi_particle_gun:
+    version: 1.6.0
+    data_dir:
+    manual_dir:
+  cms_pf_sms_t1tttt:
+    version: 1.6.0
+    data_dir:
+    manual_dir:

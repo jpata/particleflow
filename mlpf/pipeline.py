@@ -185,8 +185,8 @@ def train(
 
     # According to TensorFlow's best practices for optimal model performance, set GPU memory growth to True
     physical_devices = tf.config.list_physical_devices("GPU")
-    # for pd in physical_devices:
-    #     tf.config.experimental.set_memory_growth(pd, True)
+    for pd in physical_devices:
+        tf.config.experimental.set_memory_growth(pd, True)
 
     if seeds:
         random.seed(1234)

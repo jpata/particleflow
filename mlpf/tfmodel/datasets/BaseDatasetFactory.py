@@ -11,8 +11,6 @@ try:
 except ModuleNotFoundError:
     pass
 
-ENERGY_BINS = tf.cast(tf.linspace(0, 1000, 100), dtype=tf.float32)
-PT_BINS = tf.cast(tf.linspace(0, 1000, 100), dtype=tf.float32)
 
 # Unpacks a flat target array along the feature axis to a feature dict
 # the feature order is defined in the data prep stage
@@ -42,22 +40,25 @@ def unpack_target(y, num_output_classes, config):
     tf.debugging.assert_less_equal(tf.math.abs(cos_phi), 1e5)
     tf.debugging.assert_less_equal(tf.math.abs(energy), 1e5)
 
+    ENERGY_BINS = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
+    PT_BINS = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
+
     energy_bins = tf.searchsorted(ENERGY_BINS, tf.squeeze(energy, axis=-1))
-    energy_bins = tf.one_hot(energy_bins, 100)
+    energy_bins = tf.one_hot(energy_bins, 500)
 
     pt_bins = tf.searchsorted(PT_BINS, tf.squeeze(pt, axis=-1))
-    pt_bins = tf.one_hot(pt_bins, 100)
+    pt_bins = tf.one_hot(pt_bins, 500)
 
     ret = {
         "cls": tf.one_hot(type_as_int, num_output_classes),
         "charge": tf.one_hot(charge_as_int, 3),
         "pt": pt,
-        "pt_bins": pt_bins,
         "eta": eta,
         "sin_phi": sin_phi,
         "cos_phi": cos_phi,
         "energy": energy,
         "energy_bins": energy_bins,
+        "pt_bins": pt_bins,
     }
 
     if config["loss"]["event_loss"] != "none":
