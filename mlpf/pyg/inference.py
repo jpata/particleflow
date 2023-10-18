@@ -66,22 +66,22 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                 # p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
                 p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
 
-                Xs = awkward.from_iter(Xs)
+            Xs = awkward.from_iter(Xs)
 
-                # in case of no predicted particles in the batch
-                if torch.sum(awkvals[typ]["ids"] != 0) == 0:
-                    pt = build_dummy_array(len(p4s), np.float64)
-                    eta = build_dummy_array(len(p4s), np.float64)
-                    phi = build_dummy_array(len(p4s), np.float64)
-                    energy = build_dummy_array(len(p4s), np.float64)
-                else:
-                    p4s = awkward.from_iter(p4s)
-                    pt = p4s[:, :, 0]
-                    eta = p4s[:, :, 1]
-                    phi = p4s[:, :, 2]
-                    energy = p4s[:, :, 3]
+            # in case of no predicted particles in the batch
+            if torch.sum(awkvals[typ]["ids"] != 0) == 0:
+                pt = build_dummy_array(len(p4s), np.float64)
+                eta = build_dummy_array(len(p4s), np.float64)
+                phi = build_dummy_array(len(p4s), np.float64)
+                energy = build_dummy_array(len(p4s), np.float64)
+            else:
+                p4s = awkward.from_iter(p4s)
+                pt = p4s[:, :, 0]
+                eta = p4s[:, :, 1]
+                phi = p4s[:, :, 2]
+                energy = p4s[:, :, 3]
 
-                awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
 
             cluster = fastjet.ClusterSequence(awkward.Array(awk_p4s.to_xyzt()), jetdef)
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
