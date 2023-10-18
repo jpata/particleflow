@@ -8,6 +8,7 @@ import mplhep
 import numpy as np
 import torch
 import tqdm
+import utils
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
@@ -32,86 +33,74 @@ jet_match_dr = 0.1
 def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
     ret = {
         "cls_id": arr_id,
-        "pt": arr_p4[:, 1],
-        "eta": arr_p4[:, 2],
-        "sin_phi": arr_p4[:, 3],
-        "cos_phi": arr_p4[:, 4],
-        "energy": arr_p4[:, 5],
+        "pt": arr_p4["pt"],
+        "eta": arr_p4["eta"],
+        "sin_phi": arr_p4["sin_phi"],
+        "cos_phi": arr_p4["cos_phi"],
+        "energy": arr_p4["e"],
     }
-    ret["phi"] = np.arctan2(ret["sin_phi"], ret["cos_phi"])
+
     ret = awkward.from_iter([{k: ret[k][batch_ids == b] for k in ret.keys()} for b in np.unique(batch_ids)])
     return ret
 
 
 @torch.no_grad()
-def run_predictions(rank, mlpf, loader, sample, outpath, jetdef):
+def run_predictions(rank, model, loader, sample, outpath, jetdef):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     ti = time.time()
 
     for i, event in tqdm.tqdm(enumerate(loader), total=len(loader)):
         event.X = event.X.to(rank)
-        event.batch = event.batch.to(rank)
 
-        # recall target ~ ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
-        target_ids = event.ygen[:, 0].long()
-        event.ygen = event.ygen[:, 1:]
+        ygen = utils.unpack_target(event.ygen)
+        ycand = utils.unpack_target(event.ycand)
 
-        cand_ids = event.ycand[:, 0].long()
-        event.ycand = event.ycand[:, 1:]
+        preds = utils.unpack_predictions(model(event))
 
-        # make mlpf forward pass
-        pred_ids_one_hot, pred_momentum, pred_charge = mlpf(event)
-        pred_ids_one_hot = pred_ids_one_hot.detach().cpu()
-        pred_momentum = pred_momentum.detach().cpu()
-        pred_charge = pred_charge.detach().cpu()
-
-        pred_ids = torch.argmax(pred_ids_one_hot, axis=-1)
-        pred_charge = torch.argmax(pred_charge, axis=1, keepdim=True) - 1
-        pred_p4 = torch.cat([pred_charge, pred_momentum], axis=-1)
-
-        batch_ids = event.batch.cpu().numpy()
-        awkvals = {
-            "gen": particle_array_to_awkward(batch_ids, target_ids.cpu().numpy(), event.ygen.cpu().numpy()),
-            "cand": particle_array_to_awkward(batch_ids, cand_ids.cpu().numpy(), event.ycand.cpu().numpy()),
-            "pred": particle_array_to_awkward(batch_ids, pred_ids.cpu().numpy(), pred_p4.cpu().numpy()),
-        }
+        for k, v in preds.items():
+            preds[k] = v.detach().cpu()
 
         gen_p4, cand_p4, pred_p4 = [], [], []
         gen_cls, cand_cls, pred_cls = [], [], []
         Xs = []
+
+        # loop over each batch to disentangle the events
+        batch_ids = event.batch.cpu().numpy()
         for _ibatch in np.unique(batch_ids):
             msk_batch = batch_ids == _ibatch
-            msk_gen = (target_ids[msk_batch] != 0).numpy()
-            msk_cand = (cand_ids[msk_batch] != 0).numpy()
-            msk_pred = (pred_ids[msk_batch] != 0).numpy()
+
+            msk_gen = (ygen["ids"][msk_batch] != 0).numpy()
+            msk_cand = (ycand["ids"][msk_batch] != 0).numpy()
+            msk_pred = (preds["ids"][msk_batch] != 0).numpy()
 
             Xs.append(event.X[msk_batch].cpu().numpy())
 
-            gen_p4.append(event.ygen[msk_batch, 1:][msk_gen].numpy())
-            gen_cls.append(target_ids[msk_batch][msk_gen].numpy())
+            gen_p4.append(ygen["p4"][msk_batch][msk_gen].numpy())
+            gen_cls.append(ygen["ids"][msk_batch][msk_gen].numpy())
 
-            cand_p4.append(event.ycand[msk_batch, 1:][msk_cand].numpy())
-            cand_cls.append(cand_ids[msk_batch][msk_cand].numpy())
+            cand_p4.append(ycand["p4"][msk_batch][msk_cand].numpy())
+            cand_cls.append(ycand["ids"][msk_batch][msk_cand].numpy())
 
-            pred_p4.append(pred_momentum[msk_batch, :][msk_pred].numpy())
-            pred_cls.append(pred_ids[msk_batch][msk_pred].numpy())
+            pred_p4.append(preds["p4"][msk_batch][msk_pred].numpy())
+            pred_cls.append(preds["ids"][msk_batch][msk_pred].numpy())
 
         Xs = awkward.from_iter(Xs)
-        gen_p4 = awkward.from_iter(gen_p4)
+
         gen_cls = awkward.from_iter(gen_cls)
+        gen_p4 = awkward.from_iter(gen_p4)
         gen_p4 = vector.awk(
             awkward.zip({"pt": gen_p4[:, :, 0], "eta": gen_p4[:, :, 1], "phi": gen_p4[:, :, 2], "e": gen_p4[:, :, 3]})
         )
 
-        cand_p4 = awkward.from_iter(cand_p4)
         cand_cls = awkward.from_iter(cand_cls)
+        cand_p4 = awkward.from_iter(cand_p4)
         cand_p4 = vector.awk(
             awkward.zip({"pt": cand_p4[:, :, 0], "eta": cand_p4[:, :, 1], "phi": cand_p4[:, :, 2], "e": cand_p4[:, :, 3]})
         )
 
         # in case of no predicted particles in the batch
-        if torch.sum(pred_ids != 0) == 0:
+        if torch.sum(preds["ids"] != 0) == 0:
             pt = build_dummy_array(len(pred_p4), np.float64)
             eta = build_dummy_array(len(pred_p4), np.float64)
             phi = build_dummy_array(len(pred_p4), np.float64)
@@ -145,6 +134,12 @@ def run_predictions(rank, mlpf, loader, sample, outpath, jetdef):
         gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
         matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
+        awkvals = {
+            "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+            "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+            "pred": awkward.from_iter([{k: preds[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+        }
+
         awkward.to_parquet(
             awkward.Array(
                 {
@@ -158,7 +153,7 @@ def run_predictions(rank, mlpf, loader, sample, outpath, jetdef):
         )
         _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
-        if i == 100:
+        if i == 10:
             break
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")

@@ -114,15 +114,63 @@ X_FEATURES = {
 }
 
 Y_FEATURES = {
-    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
-    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
-    "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
+    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"],
+    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"],
+    "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"],
 }
 
 
 def rank_zero_logging(rank, _logger, msg):
     if (rank == 0) or (rank == "cpu"):
         _logger.info(msg)
+
+
+def unpack_target(y):
+    target = ["ids", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+
+    ret = {}
+    ret["ids"] = y[:, 0].long()
+    ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
+
+    for i, feat in enumerate(target):
+        if i >= 2:  # skip the cls and charge as they are defined above
+            ret[feat] = y[:, i].to(dtype=torch.float32)
+
+    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
+    ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
+
+    # do some sanity checks
+    assert torch.all(ret["pt"] >= 0.0)  # pt
+    assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
+    assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
+    assert torch.all(ret["e"] >= 0.0)  # energy
+
+    ret["p4"] = torch.cat([ret["pt"], ret["eta"], ret["phi"], ret["e"]], axis=-1)
+
+    return ret
+
+
+def unpack_predictions(preds):
+    # recall ~ target = ["ids", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+
+    ret = {}
+    ret["ids_onehot"], ret["momentum"], ret["charge"] = preds
+
+    # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
+
+    # unpacking
+    ret["pt"] = ret["momentum"][:, 0]
+    ret["eta"] = ret["momentum"][:, 1]
+    ret["sin_phi"] = ret["momentum"][:, 2]
+    ret["cos_phi"] = ret["momentum"][:, 3]
+    ret["e"] = ret["momentum"][:, 4]
+
+    # new variables
+    ret["ids"] = torch.argmax(ret["ids_onehot"], axis=-1)
+    ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
+    ret["p4"] = torch.cat([ret["pt"], ret["eta"], ret["phi"], ret["e"]], axis=-1)
+
+    return ret
 
 
 def save_HPs(args, mlpf, model_kwargs, outdir):
