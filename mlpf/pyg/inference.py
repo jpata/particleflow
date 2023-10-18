@@ -25,26 +25,9 @@ from plotting.plot_utils import (
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
-jet_pt = 5.0
-jet_match_dr = 0.1
-
-
-def particle_array_to_awkward(batch_ids, arr_id, arr_p4):
-    ret = {
-        "cls_id": arr_id,
-        "pt": arr_p4["pt"],
-        "eta": arr_p4["eta"],
-        "sin_phi": arr_p4["sin_phi"],
-        "cos_phi": arr_p4["cos_phi"],
-        "energy": arr_p4["e"],
-    }
-
-    ret = awkward.from_iter([{k: ret[k][batch_ids == b] for k in ret.keys()} for b in np.unique(batch_ids)])
-    return ret
-
 
 @torch.no_grad()
-def run_predictions(rank, model, loader, sample, outpath, jetdef):
+def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     ti = time.time()
@@ -75,8 +58,9 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
                 Xs.append(batch.X[msk_batch].cpu().numpy())
 
                 # mask nulls for jet reconstruction
-                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
-                p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
+                # msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
+                # p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
+                p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
 
                 Xs = awkward.from_iter(Xs)
 
@@ -96,7 +80,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
                 awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
 
             cluster = fastjet.ClusterSequence(awkward.Array(awk_p4s.to_xyzt()), jetdef)
-            jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_pt)
+            jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
         gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
         gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)

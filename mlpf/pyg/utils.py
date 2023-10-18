@@ -126,6 +126,8 @@ def rank_zero_logging(rank, _logger, msg):
 
 
 def unpack_target(y):
+    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "e"]
+
     target = ["ids", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
 
     ret = {}
