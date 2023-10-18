@@ -113,12 +113,10 @@ X_FEATURES = {
     ],
 }
 
-Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 
 
 def unpack_target(y):
-    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
-
     ret = {}
     ret["cls_id"] = y[:, 0].long()
     ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
@@ -126,8 +124,6 @@ def unpack_target(y):
     for i, feat in enumerate(Y_FEATURES):
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[:, i].to(dtype=torch.float32)
-
-    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
 
     # do some sanity checks
@@ -136,6 +132,8 @@ def unpack_target(y):
     assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
     assert torch.all(ret["energy"] >= 0.0)  # energy
 
+    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
+    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
