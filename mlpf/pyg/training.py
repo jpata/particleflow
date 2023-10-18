@@ -240,11 +240,14 @@ def train(
                         for loss_ in valid_loss:
                             valid_loss[loss_] += loss[loss_].detach().cpu().item()
 
+                    for loss_ in valid_loss:
+                        valid_loss[loss_] = valid_loss[loss_] / len(valid_loader)
+
                     if tensorboard_writer:
                         for loss_ in valid_loss:
                             tensorboard_writer.add_scalar(
                                 f"step_valid/loss_{loss_}",
-                                valid_loss[loss_] / len(valid_loader),
+                                valid_loss[loss_],
                             )
 
                     if valid_loss["Total"] < best_val_loss:
@@ -269,10 +272,10 @@ def train(
 
                     _logger.info(
                         f"Rank {rank}: "
-                        + f"val_loss_tot={valid_loss['Total']/len(valid_loader):.2f} "
-                        + f"val_loss_id={valid_loss['Classification']/len(valid_loader):.2f} "
-                        + f"val_loss_momentum={valid_loss['Regression']/len(valid_loader):.2f} "
-                        + f"val_loss_charge={valid_loss['Charge']/len(valid_loader):.2f} "
+                        + f"val_loss_tot={valid_loss['Total']:.2f} "
+                        + f"val_loss_id={valid_loss['Classification']:.2f} "
+                        + f"val_loss_momentum={valid_loss['Regression']:.2f} "
+                        + f"val_loss_charge={valid_loss['Charge']:.2f} "
                         + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
@@ -359,7 +362,6 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
 
             tensorboard_writer.flush()
 
-            # save the lowest value of each component of the loss to print it on the legend of the loss plots
             t1 = time.time()
 
             epochs_remaining = num_epochs - (epoch + 1)
