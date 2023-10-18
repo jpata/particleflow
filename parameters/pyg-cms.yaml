@@ -1,0 +1,151 @@
+backend: pytorch
+
+model:
+  gnn-lsh:
+    conv_type: gnn-lsh
+    embedding_dim: 512
+    width: 512
+    num_convs: 3
+    dropout: 0.0
+
+  gravnet:
+    conv_type: gravnet
+    embedding_dim: 512
+    width: 512
+    num_convs: 3
+    k: 16
+    propagate_dimensions: 22
+    space_dimensions: 4
+    dropout: 0.0
+
+  attention:
+    conv_type: attention
+    embedding_dim: 128
+    width: 128
+    num_convs: 2
+    dropout: 0.0
+
+train_dataset:
+  cms:
+    cms_pf_ttbar:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_qcd:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_ztt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_sms_t1tttt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_single_electron:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_gamma:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_pi0:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_neutron:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_pi:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_tau:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_mu:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_proton:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_multi_particle_gun:
+      version: 1.6.0
+      batch_size: 5
+      max_events: -1
+
+valid_dataset:
+  cms:
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: 500
+
+test_dataset:
+  cms:
+    cms_pf_ttbar:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_qcd:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_ztt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_sms_t1tttt:
+      version: 1.6.0
+      batch_size: 1
+      max_events: -1
+    cms_pf_single_electron:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_gamma:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_pi0:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_neutron:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_pi:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_tau:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_mu:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_single_proton:
+      version: 1.6.0
+      batch_size: 20
+      max_events: -1
+    cms_pf_multi_particle_gun:
+      version: 1.6.0
+      batch_size: 5
+      max_events: -1

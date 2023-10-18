@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--config", type=str, default="parameters/pyg-config.yaml", help="yaml config")
+parser.add_argument("--config", type=str, default="parameters/pyg-cms.yaml", help="yaml config")
 parser.add_argument("--prefix", type=str, default="test_", help="prefix appended to result dir name")
 parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
@@ -70,8 +70,6 @@ def run(rank, world_size, args, outdir):
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
-        outdir = args.load
-
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
@@ -89,7 +87,7 @@ def run(rank, world_size, args, outdir):
         if (rank == 0) or (rank == "cpu"):
             _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
 
-    else:  # instantiate a new model
+    else:  # instantiate a new model in the outdir created
         model_kwargs = {
             "input_dim": len(X_FEATURES[args.dataset]),
             "num_classes": len(CLASS_LABELS[args.dataset]),
@@ -109,7 +107,7 @@ def run(rank, world_size, args, outdir):
 
     if args.train:
         # use the outdir that was created in main()
-        # loaded weights from previous trainings
+
         if (rank == 0) or (rank == "cpu"):
             save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info(f"Creating experiment dir {outdir}")
@@ -119,8 +117,9 @@ def run(rank, world_size, args, outdir):
         for sample in config["train_dataset"][args.dataset]:
             version = config["train_dataset"][args.dataset][sample]["version"]
             batch_size = config["train_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
+            max_events = config["train_dataset"][args.dataset][sample]["max_events"]
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=args.ntrain)
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=max_events)
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
@@ -131,8 +130,9 @@ def run(rank, world_size, args, outdir):
             for sample in config["valid_dataset"][args.dataset]:
                 version = config["valid_dataset"][args.dataset][sample]["version"]
                 batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
+                max_events = config["valid_dataset"][args.dataset][sample]["max_events"]
 
-                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
+                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=max_events)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
@@ -164,8 +164,9 @@ def run(rank, world_size, args, outdir):
         for sample in config["test_dataset"][args.dataset]:
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
+            max_events = config["test_dataset"][args.dataset][sample]["max_events"]
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=max_events)
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
@@ -233,9 +234,11 @@ def main():
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
         _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/train.log")
+        os.system(f"cp {args.config} {outdir}/train-config.yaml")
     else:
         outdir = args.load
         _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/test.log")
+        os.system(f"cp {args.config} {outdir}/test-config.yaml")
 
     if args.gpus:
         assert (
