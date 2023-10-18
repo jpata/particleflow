@@ -126,9 +126,9 @@ def rank_zero_logging(rank, _logger, msg):
 
 
 def unpack_target(y):
-    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "e"]
+    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
 
-    target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+    target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 
     ret = {}
     ret["cls_id"] = y[:, 0].long()
@@ -148,14 +148,14 @@ def unpack_target(y):
     assert torch.all(ret["e"] >= 0.0)  # energy
 
     ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
 
     return ret
 
 
 def unpack_predictions(preds):
-    # recall ~ target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+    # recall ~ target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 
     ret = {}
     ret["cls_id_onehot"], ret["momentum"], ret["charge"] = preds
@@ -167,13 +167,13 @@ def unpack_predictions(preds):
     ret["eta"] = ret["momentum"][:, 1]
     ret["sin_phi"] = ret["momentum"][:, 2]
     ret["cos_phi"] = ret["momentum"][:, 3]
-    ret["e"] = ret["momentum"][:, 4]
+    ret["energy"] = ret["momentum"][:, 4]
 
     # new variables
     ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
 
     return ret
