@@ -66,7 +66,7 @@ def run(rank, world_size, args, outdir):
     if (rank == 0) or (rank == "cpu"):  # write the logs
         # _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
         logger = logging.getLogger("mlpf")
-        logfile = logging.FileHandler(f"{outdir}/{args.log_file}", "w+")
+        logfile = logging.FileHandler(f"{outdir}/{args.log_file}", "a")
         logger.addHandler(logfile)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
