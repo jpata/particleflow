@@ -145,7 +145,7 @@ def unpack_target(y):
     assert torch.all(ret["pt"] >= 0.0)  # pt
     assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
     assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
-    assert torch.all(ret["e"] >= 0.0)  # energy
+    assert torch.all(ret["energy"] >= 0.0)  # energy
 
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
