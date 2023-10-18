@@ -78,9 +78,9 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                 phi = p4s[:, :, 2]
                 energy = p4s[:, :, 3]
 
-            awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
 
-            cluster = fastjet.ClusterSequence(awkward.Array(awk_p4s.to_xyzt()), jetdef)
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
         gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
