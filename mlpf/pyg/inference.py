@@ -8,7 +8,6 @@ import mplhep
 import numpy as np
 import torch
 import tqdm
-import utils
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
@@ -24,7 +23,7 @@ from plotting.plot_utils import (
 )
 
 from .logger import _logger
-from .utils import CLASS_NAMES
+from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 jet_pt = 5.0
 jet_match_dr = 0.1
@@ -53,10 +52,10 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
     for i, event in tqdm.tqdm(enumerate(loader), total=len(loader)):
         event.X = event.X.to(rank)
 
-        ygen = utils.unpack_target(event.ygen)
-        ycand = utils.unpack_target(event.ycand)
+        ygen = unpack_target(event.ygen)
+        ycand = unpack_target(event.ycand)
 
-        ypred = utils.unpack_predictions(model(event))
+        ypred = unpack_predictions(model(event))
 
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()

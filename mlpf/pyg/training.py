@@ -7,12 +7,12 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import tqdm
-import utils
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
+from .utils import unpack_predictions, unpack_target
 
 # from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -164,9 +164,9 @@ def train(
             )
 
         event = batch.to(rank)
-        ygen = utils.unpack_target(event.ygen)
+        ygen = unpack_target(event.ygen)
 
-        ypred = utils.unpack_predictions(model(event))
+        ypred = unpack_predictions(model(event))
 
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
@@ -229,7 +229,7 @@ def train(
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
                         event = batch.to(rank)
 
-                        ygen = utils.unpack_target(event.ygen)
+                        ygen = unpack_target(event.ygen)
 
                         ypred = {}
                         if world_size > 1:  # validation is only run on a single machine
