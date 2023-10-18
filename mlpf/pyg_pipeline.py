@@ -68,6 +68,7 @@ def run(rank, world_size, args, outdir, logfile):
         config = yaml.safe_load(stream)
 
     if args.load:  # load a pre-trained model
+        outdir = args.load  # in case both --load and --train are provided
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
