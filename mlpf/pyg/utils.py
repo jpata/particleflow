@@ -128,10 +128,10 @@ def rank_zero_logging(rank, _logger, msg):
 def unpack_target(y):
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "e"]
 
-    target = ["ids", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+    target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
 
     ret = {}
-    ret["ids"] = y[:, 0].long()
+    ret["cls_id"] = y[:, 0].long()
     ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
 
     for i, feat in enumerate(target):
@@ -155,10 +155,10 @@ def unpack_target(y):
 
 
 def unpack_predictions(preds):
-    # recall ~ target = ["ids", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
+    # recall ~ target = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "jet_idx"]
 
     ret = {}
-    ret["ids_onehot"], ret["momentum"], ret["charge"] = preds
+    ret["cls_ids_onehot"], ret["momentum"], ret["charge"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
@@ -170,7 +170,7 @@ def unpack_predictions(preds):
     ret["e"] = ret["momentum"][:, 4]
 
     # new variables
-    ret["ids"] = torch.argmax(ret["ids_onehot"], axis=-1)
+    ret["cls_id"] = torch.argmax(ret["ids_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1

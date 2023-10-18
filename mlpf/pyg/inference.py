@@ -62,11 +62,11 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                 msk_batch = batch_ids == _ibatch
 
                 # mask nulls for jet reconstruction
-                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
+                msk = (awkvals[typ]["cls_id"][msk_batch] != 0).numpy()
                 p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
 
             # in case of no predicted particles in the batch
-            if torch.sum(awkvals[typ]["ids"] != 0) == 0:
+            if torch.sum(awkvals[typ]["cls_id"] != 0) == 0:
                 pt = build_dummy_array(len(p4s), np.float64)
                 eta = build_dummy_array(len(p4s), np.float64)
                 phi = build_dummy_array(len(p4s), np.float64)

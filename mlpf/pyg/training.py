@@ -24,14 +24,14 @@ np.seterr(divide="ignore", invalid="ignore")
 def mlpf_loss(y, ypred):
     """
     Args
-        y [dict]: relevant keys are "ids, momentum, charge"
-        ypred [dict]: relevant keys are "ids_onehot, momentum, charge"
+        y [dict]: relevant keys are "cls_id, momentum, charge"
+        ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0)
-    loss["Classification"] = 100 * loss_obj_id(ypred["ids_onehot"], y["ids"])
+    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
 
-    msk_true_particle = torch.unsqueeze((y["ids"] != 0).to(dtype=torch.float32), axis=-1)
+    msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
 
     loss["Regression"] = 10 * torch.nn.functional.huber_loss(
         ypred["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
@@ -166,11 +166,11 @@ def train(
         ygen = unpack_target(batch.to(rank).ygen)
         ypred = unpack_predictions(model(batch.to(rank)))
 
-        for icls in range(ypred["ids_onehot"].shape[1]):
+        for icls in range(ypred["cls_id_onehot"].shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
                     f"step_train/num_cls_{icls}",
-                    torch.sum(ygen["ids"] == icls),
+                    torch.sum(ygen["cls_id"] == icls),
                 )
 
         # JP: need to debug this
