@@ -52,10 +52,9 @@ parser.add_argument("--export-onnx", action="store_true", help="exports the mode
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
-parser.add_argument("--log-file", type=str, default="log.log", help="path to the log file")
 
 
-def run(rank, world_size, args, outdir):
+def run(rank, world_size, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
@@ -63,11 +62,8 @@ def run(rank, world_size, args, outdir):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    if (rank == 0) or (rank == "cpu"):  # write the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}")
-        # logger = logging.getLogger("mlpf")
-        # logfile = logging.FileHandler(f"{outdir}/{args.log_file}")
-        # logger.addHandler(logfile)
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
@@ -231,11 +227,15 @@ def main():
 
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/train.log")
+        logfile = f"{outdir}/train.log"
+        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
+
         os.system(f"cp {args.config} {outdir}/train-config.yaml")
     else:
         outdir = args.load
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/test.log")
+        logfile = f"{outdir}/test.log"
+        _configLogger("mlpf", stdout=sys.stdout, filename=logfile)
+
         os.system(f"cp {args.config} {outdir}/test-config.yaml")
 
     if args.gpus:
@@ -251,19 +251,19 @@ def main():
 
             mp.spawn(
                 run,
-                args=(world_size, args, outdir),
+                args=(world_size, args, outdir, logfile),
                 nprocs=world_size,
                 join=True,
             )
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            run(rank, world_size, args, outdir)
+            run(rank, world_size, args, outdir, logfile)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, args, outdir)
+        run(rank, world_size, args, outdir, logfile)
 
 
 if __name__ == "__main__":
