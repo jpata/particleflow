@@ -9,7 +9,6 @@ import logging
 import os
 from pathlib import Path
 import pickle as pkl
-import numpy as np
 import yaml
 
 import torch
