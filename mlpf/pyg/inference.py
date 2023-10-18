@@ -42,39 +42,66 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
 
         # loop over the batch to disentangle the events
         batch_ids = batch.batch.cpu().numpy()
-        Xs = []
-        for _ibatch in np.unique(batch_ids):
-            msk_batch = batch_ids == _ibatch
-            Xs.append(batch.X[msk_batch].cpu().numpy())
-        Xs = awkward.from_iter(Xs)
 
         jets_coll = {}
-        for typ, y in {"gen": ygen, "cand": ycand, "pred": ypred}.items():
-            p4s = []
-            for _ibatch in np.unique(batch_ids):
-                msk_batch = batch_ids == _ibatch
+        Xs, p4s = [], {"gen": [], "cand": [], "pred": []}
+        for _ibatch in np.unique(batch_ids):
+            msk_batch = batch_ids == _ibatch
 
-                # mask nulls for jet reconstruction
-                msk = (y["cls_id"][msk_batch] != 0).numpy()
-                p4s.append(y["p4"][msk_batch][msk].numpy())
+            Xs.append(batch.X[msk_batch].cpu().numpy())
 
-            # in case of no predicted particles in the batch
-            if torch.sum(y["cls_id"] != 0) == 0:
-                pt = build_dummy_array(len(p4s), np.float64)
-                eta = build_dummy_array(len(p4s), np.float64)
-                phi = build_dummy_array(len(p4s), np.float64)
-                energy = build_dummy_array(len(p4s), np.float64)
-            else:
-                p4s = awkward.from_iter(p4s)
-                pt = p4s[:, :, 0]
-                eta = p4s[:, :, 1]
-                phi = p4s[:, :, 2]
-                energy = p4s[:, :, 3]
+            # mask nulls for jet reconstruction
+            msk = (ygen["cls_id"][msk_batch] != 0).numpy()
+            p4s["gen"].append(ygen["p4"][msk_batch][msk].numpy())
 
-            vec = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
+            msk = (ycand["cls_id"][msk_batch] != 0).numpy()
+            p4s["cand"].append(ycand["p4"][msk_batch][msk].numpy())
+
+            msk = (ypred["cls_id"][msk_batch] != 0).numpy()
+            p4s["pred"].append(ypred["p4"][msk_batch][msk].numpy())
+
+        Xs = awkward.from_iter(Xs)
+
+        for typ in ["gen", "cand"]:
+            vec = vector.awk(
+                awkward.zip(
+                    {
+                        "pt": awkward.from_iter(p4s[typ])[:, :, 0],
+                        "eta": awkward.from_iter(p4s[typ])[:, :, 1],
+                        "phi": awkward.from_iter(p4s[typ])[:, :, 2],
+                        "e": awkward.from_iter(p4s[typ])[:, :, 3],
+                    }
+                )
+            )
             cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-
             jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
+
+        # in case of no predicted particles in the batch
+        if torch.sum(ypred["cls_id"] != 0) == 0:
+            vec = vector.awk(
+                awkward.zip(
+                    {
+                        "pt": build_dummy_array(len(p4s["pred"]), np.float64),
+                        "eta": build_dummy_array(len(p4s["pred"]), np.float64),
+                        "phi": build_dummy_array(len(p4s["pred"]), np.float64),
+                        "e": build_dummy_array(len(p4s["pred"]), np.float64),
+                    }
+                )
+            )
+        else:
+            vec = vector.awk(
+                awkward.zip(
+                    {
+                        "pt": awkward.from_iter(p4s["pred"])[:, :, 0],
+                        "eta": awkward.from_iter(p4s["pred"])[:, :, 1],
+                        "phi": awkward.from_iter(p4s["pred"])[:, :, 2],
+                        "e": awkward.from_iter(p4s["pred"])[:, :, 3],
+                    }
+                )
+            )
+
+        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+        jets_coll["pred"] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
         gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
         gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
