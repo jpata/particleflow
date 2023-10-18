@@ -170,7 +170,7 @@ def unpack_predictions(preds):
     ret["e"] = ret["momentum"][:, 4]
 
     # new variables
-    ret["cls_id"] = torch.argmax(ret["ids_onehot"], axis=-1)
+    ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1
