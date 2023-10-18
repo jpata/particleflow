@@ -215,7 +215,7 @@ def train(
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
             if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
+                _logger.info(f"Initiating a quick validation run on device {rank}")  # , color="red")
                 model.eval()
 
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
