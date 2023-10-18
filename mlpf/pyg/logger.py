@@ -14,7 +14,7 @@ def _configLogger(name, stdout=sys.stdout, filename=None, loglevel=logging.INFO,
         logger.addHandler(console)
     if filename:
         if append:
-            logfile = logging.FileHandler(filename, "w")
+            logfile = logging.FileHandler(filename, "w+")
         else:
             logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)
