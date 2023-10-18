@@ -102,7 +102,6 @@ def run(rank, world_size, args, outdir, logfile):
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)
-        # _logging(rank, _logger, msg)
 
     if args.train:
         if (rank == 0) or (rank == "cpu"):
