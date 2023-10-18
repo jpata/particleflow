@@ -147,7 +147,9 @@ def unpack_target(y):
     assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
     assert torch.all(ret["e"] >= 0.0)  # energy
 
-    ret["p4"] = torch.cat([ret["pt"], ret["eta"], ret["phi"], ret["e"]], axis=1)
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1
+    )
 
     return ret
 
@@ -170,7 +172,9 @@ def unpack_predictions(preds):
     # new variables
     ret["ids"] = torch.argmax(ret["ids_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
-    ret["p4"] = torch.cat([ret["pt"], ret["eta"], ret["phi"], ret["e"]], axis=1)
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["e"].unsqueeze(1)], axis=1
+    )
 
     return ret
 
