@@ -132,15 +132,14 @@ def train(
     optimizer,
     train_loader,
     valid_loader,
-    outpath,
     best_val_loss,
     stale_epochs,
     patience,
+    outpath,
     tensorboard_writer=None,
 ):
     """
-    A training/validation run over a given epoch that gets called in the train_mlpf() function.
-    When optimizer is set to None, it freezes the model for a validation_run.
+    Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
 
     N_STEPS = 100
@@ -298,8 +297,8 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     Args:
         rank: 'cpu' or int representing the gpu device id
         model: a pytorch model (may be wrapped by DistributedDataParallel)
-        train_loader: a pytorch Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
-        valid_loader: a pytorch Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
+        train_loader: a pytorch geometric Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
+        valid_loader: a pytorch geometric Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
         patience: number of stale epochs before stopping the training
         outpath: path to store the model weights and training plots
     """
@@ -329,10 +328,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             optimizer,
             train_loader,
             valid_loader,
-            outpath,
             best_val_loss,
             stale_epochs,
             patience,
+            outpath,
             tensorboard_writer,
         )
 
