@@ -58,13 +58,13 @@ parser.add_argument("--log-file", type=str, default="log.log", help="path to the
 def run(rank, world_size, args, outdir):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
-    if (rank == 0) or (rank == "cpu"):  # write the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
-
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+
+    if (rank == 0) or (rank == "cpu"):  # write the logs
+        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
