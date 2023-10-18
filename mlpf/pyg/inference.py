@@ -33,6 +33,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
     ti = time.time()
 
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+        print("batch", batch)
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
 
@@ -54,8 +55,11 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
         for typ in ["gen", "cand", "pred"]:
             for _ibatch in np.unique(batch_ids):
                 msk_batch = batch_ids == _ibatch
+                print("batch.X", batch.X.shape)
 
                 Xs.append(batch.X[msk_batch].cpu().numpy())
+
+                print("awkvals[typ][p4]", awkvals[typ]["p4"].shape)
 
                 # mask nulls for jet reconstruction
                 # msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
