@@ -43,7 +43,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
 
         batch_ids = batch.batch.cpu().numpy()
 
-        # loop over each batch to disentangle the events
+        # loop over each batches to disentangle the events
         Xs = []
         for _ibatch in np.unique(batch_ids):
             msk_batch = batch_ids == _ibatch
@@ -65,7 +65,6 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                 # mask nulls for jet reconstruction
                 msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
                 p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
-                # p4s.append(awkvals[typ]["p4"][msk_batch].numpy())
 
             # in case of no predicted particles in the batch
             if torch.sum(awkvals[typ]["ids"] != 0) == 0:
@@ -107,7 +106,7 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
             ),
             f"{outpath}/ypred/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {outpath}/ypred/{sample}/pred_{rank}_{i}.parquet")
+        _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
