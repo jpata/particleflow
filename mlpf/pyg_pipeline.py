@@ -64,7 +64,10 @@ def run(rank, world_size, args, outdir):
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
     if (rank == 0) or (rank == "cpu"):  # write the logs
-        _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
+        # _configLogger("mlpf", stdout=sys.stdout, filename=f"{outdir}/{args.log_file}", append=True)
+        logger = logging.getLogger("mlpf")
+        logfile = logging.FileHandler(f"{outdir}/{args.log_file}", "w+")
+        logger.addHandler(logfile)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
