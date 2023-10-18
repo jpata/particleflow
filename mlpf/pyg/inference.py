@@ -56,88 +56,59 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
         ygen = utils.unpack_target(event.ygen)
         ycand = utils.unpack_target(event.ycand)
 
-        preds = utils.unpack_predictions(model(event))
+        ypred = utils.unpack_predictions(model(event))
 
-        for k, v in preds.items():
-            preds[k] = v.detach().cpu()
+        for k, v in ypred.items():
+            ypred[k] = v.detach().cpu()
 
-        gen_p4, cand_p4, pred_p4 = [], [], []
-        gen_cls, cand_cls, pred_cls = [], [], []
-        Xs = []
+        awkvals = {
+            "gen": ygen,
+            "cand": ycand,
+            "pred": ypred,
+        }
 
+        jets_coll = {}
+        Xs, p4s = [], []
         # loop over each batch to disentangle the events
         batch_ids = event.batch.cpu().numpy()
         for _ibatch in np.unique(batch_ids):
-            msk_batch = batch_ids == _ibatch
+            for typ in ["gen", "cand", "pred"]:
+                msk_batch = batch_ids == _ibatch
 
-            msk_gen = (ygen["ids"][msk_batch] != 0).numpy()
-            msk_cand = (ycand["ids"][msk_batch] != 0).numpy()
-            msk_pred = (preds["ids"][msk_batch] != 0).numpy()
+                msk = (awkvals[typ]["ids"][msk_batch] != 0).numpy()
 
-            Xs.append(event.X[msk_batch].cpu().numpy())
+                Xs.append(event.X[msk_batch].cpu().numpy())
+                p4s.append(awkvals[typ]["p4"][msk_batch][msk].numpy())
 
-            gen_p4.append(ygen["p4"][msk_batch][msk_gen].numpy())
-            gen_cls.append(ygen["ids"][msk_batch][msk_gen].numpy())
+            Xs = awkward.from_iter(Xs)
 
-            cand_p4.append(ycand["p4"][msk_batch][msk_cand].numpy())
-            cand_cls.append(ycand["ids"][msk_batch][msk_cand].numpy())
+            # in case of no predicted particles in the batch
+            if torch.sum(awkvals[typ]["ids"] != 0) == 0:
+                pt = build_dummy_array(len(p4s), np.float64)
+                eta = build_dummy_array(len(p4s), np.float64)
+                phi = build_dummy_array(len(p4s), np.float64)
+                energy = build_dummy_array(len(p4s), np.float64)
+            else:
+                p4s = awkward.from_iter(p4s)
+                pt = p4s[:, :, 0]
+                eta = p4s[:, :, 1]
+                phi = p4s[:, :, 2]
+                energy = p4s[:, :, 3]
 
-            pred_p4.append(preds["p4"][msk_batch][msk_pred].numpy())
-            pred_cls.append(preds["ids"][msk_batch][msk_pred].numpy())
+            awk_p4s = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
 
-        Xs = awkward.from_iter(Xs)
-
-        gen_cls = awkward.from_iter(gen_cls)
-        gen_p4 = awkward.from_iter(gen_p4)
-        gen_p4 = vector.awk(
-            awkward.zip({"pt": gen_p4[:, :, 0], "eta": gen_p4[:, :, 1], "phi": gen_p4[:, :, 2], "e": gen_p4[:, :, 3]})
-        )
-
-        cand_cls = awkward.from_iter(cand_cls)
-        cand_p4 = awkward.from_iter(cand_p4)
-        cand_p4 = vector.awk(
-            awkward.zip({"pt": cand_p4[:, :, 0], "eta": cand_p4[:, :, 1], "phi": cand_p4[:, :, 2], "e": cand_p4[:, :, 3]})
-        )
-
-        # in case of no predicted particles in the batch
-        if torch.sum(preds["ids"] != 0) == 0:
-            pt = build_dummy_array(len(pred_p4), np.float64)
-            eta = build_dummy_array(len(pred_p4), np.float64)
-            phi = build_dummy_array(len(pred_p4), np.float64)
-            pred_cls = build_dummy_array(len(pred_p4), np.float64)
-            energy = build_dummy_array(len(pred_p4), np.float64)
-            pred_p4 = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "e": energy}))
-        else:
-            pred_p4 = awkward.from_iter(pred_p4)
-            pred_cls = awkward.from_iter(pred_cls)
-            pred_p4 = vector.awk(
-                awkward.zip(
-                    {
-                        "pt": pred_p4[:, :, 0],
-                        "eta": pred_p4[:, :, 1],
-                        "phi": pred_p4[:, :, 2],
-                        "e": pred_p4[:, :, 3],
-                    }
-                )
-            )
-
-        jets_coll = {}
-
-        cluster1 = fastjet.ClusterSequence(awkward.Array(gen_p4.to_xyzt()), jetdef)
-        jets_coll["gen"] = cluster1.inclusive_jets(min_pt=jet_pt)
-        cluster2 = fastjet.ClusterSequence(awkward.Array(cand_p4.to_xyzt()), jetdef)
-        jets_coll["cand"] = cluster2.inclusive_jets(min_pt=jet_pt)
-        cluster3 = fastjet.ClusterSequence(awkward.Array(pred_p4.to_xyzt()), jetdef)
-        jets_coll["pred"] = cluster3.inclusive_jets(min_pt=jet_pt)
+            cluster = fastjet.ClusterSequence(awkward.Array(awk_p4s.to_xyzt()), jetdef)
+            jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_pt)
 
         gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
         gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
+
         matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
         awkvals = {
             "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
             "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-            "pred": awkward.from_iter([{k: preds[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+            "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
         }
 
         awkward.to_parquet(
@@ -149,12 +120,9 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef):
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{outpath}/preds/{sample}/pred_{rank}_{i}.parquet",
+            f"{outpath}/ypred/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
-
-        if i == 10:
-            break
+        _logger.info(f"Saved predictions at {outpath}/ypred/{sample}/pred_{rank}_{i}.parquet")
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
@@ -174,7 +142,7 @@ def make_plots(outpath, sample, dataset):
         os.makedirs(f"{outpath}/plots/{sample}")
 
     plots_path = Path(f"{outpath}/plots/{sample}/")
-    pred_path = Path(f"{outpath}/preds/{sample}/")
+    pred_path = Path(f"{outpath}/ypred/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 

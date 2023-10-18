@@ -21,23 +21,23 @@ from .logger import _logger
 np.seterr(divide="ignore", invalid="ignore")
 
 
-def mlpf_loss(y, preds):
+def mlpf_loss(y, ypred):
     """
     Args
         y [dict]: relevant keys are "ids, momentum, charge"
-        preds [dict]: relevant keys are "ids_onehot, momentum, charge"
+        ypred [dict]: relevant keys are "ids_onehot, momentum, charge"
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0)
-    loss["Classification"] = 100 * loss_obj_id(preds["ids_onehot"], y["ids"])
+    loss["Classification"] = 100 * loss_obj_id(ypred["ids_onehot"], y["ids"])
 
     msk_true_particle = torch.unsqueeze((y["ids"] != 0).to(dtype=torch.float32), axis=-1)
 
     loss["Regression"] = 10 * torch.nn.functional.huber_loss(
-        preds["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
+        ypred["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
     )
     loss["Charge"] = torch.nn.functional.cross_entropy(
-        preds["charge"] * msk_true_particle, (y["charge"] * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        ypred["charge"] * msk_true_particle, (y["charge"] * msk_true_particle[:, 0]).to(dtype=torch.int64)
     )
 
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
@@ -166,12 +166,12 @@ def train(
         event = batch.to(rank)
         ygen = utils.unpack_target(event.ygen)
 
-        preds = utils.unpack_predictions(model(event))
+        ypred = utils.unpack_predictions(model(event))
 
-        for k, v in preds.items():
-            preds[k] = v.detach().cpu()
+        for k, v in ypred.items():
+            ypred[k] = v.detach().cpu()
 
-        for icls in range(preds["ids_onehot"].shape[1]):
+        for icls in range(ypred["ids_onehot"].shape[1]):
             if tensorboard_writer:
                 tensorboard_writer.add_scalar(
                     f"step_train/num_cls_{icls}",
@@ -180,7 +180,7 @@ def train(
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
-        loss = mlpf_loss(ygen, preds)
+        loss = mlpf_loss(ygen, ypred)
 
         for param in model.parameters():
             param.grad = None
@@ -231,13 +231,13 @@ def train(
 
                         ygen = utils.unpack_target(event.ygen)
 
-                        preds = {}
+                        ypred = {}
                         if world_size > 1:  # validation is only run on a single machine
-                            preds["ids_onehot"], preds["momentum"], preds["charge"] = model.module(event)
+                            ypred["ids_onehot"], ypred["momentum"], ypred["charge"] = model.module(event)
                         else:
-                            preds["ids_onehot"], preds["momentum"], preds["charge"] = model(event)
+                            ypred["ids_onehot"], ypred["momentum"], ypred["charge"] = model(event)
 
-                        loss = mlpf_loss(ygen, preds)
+                        loss = mlpf_loss(ygen, ypred)
 
                         for loss_ in valid_loss:
                             valid_loss[loss_] += loss[loss_].detach().cpu().item()
