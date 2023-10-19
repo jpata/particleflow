@@ -12,4 +12,4 @@ singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python3.10 mlpf/pipeline.py train -c parameters/cms-gen.yaml --plot-freq 1 --num-cpus 32 \
-    --batch-multiplier 2
+    --batch-multiplier 2 --ntrain 5000 --ntest 5000 --plot-freq 5

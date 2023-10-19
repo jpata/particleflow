@@ -21,9 +21,10 @@ _CITATION = """
 class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_multi_particle_gun dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.6.1")
     RELEASE_NOTES = {
         "1.6.0": "Initial release",
+        "1.6.1": "Additional stats",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \

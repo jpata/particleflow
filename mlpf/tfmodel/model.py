@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 # FIXME: this should be configurable in a central place
-regularizer_weight = 0.00001
+regularizer_weight = 0.00000
 
 # for PFNetTransformer-based, we need to set a different random seed for each subsequent attention layer
 SEED_KERNELATTENTION = 0
@@ -440,6 +440,7 @@ def point_wise_feed_forward_network(
     for ilayer in range(num_layers):
         _name = name + "_dense_{}".format(ilayer)
 
+        layers.append(tf.keras.layers.LayerNormalization(axis=-1))
         layers.append(
             tf.keras.layers.Dense(
                 dff,
@@ -454,6 +455,8 @@ def point_wise_feed_forward_network(
 
         if dim_decrease:
             dff = dff // 2
+
+    layers.append(tf.keras.layers.LayerNormalization(axis=-1))
 
     layers.append(
         tf.keras.layers.Dense(
@@ -937,7 +940,9 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
 
-        pred_energy_corr = tf.nn.softmax(self.ffn_energy(X_encoded_energy, training=training), axis=-1)
+        ffn_energy = self.ffn_energy(X_encoded_energy, training=training)
+        tf.print("energy", tf.reduce_min(ffn_energy), tf.reduce_max(ffn_energy), tf.reduce_mean(ffn_energy))
+        pred_energy_corr = tf.nn.softmax(ffn_energy, axis=-1)
         pred_energy = tf.reduce_sum(self.energy_bins * pred_energy_corr, axis=-1, keepdims=True) * msk_input_outtype
 
         pred_pt_corr = tf.nn.softmax(self.ffn_pt(X_encoded_energy, training=training), axis=-1)

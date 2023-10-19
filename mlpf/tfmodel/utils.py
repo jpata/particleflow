@@ -706,10 +706,10 @@ def get_loss_dict(config):
         "cos_phi": get_loss_from_params(config["loss"].get("cos_phi_loss", default_loss)),
         "energy": get_loss_from_params(config["loss"].get("energy_loss", default_loss)),
         "energy_bins": tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            from_logits=False, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE, label_smoothing=1e-3
         ),
         "pt_bins": tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            from_logits=False, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE, label_smoothing=1e-3
         ),
     }
     loss_weights = {
