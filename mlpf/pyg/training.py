@@ -274,7 +274,7 @@ def train(
 
                     if stale_epochs > patience:
                         _logger.info("breaking due to stale epochs")
-                        break
+                        return None, None, None, stale_epochs
 
         if tensorboard_writer:
             tensorboard_writer.flush()
@@ -394,5 +394,4 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             with open(f"{outpath}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-    # rank_zero_logging(rank, _logger, f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")  # noqa
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
