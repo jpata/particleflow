@@ -9,7 +9,7 @@ TOLERANCE = 1e-2
 
 class TestGNNTorchAndTensorflow(unittest.TestCase):
     def test_GHConvDense(self):
-        from mlpf.pyg.gnn_lsh import GHConvDense as GHConvDenseTorch
+        from mlpf.pyg.model import GHConvDense as GHConvDenseTorch
         from mlpf.tfmodel.model import GHConvDense
 
         nn1 = GHConvDense(output_dim=128, activation="selu")
@@ -39,7 +39,7 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         self.assertLess(np.sum(out1 - out2), TOLERANCE)
 
     def test_MessageBuildingLayerLSH(self):
-        from mlpf.pyg.gnn_lsh import MessageBuildingLayerLSH as MessageBuildingLayerLSHTorch
+        from mlpf.pyg.model import MessageBuildingLayerLSH as MessageBuildingLayerLSHTorch
         from mlpf.tfmodel.model import MessageBuildingLayerLSH
 
         nn1 = MessageBuildingLayerLSH(distance_dim=128, bin_size=64)
@@ -72,7 +72,7 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         ret = reverse_lsh(bins_split, x, False)
         self.assertTrue(np.all(x_node == ret.numpy()))
 
-        from mlpf.pyg.gnn_lsh import reverse_lsh as reverse_lsh_torch
+        from mlpf.pyg.model import reverse_lsh as reverse_lsh_torch
 
         bins_split, x, dm, msk_f = out2
         ret = reverse_lsh_torch(bins_split, x)

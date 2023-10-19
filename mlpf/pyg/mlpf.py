@@ -4,7 +4,7 @@ import torch_geometric
 import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv
 
-from .gnn_lsh import CombinedGraphLayer
+from .model import CombinedGraphLayer
 
 
 class GravNetLayer(nn.Module):
