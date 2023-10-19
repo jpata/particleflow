@@ -32,7 +32,6 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--config", type=str, default="parameters/pyg-cms.yaml", help="yaml config")
 parser.add_argument("--prefix", type=str, default="test_", help="prefix appended to result dir name")
-parser.add_argument("--overwrite", dest="overwrite", action="store_true", help="overwrites the model if True")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument(
