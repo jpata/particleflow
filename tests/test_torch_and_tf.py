@@ -1,8 +1,8 @@
 import unittest
 
 import numpy as np
-import tensorflow as tf
 import torch
+import tensorflow as tf
 
 TOLERANCE = 1e-2
 
