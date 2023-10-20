@@ -193,7 +193,7 @@ class PFDataset:
         self.ds = builder.as_data_source(split=split)
 
         # # to prevent a warning from tfds about accessing sequences of indices
-        # self.ds.__class__.__getitems__ = my_getitem
+        self.ds.__class__.__getitems__ = my_getitem
 
         self.keys_to_get = keys_to_get
 
@@ -304,6 +304,9 @@ def my_getitem(self, vals):
     #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
     # )
     records = self.data_source.__getitems__(vals)
+    print("hopa")
+    a = [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+    print("hoppaten")
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
