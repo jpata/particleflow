@@ -155,7 +155,6 @@ def train(
     istep = 0
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
-        print("rank", rank, "batch", batch)
         istep += 1
         if tensorboard_writer:
             tensorboard_writer.add_scalar(
