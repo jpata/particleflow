@@ -121,6 +121,16 @@ EVALUATION_DATASET_NAMES = {
     "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
     "cms_pf_qcd": r"CMS QCD+PU events",
+    "cms_pf_ztt": r"CMS Ztt events",
+    "cms_pf_multi_particle_gun": r"CMS multi particle gun events",
+    "cms_pf_single_electron": r"CMS single electron particle gun events",
+    "cms_pf_single_gamma": r"CMS single photon gun events",
+    "cms_pf_single_mu": r"CMS single muon particle gun events",
+    "cms_pf_single_pi": r"CMS single pion particle gun events",
+    "cms_pf_single_pi0": r"CMS single neutral pion particle gun events",
+    "cms_pf_single_proton": r"CMS single proton particle gun events",
+    "cms_pf_single_tau": r"CMS single tau particle gun events",
+    "cms_pf_sms_t1tttt": r"CMS sms t1tttt events",
 }
 
 

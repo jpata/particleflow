@@ -1,6 +1,6 @@
-from pathlib import Path
 import datetime
 import platform
+from pathlib import Path
 
 
 def create_experiment_dir(prefix=None, suffix=None):
@@ -13,4 +13,5 @@ def create_experiment_dir(prefix=None, suffix=None):
         train_dir = train_dir.with_name(train_dir.name + "." + platform.node())
 
     train_dir.mkdir(parents=True)
+
     return str(train_dir)
