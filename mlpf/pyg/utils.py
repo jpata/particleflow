@@ -208,20 +208,18 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
+    def get_loader(self, batch_size, world_size, num_workers=None, prefetch_factor=None):
         if world_size > 1:
+            sampler = self.get_distributed_sampler()
+        else:
+            sampler = self.get_sampler()
+
+        if num_workers:
             return DataLoader(
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_distributed_sampler(),
-            )
-        elif num_workers:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_sampler(),
+                sampler=sampler,
                 num_workers=num_workers,
                 prefetch_factor=prefetch_factor,
             )
@@ -230,7 +228,7 @@ class PFDataset:
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_sampler(),
+                sampler=sampler,
             )
 
     def __len__(self):

@@ -41,6 +41,8 @@ parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], r
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
+parser.add_argument("--num-workers", default=None, help="number of processes to load the data")
+parser.add_argument("--prefetch-factor", default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", help="initiates a training")
 parser.add_argument("--test", action="store_true", help="tests the model")
@@ -117,7 +119,8 @@ def run(rank, world_size, args, outdir, logfile):
             ds = PFDataset(args.data_dir, f"{sample}:{version}", "train", ["X", "ygen"], num_samples=args.ntrain)
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(ds.get_loader(batch_size=batch_size, world_size=world_size))
+            train_loaders.append(ds.get_loader(batch_size, world_size, args.num_workers, args.prefetch_factor))
+
         train_loader = InterleavedIterator(train_loaders)
 
         if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
@@ -129,7 +132,8 @@ def run(rank, world_size, args, outdir, logfile):
                 ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-                valid_loaders.append(ds.get_loader(batch_size=batch_size, world_size=1))
+                valid_loaders.append(ds.get_loader((batch_size, 1, args.num_workers, args.prefetch_factor)))
+
             valid_loader = InterleavedIterator(valid_loaders)
         else:
             valid_loader = None
@@ -159,10 +163,12 @@ def run(rank, world_size, args, outdir, logfile):
             version = config["test_dataset"][args.dataset][sample]["version"]
             batch_size = config["test_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
 
-            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.ntest)
+            ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], args.ntest)
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
-            test_loaders[sample] = InterleavedIterator([ds.get_loader(batch_size=batch_size, world_size=world_size)])
+            test_loaders[sample] = InterleavedIterator(
+                [ds.get_loader(batch_size, world_size, args.num_workers, args.prefetch_factor)]
+            )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
                 if (rank == 0) or (rank == "cpu"):
