@@ -277,7 +277,7 @@ def train(
 
             if world_size > 1:
                 dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
-                dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
+                # dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
                 print("rank", rank, "stale_epochs", stale_epochs)
 
             if stale_epochs > patience:
