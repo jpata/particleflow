@@ -254,7 +254,7 @@ def main():
             for rank in range(world_size):
                 _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
-            mp.spawn(
+            mp.forkserver(
                 run,
                 args=(world_size, args, outdir, logfile),
                 nprocs=world_size,
