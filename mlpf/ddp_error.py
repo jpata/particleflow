@@ -33,7 +33,6 @@ class PFDataset:
     def __init__(self, data_dir, name, split, keys_to_get):
         """
         Args
-            dataset: "cms", "clic", or "delphes"
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test
