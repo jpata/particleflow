@@ -2,7 +2,6 @@ import torch
 from torch import nn
 
 
-# @torch.compile
 def point_wise_feed_forward_network(
     d_in,
     d_hidden,
@@ -55,7 +54,6 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     return bins_split
 
 
-# @torch.compile
 def pairwise_l2_dist(A, B):
     na = torch.sum(torch.square(A), -1)
     nb = torch.sum(torch.square(B), -1)
@@ -95,7 +93,6 @@ class GHConvDense(nn.Module):
             requires_grad=True,
         )
 
-    # @torch.compile
     def forward(self, inputs):
         x, adj, msk = inputs
         adj = torch.squeeze(adj, axis=-1)
@@ -138,7 +135,6 @@ class NodePairGaussianKernel(nn.Module):
     returns: (n_batch, n_bins, n_points, n_points, 1) message matrix
     """
 
-    # @torch.compile
     def forward(self, x_msg_binned, msk, training=False):
         x = x_msg_binned * msk
         dm = torch.unsqueeze(self.dist_norm(x, x), axis=-1)
@@ -217,7 +213,6 @@ class MessageBuildingLayerLSH(nn.Module):
         return bins_split, x_features_binned, dm, msk_f_binned
 
 
-# @torch.compile
 def reverse_lsh(bins_split, points_binned_enc):
     shp = points_binned_enc.shape
     batch_dim = shp[0]
