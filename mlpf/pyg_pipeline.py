@@ -42,7 +42,9 @@ parser.add_argument("--gpus", type=str, default=None, help="to use CPU set to em
 parser.add_argument(
     "--gpu_batch_multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
 )
-parser.add_argument("--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?")
+parser.add_argument(
+    "--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?"
+)
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
@@ -116,7 +118,8 @@ def run(rank, world_size, config, args, outdir, logfile):
         if (rank == 0) or (rank == "cpu"):
             if args.hpo:
                 from ray import train as ray_train
-                outdir = ray_train.get_context().get_trial_dir()  #TODO: EW, check if this is needed
+
+                outdir = ray_train.get_context().get_trial_dir()  # TODO: EW, check if this is needed
             save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
@@ -137,9 +140,13 @@ def run(rank, world_size, config, args, outdir, logfile):
             valid_loaders = []
             for sample in config["valid_dataset"][config["dataset"]]:
                 version = config["valid_dataset"][config["dataset"]][sample]["version"]
-                batch_size = config["valid_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
+                batch_size = (
+                    config["valid_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
+                )
 
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["nvalid"])
+                ds = PFDataset(
+                    config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["nvalid"]
+                )
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size, 1, config["num_workers"], config["prefetch_factor"]))
@@ -174,7 +181,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             version = config["test_dataset"][config["dataset"]][sample]["version"]
             batch_size = config["test_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
-            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["ntest"])
+            ds = PFDataset(
+                config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["ntest"]
+            )
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator(
@@ -245,7 +254,6 @@ def override_config(config, args):
             config[arg] = arg_value
     return config
 
-    
 
 def device_agnostic_run(config, args, world_size):
 
@@ -303,6 +311,7 @@ def main():
     if args.hpo:
         import ray
         from ray import tune
+
         # from ray.tune.logger import TBXLoggerCallback
         from raytune.pt_search_space import raytune_num_samples, search_space, set_hps_from_search_space
         from raytune.utils import get_raytune_schedule, get_raytune_search_alg
@@ -365,7 +374,7 @@ def main():
             analysis.get_best_config(
                 metric=config["raytune"]["default_metric"],
                 mode=config["raytune"]["default_mode"],
-                scope='all',
+                scope="all",
             ),
         )
 

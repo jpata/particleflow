@@ -21,14 +21,14 @@ search_space = {
 def set_hps_from_search_space(search_space, config):
     if "lr" in search_space.keys():
         config["lr"] = search_space["lr"]
-    
+
     if "gpu_batch_multiplier" in search_space.keys():
         config["gpu_batch_multiplier"] = search_space["gpu_batch_multiplier"]
 
     if "conv_type" in search_space.keys():
         conv_type = search_space["conv_type"]
         config["conv_type"] = conv_type
-        
+
         if conv_type == "gnn_lsh" or conv_type == "transformer":
             if "embedding_dim" in search_space.keys():
                 config["model"][conv_type]["embedding_dim"] = search_space["embedding_dim"]
@@ -41,7 +41,6 @@ def set_hps_from_search_space(search_space, config):
 
             if "num_convs" in search_space.keys():
                 config["model"][conv_type]["num_convs"] = search_space["num_convs"]
-
 
     if "embedding_dim" in search_space.keys():
         config["embedding_dim"] = search_space["embedding_dim"]
