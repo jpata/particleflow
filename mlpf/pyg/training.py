@@ -195,9 +195,6 @@ def train(
                 nsteps = N_STEPS
                 istep = 0
 
-            if world_size > 1:
-                dist.barrier()
-
             if tensorboard_writer:
                 for loss_ in train_loss:
                     tensorboard_writer.add_scalar(
@@ -214,6 +211,9 @@ def train(
                 + f"train_loss_charge={train_loss['Charge']/nsteps:.2f} "
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+
+            if world_size > 1:
+                dist.barrier()
 
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
@@ -272,18 +272,18 @@ def train(
                         + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
+                model.train()  # prepare for next training loop
 
-                    if stale_epochs > patience:
-                        _logger.info("breaking due to stale epochs")
-                        return None, None, None, stale_epochs
+            if world_size > 1:
+                dist.barrier()
+            # TODO: broadcast stale_epochs here
+
+            if stale_epochs > patience:
+                _logger.info("breaking due to stale epochs")
+                return None, None, None, stale_epochs
 
         if tensorboard_writer:
             tensorboard_writer.flush()
-
-        if world_size > 1:
-            dist.barrier()
-
-        model.train()  # prepare for next training loop
 
     for loss_ in epoch_loss:
         epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(train_loader)
