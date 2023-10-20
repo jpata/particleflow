@@ -23,8 +23,7 @@ from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import (CLASS_LABELS, X_FEATURES, InterleavedIterator,
-                       PFDataset, save_HPs)
+from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -121,8 +120,9 @@ def run(rank, world_size, args, outdir, logfile):
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size, world_size, args.num_workers, args.prefetch_factor))
-
-        train_loader = InterleavedIterator(train_loaders)
+            break
+        train_loader = train_loaders[0]
+        # train_loader = InterleavedIterator(train_loaders)
 
         if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
             valid_loaders = []
@@ -134,8 +134,9 @@ def run(rank, world_size, args, outdir, logfile):
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(ds.get_loader(batch_size, 1, args.num_workers, args.prefetch_factor))
-
-            valid_loader = InterleavedIterator(valid_loaders)
+                break
+            valid_loader = valid_loaders[0]
+            # valid_loader = InterleavedIterator(valid_loaders)
         else:
             valid_loader = None
 
