@@ -238,7 +238,11 @@ class PFDataset:
         return self.ds.__repr__()
 
 
-class DataLoader(torch.utils.data.DataLoader):
+# class DataLoader(torch.utils.data.DataLoader):
+from utils_dl import DataLoader as DL
+
+
+class DataLoader(DL):
     """
     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
     because we need to implement our own Collater class to load the tensorflow_datasets (see below).
