@@ -132,7 +132,7 @@ def run(rank, world_size, args, outdir, logfile):
                 ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-                valid_loaders.append(ds.get_loader((batch_size, 1, args.num_workers, args.prefetch_factor)))
+                valid_loaders.append(ds.get_loader(batch_size, 1, args.num_workers, args.prefetch_factor))
 
             valid_loader = InterleavedIterator(valid_loaders)
         else:
