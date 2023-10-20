@@ -4,9 +4,7 @@ import torch_geometric
 import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv
 
-from .model import CombinedGraphLayer
-
-# from pyg_ssl.gravnet import GravNetConv  # this version also returns edge index
+from .gnn_lsh import CombinedGraphLayer
 
 
 class GravNetLayer(nn.Module):
@@ -19,8 +17,6 @@ class GravNetLayer(nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, batch_index):
-        # possibly do something with edge index
-        # x_new, edge_index, edge_weight = self.conv1(x, batch_index)
         x_new = self.conv1(x, batch_index)
         x_new = self.dropout(x_new)
         x = self.norm1(x + x_new)
@@ -161,11 +157,11 @@ class MLPF(nn.Module):
                     # assert out_stacked.shape[0] == conv_input.shape[0]
                     embeddings_reg.append(out_stacked)
 
+        # classification
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
-
-        # predict the PIDs
         preds_id = self.nn_id(embedding_id)
 
+        # regression
         embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data

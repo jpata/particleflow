@@ -113,14 +113,58 @@ X_FEATURES = {
     ],
 }
 
-Y_FEATURES = {
-    "cms": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
-    "delphes": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
-    "clic": ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"],
-}
+Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 
 
-def save_mlpf(args, mlpf, model_kwargs, outdir):
+def unpack_target(y):
+    ret = {}
+    ret["cls_id"] = y[:, 0].long()
+    ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
+
+    for i, feat in enumerate(Y_FEATURES):
+        if i >= 2:  # skip the cls and charge as they are defined above
+            ret[feat] = y[:, i].to(dtype=torch.float32)
+    ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
+
+    # do some sanity checks
+    assert torch.all(ret["pt"] >= 0.0)  # pt
+    assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
+    assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
+    assert torch.all(ret["energy"] >= 0.0)  # energy
+
+    # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
+    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
+    )
+
+    return ret
+
+
+def unpack_predictions(preds):
+    ret = {}
+    ret["cls_id_onehot"], ret["momentum"], ret["charge"] = preds
+
+    # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
+
+    # unpacking
+    ret["pt"] = ret["momentum"][:, 0]
+    ret["eta"] = ret["momentum"][:, 1]
+    ret["sin_phi"] = ret["momentum"][:, 2]
+    ret["cos_phi"] = ret["momentum"][:, 3]
+    ret["energy"] = ret["momentum"][:, 4]
+
+    # new variables
+    ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+    ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
+    )
+
+    return ret
+
+
+def save_HPs(args, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
     with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture
@@ -164,20 +208,18 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=4):
+    def get_loader(self, batch_size, world_size, num_workers=None, prefetch_factor=2):
         if world_size > 1:
+            sampler = self.get_distributed_sampler()
+        else:
+            sampler = self.get_sampler()
+
+        if num_workers is not None:
             return DataLoader(
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_distributed_sampler(),
-            )
-        elif num_workers:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_sampler(),
+                sampler=sampler,
                 num_workers=num_workers,
                 prefetch_factor=prefetch_factor,
             )
@@ -186,7 +228,7 @@ class PFDataset:
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                sampler=self.get_sampler(),
+                sampler=sampler,
             )
 
     def __len__(self):
