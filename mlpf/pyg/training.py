@@ -272,7 +272,7 @@ def train(
                         + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
-                    stale_epochs += 10  # TODO remove
+                    stale_epochs += 55  # TODO remove
                 model.train()  # prepare for next training loop
 
             if world_size > 1:
