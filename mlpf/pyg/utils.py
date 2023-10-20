@@ -297,6 +297,7 @@ class Collater:
 
 
 def my_getitem(self, vals):
+    from tensorflow_datasets.core.proto import dataset_info_pb2
     # print(
     #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
     # )
@@ -324,9 +325,11 @@ class InterleavedIterator(object):
         self.cur_index = 0
 
     def __iter__(self):
+        from tensorflow_datasets.core.proto import dataset_info_pb2
         return self
 
     def __next__(self):
+        from tensorflow_datasets.core.proto import dataset_info_pb2
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
@@ -338,6 +341,7 @@ class InterleavedIterator(object):
         return next(self.data_loaders_iter[iloader])
 
     def __len__(self):
+        from tensorflow_datasets.core.proto import dataset_info_pb2
         len_ = 0
         for iloader in range(len(self.data_loaders_iter)):
             len_ += len(self.data_loaders_iter[iloader])
