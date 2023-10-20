@@ -255,7 +255,7 @@ def train(
                             f"{outpath}/best_weights.pth",
                         )
                         _logger.info(
-                            f"finished {itrain}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
+                            f"finished {itrain+1}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
                         )
                         stale_epochs = torch.tensor(0, device=rank)
                     else:

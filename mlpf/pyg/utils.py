@@ -293,7 +293,7 @@ class Collater:
 
         elem = batch[0]
 
-        pkl.dump("batch", open(b"Fruits.obj", "wb"))
+        pkl.dump(batch, open(b"Fruits.obj", "wb"))
         if isinstance(elem, BaseData):
             return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
