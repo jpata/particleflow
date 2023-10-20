@@ -157,7 +157,7 @@ def main_worker(rank, world_size, args):
 
     print("Looping over dataloader")
     for i, batch in enumerate(train_loader):
-        print("batch", batch)
+        print("batch", batch.to(rank))
         if i > 9:
             break
 
