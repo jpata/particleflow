@@ -12,6 +12,7 @@ import warnings
 
 import torch
 import torch.multiprocessing as multiprocessing
+from torch import inf
 from torch._six import queue, string_classes
 from torch._utils import ExceptionWrapper
 
