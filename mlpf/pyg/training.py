@@ -258,7 +258,7 @@ def train(
                         _logger.info(
                             f"finished {itrain}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
                         )
-                        stale_epochs = torch.tensor(0)
+                        stale_epochs = torch.tensor(0, device=rank)
                     else:
                         _logger.info(f"finished {itrain}/{len(train_loader)} iterations")
                         stale_epochs += 1
@@ -277,7 +277,7 @@ def train(
 
             if world_size > 1:
                 dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
-                # dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
+                dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
                 print("rank", rank, "stale_epochs", stale_epochs)
 
             if stale_epochs > patience:
@@ -317,7 +317,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
 
-    stale_epochs, best_val_loss = torch.tensor(0), 99999.9
+    stale_epochs, best_val_loss = torch.tensor(0, device=rank), 99999.9
     for epoch in range(num_epochs):
         _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
