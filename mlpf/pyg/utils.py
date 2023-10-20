@@ -303,11 +303,7 @@ def my_getitem(self, vals):
     # print(
     #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
     # )
-    print("oops")
     records = self.data_source.__getitems__(vals)
-    print("hopa")
-    a = [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
-    print("hoppaten")
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
@@ -317,6 +313,8 @@ class InterleavedIterator(object):
     def __init__(self, data_loaders):
         self.idx = 0
         self.data_loaders = data_loaders
+        print("data_loaders", self.data_loaders)
+
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         max_loader_size = max([len(dl) for dl in data_loaders])
 
