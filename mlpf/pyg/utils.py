@@ -308,6 +308,8 @@ class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
+        from tensorflow_datasets.core.proto import dataset_info_pb2
+
         self.idx = 0
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
