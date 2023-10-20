@@ -59,9 +59,8 @@ def ffn(input_dim, output_dim, width, act, dropout):
 
 @torch.compile
 def unpad(data_padded, mask):
-    #A = torch.cat([data_padded[i][mask[i]] for i in range(data_padded.shape[0])])
-    B = data_padded[mask]
-    return B
+    A = data_padded[mask]
+    return A
 
 class MLPF(nn.Module):
     def __init__(
@@ -168,6 +167,10 @@ class MLPF(nn.Module):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     out_padded = conv(conv_input, ~mask)
                     embeddings_reg.append(out_padded)
+
+        if self.conv_type != "gravnet":
+            embeddings_id = [unpad(emb, mask) for emb in embeddings_id]
+            embeddings_reg = [unpad(emb, mask) for emb in embeddings_reg]
 
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
 
