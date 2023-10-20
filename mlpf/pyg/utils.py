@@ -256,8 +256,6 @@ class DataLoader(torch.utils.data.DataLoader):
         exclude_keys: Optional[List[str]] = None,
         **kwargs,
     ):
-        from tensorflow_datasets.core.proto import dataset_info_pb2
-
         # Remove for PyTorch Lightning:
         collate_fn = kwargs.pop("collate_fn", None)
 
