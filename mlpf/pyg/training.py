@@ -317,8 +317,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
 
-    stale_epochs = 0
-    best_val_loss = 99999.9
+    stale_epochs, best_val_loss = torch.tensor(0), 99999.9
     for epoch in range(num_epochs):
         _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
