@@ -182,9 +182,9 @@ def train(
         optimizer.step()
 
         for loss_ in train_loss:
-            train_loss[loss_] += loss[loss_].detach().cpu().item()
+            train_loss[loss_] += loss[loss_].detach()
         for loss_ in epoch_loss:
-            epoch_loss[loss_] += loss[loss_].detach().cpu().item()
+            epoch_loss[loss_] += loss[loss_].detach()
 
         # run a quick validation run at intervals of N_STEPS or at the last step
         if (((itrain % N_STEPS) == 0) and (itrain != 0)) or (itrain == (len(train_loader) - 1)):
@@ -230,10 +230,10 @@ def train(
                         loss = mlpf_loss(ygen, ypred)
 
                         for loss_ in valid_loss:
-                            valid_loss[loss_] += loss[loss_].detach().cpu().item()
+                            valid_loss[loss_] += loss[loss_].detach()
 
                     for loss_ in valid_loss:
-                        valid_loss[loss_] = valid_loss[loss_] / len(valid_loader)
+                        valid_loss[loss_] = valid_loss[loss_].cpu().item() / len(valid_loader)
 
                     if tensorboard_writer:
                         for loss_ in valid_loss:
@@ -285,7 +285,7 @@ def train(
         model.train()  # prepare for next training loop
 
     for loss_ in epoch_loss:
-        epoch_loss[loss_] = epoch_loss[loss_] / len(train_loader)
+        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(train_loader)
 
     return epoch_loss, valid_loss, best_val_loss, stale_epochs
 
