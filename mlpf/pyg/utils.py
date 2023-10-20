@@ -192,8 +192,8 @@ class PFDataset:
 
         self.ds = builder.as_data_source(split=split)
 
-        # to prevent a warning from tfds about accessing sequences of indices
-        self.ds.__class__.__getitems__ = my_getitem
+        # # to prevent a warning from tfds about accessing sequences of indices
+        # self.ds.__class__.__getitems__ = my_getitem
 
         self.keys_to_get = keys_to_get
 
@@ -293,7 +293,6 @@ class Collater:
 
         elem = batch[0]
 
-        pkl.dump(elem, open(b"Fruits.obj", "wb"))
         if isinstance(elem, BaseData):
             return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
