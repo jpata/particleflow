@@ -25,6 +25,7 @@ parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets_
 parser.add_argument("--batch-size", type=int, default=2, help="batch size for data loader")
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=2, help="will only be set if --num-workers>0")
+parser.add_argument("--spwan-method", type=int, default="spawn", help="['spawn', 'fork', 'forkserver']")
 
 
 class PFDataset:
@@ -188,7 +189,7 @@ def main():
                 args=(world_size, args),
                 nprocs=world_size,
                 join=True,
-                start_method="spawn",
+                start_method=args.spawn_method,
             )
 
         elif world_size == 1:
