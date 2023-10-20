@@ -7,7 +7,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 2
 patience: 20
-lr: 1e_4
+lr: 1e-4
 conv_type: gnn_lsh
 ntrain:
 ntest:
