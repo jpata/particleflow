@@ -213,7 +213,7 @@ def train(
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
             if world_size > 1:
-                dist.barrier()
+                dist.barrier()  # wait until training run is finished on all ranks before running the validation
 
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
@@ -275,7 +275,8 @@ def train(
                 model.train()  # prepare for next training loop
 
             if world_size > 1:
-                dist.barrier()
+                dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
+
             # TODO: broadcast stale_epochs here
 
             if stale_epochs > patience:
