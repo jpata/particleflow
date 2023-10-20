@@ -23,7 +23,8 @@ from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
+from pyg.utils import (CLASS_LABELS, X_FEATURES, InterleavedIterator,
+                       PFDataset, save_HPs)
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -254,12 +255,20 @@ def main():
             for rank in range(world_size):
                 _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
-            mp.spawn(
+            mp.start_processes(
                 run,
                 args=(world_size, args, outdir, logfile),
                 nprocs=world_size,
                 join=True,
+                start_method="spawn",
             )
+
+            # mp.spawn(
+            #     run,
+            #     args=(world_size, args, outdir, logfile),
+            #     nprocs=world_size,
+            #     join=True,
+            # )
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
