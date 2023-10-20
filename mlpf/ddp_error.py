@@ -1,7 +1,5 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
-
-Author: Farouk Mokhtar
+Debugging error when using num_workers>0 for pytorch dataloader in a torch.distributed context.
 """
 
 import argparse
@@ -169,9 +167,9 @@ def main_worker(rank, world_size, args):
 
 def main():
     # e.g.
-    # on cpu: python3 ddp_error.py --gpus "0,1" --num-workers 2
-    # on single-gpu:
-    # on multi-gpu:
+    # on cpu: python3 ddp_error.py --gpus "" --num-workers 2
+    # on single-gpu: python3 ddp_error.py --gpus "0" --num-workers 2
+    # on multi-gpu: python3 ddp_error.py --gpus "0,1" --num-workers 2
 
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
