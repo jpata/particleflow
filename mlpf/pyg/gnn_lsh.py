@@ -10,7 +10,6 @@ def point_wise_feed_forward_network(
     activation="ELU",
     dropout=0.0,
 ):
-
     layers = []
     layers.append(
         nn.Linear(
@@ -177,7 +176,6 @@ class MessageBuildingLayerLSH(nn.Module):
         )
 
     def forward(self, x_msg, x_node, msk, training=False):
-
         shp = x_msg.shape
         n_points = shp[1]
 
@@ -240,7 +238,6 @@ def reverse_lsh(bins_split, points_binned_enc):
 
 class CombinedGraphLayer(nn.Module):
     def __init__(self, *args, **kwargs):
-
         self.inout_dim = kwargs.pop("inout_dim")
         self.max_num_bins = kwargs.pop("max_num_bins")
         self.bin_size = kwargs.pop("bin_size")
@@ -284,7 +281,6 @@ class CombinedGraphLayer(nn.Module):
             self.dropout_layer = torch.nn.Dropout(self.dropout)
 
     def forward(self, x, msk):
-
         n_elems = x.shape[1]
         bins_to_pad_to = -torch.floor_divide(-n_elems, self.bin_size)
 
