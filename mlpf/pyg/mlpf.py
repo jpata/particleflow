@@ -58,6 +58,7 @@ def unpad(data_padded, mask):
     A = data_padded[mask]
     return A
 
+
 class MLPF(nn.Module):
     def __init__(
         self,
@@ -99,7 +100,7 @@ class MLPF(nn.Module):
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
             elif self.conv_type == "gnn-lsh":
                 self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()                
+                self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
@@ -127,7 +128,6 @@ class MLPF(nn.Module):
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
-
 
     def forward(self, event):
         # unfold the Batch object
