@@ -219,7 +219,7 @@ class PFDataset:
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
+                # sampler=sampler,
                 num_workers=num_workers,
                 prefetch_factor=prefetch_factor,
             )
@@ -297,7 +297,6 @@ class Collater:
 
 
 def my_getitem(self, vals):
-    from tensorflow_datasets.core.proto import dataset_info_pb2
     # print(
     #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
     # )
@@ -309,8 +308,6 @@ class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
-        from tensorflow_datasets.core.proto import dataset_info_pb2
-
         self.idx = 0
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
@@ -325,11 +322,9 @@ class InterleavedIterator(object):
         self.cur_index = 0
 
     def __iter__(self):
-        from tensorflow_datasets.core.proto import dataset_info_pb2
         return self
 
     def __next__(self):
-        from tensorflow_datasets.core.proto import dataset_info_pb2
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
@@ -341,7 +336,6 @@ class InterleavedIterator(object):
         return next(self.data_loaders_iter[iloader])
 
     def __len__(self):
-        from tensorflow_datasets.core.proto import dataset_info_pb2
         len_ = 0
         for iloader in range(len(self.data_loaders_iter)):
             len_ += len(self.data_loaders_iter[iloader])
