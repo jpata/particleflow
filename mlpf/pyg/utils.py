@@ -219,7 +219,7 @@ class PFDataset:
                 self.ds,
                 batch_size=batch_size,
                 collate_fn=Collater(self.keys_to_get),
-                # sampler=sampler,
+                sampler=sampler,
                 num_workers=num_workers,
                 prefetch_factor=prefetch_factor,
             )
@@ -238,11 +238,10 @@ class PFDataset:
         return self.ds.__repr__()
 
 
-# class DataLoader(torch.utils.data.DataLoader):
-from .utils_dl import DataLoader as DL
+class DataLoader(torch.utils.data.DataLoader):
+    # from .utils_dl import DataLoader as DL
 
-
-class DataLoader(DL):
+    # class DataLoader(DL):
     """
     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
     because we need to implement our own Collater class to load the tensorflow_datasets (see below).
@@ -257,6 +256,8 @@ class DataLoader(DL):
         exclude_keys: Optional[List[str]] = None,
         **kwargs,
     ):
+        from tensorflow_datasets.core.proto import dataset_info_pb2
+
         # Remove for PyTorch Lightning:
         collate_fn = kwargs.pop("collate_fn", None)
 
