@@ -1,4 +1,5 @@
 import unittest
+
 import numpy as np
 import torch
 import tensorflow as tf
@@ -9,9 +10,11 @@ TOLERANCE = 1e-2
 class TestGNNTorchAndTensorflow(unittest.TestCase):
     def test_GHConvDense(self):
         from mlpf.tfmodel.model import GHConvDense
-        from mlpf.pyg.model import GHConvDense as GHConvDenseTorch
 
         nn1 = GHConvDense(output_dim=128, activation="selu")
+
+        from mlpf.pyg.gnn_lsh import GHConvDense as GHConvDenseTorch
+
         nn2 = GHConvDenseTorch(output_dim=128, activation="selu", hidden_dim=64)
 
         x = np.random.normal(size=(2, 4, 64, 64)).astype(np.float32)
@@ -39,9 +42,11 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
 
     def test_MessageBuildingLayerLSH(self):
         from mlpf.tfmodel.model import MessageBuildingLayerLSH
-        from mlpf.pyg.model import MessageBuildingLayerLSH as MessageBuildingLayerLSHTorch
 
         nn1 = MessageBuildingLayerLSH(distance_dim=128, bin_size=64)
+
+        from mlpf.pyg.gnn_lsh import MessageBuildingLayerLSH as MessageBuildingLayerLSHTorch
+
         nn2 = MessageBuildingLayerLSHTorch(distance_dim=128, bin_size=64)
 
         x_dist = np.random.normal(size=(2, 256, 128)).astype(np.float32)
@@ -71,7 +76,7 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         ret = reverse_lsh(bins_split, x, False)
         self.assertTrue(np.all(x_node == ret.numpy()))
 
-        from mlpf.pyg.model import reverse_lsh as reverse_lsh_torch
+        from mlpf.pyg.gnn_lsh import reverse_lsh as reverse_lsh_torch
 
         bins_split, x, dm, msk_f = out2
         ret = reverse_lsh_torch(bins_split, x)

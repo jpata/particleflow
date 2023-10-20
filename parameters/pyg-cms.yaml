@@ -10,9 +10,9 @@ model:
 
   gravnet:
     conv_type: gravnet
-    embedding_dim: 36
-    width: 128
-    num_convs: 2
+    embedding_dim: 512
+    width: 512
+    num_convs: 3
     k: 16
     propagate_dimensions: 22
     space_dimensions: 4
@@ -69,29 +69,12 @@ train_dataset:
     cms_pf_multi_particle_gun:
       version: 1.6.0
       batch_size: 5
-  clic:
-    clic_edm_qq_pf:
-      version: 1.5.0
-      batch_size: 100
-    clic_edm_ttbar_pf:
-      version: 1.5.0
-      batch_size: 100
-    # clic_edm_ttbar_pu10_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-    # clic_edm_ww_fullhad_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-    # clic_edm_zh_tautau_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-  delphes:
-    delphes_ttbar_pf:
-      version: 1.2.0
-      batch_size: 10
-    delphes_qcd_pf:
-      version: 1.2.0
-      batch_size: 10
+
+valid_dataset:
+  cms:
+    cms_pf_qcd_high_pt:
+      version: 1.6.0
+      batch_size: 1
 
 test_dataset:
   cms:
@@ -137,26 +120,3 @@ test_dataset:
     cms_pf_multi_particle_gun:
       version: 1.6.0
       batch_size: 5
-  clic:
-    clic_edm_qq_pf:
-      version: 1.5.0
-      batch_size: 100
-    clic_edm_ttbar_pf:
-      version: 1.5.0
-      batch_size: 100
-    # clic_edm_ttbar_pu10_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-    # clic_edm_ww_fullhad_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-    # clic_edm_zh_tautau_pf:
-    #   version: 1.5.0
-    #   batch_size: 100
-  delphes:
-    delphes_ttbar_pf:
-      version: 1.2.0
-      batch_size: 10
-    delphes_qcd_pf:
-      version: 1.2.0
-      batch_size: 10
