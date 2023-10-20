@@ -129,20 +129,20 @@ def run(rank, world_size, config, args, outdir, logfile):
             ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", ["X", "ygen"], num_samples=config["ntrain"])
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(ds.get_loader(batch_size, world_size, args.num_workers, args.prefetch_factor))  # TODO: change to use config
+            train_loaders.append(ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"]))
 
         train_loader = InterleavedIterator(train_loaders)
 
         if (rank == 0) or (rank == "cpu"):  # quick validation only on a single machine
             valid_loaders = []
-            for sample in config["valid_dataset"][args.dataset]:
-                version = config["valid_dataset"][args.dataset][sample]["version"]
-                batch_size = config["valid_dataset"][args.dataset][sample]["batch_size"] * args.gpu_batch_multiplier
+            for sample in config["valid_dataset"][config["dataset"]]:
+                version = config["valid_dataset"][config["dataset"]][sample]["version"]
+                batch_size = config["valid_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
-                ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=args.nvalid)
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["nvalid"])
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-                valid_loaders.append(ds.get_loader(batch_size, 1, args.num_workers, args.prefetch_factor))
+                valid_loaders.append(ds.get_loader(batch_size, 1, config["num_workers"], config["prefetch_factor"]))
 
             valid_loader = InterleavedIterator(valid_loaders)
         else:

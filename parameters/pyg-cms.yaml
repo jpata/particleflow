@@ -1,7 +1,7 @@
 backend: pytorch
 
-dataset: clic
-data_dir: /mnt/ceph/users/ewulff/tensorflow_datasets/clusters
+dataset: cms
+data_dir: /mnt/ceph/users/ewulff/tensorflow_datasets/
 gpus: "0"
 gpu_batch_multiplier: 1
 load:
@@ -11,6 +11,8 @@ lr: 1e_4
 conv_type: gnn_lsh
 ntrain:
 ntest:
+num_workers: 1
+prefetch_factor: 2
 
 model:
   gnn_lsh:
