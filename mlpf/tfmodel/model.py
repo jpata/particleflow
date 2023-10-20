@@ -811,6 +811,7 @@ class OutputDecoding(tf.keras.Model):
         self.met_output = met_output
         self.cls_output_as_logits = cls_output_as_logits
 
+        # FIXME: figure out how to get this consistent with the definition in the dataset side (BaseDatasetFactory.py)
         self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
         self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
 
@@ -834,7 +835,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_pt = point_wise_feed_forward_network(
-            500,
+            self.pt_bins.shape[0],
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
@@ -865,7 +866,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            500,
+            self.energy_bins.shape[0],
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
