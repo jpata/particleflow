@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
 
-# from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # Ignore divide by 0 errors
@@ -142,12 +142,12 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensor
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
         num_iterations += 1
 
-        if tensorboard_writer:
-            tensorboard_writer.add_scalar(
-                "step_{}/num_elems".format(step_type),
-                batch.X.shape[0],
-                ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
-            )
+        # if tensorboard_writer:
+        #     tensorboard_writer.add_scalar(
+        #         "step_{}/num_elems".format(step_type),
+        #         batch.X.shape[0],
+        #         ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+        #     )
 
         event = batch.to(rank)
 
@@ -167,13 +167,13 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensor
                 pred_ids_one_hot, pred_momentum, pred_charge = model(event)
         # print(f"{event}: {(time.time() - t0):.2f}s")
 
-        for icls in range(pred_ids_one_hot.shape[1]):
-            if tensorboard_writer:
-                tensorboard_writer.add_scalar(
-                    "step_{}/num_cls_{}".format(step_type, icls),
-                    torch.sum(target_ids == icls),
-                    ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
-                )
+        # for icls in range(pred_ids_one_hot.shape[1]):
+        #     if tensorboard_writer:
+        #         tensorboard_writer.add_scalar(
+        #             "step_{}/num_cls_{}".format(step_type, icls),
+        #             torch.sum(target_ids == icls),
+        #             ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+        #         )
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
@@ -193,12 +193,12 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensor
         # TOTAL LOSS
         loss_["Total"] = loss_["Classification"] + loss_["Regression"] + loss_["Charge"]
 
-        if tensorboard_writer:
-            tensorboard_writer.add_scalar(
-                "step_{}/loss".format(step_type),
-                loss_["Total"],
-                ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
-            )
+        # if tensorboard_writer:
+        #     tensorboard_writer.add_scalar(
+        #         "step_{}/loss".format(step_type),
+        #         loss_["Total"],
+        #         ISTEP_GLOBAL_TRAIN if is_train else ISTEP_GLOBAL_VALID,
+        #     )
         if is_train:
             for param in model.parameters():
                 param.grad = None
@@ -206,10 +206,10 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensor
             optimizer.step()
 
         for loss in losses:
-            losses[loss] += loss_[loss].detach().cpu().item()
+            losses[loss] += loss_[loss].detach()
 
-        if tensorboard_writer:
-            tensorboard_writer.flush()
+        # if tensorboard_writer:
+        #     tensorboard_writer.flush()
 
         if is_train:
             ISTEP_GLOBAL_TRAIN += 1
@@ -217,7 +217,7 @@ def train(rank, world_size, model, train_loader, valid_loader, optimizer, tensor
             ISTEP_GLOBAL_VALID += 1
 
     for loss in losses:
-        losses[loss] = losses[loss] / num_iterations
+        losses[loss] = losses[loss].cpu().item() / num_iterations
 
     _logger.info(
         f"loss_id={losses['Classification']:.4f} loss_momentum={losses['Regression']:.4f} loss_charge={losses['Charge']:.4f}"
@@ -264,10 +264,15 @@ def train_mlpf(rank, world_size, model, train_loader, valid_loader, n_epochs, pa
             break
 
         # training step
-        losses_t = train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer)
-        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-        #     with record_function("model_train"):
-        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+        if epoch == -1:
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
+                with record_function("model_train"):
+                    losses_t = train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer)
+            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+            print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=20))
+            prof.export_chrome_trace("trace.json")
+        else:
+            losses_t = train(rank, world_size, model, train_loader, valid_loader, optimizer, tensorboard_writer)
 
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)

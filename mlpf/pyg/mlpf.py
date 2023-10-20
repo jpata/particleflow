@@ -57,6 +57,12 @@ def ffn(input_dim, output_dim, width, act, dropout):
     )
 
 
+@torch.compile
+def unpad(data_padded, mask):
+    #A = torch.cat([data_padded[i][mask[i]] for i in range(data_padded.shape[0])])
+    B = data_padded[mask]
+    return B
+
 class MLPF(nn.Module):
     def __init__(
         self,
@@ -83,7 +89,7 @@ class MLPF(nn.Module):
         # embedding of the inputs
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
-
+            self.bin_size = 640
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -98,12 +104,11 @@ class MLPF(nn.Module):
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
             elif self.conv_type == "gnn-lsh":
                 self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-
+                self.conv_reg = nn.ModuleList()                
                 for i in range(num_convs):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
-                        "bin_size": 640,
+                        "bin_size": self.bin_size,
                         "max_num_bins": 200,
                         "distance_dim": 128,
                         "layernorm": True,
@@ -128,6 +133,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
+
     def forward(self, event):
         # unfold the Batch object
         input_ = event.X.float()
@@ -136,6 +142,14 @@ class MLPF(nn.Module):
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(input_)
+
+            if self.conv_type != "gravnet":
+                _, num_nodes = torch.unique(batch_idx, return_counts=True)
+                max_num_nodes = torch.max(num_nodes).cpu()
+                max_num_nodes_padded = ((max_num_nodes // self.bin_size) + 1) * self.bin_size
+                embedding, mask = torch_geometric.utils.to_dense_batch(
+                    embedding, batch_idx, max_num_nodes=max_num_nodes_padded
+                )
 
             if self.conv_type == "gravnet":
                 # perform a series of graph convolutions
@@ -148,18 +162,12 @@ class MLPF(nn.Module):
             else:
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
-                    input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
-                    out_padded = conv(input_padded, ~mask)
-                    out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
-                    # assert out_stacked.shape[0] == conv_input.shape[0]
-                    embeddings_id.append(out_stacked)
+                    out_padded = conv(conv_input, ~mask)
+                    embeddings_id.append(out_padded)
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
-                    input_padded, mask = torch_geometric.utils.to_dense_batch(conv_input, batch_idx)
-                    out_padded = conv(input_padded, ~mask)
-                    out_stacked = torch.cat([out_padded[i][mask[i]] for i in range(out_padded.shape[0])])
-                    # assert out_stacked.shape[0] == conv_input.shape[0]
-                    embeddings_reg.append(out_stacked)
+                    out_padded = conv(conv_input, ~mask)
+                    embeddings_reg.append(out_padded)
 
         embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
 
