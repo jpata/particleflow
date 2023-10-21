@@ -54,10 +54,10 @@ class PFDataset:
         return sampler
 
     def get_loader(self, world_size, batch_size, num_workers=None, prefetch_factor=2):
-        if world_size > 1:
-            sampler = self.get_distributed_sampler()
-        else:
-            sampler = self.get_sampler()
+        # if world_size > 1:
+        #     sampler = self.get_distributed_sampler()
+        # else:
+        sampler = self.get_sampler()
 
         if num_workers is not None:
             return DataLoader(
