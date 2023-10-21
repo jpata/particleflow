@@ -39,7 +39,10 @@ def main_worker(rank, world_size, args):
 
     if world_size > 1:
         new = torch_geometric.loader.DataLoader(
-            events, batch_size=2, sampler=torch.utils.data.distributed.DistributedSampler(events)
+            events,
+            batch_size=2,
+            sampler=torch.utils.data.distributed.DistributedSampler(events),
+            num_workers=args.num_workers,
         )
     else:
         new = torch_geometric.loader.DataLoader(events, batch_size=2)
