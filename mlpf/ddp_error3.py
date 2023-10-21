@@ -5,7 +5,6 @@ Debugging error when using num_workers>0 for pytorch dataloader in a torch.distr
 import argparse
 import logging
 import os
-from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
@@ -28,103 +27,16 @@ parser.add_argument("--prefetch-factor", type=int, default=2, help="will only be
 parser.add_argument("--spawn-method", type=str, default="spawn", help="['spawn', 'fork', 'forkserver']")
 
 
-class PFDataset:
-    """Builds a DataSource from tensorflow datasets."""
-
-    def __init__(self, data_dir, name, split, keys_to_get):
-        """
-        Args
-            data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
-            name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
-            split: "train" or "test
-        """
-
-        builder = tfds.builder(name, data_dir=data_dir)
-
-        self.ds = builder.as_data_source(split=split)
-
-        self.keys_to_get = keys_to_get
-
-    def get_sampler(self):
-        sampler = torch.utils.data.RandomSampler(self.ds)
-        return sampler
-
-    def get_distributed_sampler(self):
-        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
-        return sampler
-
-    def get_loader(self, world_size, batch_size, num_workers=None, prefetch_factor=2):
-        if world_size > 1:
-            sampler = self.get_distributed_sampler()
-        else:
-            sampler = self.get_sampler()
-
-        if num_workers is not None:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-            )
-
-    def __len__(self):
-        return len(self.ds)
-
-    def __repr__(self):
-        return self.ds.__repr__()
-
-
-class DataLoader(torch.utils.data.DataLoader):
-    """
-    Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
-    because we need to implement our own Collater class to load the tensorflow_datasets (see below).
-    """
-
-    def __init__(
-        self,
-        dataset: PFDataset,
-        batch_size: int = 1,
-        shuffle: bool = False,
-        follow_batch: Optional[List[str]] = None,
-        exclude_keys: Optional[List[str]] = None,
-        **kwargs,
-    ):
-        # Remove for PyTorch Lightning:
-        collate_fn = kwargs.pop("collate_fn", None)
-
-        # Save for PyTorch Lightning < 1.6:
-        self.follow_batch = follow_batch
-        self.exclude_keys = exclude_keys
-
-        super().__init__(
-            dataset,
-            batch_size,
-            shuffle,
-            collate_fn=collate_fn,
-            **kwargs,
-        )
-
-
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None):
+    def __init__(self, follow_batch=None, exclude_keys=None):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
-        self.keys_to_get = keys_to_get
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
-        elem_keys = self.keys_to_get
+        elem_keys = ["X"]
 
         batch = []
         for ev in range(num_samples_in_batch):
@@ -141,13 +53,34 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def main_worker(rank, world_size, args, train_loader):
+def main_worker(rank, world_size, args, ds):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+
+        sampler = torch.utils.data.distributed.DistributedSampler(ds)
+    else:
+        sampler = torch.utils.data.RandomSampler(ds)
+
+    if args.num_workers is not None:
+        train_loader = torch.utils.data.DataLoader(
+            ds,
+            batch_size=args.batch_size,
+            collate_fn=Collater(),
+            sampler=sampler,
+            num_workers=args.num_workers,
+            prefetch_factor=args.prefetch_factor,
+        )
+    else:
+        train_loader = torch.utils.data.DataLoader(
+            ds,
+            batch_size=args.batch_size,
+            collate_fn=Collater(),
+            sampler=sampler,
+        )
 
     print("Looping over dataloader from inside the worker")
     for i, batch in enumerate(train_loader):
@@ -169,15 +102,8 @@ def main():
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 
     print("Defining dataset")
-    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
-
-    print("Defining dataloader")
-    train_loader = ds.get_loader(1, args.batch_size, args.num_workers, args.prefetch_factor)
-
-    for i, batch in enumerate(train_loader):
-        print("batch", batch)
-        if i > 9:
-            break
+    builder = tfds.builder("cms_pf_ttbar:1.6.0", data_dir=args.data_dir)
+    ds = builder.as_data_source(split="train")
 
     if args.gpus:
         assert (
@@ -191,7 +117,7 @@ def main():
 
             mp.start_processes(
                 main_worker,
-                args=(world_size, args, train_loader),
+                args=(world_size, args, ds),
                 nprocs=world_size,
                 join=True,
                 start_method=args.spawn_method,
@@ -200,12 +126,12 @@ def main():
         elif world_size == 1:
             rank = 0
             print(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}")
-            main_worker(rank, world_size, args, train_loader)
+            main_worker(rank, world_size, args, ds)
 
     else:
         rank = "cpu"
         print("Will use cpu")
-        main_worker(rank, world_size, args, train_loader)
+        main_worker(rank, world_size, args, ds)
 
 
 if __name__ == "__main__":
