@@ -60,10 +60,13 @@ def main_worker(rank, world_size, args, ds):
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
-
+        print("ho")
         sampler = torch.utils.data.distributed.DistributedSampler(ds)
+        print("ho")
     else:
+        print("ho3")
         sampler = torch.utils.data.RandomSampler(ds)
+        print("ho3")
 
     print(args.num_workers)
     if args.num_workers is not None:
