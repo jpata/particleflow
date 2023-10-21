@@ -172,7 +172,7 @@ def main():
     ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
 
     print("Defining dataloader")
-    train_loader = ds.get_loader(world_size, args.batch_size, args.num_workers, args.prefetch_factor)
+    train_loader = ds.get_loader(1, args.batch_size, args.num_workers, args.prefetch_factor)
 
     for i, batch in enumerate(train_loader):
         print("batch", batch)
