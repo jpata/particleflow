@@ -141,16 +141,13 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def main_worker(rank, world_size, args):
+def main_worker(rank, world_size, args, ds):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
-
-    print("Defining dataset")
-    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
 
     print("Defining dataloader")
     train_loader = ds.get_loader(world_size, args.batch_size, args.num_workers, args.prefetch_factor)
@@ -167,12 +164,15 @@ def main_worker(rank, world_size, args):
 
 def main():
     # e.g.
-    # on cpu: python3 ddp_error.py --gpus "" --num-workers 2
-    # on single-gpu: python3 ddp_error.py --gpus "0" --num-workers 2
-    # on multi-gpu: python3 ddp_error.py --gpus "0,1" --num-workers 2
+    # on cpu: python3 mlpf/ddp_error.py --gpus "" --num-workers 2
+    # on single-gpu: python3 mlpf/ddp_error.py --gpus "0" --num-workers 2
+    # on multi-gpu: python3 mlpf/ddp_error.py --gpus "0,1" --num-workers 2
 
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+
+    print("Defining dataset")
+    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
 
     if args.gpus:
         assert (
@@ -186,7 +186,7 @@ def main():
 
             mp.start_processes(
                 main_worker,
-                args=(world_size, args),
+                args=(world_size, args, ds),
                 nprocs=world_size,
                 join=True,
                 start_method=args.spawn_method,
@@ -195,12 +195,12 @@ def main():
         elif world_size == 1:
             rank = 0
             print(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}")
-            main_worker(rank, world_size, args)
+            main_worker(rank, world_size, args, ds)
 
     else:
         rank = "cpu"
         print("Will use cpu")
-        main_worker(rank, world_size, args)
+        main_worker(rank, world_size, args, ds)
 
 
 if __name__ == "__main__":
