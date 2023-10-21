@@ -54,10 +54,10 @@ class PFDataset:
         return sampler
 
     def get_loader(self, world_size, batch_size, num_workers=None, prefetch_factor=2):
-        # if world_size > 1:
-        #     sampler = self.get_distributed_sampler()
-        # else:
-        sampler = self.get_sampler()
+        if world_size > 1:
+            sampler = self.get_distributed_sampler()
+        else:
+            sampler = self.get_sampler()
 
         if num_workers is not None:
             return DataLoader(
@@ -141,13 +141,19 @@ class Collater:
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
-def main_worker(rank, world_size, args, train_loader):
+def main_worker(rank, world_size, args):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+
+    print("Defining dataset")
+    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
+
+    print("Defining dataloader")
+    train_loader = ds.get_loader(world_size, args.batch_size, args.num_workers, args.prefetch_factor)
 
     print("Looping over dataloader")
     for i, batch in enumerate(train_loader):
@@ -168,12 +174,6 @@ def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 
-    print("Defining dataset")
-    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
-
-    print("Defining dataloader")
-    train_loader = ds.get_loader(world_size, args.batch_size, args.num_workers, args.prefetch_factor)
-
     if args.gpus:
         assert (
             world_size <= torch.cuda.device_count()
@@ -186,7 +186,7 @@ def main():
 
             mp.start_processes(
                 main_worker,
-                args=(world_size, args, train_loader),
+                args=(world_size, args),
                 nprocs=world_size,
                 join=True,
                 start_method=args.spawn_method,
@@ -195,12 +195,12 @@ def main():
         elif world_size == 1:
             rank = 0
             print(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}")
-            main_worker(rank, world_size, args, train_loader)
+            main_worker(rank, world_size, args)
 
     else:
         rank = "cpu"
         print("Will use cpu")
-        main_worker(rank, world_size, args, train_loader)
+        main_worker(rank, world_size, args)
 
 
 if __name__ == "__main__":
