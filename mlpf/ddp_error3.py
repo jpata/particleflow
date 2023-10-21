@@ -24,7 +24,7 @@ parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets_
 parser.add_argument("--batch-size", type=int, default=2, help="batch size for data loader")
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=2, help="will only be set if --num-workers>0")
-parser.add_argument("--spawn-method", type=str, default="spawn", help="['spawn', 'fork', 'forkserver']")
+parser.add_argument("--start-method", type=str, default="spawn", help="['spawn', 'fork', 'forkserver']")
 
 
 class Collater:
@@ -120,13 +120,13 @@ def main():
             print(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus")
             for rank in range(world_size):
                 print(torch.cuda.get_device_name(rank))
-
+            print("HO")
             mp.start_processes(
                 main_worker,
                 args=(world_size, args, ds),
                 nprocs=world_size,
                 join=True,
-                start_method=args.spawn_method,
+                start_method=args.start_method,
             )
 
         elif world_size == 1:
