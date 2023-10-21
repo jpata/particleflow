@@ -67,6 +67,7 @@ def main_worker(rank, world_size, args, ds):
 
     print(args.num_workers)
     if args.num_workers is not None:
+        print("ho")
         train_loader = torch.utils.data.DataLoader(
             ds,
             batch_size=args.batch_size,
