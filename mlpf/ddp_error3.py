@@ -75,6 +75,7 @@ def main_worker(rank, world_size, args, ds):
             prefetch_factor=args.prefetch_factor,
         )
     else:
+        print("here")
         train_loader = torch.utils.data.DataLoader(
             ds,
             batch_size=args.batch_size,
