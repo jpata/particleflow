@@ -65,6 +65,7 @@ def main_worker(rank, world_size, args, ds):
     else:
         sampler = torch.utils.data.RandomSampler(ds)
 
+    print(args.num_workers)
     if args.num_workers is not None:
         train_loader = torch.utils.data.DataLoader(
             ds,
