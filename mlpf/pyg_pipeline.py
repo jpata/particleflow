@@ -281,11 +281,12 @@ def main():
             if args.distributed:
                 is_distributed = True
                 _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel and {world_size} gpus", color="purple")
-                mp.spawn(
+                mp.start_processes(
                     run,
                     args=(world_size, is_distributed, args, outdir, logfile),
                     nprocs=world_size,
                     join=True,
+                    start_method="spawn",
                 )
             else:  # use torch_geometric.nn.data_parallel
                 _logger.info(f"Will use torch_geometric.nn.data_parallel and {world_size} gpus", color="purple")

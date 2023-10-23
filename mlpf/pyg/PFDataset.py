@@ -45,7 +45,6 @@ class PFDataset:
             else:
                 sampler = self.get_distributed_sampler()
 
-            print(f"num_workers {num_workers}, prefetch_factor {prefetch_factor}")
             # TODO: fix num_workers>0 for DDP
             return DataLoader(
                 self.ds,
@@ -60,7 +59,6 @@ class PFDataset:
             sampler = self.get_sampler()
 
             batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
-            print(f"num_workers {num_workers}, prefetch_factor {prefetch_factor}")
 
             return DataLoader(
                 self.ds,
@@ -73,7 +71,6 @@ class PFDataset:
 
         else:  # single-gpu and cpu
             sampler = self.get_sampler()
-            print(f"num_workers {num_workers}, prefetch_factor {prefetch_factor}")
 
             return DataLoader(
                 self.ds,
