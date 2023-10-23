@@ -21,8 +21,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets_small/", help="path to tfds")
 parser.add_argument("--batch-size", type=int, default=2, help="batch size for data loader")
-parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
-parser.add_argument("--prefetch-factor", type=int, default=2, help="will only be set if --num-workers>0")
+parser.add_argument("--num-workers", type=int, default=0, help="number of processes to load the data")
+parser.add_argument("--prefetch-factor", type=int, default=None, help="will only be set if --num-workers>0")
 parser.add_argument("--start-method", type=str, default="spawn", help="['spawn', 'fork', 'forkserver']")
 
 
