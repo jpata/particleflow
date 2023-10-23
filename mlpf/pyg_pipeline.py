@@ -37,7 +37,7 @@ parser.add_argument("--prefix", type=str, default="test_", help="prefix appended
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument(
-    "--distributed", action="store_true", help="will use torch.distributed rather than torch_geometric.nn.data_parallel"
+    "--ddp", action="store_true", help="will use torch.distributed rather than torch_geometric.nn.data_parallel"
 )
 parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=1, help="increase batch size per GPU by this constant factor"
@@ -59,10 +59,10 @@ parser.add_argument("--make-plots", action="store_true", help="make plots of the
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 
 
-def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
-    """Will be passed to each gpu if ((world_size > 1) and is_distributed) else will run normally on the given device(s)."""
+def main_worker(rank, world_size, is_ddp, args, outdir, logfile):
+    """Will be passed to each gpu if ((world_size > 1) and is_ddp) else will run normally on the given device(s)."""
 
-    if is_distributed:
+    if is_ddp:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
@@ -100,10 +100,10 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
 
     model.to(rank)
 
-    if (world_size > 1) and is_distributed:
+    if (world_size > 1) and is_ddp:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
-    elif (world_size > 1) and not is_distributed:
+    elif (world_size > 1) and not is_ddp:
         model = torch_geometric.nn.DataParallel(model)
 
     if (rank == 0) or (rank == "cpu"):
@@ -124,7 +124,7 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(
-                ds.get_loader(batch_size, world_size, is_distributed, args.num_workers, args.prefetch_factor, "train")
+                ds.get_loader(batch_size, world_size, is_ddp, args.num_workers, args.prefetch_factor, "train")
             )
 
         train_loader = InterleavedIterator(train_loaders)
@@ -139,7 +139,7 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
                 valid_loaders.append(
-                    ds.get_loader(batch_size, world_size, is_distributed, args.num_workers, args.prefetch_factor, "valid")
+                    ds.get_loader(batch_size, world_size, is_ddp, args.num_workers, args.prefetch_factor, "valid")
                 )
 
             valid_loader = InterleavedIterator(valid_loaders)
@@ -149,7 +149,7 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
         train_mlpf(
             rank,
             world_size,
-            is_distributed,
+            is_ddp,
             model,
             optimizer,
             train_loader,
@@ -176,7 +176,7 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator(
-                [ds.get_loader(batch_size, world_size, is_distributed, args.num_workers, args.prefetch_factor)]
+                [ds.get_loader(batch_size, world_size, is_ddp, args.num_workers, args.prefetch_factor)]
             )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
@@ -207,7 +207,7 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
             run_predictions(
                 rank,
                 world_size,
-                is_distributed,
+                is_ddp,
                 model,
                 test_loaders[sample],
                 sample,
@@ -246,14 +246,14 @@ def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
             except Exception as e:
                 print("ONNX export failed: {}".format(e))
 
-    if is_distributed:
+    if is_ddp:
         dist.destroy_process_group()
 
 
 def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
-    is_distributed = False  # will be set to True if --distributed is provided
+    is_ddp = False  # will be set to True if --distributed is provided
 
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
@@ -278,12 +278,12 @@ def main():
             for rank in range(world_size):
                 _logger.info(f"rank {rank}: {torch.cuda.get_device_name(rank)}", color="purple")
 
-            if args.distributed:
-                is_distributed = True
+            if args.ddp:
+                is_ddp = True
                 _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel and {world_size} gpus", color="purple")
                 mp.start_processes(
                     main_worker,
-                    args=(world_size, is_distributed, args, outdir, logfile),
+                    args=(world_size, is_ddp, args, outdir, logfile),
                     nprocs=world_size,
                     join=True,
                     start_method="spawn",
@@ -291,17 +291,17 @@ def main():
             else:  # use torch_geometric.nn.data_parallel
                 _logger.info(f"Will use torch_geometric.nn.data_parallel and {world_size} gpus", color="purple")
                 rank = 0
-                main_worker(rank, world_size, is_distributed, args, outdir, logfile)
+                main_worker(rank, world_size, is_ddp, args, outdir, logfile)
 
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            main_worker(rank, world_size, is_distributed, args, outdir, logfile)
+            main_worker(rank, world_size, is_ddp, args, outdir, logfile)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        main_worker(rank, world_size, is_distributed, args, outdir, logfile)
+        main_worker(rank, world_size, is_ddp, args, outdir, logfile)
 
 
 if __name__ == "__main__":

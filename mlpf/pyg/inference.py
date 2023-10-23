@@ -27,16 +27,14 @@ from .utils import CLASS_NAMES
 
 
 @torch.no_grad()
-def run_predictions(
-    rank, world_size, is_distributed, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1
-):
+def run_predictions(rank, world_size, is_ddp, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     model.eval()
 
     ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
+        if (world_size > 1) and not is_ddp:  # torch_geometric.nn.data_parallel is given a list of Batch()
             X = batch
         else:
             X = batch.to(rank)

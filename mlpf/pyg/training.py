@@ -127,7 +127,7 @@ class FocalLoss(nn.Module):
 def train(
     rank,
     world_size,
-    is_distributed,
+    is_ddp,
     model,
     optimizer,
     train_loader,
@@ -157,7 +157,7 @@ def train(
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         istep += 1
 
-        if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
+        if (world_size > 1) and not is_ddp:  # torch_geometric.nn.data_parallel is given a list of Batch()
             X = batch
         else:
             X = batch.to(rank)
@@ -210,7 +210,7 @@ def train(
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-            if is_distributed:
+            if is_ddp:
                 dist.barrier()  # wait until training run is finished on all ranks before running the validation
 
             if (rank == 0) or (rank == "cpu"):
@@ -220,11 +220,11 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        if (world_size > 1) and is_distributed:
+                        if (world_size > 1) and is_ddp:
                             # for torch.nn.parallel.DistributedDataParallel validation is run only on a single machine
                             X = batch.to(rank)
                             ygen, _, ypred = model.module(X)
-                        elif (world_size > 1) and not is_distributed:
+                        elif (world_size > 1) and not is_ddp:
                             # for torch_geometric.nn.data_parallel the batch is a list
                             X = batch
                             ygen, _, ypred = model(X)
@@ -282,7 +282,7 @@ def train(
 
                 model.train()  # prepare for next training loop
 
-            if is_distributed:
+            if is_ddp:
                 dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
                 dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
 
@@ -299,16 +299,14 @@ def train(
     return epoch_loss, valid_loss, best_val_loss, stale_epochs
 
 
-def train_mlpf(
-    rank, world_size, is_distributed, model, optimizer, train_loader, valid_loader, num_epochs, patience, outpath
-):
+def train_mlpf(rank, world_size, is_ddp, model, optimizer, train_loader, valid_loader, num_epochs, patience, outpath):
     """
     Will run a full training by calling train().
 
     Args:
         rank: 'cpu' or int representing the gpu device id
         model: torch model (may be wrapped by torch_geometric.nn.data_parallel or torch.nn.parallel.DistributedDataParallel)
-        is_distributed: True for torch.nn.parallel.DistributedDataParallel()
+        is_ddp: True for torch.nn.parallel.DistributedDataParallel()
         train_loader: a pytorch geometric Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
         valid_loader: a pytorch geometric Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
         patience: number of stale epochs before stopping the training
@@ -335,7 +333,7 @@ def train_mlpf(
         losses_t, losses_v, best_val_loss, stale_epochs = train(
             rank,
             world_size,
-            is_distributed,
+            is_ddp,
             model,
             optimizer,
             train_loader,

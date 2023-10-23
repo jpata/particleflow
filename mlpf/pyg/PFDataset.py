@@ -35,11 +35,11 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=0, prefetch_factor=None, flag="train"):
+    def get_loader(self, batch_size, world_size, is_ddp=False, num_workers=0, prefetch_factor=None, flag="train"):
         if (num_workers > 0) and (prefetch_factor is None):
             prefetch_factor = 2  # default prefetch_factor when num_workers>0
 
-        if (world_size > 1) and is_distributed:  # torch.nn.parallel.DistributedDataParallel
+        if (world_size > 1) and is_ddp:  # torch.nn.parallel.DistributedDataParallel
             if flag == "valid":
                 sampler = self.get_sampler()  # validation is done a on single machine
             else:
@@ -55,7 +55,7 @@ class PFDataset:
                 prefetch_factor=prefetch_factor,
             )
 
-        elif (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel
+        elif (world_size > 1) and not is_ddp:  # torch_geometric.nn.data_parallel
             sampler = self.get_sampler()
 
             batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
