@@ -86,17 +86,24 @@ class PFDataset:
     def __repr__(self):
         return self.ds.__repr__()
 
-    # def __getstate__(self):
-    #     state = self.ds.__dict__.copy()
-    #     # remove unpicklable entries
-    #     self.dataset_info = state["dataset_info"]
-    #     del state["dataset_info"]
-    #     return state
+    def __getstate__(self):
+        """Used for serializing instances"""
 
-    # def __setstate__(self, state):
-    #     """Used for deserializing"""
-    #     # restore the state which was picklable
-    #     self.__dict__.update(state)
+        # start with a copy so we don't accidentally modify the object state
+        # or cause other conflicts
+        state = self.__dict__.copy()
+
+        # remove unpicklable entries
+        del state["dataset_info"]
+        return state
+
+    def __setstate__(self, state):
+        """Used for deserializing"""
+        # restore the state which was picklable
+        self.__dict__.update(state)
+
+        # restore unpicklable entries
+        self.dataset_info = self.ds.dataset_info
 
 
 class DataLoader(torch.utils.data.DataLoader):
