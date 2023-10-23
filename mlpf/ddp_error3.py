@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 
-import tensorflow_datasets as tfds
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -105,13 +104,11 @@ def main():
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 
     print("Defining dataset")
-    builder = tfds.builder("cms_pf_ttbar:1.6.0", data_dir=args.data_dir)
-    ds = builder.as_data_source(split="train")
-    print("Finished defining dataset")
 
     from pyg.PFDataset import PFDataset
 
     ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
+    print("Finished defining dataset")
 
     if args.gpus:
         assert (
