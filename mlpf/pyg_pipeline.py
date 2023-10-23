@@ -62,7 +62,7 @@ parser.add_argument("--export-onnx", action="store_true", help="exports the mode
 def run(rank, world_size, is_distributed, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
-    if (world_size > 1) and is_distributed:
+    if is_distributed:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
@@ -234,7 +234,7 @@ def run(rank, world_size, is_distributed, args, outdir, logfile):
             except Exception as e:
                 print("ONNX export failed: {}".format(e))
 
-    if world_size > 1:
+    if is_distributed:
         dist.destroy_process_group()
 
 
