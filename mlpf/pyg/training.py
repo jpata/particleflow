@@ -163,7 +163,7 @@ def train(
         else:
             X = batch.to(rank)
 
-        ygen, ypred = model(X)
+        ygen, _, ypred = model(X)
 
         for icls in range(ypred["cls_id_onehot"].shape[1]):
             if tensorboard_writer:
@@ -224,15 +224,15 @@ def train(
                         if (world_size > 1) and is_distributed:
                             # for torch.nn.parallel.DistributedDataParallel validation is run only on a single machine
                             X = batch.to(rank)
-                            ygen, ypred = model.module(X)
+                            ygen, _, ypred = model.module(X)
                         elif (world_size > 1) and not is_distributed:
                             # for torch_geometric.nn.data_parallel the batch is a list
                             X = batch
-                            ygen, ypred = model(X)
+                            ygen, _, ypred = model(X)
                         else:
                             # for single-gpu or cpu life is simple
                             X = batch.to(rank)
-                            ygen, ypred = model(X)
+                            ygen, _, ypred = model(X)
 
                         loss = mlpf_loss(ygen, ypred)
 

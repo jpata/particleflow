@@ -23,20 +23,25 @@ from plotting.plot_utils import (
 )
 
 from .logger import _logger
-from .utils import CLASS_NAMES, unpack_predictions, unpack_target
+from .utils import CLASS_NAMES
 
 
 @torch.no_grad()
-def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
+def run_predictions(
+    rank, world_size, is_distributed, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1
+):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     model.eval()
 
     ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        ygen = unpack_target(batch.ygen)
-        ycand = unpack_target(batch.ycand)
-        ypred = unpack_predictions(model(batch.to(rank)))
+        if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
+            X = batch
+        else:
+            X = batch.to(rank)
+
+        ygen, ycand, ypred = model(X)
 
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()

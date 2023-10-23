@@ -203,7 +203,18 @@ def run(rank, world_size, is_distributed, args, outdir, logfile):
             else:
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
-            run_predictions(rank, model, test_loaders[sample], sample, outdir, jetdef, jet_ptcut=5.0, jet_match_dr=0.1)
+            run_predictions(
+                rank,
+                world_size,
+                is_distributed,
+                model,
+                test_loaders[sample],
+                sample,
+                outdir,
+                jetdef,
+                jet_ptcut=5.0,
+                jet_match_dr=0.1,
+            )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
