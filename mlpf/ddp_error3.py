@@ -66,32 +66,13 @@ def main_worker(rank, world_size, args):
     ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
     print("Finished defining dataset")
 
-    if world_size > 1:
-        sampler = torch.utils.data.distributed.DistributedSampler(ds)
-    else:
-        sampler = torch.utils.data.RandomSampler(ds)
+    train_loaders = []
+    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.", "train", ["X", "ygen"])
 
-    print("num_workers", args.num_workers)
-    if args.num_workers is not None:
-        train_loader = torch.utils.data.DataLoader(
-            ds,
-            batch_size=args.batch_size,
-            collate_fn=Collater(),
-            sampler=sampler,
-            num_workers=args.num_workers,
-            prefetch_factor=args.prefetch_factor,
-        )
-    else:
-        print("here")
-        train_loader = torch.utils.data.DataLoader(
-            ds,
-            batch_size=args.batch_size,
-            collate_fn=Collater(),
-            sampler=sampler,
-        )
+    train_loaders.append(ds.get_loader(args.batch_size, world_size, True, args.num_workers, args.prefetch_factor, "train"))
 
     print("Looping over dataloader from inside the worker")
-    for i, batch in enumerate(train_loader):
+    for i, batch in enumerate(train_loaders[0]):
         print("batch", batch.to(rank))
         if i > 9:
             break

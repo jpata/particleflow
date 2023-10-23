@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
@@ -112,8 +110,6 @@ class DataLoader(torch.utils.data.DataLoader):
         dataset: PFDataset,
         batch_size: int = 1,
         shuffle: bool = False,
-        follow_batch: Optional[List[str]] = None,
-        exclude_keys: Optional[List[str]] = None,
         **kwargs,
     ):
         # Remove for PyTorch Lightning:
