@@ -54,6 +54,7 @@ class PFDataset:
         elif (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel
             sampler = self.get_sampler()
 
+            batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
             if num_workers is not None:
                 return DataLoader(
                     self.ds,
