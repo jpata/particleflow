@@ -23,8 +23,9 @@ import torch_geometric
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
+from pyg.PFDataset import InterleavedIterator, PFDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
