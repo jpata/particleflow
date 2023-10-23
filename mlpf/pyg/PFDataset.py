@@ -6,6 +6,8 @@ import torch.utils.data
 from torch import Tensor
 from torch_geometric.data import Batch, Data
 
+from .logger import _logger
+
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
@@ -43,40 +45,9 @@ class PFDataset:
             else:
                 sampler = self.get_distributed_sampler()
 
-            # TODO: add num_workers>0 for DDP
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-            )
-
-        elif (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel
-            sampler = self.get_sampler()
-
-            batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
             if num_workers is not None:
-                print("NUMWORKERS: ", num_workers)
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get, return_lists=True),
-                    sampler=sampler,
-                    num_workers=num_workers,
-                    prefetch_factor=prefetch_factor,
-                )
-            else:
-                print("NUMWORKERS: is 0")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get, return_lists=True),
-                    sampler=sampler,
-                )
-        else:  # single-gpu and cpu
-            sampler = self.get_sampler()
-            if num_workers is not None:
-                print("NUMWORKERS: ", num_workers)
+                # TODO: fix num_workers>0 for DDP
+                _logger.info(f"NUM WORKERS: {num_workers}")
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
@@ -86,9 +57,50 @@ class PFDataset:
                     prefetch_factor=prefetch_factor,
                 )
             else:
-                print(
-                    "NUMWORKERS: is 0",
+                _logger.info("NUM WORKERS: 0")
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
                 )
+
+        elif (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel
+            sampler = self.get_sampler()
+
+            batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
+            if num_workers is not None:
+                _logger.info(f"NUM WORKERS: {num_workers}")
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get, return_lists=True),
+                    sampler=sampler,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                )
+            else:
+                _logger.info("NUM WORKERS: 0")
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get, return_lists=True),
+                    sampler=sampler,
+                )
+        else:  # single-gpu and cpu
+            sampler = self.get_sampler()
+            if num_workers is not None:
+                _logger.info(f"NUM WORKERS: {num_workers}")
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                )
+            else:
+                _logger.info("NUM WORKERS: 0")
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
