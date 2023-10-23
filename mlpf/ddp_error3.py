@@ -109,6 +109,10 @@ def main():
     ds = builder.as_data_source(split="train")
     print("Finished defining dataset")
 
+    from pyg.PFDataset import PFDataset
+
+    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
+
     if args.gpus:
         assert (
             world_size <= torch.cuda.device_count()
