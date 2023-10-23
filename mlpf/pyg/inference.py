@@ -41,8 +41,8 @@ def run_predictions(
         else:
             X = batch.to(rank)
 
-        ygen, ycand, ypred = model(X, return_ycand=True)
-        print("ygen", ygen)
+        ygen, ycand, ypred = model(X)
+
         for k, v in ygen.items():
             ygen[k] = v.detach().cpu()
         for k, v in ycand.items():

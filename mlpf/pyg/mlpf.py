@@ -125,7 +125,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward(self, event, return_ycand=False):
+    def forward(self, event):
         # unfold the Batch object
         input_ = event.X.float()
         batch_idx = event.batch
@@ -184,7 +184,7 @@ class MLPF(nn.Module):
 
         # must return the ygen (and ycand) too for torch_geometric.nn.data_parallel
         ygen = unpack_target(event.ygen)
-        if return_ycand:
+        if "ycand" in event.keys():
             ycand = unpack_target(event.ycand)
         else:
             ycand = None
