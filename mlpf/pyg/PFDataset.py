@@ -19,7 +19,7 @@ class PFDataset:
 
         builder = tfds.builder(name, data_dir=data_dir)
         self.ds = builder.as_data_source(split=split)
-        del self.ds.dataset_info
+        # del self.ds.dataset_info
 
         self.keys_to_get = keys_to_get
 
