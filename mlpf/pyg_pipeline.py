@@ -19,6 +19,7 @@ import fastjet
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import torch_geometric
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
@@ -34,6 +35,9 @@ parser.add_argument("--config", type=str, default="parameters/pyg-cms.yaml", hel
 parser.add_argument("--prefix", type=str, default="test_", help="prefix appended to result dir name")
 parser.add_argument("--data_dir", type=str, default="/pfvol/tensorflow_datasets/", help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to empty string; else e.g., `0,1`")
+parser.add_argument(
+    "--distributed", action="store_true", help="will use torch.distributed rather than torch_geometric.nn.data_parallel"
+)
 parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=1, help="increase batch size per GPU by this constant factor"
 )
@@ -54,10 +58,10 @@ parser.add_argument("--make-plots", action="store_true", help="make plots of the
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 
 
-def run(rank, world_size, args, outdir, logfile):
+def run(rank, world_size, is_distributed, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
-    if world_size > 1:
+    if (world_size > 1) and is_distributed:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
@@ -98,9 +102,11 @@ def run(rank, world_size, args, outdir, logfile):
 
     model.to(rank)
 
-    if world_size > 1:
+    if (world_size > 1) and is_distributed:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+    elif (world_size > 1) and not is_distributed:
+        model = torch_geometric.nn.DataParallel(model)
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)
@@ -141,6 +147,7 @@ def run(rank, world_size, args, outdir, logfile):
         train_mlpf(
             rank,
             world_size,
+            is_distributed,
             model,
             optimizer,
             train_loader,
@@ -229,6 +236,7 @@ def run(rank, world_size, args, outdir, logfile):
 def main():
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+    is_distributed = False  # will be set to True if --distributed is provided
 
     if args.train:  # create a new outdir when training a model to never overwrite
         outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
@@ -250,25 +258,32 @@ def main():
 
         torch.cuda.empty_cache()
         if world_size > 1:
-            _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
             for rank in range(world_size):
-                _logger.info(torch.cuda.get_device_name(rank), color="purple")
+                _logger.info(f"rank {rank}: {torch.cuda.get_device_name(rank)}", color="purple")
 
-            mp.spawn(
-                run,
-                args=(world_size, args, outdir, logfile),
-                nprocs=world_size,
-                join=True,
-            )
+            if args.distributed:
+                is_distributed = True
+                _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel and {world_size} gpus", color="purple")
+                mp.spawn(
+                    run,
+                    args=(world_size, is_distributed, args, outdir, logfile),
+                    nprocs=world_size,
+                    join=True,
+                )
+            else:  # use torch_geometric.nn.data_parallel
+                _logger.info(f"Will use torch_geometric.nn.data_parallel and {world_size} gpus", color="purple")
+                rank = 0
+                run(rank, world_size, is_distributed, args, outdir, logfile)
+
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            run(rank, world_size, args, outdir, logfile)
+            run(rank, world_size, is_distributed, args, outdir, logfile)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, args, outdir, logfile)
+        run(rank, world_size, is_distributed, args, outdir, logfile)
 
 
 if __name__ == "__main__":

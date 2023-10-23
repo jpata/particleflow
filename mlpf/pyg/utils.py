@@ -1,12 +1,12 @@
 import json
 import pickle as pkl
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 from torch import Tensor
-from torch_geometric.data import Batch, Data
+from torch_geometric.data import Batch, Data, Dataset
 from torch_geometric.data.data import BaseData
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
@@ -208,28 +208,52 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, num_workers=None, prefetch_factor=2):
-        if world_size > 1:
+    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=None, prefetch_factor=2):
+        if (world_size > 1) and is_distributed:  # TODO: fix num_workers>0 for DDP
             sampler = self.get_distributed_sampler()
-        else:
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get),
+                sampler=sampler,
+            )
+        elif (world_size > 1) and not is_distributed:  # multi-gpu torch_geometric.nn.data_parallel
+            sampler = self.get_sampler()
+            if num_workers is not None:
+                return DataListLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                )
+            else:
+                return DataListLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
+                )
+        else:  # single-gpu and cpu
             sampler = self.get_sampler()
 
-        if num_workers is not None:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-            )
+            if num_workers is not None:
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                )
+            else:
+                return DataLoader(
+                    self.ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(self.keys_to_get),
+                    sampler=sampler,
+                )
 
     def __len__(self):
         return len(self.ds)
@@ -240,7 +264,8 @@ class PFDataset:
 
 class DataLoader(torch.utils.data.DataLoader):
     """
-    Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
+    Copied from
+    https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
     because we need to implement our own Collater class to load the tensorflow_datasets (see below).
     """
 
@@ -267,6 +292,23 @@ class DataLoader(torch.utils.data.DataLoader):
             collate_fn=collate_fn,
             **kwargs,
         )
+
+
+class DataListLoader(torch.utils.data.DataLoader):
+    """
+    Copied from
+    https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/data_list_loader.html#DataListLoader,
+    necessary for multigpu training using torch_geometric.nn.data_parallel.
+    """
+
+    def __init__(self, dataset: Union[Dataset, List[BaseData]], batch_size: int = 1, shuffle: bool = False, **kwargs):
+        # Remove for PyTorch Lightning:
+        kwargs.pop("collate_fn", None)
+
+        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=self.collate_fn, **kwargs)
+
+    def collate_fn(data_list):
+        return data_list
 
 
 class Collater:

@@ -12,7 +12,6 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
-from .utils import unpack_predictions, unpack_target
 
 # from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -128,6 +127,7 @@ class FocalLoss(nn.Module):
 def train(
     rank,
     world_size,
+    is_distributed,
     model,
     optimizer,
     train_loader,
@@ -162,8 +162,12 @@ def train(
                 batch.X.shape[0],
             )
 
-        ygen = unpack_target(batch.to(rank).ygen)
-        ypred = unpack_predictions(model(batch.to(rank)))
+        if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
+            X = batch
+        else:
+            X = batch.to(rank)
+
+        ygen, ypred = model(X)
 
         for icls in range(ypred["cls_id_onehot"].shape[1]):
             if tensorboard_writer:
@@ -221,11 +225,16 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        ygen = unpack_target(batch.to(rank).ygen)
-                        if world_size > 1:  # validation is only run on a single machine
-                            ypred = unpack_predictions(model.module(batch.to(rank)))
+                        if (world_size > 1) and is_distributed:  # for torch_geometric.nn.data_parallel
+                            X = batch.to(rank)
+                            ygen, ypred = model.module(X)  # validation is only run on a single machine
+
+                        elif (world_size > 1) and not is_distributed:  # for torch_geometric.nn.data_parallel
+                            X = batch
+                            ygen, ypred = model(X)
                         else:
-                            ypred = unpack_predictions(model(batch.to(rank)))
+                            X = batch.to(rank)
+                            ygen, ypred = model(X)
 
                         loss = mlpf_loss(ygen, ypred)
 
@@ -291,13 +300,16 @@ def train(
     return epoch_loss, valid_loss, best_val_loss, stale_epochs
 
 
-def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, num_epochs, patience, outpath):
+def train_mlpf(
+    rank, world_size, is_distributed, model, optimizer, train_loader, valid_loader, num_epochs, patience, outpath
+):
     """
     Will run a full training by calling train().
 
     Args:
         rank: 'cpu' or int representing the gpu device id
-        model: a pytorch model (may be wrapped by DistributedDataParallel)
+        model: torch model (may be wrapped by torch_geometric.nn.data_parallel or torch.nn.parallel.DistributedDataParallel)
+        is_distributed: True for torch.nn.parallel.DistributedDataParallel()
         train_loader: a pytorch geometric Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
         valid_loader: a pytorch geometric Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
         patience: number of stale epochs before stopping the training
@@ -324,6 +336,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         losses_t, losses_v, best_val_loss, stale_epochs = train(
             rank,
             world_size,
+            is_distributed,
             model,
             optimizer,
             train_loader,
