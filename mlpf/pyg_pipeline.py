@@ -185,7 +185,11 @@ def run(rank, world_size, is_distributed, args, outdir, logfile):
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
 
-        if (isinstance(model, torch.nn.parallel.DistributedDataParallel)) or (isinstance(model, torch.nn.DataParallel)):
+        assert (
+            isinstance(model, torch.nn.DataParallel) is False
+        ), "Must provide --distributed or use single machine for testing"
+
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model.module.load_state_dict(checkpoint["model_state_dict"])
         else:
             model.load_state_dict(checkpoint["model_state_dict"])
