@@ -210,7 +210,7 @@ def train(
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-            if world_size > 1:
+            if (world_size > 1) and is_distributed:
                 dist.barrier()  # wait until training run is finished on all ranks before running the validation
 
             if (rank == 0) or (rank == "cpu"):
@@ -220,14 +220,16 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        if (world_size > 1) and is_distributed:  # for torch_geometric.nn.data_parallel
+                        if (world_size > 1) and is_distributed:
+                            # for torch.nn.parallel.DistributedDataParallel validation is run only on a single machine
                             X = batch.to(rank)
-                            ygen, ypred = model.module(X)  # validation is only run on a single machine
-
-                        elif (world_size > 1) and not is_distributed:  # for torch_geometric.nn.data_parallel
+                            ygen, ypred = model.module(X)
+                        elif (world_size > 1) and not is_distributed:
+                            # for torch_geometric.nn.data_parallel the batch is a list
                             X = batch
                             ygen, ypred = model(X)
                         else:
+                            # for single-gpu or cpu life is simple
                             X = batch.to(rank)
                             ygen, ypred = model(X)
 
@@ -278,7 +280,7 @@ def train(
 
                 model.train()  # prepare for next training loop
 
-            if world_size > 1:
+            if (world_size > 1) and is_distributed:
                 dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
                 dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
 
