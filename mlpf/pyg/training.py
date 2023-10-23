@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.distributed as dist
-import torch_geometric
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -254,7 +253,7 @@ def train(
                         best_val_loss = valid_loss["Total"]
 
                         if (isinstance(model, torch.nn.parallel.DistributedDataParallel)) or (
-                            isinstance(model, torch_geometric.nn.data_parallel)
+                            isinstance(model, torch.nn.DataParallel)
                         ):
                             model_state_dict = model.module.state_dict()
                         else:

@@ -185,9 +185,7 @@ def run(rank, world_size, is_distributed, args, outdir, logfile):
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
 
-        if (isinstance(model, torch.nn.parallel.DistributedDataParallel)) or (
-            isinstance(model, torch_geometric.nn.data_parallel)
-        ):
+        if (isinstance(model, torch.nn.parallel.DistributedDataParallel)) or (isinstance(model, torch.nn.DataParallel)):
             model.module.load_state_dict(checkpoint["model_state_dict"])
         else:
             model.load_state_dict(checkpoint["model_state_dict"])
