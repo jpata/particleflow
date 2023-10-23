@@ -43,6 +43,10 @@ def run_predictions(
 
         ygen, ycand, ypred = model(X)
 
+        for k, v in ygen.items():
+            ygen[k] = v.detach().cpu()
+        for k, v in ycand.items():
+            ycand[k] = v.detach().cpu()
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
 
