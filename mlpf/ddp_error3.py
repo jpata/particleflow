@@ -60,18 +60,15 @@ def main_worker(rank, world_size, args):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    print("Defining dataset")
     from pyg.PFDataset import PFDataset
 
+    print("Defining dataset")
     ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.0", "train", ["X", "ygen"])
     print("Finished defining dataset")
-
     train_loaders = []
-    ds = PFDataset(args.data_dir, "cms_pf_ttbar:1.6.", "train", ["X", "ygen"])
-
     train_loaders.append(ds.get_loader(args.batch_size, world_size, True, args.num_workers, args.prefetch_factor, "train"))
+    print("Finished dataloading from inside the worker")
 
-    print("Looping over dataloader from inside the worker")
     for i, batch in enumerate(train_loaders[0]):
         print("batch", batch.to(rank))
         if i > 9:
