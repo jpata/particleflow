@@ -56,6 +56,7 @@ class PFDataset:
 
             batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
             if num_workers is not None:
+                print("NUMWORKERS: ", num_workers)
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
@@ -65,6 +66,7 @@ class PFDataset:
                     prefetch_factor=prefetch_factor,
                 )
             else:
+                print("NUMWORKERS: is 0")
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
@@ -74,6 +76,7 @@ class PFDataset:
         else:  # single-gpu and cpu
             sampler = self.get_sampler()
             if num_workers is not None:
+                print("NUMWORKERS: ", num_workers)
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
@@ -83,6 +86,9 @@ class PFDataset:
                     prefetch_factor=prefetch_factor,
                 )
             else:
+                print(
+                    "NUMWORKERS: is 0",
+                )
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
