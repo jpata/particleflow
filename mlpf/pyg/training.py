@@ -156,11 +156,6 @@ def train(
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         istep += 1
-        if tensorboard_writer:
-            tensorboard_writer.add_scalar(
-                "step_train/num_elems",
-                batch.X.shape[0],
-            )
 
         if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
             X = batch
