@@ -210,9 +210,13 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=None, prefetch_factor=2):
+    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=None, prefetch_factor=2, flag="train"):
         if (world_size > 1) and is_distributed:  # TODO: fix num_workers>0 for DDP
-            sampler = self.get_distributed_sampler()
+            if flag == "valid":  # validation done on single machine
+                sampler = self.get_sampler()
+            else:
+                sampler = self.get_distributed_sampler()
+
             return DataLoader(
                 self.ds,
                 batch_size=batch_size,
