@@ -87,6 +87,18 @@ class PFDataset:
     def __repr__(self):
         return self.ds.__repr__()
 
+    def __getstate__(self):
+        state = self.ds.__dict__.copy()
+        # remove unpicklable entries
+        self.dataset_info = state["dataset_info"]
+        del state["dataset_info"]
+        return state
+
+    def __setstate__(self, state):
+        """Used for deserializing"""
+        # restore the state which was picklable
+        self.__dict__.update(state)
+
 
 class DataLoader(torch.utils.data.DataLoader):
     """
