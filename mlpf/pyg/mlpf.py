@@ -182,7 +182,7 @@ class MLPF(nn.Module):
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
 
-        # must return the ygen too for torch_geometric.nn.data_parallel
+        # must return the ygen (and ycand) too for torch_geometric.nn.data_parallel
         ygen = unpack_target(event.ygen)
         if return_ycand:
             ycand = unpack_target(event.ycand)
