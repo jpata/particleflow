@@ -174,7 +174,7 @@ def run(rank, world_size, is_distributed, args, outdir, logfile):
 
             ds = PFDataset(args.data_dir, f"{sample}:{version}", "test", ["X", "ygen", "ycand"], args.ntest)
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
-
+            print("is_distributed", is_distributed)
             test_loaders[sample] = InterleavedIterator(
                 [ds.get_loader(batch_size, world_size, is_distributed, args.num_workers, args.prefetch_factor)]
             )
