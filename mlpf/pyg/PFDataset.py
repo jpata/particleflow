@@ -6,23 +6,20 @@ import torch.utils.data
 from torch import Tensor
 from torch_geometric.data import Batch, Data
 
-from .logger import _logger
-
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, keys_to_get, num_samples=None):
+    def __init__(self, data_dir, name, split, keys_to_get=["X", "ygen", "ycand"], num_samples=None):
         """
         Args
-            dataset: "cms", "clic", or "delphes"
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test
+            keys_to_get: any selection of ["X", "ygen", "ycand"]
         """
 
         builder = tfds.builder(name, data_dir=data_dir)
-
         self.ds = builder.as_data_source(split=split)
 
         self.keys_to_get = keys_to_get
@@ -38,59 +35,43 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=None, prefetch_factor=2, flag="train"):
+    def get_loader(self, batch_size, world_size, is_distributed=False, num_workers=0, prefetch_factor=None, flag="train"):
+        if (num_workers > 0) and (prefetch_factor is None):
+            prefetch_factor = 2  # default prefetch_factor when num_workers>0
+
         if (world_size > 1) and is_distributed:  # torch.nn.parallel.DistributedDataParallel
             if flag == "valid":
                 sampler = self.get_sampler()  # validation is done a on single machine
             else:
                 sampler = self.get_distributed_sampler()
 
-            if num_workers is not None:
-                # TODO: fix num_workers>0 for DDP
-                _logger.info(f"NUM WORKERS: {num_workers}")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get),
-                    sampler=sampler,
-                    num_workers=num_workers,
-                    prefetch_factor=prefetch_factor,
-                )
-            else:
-                _logger.info("NUM WORKERS: 0")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get),
-                    sampler=sampler,
-                )
+            # TODO: fix num_workers>0 for DDP
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get),
+                sampler=sampler,
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
 
         elif (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel
             sampler = self.get_sampler()
 
             batch_size *= world_size  # because torch_geometric.nn.data_parallel will divide the batch over the gpus
-            if num_workers is not None:
-                _logger.info(f"NUM WORKERS: {num_workers}")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get, return_lists=True),
-                    sampler=sampler,
-                    num_workers=num_workers,
-                    prefetch_factor=prefetch_factor,
-                )
-            else:
-                _logger.info("NUM WORKERS: 0")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get, return_lists=True),
-                    sampler=sampler,
-                )
+
+            return DataLoader(
+                self.ds,
+                batch_size=batch_size,
+                collate_fn=Collater(self.keys_to_get, return_lists=True),
+                sampler=sampler,
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+            )
+
         else:  # single-gpu and cpu
             sampler = self.get_sampler()
             if num_workers is not None:
-                _logger.info(f"NUM WORKERS: {num_workers}")
                 return DataLoader(
                     self.ds,
                     batch_size=batch_size,
@@ -98,14 +79,6 @@ class PFDataset:
                     sampler=sampler,
                     num_workers=num_workers,
                     prefetch_factor=prefetch_factor,
-                )
-            else:
-                _logger.info("NUM WORKERS: 0")
-                return DataLoader(
-                    self.ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(self.keys_to_get),
-                    sampler=sampler,
                 )
 
     def __len__(self):

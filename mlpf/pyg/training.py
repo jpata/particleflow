@@ -211,7 +211,7 @@ def train(
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-            if (world_size > 1) and is_distributed:
+            if is_distributed:
                 dist.barrier()  # wait until training run is finished on all ranks before running the validation
 
             if (rank == 0) or (rank == "cpu"):
@@ -283,7 +283,7 @@ def train(
 
                 model.train()  # prepare for next training loop
 
-            if (world_size > 1) and is_distributed:
+            if is_distributed:
                 dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
                 dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
 

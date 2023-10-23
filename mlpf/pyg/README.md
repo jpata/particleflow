@@ -27,6 +27,7 @@ where:
 - `ntrain`, `nvalid`, `ntest`: specefies number of events (per sample) that will be used
 
 Adding the arguments:
+- `--distributed`: will use torch.distributed rather than torch_geometric.nn.data_parallel for multigpu support
 - `--load` will load a pre-trained model
 - `--train` will run a training (may train a loaded model if `--load` is provided)
 - `--test` will run inference and save the predictions as `.parquets`
