@@ -155,7 +155,6 @@ def train(
     istep = 0
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
-        print("batch", batch)
         istep += 1
 
         if (world_size > 1) and not is_distributed:  # torch_geometric.nn.data_parallel is given a list of Batch()
