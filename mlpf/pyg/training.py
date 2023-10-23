@@ -194,9 +194,6 @@ def train(
                 nsteps = N_STEPS
                 istep = 0
 
-            if world_size > 1:
-                dist.barrier()
-
             if tensorboard_writer:
                 for loss_ in train_loss:
                     tensorboard_writer.add_scalar(
@@ -213,6 +210,9 @@ def train(
                 + f"train_loss_charge={train_loss['Charge']/nsteps:.2f} "
             )
             train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+
+            if world_size > 1:
+                dist.barrier()  # wait until training run is finished on all ranks before running the validation
 
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
@@ -255,9 +255,9 @@ def train(
                             f"{outpath}/best_weights.pth",
                         )
                         _logger.info(
-                            f"finished {itrain}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
+                            f"finished {itrain+1}/{len(train_loader)} iterations and saved the model at {outpath}/best_weights.pth"  # noqa
                         )
-                        stale_epochs = 0
+                        stale_epochs = torch.tensor(0, device=rank)
                     else:
                         _logger.info(f"finished {itrain}/{len(train_loader)} iterations")
                         stale_epochs += 1
@@ -272,17 +272,18 @@ def train(
                         + f"stale={stale_epochs} "
                     )
 
-                    if stale_epochs > patience:
-                        _logger.info("breaking due to stale epochs")
-                        return None, None, None, stale_epochs
+                model.train()  # prepare for next training loop
+
+            if world_size > 1:
+                dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
+                dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
+
+            if stale_epochs > patience:
+                _logger.info("breaking due to stale epochs")
+                return None, None, None, stale_epochs
 
         if tensorboard_writer:
             tensorboard_writer.flush()
-
-        if world_size > 1:
-            dist.barrier()
-
-        model.train()  # prepare for next training loop
 
     for loss_ in epoch_loss:
         epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(train_loader)
@@ -314,8 +315,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
 
-    stale_epochs = 0
-    best_val_loss = 99999.9
+    stale_epochs, best_val_loss = torch.tensor(0, device=rank), 99999.9
     for epoch in range(num_epochs):
         _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
