@@ -130,7 +130,7 @@ class MLPF(nn.Module):
         input_ = event.X.float()
         batch_idx = event.batch
 
-        print(event.device)
+        print(event.X.device, event)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
