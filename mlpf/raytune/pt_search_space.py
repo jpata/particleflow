@@ -1,6 +1,6 @@
 from ray.tune import choice  # grid_search, choice, loguniform, quniform
 
-raytune_num_samples = 4  # Number of random samples to draw from search space. Set to 1 for grid search.
+raytune_num_samples = 8  # Number of random samples to draw from search space. Set to 1 for grid search.
 samp = choice
 
 # gnn scan
@@ -10,7 +10,7 @@ search_space = {
     # "gpu_batch_multiplier": samp([10, 20, 40]),
     # model arch parameters
     "conv_type": samp(["gnn_lsh"]),
-    "embedding_dim": samp([252, 512]),
+    "embedding_dim": samp([128, 252, 512]),
     # "width": samp([512]),
     # "num_convs": samp([3]),
     # "dropout": samp([0.0]),

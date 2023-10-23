@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -t 168:00:00
+#SBATCH -t 2:00:00
 #SBATCH -N 2
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
@@ -79,8 +79,8 @@ echo All Ray workers started.
 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
-    --ray_cpus $((SLURM_CPUS_PER_TASK/4)) \
-    --ray_gpus 1 \
+    --ray-cpus $((SLURM_CPUS_PER_TASK/4)) \
+    --ray-gpus 1 \
     --gpus "0" \
     --ntrain 1000 \
     --ntest 1000

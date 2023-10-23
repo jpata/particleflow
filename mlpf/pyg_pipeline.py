@@ -37,10 +37,10 @@ parser = argparse.ArgumentParser()
 # values loaded from the config file given by --config unless explicitly given
 parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
-parser.add_argument("--data_dir", type=str, default=None, help="path to `tensorflow_datasets/`")
+parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=str, default=None, help="to use CPU set to empty string; else e.g., `0,1`")
 parser.add_argument(
-    "--gpu_batch_multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
+    "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
 )
 parser.add_argument(
     "--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?"
@@ -48,12 +48,12 @@ parser.add_argument(
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
-parser.add_argument("--num_epochs", type=int, default=None, help="number of training epochs")
+parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
-parser.add_argument("--conv_type", type=str, default=None, help="choices are ['gnn_lsh', 'gravnet', 'attention']")
-parser.add_argument("--make_plots", action="store_true", default=None, help="make plots of the test predictions")
-parser.add_argument("--export_onnx", action="store_true", default=None, help="exports the model to onnx")
+parser.add_argument("--conv-type", type=str, default=None, help="choices are ['gnn_lsh', 'gravnet', 'attention']")
+parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
+parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
@@ -61,8 +61,8 @@ parser.add_argument("--num-workers", type=int, default=None, help="number of pro
 parser.add_argument("--prefetch-factor", type=int, default=2, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
-parser.add_argument("--ray_cpus", type=int, default=None, help="CPUs per trial for HPO")
-parser.add_argument("--ray_gpus", type=int, default=None, help="GPUs per trial for HPO")
+parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
+parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
 
 
 def run(rank, world_size, config, args, outdir, logfile):
@@ -116,10 +116,6 @@ def run(rank, world_size, config, args, outdir, logfile):
 
     if args.train:
         if (rank == 0) or (rank == "cpu"):
-            if args.hpo:
-                from ray import train as ray_train
-
-                outdir = ray_train.get_context().get_trial_dir()  # TODO: EW, check if this is needed
             save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
@@ -165,6 +161,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
+            hpo=True if args.hpo is not None else False,
         )
 
     if args.test:
@@ -187,7 +184,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator(
-                [ds.get_loader(batch_size, world_size, args.num_workers, args.prefetch_factor)]
+                [ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"])]
             )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
@@ -255,10 +252,9 @@ def override_config(config, args):
     return config
 
 
-def device_agnostic_run(config, args, world_size):
+def device_agnostic_run(config, args, world_size, outdir):
 
     if args.train:  # create a new outdir when training a model to never overwrite
-        outdir = create_experiment_dir(prefix=args.prefix + Path(args.config).stem + "_")
         logfile = f"{outdir}/train.log"
         _configLogger("mlpf", filename=logfile)
 
@@ -311,6 +307,7 @@ def main():
     if args.hpo:
         import ray
         from ray import tune
+        from ray import train as ray_train
 
         # from ray.tune.logger import TBXLoggerCallback
         from raytune.pt_search_space import raytune_num_samples, search_space, set_hps_from_search_space
@@ -343,7 +340,8 @@ def main():
 
         def hpo(search_space, config, args, world_size):
             config = set_hps_from_search_space(search_space, config)
-            device_agnostic_run(config, args, world_size)
+            outdir = ray_train.get_context().get_trial_dir()
+            device_agnostic_run(config, args, world_size, outdir)
 
         start = datetime.now()
         analysis = tune.run(
@@ -379,7 +377,8 @@ def main():
         )
 
     else:
-        device_agnostic_run(config, args, world_size)
+        outdir = create_experiment_dir(prefix=(args.prefix or "") + Path(args.config).stem + "_")
+        device_agnostic_run(config, args, world_size, outdir)
 
 
 if __name__ == "__main__":

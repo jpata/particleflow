@@ -32,14 +32,15 @@ python3 --version
 
 
 echo 'Starting training.'
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 mlpf/pyg_pipeline.py --train \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --prefix $2 \
     --gpus "0" \
-    --num_epochs 3 \
+    --num-epochs 3 \
     --lr 0.0001 \
-    --conv_type gnn_lsh \
+    --conv-type gnn_lsh \
     --ntrain 400 \
-    --ntest 400
+    --ntest 400 \
+    --num-workers 1
 
 echo 'Training done.'
