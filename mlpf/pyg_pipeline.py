@@ -59,8 +59,8 @@ parser.add_argument("--make-plots", action="store_true", help="make plots of the
 parser.add_argument("--export-onnx", action="store_true", help="exports the model to onnx")
 
 
-def run(rank, world_size, is_distributed, args, outdir, logfile):
-    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+def main_worker(rank, world_size, is_distributed, args, outdir, logfile):
+    """Will be passed to each gpu if ((world_size > 1) and is_distributed) else will run normally on the given device(s)."""
 
     if is_distributed:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -282,7 +282,7 @@ def main():
                 is_distributed = True
                 _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel and {world_size} gpus", color="purple")
                 mp.start_processes(
-                    run,
+                    main_worker,
                     args=(world_size, is_distributed, args, outdir, logfile),
                     nprocs=world_size,
                     join=True,
@@ -291,17 +291,17 @@ def main():
             else:  # use torch_geometric.nn.data_parallel
                 _logger.info(f"Will use torch_geometric.nn.data_parallel and {world_size} gpus", color="purple")
                 rank = 0
-                run(rank, world_size, is_distributed, args, outdir, logfile)
+                main_worker(rank, world_size, is_distributed, args, outdir, logfile)
 
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            run(rank, world_size, is_distributed, args, outdir, logfile)
+            main_worker(rank, world_size, is_distributed, args, outdir, logfile)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, is_distributed, args, outdir, logfile)
+        main_worker(rank, world_size, is_distributed, args, outdir, logfile)
 
 
 if __name__ == "__main__":
