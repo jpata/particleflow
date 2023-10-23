@@ -184,7 +184,7 @@ class MLPF(nn.Module):
 
         # must return the ygen (and ycand) too for torch_geometric.nn.data_parallel
         ygen = unpack_target(event.ygen)
-        if "ycand" in event.keys():
+        if "ycand" in event.keys:
             ycand = unpack_target(event.ycand)
         else:
             ycand = None
