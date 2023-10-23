@@ -47,14 +47,14 @@ def run_predictions(
             ypred[k] = v.detach().cpu()
 
         # loop over the batch to disentangle the events
-        batch_ids = batch.batch.cpu().numpy()
+        batch_ids = X.batch.cpu().numpy()
 
         jets_coll = {}
         Xs, p4s = [], {"gen": [], "cand": [], "pred": []}
         for _ibatch in np.unique(batch_ids):
             msk_batch = batch_ids == _ibatch
 
-            Xs.append(batch.X[msk_batch].cpu().numpy())
+            Xs.append(X.X[msk_batch].cpu().numpy())
 
             # mask nulls for jet reconstruction
             msk = (ygen["cls_id"][msk_batch] != 0).numpy()
