@@ -10,11 +10,7 @@ import os
 import os.path as osp
 import pickle as pkl
 from pathlib import Path
-
 import yaml
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import fastjet
 import torch
 import torch.distributed as dist

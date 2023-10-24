@@ -373,8 +373,11 @@ def eval_model(
         if verbose:
             print("unpacking outputs")
 
-        ygen = unpack_target(elem["ygen"], config["dataset"]["num_output_classes"], config)
-        ycand = unpack_target(elem["ycand"], config["dataset"]["num_output_classes"], config)
+        ygen = [unpack_target(x, config["dataset"]["num_output_classes"], config) for x in elem["ygen"]]
+        ycand = [unpack_target(x, config["dataset"]["num_output_classes"], config) for x in elem["ycand"]]
+        ygen = {k: tf.stack([x[k] for x in ygen]) for k in ygen[0].keys()}
+        ycand = {k: tf.stack([x[k] for x in ycand]) for k in ycand[0].keys()}
+
         # 0, 1, 2 -> -1, 0, 1
         ygen["charge"] = tf.expand_dims(tf.math.argmax(ygen["charge"], axis=-1), axis=-1) - 1
         ycand["charge"] = tf.expand_dims(tf.math.argmax(ycand["charge"], axis=-1), axis=-1) - 1

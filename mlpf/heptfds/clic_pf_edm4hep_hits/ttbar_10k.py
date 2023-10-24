@@ -22,8 +22,7 @@ class ClicEdmTtbarHitsPf10k(tfds.core.GeneratorBasedBuilder):
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
 
-    The processed tensorflow_dataset can also be downloaded from:
-    FIXME
+    The processed tensorflow dataset can also be downloaded from: https://zenodo.org/record/8414225
     """
 
     def __init__(self, *args, **kwargs):
