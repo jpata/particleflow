@@ -21,12 +21,15 @@ _CITATION = """
 class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_multi_particle_gun dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.6.1")
     RELEASE_NOTES = {
         "1.6.0": "Initial release",
+        "1.6.1": "Additional stats",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/MultiParticlePFGun_cfi data/
+    rsync -r --progress \
+        lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_multi_particle_gun \
+        ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):

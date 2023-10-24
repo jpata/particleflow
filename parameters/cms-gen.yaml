@@ -29,11 +29,11 @@ dataset:
 loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 1.0
+  pt_loss_coef: 0.01
   eta_loss_coef: 1.0
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
-  energy_loss_coef: 1.0
+  energy_loss_coef: 0.01
   cls_loss:
     type: SigmoidFocalCrossEntropy
     from_logits: yes
@@ -66,11 +66,11 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0001
-  num_epochs: 50
+  lr: 0.001
+  num_epochs: 20
   dtype: float32
   trainable:
-  lr_schedule: none  # cosinedecay, exponentialdecay, onecycle, none
+  lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
   optimizer: adam  # adam, adamw, sgd
   horovod_enabled: no
   cls_output_as_logits: yes
@@ -146,14 +146,12 @@ parameters:
     regression_use_classification: yes
     dropout: 0.1
 
-    pt_as_correction: yes
-
     id_dim_decrease: yes
     charge_dim_decrease: yes
-    pt_dim_decrease: yes
+    pt_dim_decrease: no
     eta_dim_decrease: yes
     phi_dim_decrease: yes
-    energy_dim_decrease: yes
+    energy_dim_decrease: no
 
     id_hidden_dim: 512
     charge_hidden_dim: 256
@@ -171,7 +169,7 @@ parameters:
     layernorm: yes
     mask_reg_cls0: yes
 
-  skip_connection: no
+  skip_connection: yes
   debug: no
 
 timing:
