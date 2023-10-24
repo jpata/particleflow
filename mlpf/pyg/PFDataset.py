@@ -14,19 +14,26 @@ class PFDataset:
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test
-            keys_to_get: any selection of ["X", "ygen", "ycand"]
+            keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
         """
 
         builder = tfds.builder(name, data_dir=data_dir)
+
         self.ds = builder.as_data_source(split=split)
 
+        # to prevent a warning from tfds about accessing sequences of indices
+        self.ds.__class__.__getitems__ = my_getitem
+
+        # to make dataset_info pickable
         tmp = self.ds.dataset_info
-        self.ds.dataset_info = None
         from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
+        self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
+        self.rep = self.ds.__repr__()
 
+        # any selection of ["X", "ygen", "ycand"] to retrieve
         self.keys_to_get = keys_to_get
 
         if num_samples:
@@ -90,7 +97,7 @@ class PFDataset:
         return len(self.ds)
 
     def __repr__(self):
-        return self.ds.__repr__()
+        return self.rep
 
 
 class DataLoader(torch.utils.data.DataLoader):
@@ -137,6 +144,14 @@ class Collater:
             return batch
         else:
             return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
+
+
+def my_getitem(self, vals):
+    # print(
+    #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
+    # )
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class InterleavedIterator(object):
