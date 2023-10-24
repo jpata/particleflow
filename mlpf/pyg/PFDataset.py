@@ -29,16 +29,16 @@ class PFDataset:
 
         # to make dataset_info pickable
         tmp = self.ds.dataset_info
-        self.ds.dataset_info = None
         from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
+        self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
+        self.rep = self.ds.__repr__()
 
         # any selection of ["X", "ygen", "ycand"] to retrieve
         self.keys_to_get = keys_to_get
 
-        self.rep = self.ds.__repr__()
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
 
