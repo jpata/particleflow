@@ -47,28 +47,23 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, num_workers=None, prefetch_factor=2):
+    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=None):
+        if (num_workers > 0) and (prefetch_factor is None):
+            prefetch_factor = 2  # default prefetch_factor when num_workers>0
+
         if world_size > 1:
             sampler = self.get_distributed_sampler()
         else:
             sampler = self.get_sampler()
 
-        if num_workers is not None:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-                num_workers=num_workers,
-                prefetch_factor=prefetch_factor,
-            )
-        else:
-            return DataLoader(
-                self.ds,
-                batch_size=batch_size,
-                collate_fn=Collater(self.keys_to_get),
-                sampler=sampler,
-            )
+        return DataLoader(
+            self.ds,
+            batch_size=batch_size,
+            collate_fn=Collater(self.keys_to_get),
+            sampler=sampler,
+            num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+        )
 
     def __len__(self):
         return len(self.ds)
