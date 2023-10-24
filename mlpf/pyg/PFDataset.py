@@ -14,10 +14,10 @@ class PFDataset:
     def __init__(self, data_dir, name, split, keys_to_get, num_samples=None):
         """
         Args
-            dataset: "cms", "clic", or "delphes"
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test
+            keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
         """
 
         builder = tfds.builder(name, data_dir=data_dir)
@@ -27,6 +27,7 @@ class PFDataset:
         # to prevent a warning from tfds about accessing sequences of indices
         self.ds.__class__.__getitems__ = my_getitem
 
+        # to make dataset_info pickable
         tmp = self.ds.dataset_info
         self.ds.dataset_info = None
         from types import SimpleNamespace
@@ -34,6 +35,7 @@ class PFDataset:
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.features = tmp.features
 
+        # any selection of ["X", "ygen", "ycand"] to retrieve
         self.keys_to_get = keys_to_get
 
         if num_samples:
