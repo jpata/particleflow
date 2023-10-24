@@ -161,6 +161,7 @@ def train(
         if (world_size > 1) and not is_ddp:  # torch_geometric.nn.data_parallel is given a list of Batch()
             X = batch
             ygen = [unpack_target(x.ygen) for x in X]
+            print(ygen)
         else:
             X = batch.to(rank)
             ygen = unpack_target(X.ygen)
