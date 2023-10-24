@@ -5,7 +5,6 @@ import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv
 
 from .gnn_lsh import CombinedGraphLayer
-from .utils import unpack_predictions, unpack_target
 
 
 class GravNetLayer(nn.Module):
@@ -180,13 +179,4 @@ class MLPF(nn.Module):
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
 
-        ypred = unpack_predictions(preds_id, preds_momentum, pred_charge)
-
-        # must return the ygen (and ycand) too for torch_geometric.nn.data_parallel
-        ygen = unpack_target(event.ygen)
-        try:
-            ycand = unpack_target(event.ycand)
-        except Exception:
-            ycand = None
-
-        return ygen, ycand, ypred
+        return preds_id, preds_momentum, pred_charge
