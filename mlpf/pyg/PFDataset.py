@@ -27,6 +27,13 @@ class PFDataset:
         # to prevent a warning from tfds about accessing sequences of indices
         self.ds.__class__.__getitems__ = my_getitem
 
+        tmp = self.ds.dataset_info
+        self.ds.dataset_info = None
+        from types import SimpleNamespace
+
+        self.ds.dataset_info = SimpleNamespace()
+        self.ds.dataset_info.features = tmp.features
+
         self.keys_to_get = keys_to_get
 
         if num_samples:
