@@ -12,7 +12,6 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
-from .utils import unpack_predictions, unpack_target
 
 # from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -160,18 +159,10 @@ def train(
 
         if (world_size > 1) and not is_ddp:  # torch_geometric.nn.data_parallel is given a list of Batch()
             X = batch
-            ygen_ = X[0].ygen
-            for i in range(len(X) - 1):
-                ygen_ = torch.cat([ygen_, X[i + 1].ygen])
-                ygen = unpack_target(ygen_)
         else:
             X = batch.to(rank)
-            ygen = unpack_target(X.ygen)
 
-        preds_id, preds_momentum, pred_charge = model(X)
-        ypred = unpack_predictions(preds_id, preds_momentum, pred_charge)
-
-        # ygen, _, ypred = model(X)
+        ygen, _, ypred = model(X)
 
         for icls in range(ypred["cls_id_onehot"].shape[1]):
             if tensorboard_writer:
