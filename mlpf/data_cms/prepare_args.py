@@ -15,7 +15,7 @@ samples = [
     #    "SingleProtonMinusFlatPt0p7To1000_cfi",
     #    "SingleTauFlatPt1To1000_cfi",
     #    "MultiParticlePFGun_cfi",
-    ("MultiParticlePFGun50_cfi", 100000, 102050),
+    ("MultiParticlePFGun50_cfi", 100000, 110050),
 ]
 
 samples_pu = [

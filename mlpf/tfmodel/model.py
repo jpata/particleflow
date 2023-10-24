@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 # FIXME: this should be configurable in a central place
-regularizer_weight = 0.0
+regularizer_weight = 0.00000
 
 # for PFNetTransformer-based, we need to set a different random seed for each subsequent attention layer
 SEED_KERNELATTENTION = 0
@@ -432,21 +432,19 @@ def point_wise_feed_forward_network(
 ):
 
     if regularizer_weight > 0:
-        bias_regularizer = tf.keras.regularizers.L1(regularizer_weight)
         kernel_regularizer = tf.keras.regularizers.L1(regularizer_weight)
     else:
-        bias_regularizer = None
         kernel_regularizer = None
 
     layers = []
     for ilayer in range(num_layers):
         _name = name + "_dense_{}".format(ilayer)
 
+        layers.append(tf.keras.layers.LayerNormalization(axis=-1))
         layers.append(
             tf.keras.layers.Dense(
                 dff,
                 activation=activation,
-                bias_regularizer=bias_regularizer,
                 kernel_regularizer=kernel_regularizer,
                 name=_name,
             )
@@ -458,11 +456,14 @@ def point_wise_feed_forward_network(
         if dim_decrease:
             dff = dff // 2
 
+    layers.append(tf.keras.layers.LayerNormalization(axis=-1))
+
     layers.append(
         tf.keras.layers.Dense(
             d_model,
             dtype=dtype,
             name="{}_dense_{}".format(name, ilayer + 1),
+            kernel_regularizer=kernel_regularizer,
         )
     )
     return tf.keras.Sequential(layers, name=name)
@@ -801,7 +802,6 @@ class OutputDecoding(tf.keras.Model):
         self.dropout = dropout
 
         self.mask_reg_cls0 = mask_reg_cls0
-        self.pt_as_correction = pt_as_correction
 
         self.do_layernorm = layernorm
         if self.do_layernorm:
@@ -810,6 +810,10 @@ class OutputDecoding(tf.keras.Model):
         self.event_set_output = event_set_output
         self.met_output = met_output
         self.cls_output_as_logits = cls_output_as_logits
+
+        # FIXME: figure out how to get this consistent with the definition in the dataset side (BaseDatasetFactory.py)
+        self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
+        self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -831,7 +835,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_pt = point_wise_feed_forward_network(
-            2,
+            self.pt_bins.shape[0],
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
@@ -862,7 +866,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            1,
+            self.energy_bins.shape[0],
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
@@ -900,12 +904,10 @@ class OutputDecoding(tf.keras.Model):
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
-        orig_pt = tf.cast(X_input[:, :, 1:2], out_dtype)
         orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
         orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
-        orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
 
         if self.regression_use_classification:
             X_encoded = tf.concat(
@@ -939,19 +941,13 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
 
-        pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training)
-        pred_energy_corr = pred_energy_corr * msk_input_outtype
+        ffn_energy = self.ffn_energy(X_encoded_energy, training=training)
+        tf.print("energy", tf.reduce_min(ffn_energy), tf.reduce_max(ffn_energy), tf.reduce_mean(ffn_energy))
+        pred_energy_corr = tf.nn.softmax(ffn_energy, axis=-1)
+        pred_energy = tf.reduce_sum(self.energy_bins * pred_energy_corr, axis=-1, keepdims=True) * msk_input_outtype
 
-        # In case of a multimodal prediction, weight the per-class energy predictions by the approximately one-hot vector
-        pred_energy = orig_energy + pred_energy_corr
-        pred_energy = tf.abs(pred_energy)
-
-        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
-        if self.pt_as_correction:
-            pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
-        else:
-            pred_pt = pred_pt_corr[..., 0:1]
-        pred_pt = tf.abs(pred_pt)
+        pred_pt_corr = tf.nn.softmax(self.ffn_pt(X_encoded_energy, training=training), axis=-1)
+        pred_pt = tf.reduce_sum(self.pt_bins * pred_pt_corr, axis=-1, keepdims=True) * msk_input_outtype
 
         # mask the regression outputs for the nodes with a class prediction 0
 
@@ -963,6 +959,8 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi * msk_input_outtype,
             "cos_phi": pred_cos_phi * msk_input_outtype,
             "energy": pred_energy * msk_input_outtype,
+            "pt_bins": pred_pt_corr,
+            "energy_bins": pred_energy_corr,
         }
 
         for k in ret.keys():

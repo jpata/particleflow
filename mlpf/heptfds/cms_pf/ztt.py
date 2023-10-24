@@ -31,8 +31,7 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder):
         "1.6.0": "Regenerate with ARRAY_RECORD",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    mkdir -p data
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cms/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi data/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ztt ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
