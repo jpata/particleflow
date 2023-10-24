@@ -822,9 +822,6 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
             def model_weight_setting():
                 grad_vars = model.trainable_weights
                 logging.info("grad_vars={}".format(len(grad_vars)))
-                zero_grads = [tf.zeros_like(w) for w in grad_vars]
-                # logging.info("applying zero gradients to initialize optimizer")
-                # opt.apply_gradients(zip(zero_grads, grad_vars))
                 if loaded_opt:
                     logging.info("setting optimizer state")
                     opt.load_own_variables(loaded_opt["weights"])
