@@ -942,7 +942,6 @@ class OutputDecoding(tf.keras.Model):
             )
 
         ffn_energy = self.ffn_energy(X_encoded_energy, training=training)
-        tf.print("energy", tf.reduce_min(ffn_energy), tf.reduce_max(ffn_energy), tf.reduce_mean(ffn_energy))
         pred_energy_corr = tf.nn.softmax(ffn_energy, axis=-1)
         pred_energy = tf.reduce_sum(self.energy_bins * pred_energy_corr, axis=-1, keepdims=True) * msk_input_outtype
 

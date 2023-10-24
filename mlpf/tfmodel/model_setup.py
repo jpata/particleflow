@@ -39,8 +39,8 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
     def on_epoch_end(self, epoch, logs=None):
         super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
         weightfile_path = self.opt_path.format(epoch=epoch + 1, **logs)
-        weights = self.model.optimizer.get_weights()
-
+        weights = {}
+        self.model.optimizer.save_own_variables(weights)
         with open(weightfile_path, "wb") as fi:
             pickle.dump(
                 {

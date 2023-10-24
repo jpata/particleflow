@@ -66,12 +66,12 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
-  num_epochs: 20
+  lr: 0.005
+  num_epochs: 10
   dtype: float32
   trainable:
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
-  optimizer: adam  # adam, adamw, sgd
+  optimizer: adam # adam, adamw, sgd, lion
   horovod_enabled: no
   cls_output_as_logits: yes
   #if enabled, do not create LSH bins for small graphs (less than one bin size)
@@ -81,7 +81,7 @@ setup:
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   bucket_batch_sizes: auto
   batch_multiplier: 1
 
@@ -89,8 +89,7 @@ optimizer:
   adam:
     amsgrad: no
   adamw:
-    amsgrad: yes
-    weight_decay: 0.001
+    amsgrad: no
   sgd:
     nesterov: no
     momentum: 0.9
@@ -136,7 +135,7 @@ parameters:
       output_dim: 512
       activation: elu
       #if this is enabled, it will break float16 training
-      normalize_degrees: no
+      normalize_degrees: yes
     activation: elu
 
   num_graph_layers_id: 3
@@ -251,10 +250,10 @@ train_test_datasets:
 evaluation_datasets:
   cms_pf_qcd_high_pt:
     batch_size: 5
-    num_events: -1
+    num_events: 5000
   cms_pf_single_neutron:
     batch_size: 100
-    num_events: -1
+    num_events: 5000
 
 validation_dataset: cms_pf_qcd_high_pt
 validation_batch_size: 5
@@ -312,7 +311,7 @@ datasets:
     data_dir:
     manual_dir:
   cms_pf_multi_particle_gun:
-    version: 1.6.0
+    version: 1.6.1
     data_dir:
     manual_dir:
   cms_pf_sms_t1tttt:

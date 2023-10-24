@@ -279,17 +279,22 @@ def get_optimizer(config, lr_schedule=None):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        return tf.keras.optimizers.legacy.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+    elif config["setup"]["optimizer"] == "adamw":
+        cfg_adam = config["optimizer"]["adamw"]
+        return tf.keras.optimizers.AdamW(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+    elif config["setup"]["optimizer"] == "lion":
+        return tf.keras.optimizers.Lion(learning_rate=lr)
     elif config["setup"]["optimizer"] == "sgd":
         cfg_sgd = config["optimizer"]["sgd"]
-        return tf.keras.optimizers.legacy.SGD(
+        return tf.keras.optimizers.SGD(
             learning_rate=lr,
             momentum=cfg_sgd["momentum"],
             nesterov=cfg_sgd["nesterov"],
         )
     else:
         raise ValueError(
-            "Only 'adam', 'adamw' and 'sgd' are supported optimizers, got {}".format(config["setup"]["optimizer"])
+            "Only 'adam', 'adamw', 'sgd', 'lion' are supported optimizers, got {}".format(config["setup"]["optimizer"])
         )
 
 
@@ -818,11 +823,11 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
                 grad_vars = model.trainable_weights
                 logging.info("grad_vars={}".format(len(grad_vars)))
                 zero_grads = [tf.zeros_like(w) for w in grad_vars]
-                logging.info("applying zero gradients to initialize optimizer")
-                opt.apply_gradients(zip(zero_grads, grad_vars))
+                # logging.info("applying zero gradients to initialize optimizer")
+                # opt.apply_gradients(zip(zero_grads, grad_vars))
                 if loaded_opt:
                     logging.info("setting optimizer state")
-                    opt.set_weights(loaded_opt["weights"])
+                    opt.load_own_variables(loaded_opt["weights"])
 
             logging.info("distributing optimizer state")
             strategy = tf.distribute.get_strategy()
