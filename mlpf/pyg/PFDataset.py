@@ -33,14 +33,12 @@ class PFDataset:
         from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
-        self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
-
-        self.rep = self.ds
 
         # any selection of ["X", "ygen", "ycand"] to retrieve
         self.keys_to_get = keys_to_get
 
+        self.rep = self.ds__repr__()
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
 
@@ -74,7 +72,7 @@ class PFDataset:
         return len(self.ds)
 
     def __repr__(self):
-        return self.rep.__repr__()
+        return self.rep
 
 
 class DataLoader(torch.utils.data.DataLoader):
