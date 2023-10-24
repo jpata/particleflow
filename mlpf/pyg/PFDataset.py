@@ -20,6 +20,13 @@ class PFDataset:
         builder = tfds.builder(name, data_dir=data_dir)
         self.ds = builder.as_data_source(split=split)
 
+        # tmp = self.ds.dataset_info
+        # self.ds.dataset_info = None
+        # from types import SimpleNamespace
+
+        # self.ds.dataset_info = SimpleNamespace()
+        # self.ds.dataset_info.features = tmp.features
+
         self.keys_to_get = keys_to_get
 
         if num_samples:
