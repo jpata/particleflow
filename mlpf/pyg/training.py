@@ -172,9 +172,10 @@ def train(
 
         ygen, _, ypred = model(X)
 
-        print("len(ygen)", len(ygen))
-        print("ygen.shape", ygen.shape)
-        print("ygen.device", ygen.device)
+        print("ygen.keys()", ygen.keys())
+        print("len(ygen['cls_id']])", len(ygen["cls_id"]))
+        print("ygen.shape", ygen["cls_id"].shape)
+        print("ygen.device", ygen["cls_id"].device)
 
         for icls in range(ypred["cls_id_onehot"].shape[1]):
             if tensorboard_writer:
