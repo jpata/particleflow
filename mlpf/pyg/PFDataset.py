@@ -33,6 +33,7 @@ class PFDataset:
         from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
+        self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
 
         # any selection of ["X", "ygen", "ycand"] to retrieve
