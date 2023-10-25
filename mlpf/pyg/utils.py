@@ -143,17 +143,17 @@ def unpack_predictions(preds):
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
     # unpacking
-    ret["pt"] = ret["momentum"][:, 0]
-    ret["eta"] = ret["momentum"][:, 1]
-    ret["sin_phi"] = ret["momentum"][:, 2]
-    ret["cos_phi"] = ret["momentum"][:, 3]
-    ret["energy"] = ret["momentum"][:, 4]
+    ret["pt"] = ret["momentum"][..., 0]
+    ret["eta"] = ret["momentum"][..., 1]
+    ret["sin_phi"] = ret["momentum"][..., 2]
+    ret["cos_phi"] = ret["momentum"][..., 3]
+    ret["energy"] = ret["momentum"][..., 4]
 
     # new variables
     ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
+        [ret["pt"].unsqueeze(axis=-1), ret["eta"].unsqueeze(axis=-1), ret["phi"].unsqueeze(axis=-1), ret["energy"].unsqueeze(axis=-1)], axis=-1
     )
 
     return ret

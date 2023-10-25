@@ -16,7 +16,8 @@ from torch.utils.tensorboard import SummaryWriter
 from .logger import _logger
 from .utils import unpack_predictions, unpack_target
 
-# from torch.profiler import profile, record_function, ProfilerActivity
+import torch_geometric
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # Ignore divide by 0 errors
@@ -33,7 +34,8 @@ def mlpf_loss(y, ypred):
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0)
-    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
+
+    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"].permute((0,2,1)), y["cls_id"])
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
 
@@ -41,7 +43,7 @@ def mlpf_loss(y, ypred):
         ypred["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
     )
     loss["Charge"] = torch.nn.functional.cross_entropy(
-        ypred["charge"] * msk_true_particle, (y["charge"] * msk_true_particle[:, 0]).to(dtype=torch.int64)
+        (ypred["charge"] * msk_true_particle).permute((0,2,1)), (y["charge"] * msk_true_particle[..., 0]).to(dtype=torch.int64)
     )
 
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
@@ -168,6 +170,19 @@ def train(
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
+
+        bin_size = 640
+        _, num_nodes = torch.unique(batch.batch, return_counts=True)
+        max_num_nodes = torch.max(num_nodes)
+        max_num_nodes_padded = ((max_num_nodes // bin_size) + 1) * bin_size
+        ygen = {k: torch_geometric.utils.to_dense_batch(
+            ygen[k], batch.batch, max_num_nodes=max_num_nodes_padded
+        )[0] for k in ygen.keys()}
+        
+        for k in ygen.keys():
+            print(k, ygen[k].shape)
+        for k in ypred.keys():
+            print(k, ypred[k].shape)
         loss = mlpf_loss(ygen, ypred)
 
         for param in model.parameters():
@@ -217,6 +232,13 @@ def train(
                             ypred = unpack_predictions(model.module(batch.to(rank)))
                         else:
                             ypred = unpack_predictions(model(batch.to(rank)))
+
+                        _, num_nodes = torch.unique(batch.batch, return_counts=True)
+                        max_num_nodes = torch.max(num_nodes)
+                        max_num_nodes_padded = ((max_num_nodes // bin_size) + 1) * bin_size
+                        ygen = {k: torch_geometric.utils.to_dense_batch(
+                            ygen[k], batch.batch, max_num_nodes=max_num_nodes_padded
+                        )[0] for k in ygen.keys()}
 
                         loss = mlpf_loss(ygen, ypred)
 
@@ -329,19 +351,37 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         t0 = time.time()
 
         # training step
-        losses_t, losses_v, best_val_loss, stale_epochs = train(
-            rank,
-            world_size,
-            model,
-            optimizer,
-            train_loader,
-            valid_loader,
-            best_val_loss,
-            stale_epochs,
-            patience,
-            outdir,
-            tensorboard_writer,
-        )
+        if epoch == 1:
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=False, with_stack=True) as prof:
+                with record_function("model_train"):
+                    losses_t, losses_v, best_val_loss, stale_epochs = train(
+                        rank,
+                        world_size,
+                        model,
+                        optimizer,
+                        train_loader,
+                        valid_loader,
+                        best_val_loss,
+                        stale_epochs,
+                        patience,
+                        outdir,
+                        tensorboard_writer,
+                    )
+            prof.export_chrome_trace("trace.json")
+        else:
+            losses_t, losses_v, best_val_loss, stale_epochs = train(
+                rank,
+                world_size,
+                model,
+                optimizer,
+                train_loader,
+                valid_loader,
+                best_val_loss,
+                stale_epochs,
+                patience,
+                outdir,
+                tensorboard_writer,
+            )
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing

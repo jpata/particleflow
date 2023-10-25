@@ -239,8 +239,8 @@ def reverse_lsh(bins_split, points_binned_enc):
 
     ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
     for ibatch in range(batch_dim):
-        torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
-        torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
+        # torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
+        # torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
         ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
     return ret
 
