@@ -11,8 +11,8 @@ lr: 0.0001
 conv_type: gnn_lsh
 ntrain:
 ntest:
-num_workers: 1
-prefetch_factor: 2
+num_workers: 0
+prefetch_factor:
 
 model:
   gnn_lsh:
