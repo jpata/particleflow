@@ -294,7 +294,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     """
 
     if (rank == 0) or (rank == "cpu"):
-        tensorboard_writer = SummaryWriter(f"{outpath}/runs/")
+        tensorboard_writer = SummaryWriter(f"{outdir}/runs/")
     else:
         tensorboard_writer = False
 
