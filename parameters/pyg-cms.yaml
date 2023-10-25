@@ -1,7 +1,7 @@
 backend: pytorch
 
 dataset: cms
-data_dir: /mnt/ceph/users/ewulff/tensorflow_datasets/
+data_dir:
 gpus: "0"
 gpu_batch_multiplier: 1
 load:
