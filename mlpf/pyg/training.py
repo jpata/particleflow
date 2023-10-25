@@ -332,10 +332,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         #     with record_function("model_train"):
         # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
 
-        for k, v in losses_t.items():
-            tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
-
         if (rank == 0) or (rank == "cpu"):
+            for k, v in losses_t.items():
+                tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
+
             for loss in losses_of_interest:
                 losses["train"][loss].append(losses_t[loss])
                 losses["valid"][loss].append(losses_v[loss])
