@@ -14,6 +14,7 @@ import pickle as pkl
 from pathlib import Path
 import shutil
 import yaml
+import fastjet
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
