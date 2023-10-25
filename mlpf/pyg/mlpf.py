@@ -98,7 +98,7 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     self.conv_id.append(SelfAttentionLayer(embedding_dim))
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim))
-            elif self.conv_type == "gnn-lsh":
+            elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):

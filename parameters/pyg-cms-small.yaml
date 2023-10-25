@@ -1,8 +1,22 @@
 backend: pytorch
 
+dataset: cms
+data_dir:
+gpus: "0"
+gpu_batch_multiplier: 1
+load:
+num_epochs: 2
+patience: 20
+lr: 0.0001
+conv_type: gnn_lsh
+ntrain:
+ntest:
+num_workers: 0
+prefetch_factor:
+
 model:
-  gnn-lsh:
-    conv_type: gnn-lsh
+  gnn_lsh:
+    conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
     num_convs: 3
