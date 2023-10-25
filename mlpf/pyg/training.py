@@ -20,6 +20,8 @@ from .utils import unpack_predictions, unpack_target
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
+ISTEP_GLOBAL = 0
+
 
 def mlpf_loss(y, ypred):
     """
@@ -141,8 +143,10 @@ def train(
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
+    global ISTEP_GLOBAL
 
-    N_STEPS = 1000
+    N_STEPS = 1000  # number of steps before running validation
+
     _logger.info(f"Initiating a training run on device {rank}", color="red")
 
     # initialize loss counters (note: these will be reset after N_STEPS)
@@ -156,21 +160,9 @@ def train(
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         istep += 1
-        if tensorboard_writer:
-            tensorboard_writer.add_scalar(
-                "step_train/num_elems",
-                batch.X.shape[0],
-            )
 
         ygen = unpack_target(batch.to(rank).ygen)
         ypred = unpack_predictions(model(batch.to(rank)))
-
-        for icls in range(ypred["cls_id_onehot"].shape[1]):
-            if tensorboard_writer:
-                tensorboard_writer.add_scalar(
-                    f"step_train/num_cls_{icls}",
-                    torch.sum(ygen["cls_id"] == icls),
-                )
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
@@ -196,10 +188,7 @@ def train(
 
             if tensorboard_writer:
                 for loss_ in train_loss:
-                    tensorboard_writer.add_scalar(
-                        f"step_train/loss_{loss_}",
-                        train_loss[loss_] / nsteps,
-                    )
+                    tensorboard_writer.add_scalar(f"step_train/loss_{loss_}", train_loss[loss_] / nsteps, ISTEP_GLOBAL)
                 tensorboard_writer.flush()
 
             _logger.info(
@@ -237,10 +226,7 @@ def train(
 
                     if tensorboard_writer:
                         for loss_ in valid_loss:
-                            tensorboard_writer.add_scalar(
-                                f"step_valid/loss_{loss_}",
-                                valid_loss[loss_],
-                            )
+                            tensorboard_writer.add_scalar(f"step_valid/loss_{loss_}", valid_loss[loss_], ISTEP_GLOBAL)
 
                     if valid_loss["Total"] < best_val_loss:
                         best_val_loss = valid_loss["Total"]
@@ -271,6 +257,7 @@ def train(
                         + f"best_val_loss={best_val_loss:.2f} "
                         + f"stale={stale_epochs} "
                     )
+                    ISTEP_GLOBAL += 1
 
                 model.train()  # prepare for next training loop
 
@@ -304,7 +291,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         outpath: path to store the model weights and training plots
     """
 
-    tensorboard_writer = SummaryWriter(f"{outpath}/runs/rank_{rank}/")
+    if (rank == 0) or (rank == "cpu"):
+        tensorboard_writer = SummaryWriter(f"{outpath}/runs/")
+    else:
+        tensorboard_writer = False
 
     t0_initial = time.time()
 
