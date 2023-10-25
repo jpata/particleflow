@@ -1,8 +1,22 @@
 backend: pytorch
 
+dataset: clic
+data_dir: /mnt/ceph/users/ewulff/tensorflow_datasets/clusters
+gpus: "0"
+gpu_batch_multiplier: 1
+load:
+num_epochs: 2
+patience: 20
+lr: 0.0001
+conv_type: gnn_lsh
+ntrain:
+ntest:
+num_workers: 0
+prefetch_factor:
+
 model:
-  gnn-lsh:
-    conv_type: gnn-lsh
+  gnn_lsh:
+    conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
     num_convs: 3
@@ -24,6 +38,26 @@ model:
     width: 128
     num_convs: 2
     dropout: 0.0
+
+raytune:
+  local_dir: /mnt/ceph/users/ewulff/ray_results/  # Note: please specify an absolute path
+  sched:  # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
 
 train_dataset:
   clic:
