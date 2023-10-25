@@ -5,13 +5,13 @@ from ray.tune.schedulers import (
     PopulationBasedTraining,
 )
 from ray.tune.schedulers.pb2 import PB2  # Population Based Bandits
-from ray.tune.suggest.bayesopt import BayesOptSearch
-from ray.tune.suggest.bohb import TuneBOHB
-from ray.tune.suggest.hyperopt import HyperOptSearch
-from ray.tune.suggest.nevergrad import NevergradSearch
-from ray.tune.suggest.skopt import SkOptSearch
+from ray.tune.search.bayesopt import BayesOptSearch
+from ray.tune.search.bohb import TuneBOHB
+from ray.tune.search.hyperopt import HyperOptSearch
+from ray.tune.search.nevergrad import NevergradSearch
+from ray.tune.search.skopt import SkOptSearch
 
-# from ray.tune.suggest.hebo import HEBOSearch # HEBO is not yet supported
+# from ray.tune.search.hebo import HEBOSearch # HEBO is not yet supported
 
 
 def get_raytune_search_alg(raytune_cfg, seeds=False):
