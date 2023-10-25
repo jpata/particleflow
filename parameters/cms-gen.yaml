@@ -135,7 +135,7 @@ parameters:
       output_dim: 512
       activation: elu
       #if this is enabled, it will break float16 training
-      normalize_degrees: yes
+      normalize_degrees: no
     activation: elu
 
   num_graph_layers_id: 3
