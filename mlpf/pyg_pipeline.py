@@ -11,14 +11,11 @@ import os.path as osp
 import pickle as pkl
 from pathlib import Path
 
-import yaml
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import fastjet
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import yaml
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
