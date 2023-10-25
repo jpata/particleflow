@@ -18,8 +18,9 @@ import torch.multiprocessing as mp
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
+from pyg.PFDataset import InterleavedIterator, PFDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -37,8 +38,8 @@ parser.add_argument("--dataset", type=str, choices=["clic", "cms", "delphes"], r
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="testing samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
-parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
-parser.add_argument("--prefetch-factor", type=int, default=2, help="number of samples to fetch & prefetch at every call")
+parser.add_argument("--num-workers", type=int, default=0, help="number of processes to load the data")
+parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", help="initiates a training")
 parser.add_argument("--test", action="store_true", help="tests the model")
