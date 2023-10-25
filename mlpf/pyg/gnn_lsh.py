@@ -33,6 +33,7 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
+# @torch.compile
 def index_dim(a, b):
     return a[b]
 
@@ -142,6 +143,27 @@ class NodePairGaussianKernel(nn.Module):
         return dm
 
 
+@torch.compile
+def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
+    bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
+
+    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(
+        bins_split_2.shape[0], bins_split_2.shape[1], x_msg.shape[-1]
+    )
+    x_msg_binned = torch.gather(x_msg, 1, bins_split_3)
+    x_msg_binned = torch.reshape(x_msg_binned, (cmul.shape[0], n_bins, bin_size, x_msg_binned.shape[-1]))
+
+    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(
+        bins_split_2.shape[0], bins_split_2.shape[1], x_node.shape[-1]
+    )
+    x_features_binned = torch.gather(x_node, 1, bins_split_3)
+    x_features_binned = torch.reshape(x_features_binned, (cmul.shape[0], n_bins, bin_size, x_features_binned.shape[-1]))
+
+    msk_f_binned = torch.gather(msk, 1, bins_split_2)
+    msk_f_binned = torch.reshape(msk_f_binned, (cmul.shape[0], n_bins, bin_size, 1))
+    return x_msg_binned, x_features_binned, msk_f_binned
+
+
 class MessageBuildingLayerLSH(nn.Module):
     def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
         self.initializer = kwargs.pop("initializer", "random_normal")
@@ -179,15 +201,9 @@ class MessageBuildingLayerLSH(nn.Module):
             bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
 
             # replaced tf.gather with torch.vmap, indexing and reshape
-            bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
-            x_msg_binned = torch.vmap(index_dim)(x_msg, bins_split_2)
-            x_features_binned = torch.vmap(index_dim)(x_node, bins_split_2)
-            msk_f_binned = torch.vmap(index_dim)(msk, bins_split_2)
-            x_msg_binned = torch.reshape(x_msg_binned, (cmul.shape[0], n_bins, self.bin_size, x_msg_binned.shape[-1]))
-            x_features_binned = torch.reshape(
-                x_features_binned, (cmul.shape[0], n_bins, self.bin_size, x_features_binned.shape[-1])
+            x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(
+                bins_split, cmul, x_msg, x_node, msk, n_bins, self.bin_size
             )
-            msk_f_binned = torch.reshape(msk_f_binned, (cmul.shape[0], n_bins, self.bin_size, 1))
         else:
             x_msg_binned = torch.unsqueeze(x_msg, axis=1)
             x_features_binned = torch.unsqueeze(x_node, axis=1)
@@ -211,6 +227,7 @@ class MessageBuildingLayerLSH(nn.Module):
         return bins_split, x_features_binned, dm, msk_f_binned
 
 
+@torch.compile
 def reverse_lsh(bins_split, points_binned_enc):
     shp = points_binned_enc.shape
     batch_dim = shp[0]
@@ -220,8 +237,10 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
 
-    ret = torch.zeros(batch_dim, n_points, n_features).to(device=points_binned_enc.device)
+    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
     for ibatch in range(batch_dim):
+        torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
+        torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
         ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
     return ret
 

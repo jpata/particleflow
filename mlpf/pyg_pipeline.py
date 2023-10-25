@@ -21,8 +21,9 @@ import torch.multiprocessing as mp
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
+from pyg.PFDataset import InterleavedIterator, PFDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, InterleavedIterator, PFDataset, save_HPs
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs
 from utils import create_experiment_dir
 
 
@@ -42,6 +43,8 @@ parser.add_argument(
 parser.add_argument(
     "--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?"
 )
+parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
+parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
@@ -54,8 +57,6 @@ parser.add_argument("--export-onnx", action="store_true", default=None, help="ex
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
-parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
-parser.add_argument("--prefetch-factor", type=int, default=2, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
