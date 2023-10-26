@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from .logger import _logger
 from .utils import unpack_predictions, unpack_target
 
-# from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # Ignore divide by 0 errors
@@ -33,16 +33,23 @@ def mlpf_loss(y, ypred):
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0)
-    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
 
-    loss["Regression"] = 10 * torch.nn.functional.huber_loss(
-        ypred["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
-    )
-    loss["Charge"] = torch.nn.functional.cross_entropy(
-        ypred["charge"] * msk_true_particle, (y["charge"] * msk_true_particle[:, 0]).to(dtype=torch.int64)
-    )
+    ypred["momentum"] = ypred["momentum"] * msk_true_particle
+    ypred["charge"] = ypred["charge"] * msk_true_particle
+    y["momentum"] = y["momentum"] * msk_true_particle
+    y["charge"] = y["charge"] * msk_true_particle[..., 0]
+
+    # pytorch expects (N, C, ...)
+    if ypred["cls_id_onehot"].ndim > 2:
+        ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+        ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+
+    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
+
+    loss["Regression"] = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"])
+    loss["Charge"] = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64))
 
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
     return loss
@@ -79,13 +86,12 @@ class FocalLoss(nn.Module):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.ignore_index = ignore_index
         self.reduction = reduction
 
-        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none", ignore_index=ignore_index)
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none")
 
     def __repr__(self):
-        arg_keys = ["alpha", "gamma", "ignore_index", "reduction"]
+        arg_keys = ["alpha", "gamma", "reduction"]
         arg_vals = [self.__dict__[k] for k in arg_keys]
         arg_strs = [f"{k}={v!r}" for k, v in zip(arg_keys, arg_vals)]
         arg_str = ", ".join(arg_strs)
@@ -99,20 +105,16 @@ class FocalLoss(nn.Module):
             # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
             y = y.view(-1)
 
-        unignored_mask = y != self.ignore_index
-        y = y[unignored_mask]
-        if len(y) == 0:
-            return torch.tensor(0.0)
-        x = x[unignored_mask]
-
         # compute weighted cross entropy term: -alpha * log(pt)
         # (alpha is already part of self.nll_loss)
         log_p = F.log_softmax(x, dim=-1)
         ce = self.nll_loss(log_p, y)
 
         # get true class column from each row
-        all_rows = torch.arange(len(x))
-        log_pt = log_p[all_rows, y]
+        # this is slow due to indexing
+        # all_rows = torch.arange(len(x))
+        # log_pt = log_p[all_rows, y]
+        log_pt = torch.gather(log_p, 1, y.unsqueeze(axis=-1)).squeeze(axis=-1)
 
         # compute focal term: (1 - pt)^gamma
         pt = log_pt.exp()
@@ -129,155 +131,58 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def train(
-    rank,
-    world_size,
-    model,
-    optimizer,
-    train_loader,
-    valid_loader,
-    best_val_loss,
-    stale_epochs,
-    patience,
-    outdir,
-    tensorboard_writer=None,
-):
+def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
-    global ISTEP_GLOBAL
 
-    N_STEPS = 1000  # number of steps before running validation
-
-    _logger.info(f"Initiating a training run on device {rank}", color="red")
-
-    # initialize loss counters (note: these will be reset after N_STEPS)
-    train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-    valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    _logger.info(f"Initiating a train={is_train} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-    istep = 0
-    model.train()
-    for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
-        istep += 1
+    if is_train:
+        model.train()
+    else:
+        model.eval()
 
-        ygen = unpack_target(batch.to(rank).ygen)
-        ypred = unpack_predictions(model(batch.to(rank)))
+    for itrain, batch in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
+        batch = batch.to(rank, non_blocking=True)
 
-        # JP: need to debug this
-        # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
-        loss = mlpf_loss(ygen, ypred)
+        ygen = unpack_target(batch.ygen)
 
-        for param in model.parameters():
-            param.grad = None
-        loss["Total"].backward()
-        optimizer.step()
+        if is_train:
+            ypred = model(batch)
+        else:
+            if world_size > 1:  # validation is only run on a single machine
+                ypred = model.module(batch)
+            else:
+                ypred = model(batch)
 
-        for loss_ in train_loss:
-            train_loss[loss_] += loss[loss_].detach()
+        ypred = unpack_predictions(ypred)
+
+        if is_train:
+            loss = mlpf_loss(ygen, ypred)
+            for param in model.parameters():
+                param.grad = None
+        else:
+            with torch.no_grad():
+                loss = mlpf_loss(ygen, ypred)
+
+        if is_train:
+            loss["Total"].backward()
+            optimizer.step()
+
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
 
-        # run a quick validation run at intervals of N_STEPS or at the last step
-        if (((itrain % N_STEPS) == 0) and (itrain != 0)) or (itrain == (len(train_loader) - 1)):
-            if itrain == (len(train_loader) - 1):
-                nsteps = istep
-            else:
-                nsteps = N_STEPS
-                istep = 0
-
-            if tensorboard_writer:
-                for loss_ in train_loss:
-                    tensorboard_writer.add_scalar(f"step_train/loss_{loss_}", train_loss[loss_] / nsteps, ISTEP_GLOBAL)
-                tensorboard_writer.flush()
-
-            _logger.info(
-                f"Rank {rank}: "
-                + f"train_loss_tot={train_loss['Total']/nsteps:.2f} "
-                + f"train_loss_id={train_loss['Classification']/nsteps:.2f} "
-                + f"train_loss_momentum={train_loss['Regression']/nsteps:.2f} "
-                + f"train_loss_charge={train_loss['Charge']/nsteps:.2f} "
-            )
-            train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-
-            if world_size > 1:
-                dist.barrier()  # wait until training run is finished on all ranks before running the validation
-
-            if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
-                model.eval()
-
-                valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-                with torch.no_grad():
-                    for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        ygen = unpack_target(batch.to(rank).ygen)
-                        if world_size > 1:  # validation is only run on a single machine
-                            ypred = unpack_predictions(model.module(batch.to(rank)))
-                        else:
-                            ypred = unpack_predictions(model(batch.to(rank)))
-
-                        loss = mlpf_loss(ygen, ypred)
-
-                        for loss_ in valid_loss:
-                            valid_loss[loss_] += loss[loss_].detach()
-
-                    for loss_ in valid_loss:
-                        valid_loss[loss_] = valid_loss[loss_].cpu().item() / len(valid_loader)
-
-                    if tensorboard_writer:
-                        for loss_ in valid_loss:
-                            tensorboard_writer.add_scalar(f"step_valid/loss_{loss_}", valid_loss[loss_], ISTEP_GLOBAL)
-
-                    if valid_loss["Total"] < best_val_loss:
-                        best_val_loss = valid_loss["Total"]
-
-                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                            model_state_dict = model.module.state_dict()
-                        else:
-                            model_state_dict = model.state_dict()
-
-                        torch.save(
-                            {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                            f"{outdir}/best_weights.pth",
-                        )
-                        _logger.info(
-                            f"finished {itrain+1}/{len(train_loader)} iterations and saved the model at {outdir}/best_weights.pth"  # noqa
-                        )
-                        stale_epochs = torch.tensor(0, device=rank)
-                    else:
-                        _logger.info(f"finished {itrain}/{len(train_loader)} iterations")
-                        stale_epochs += 1
-
-                    _logger.info(
-                        f"Rank {rank}: "
-                        + f"val_loss_tot={valid_loss['Total']:.2f} "
-                        + f"val_loss_id={valid_loss['Classification']:.2f} "
-                        + f"val_loss_momentum={valid_loss['Regression']:.2f} "
-                        + f"val_loss_charge={valid_loss['Charge']:.2f} "
-                        + f"best_val_loss={best_val_loss:.2f} "
-                        + f"stale={stale_epochs} "
-                    )
-                    ISTEP_GLOBAL += 1
-
-                model.train()  # prepare for next training loop
-
-            if world_size > 1:
-                dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
-                dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
-
-            if stale_epochs > patience:
-                _logger.info("breaking due to stale epochs")
-                return None, None, None, stale_epochs
-
-        if tensorboard_writer:
-            tensorboard_writer.flush()
+    if world_size > 1:
+        dist.barrier()
 
     for loss_ in epoch_loss:
-        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(train_loader)
+        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(data_loader)
 
-    return epoch_loss, valid_loss, best_val_loss, stale_epochs
+    return epoch_loss
 
 
 def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, num_epochs, patience, outdir, hpo=False):
@@ -307,7 +212,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
 
-    stale_epochs, best_val_loss = torch.tensor(0, device=rank), 99999.9
+    stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
     start_epoch = 0
 
     if hpo:
@@ -329,19 +234,35 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         t0 = time.time()
 
         # training step
-        losses_t, losses_v, best_val_loss, stale_epochs = train(
-            rank,
-            world_size,
-            model,
-            optimizer,
-            train_loader,
-            valid_loader,
-            best_val_loss,
-            stale_epochs,
-            patience,
-            outdir,
-            tensorboard_writer,
-        )
+        if epoch == -1:
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
+            ) as prof:
+                with record_function("model_train"):
+                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
+            prof.export_chrome_trace("trace.json")
+        else:
+            losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
+
+        if (rank == 0) or (rank == "cpu"):
+            losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
+            if losses_v["Total"] < best_val_loss:
+                best_val_loss = losses_v["Total"]
+                stale_epochs = 0
+            else:
+                stale_epochs += 1
+
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                model_state_dict = model.module.state_dict()
+            else:
+                model_state_dict = model.state_dict()
+
+            torch.save(
+                {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
+                #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
+                f"{outdir}/best_weights.pth",
+            )
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
@@ -366,9 +287,8 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         if stale_epochs > patience:
             break
 
-        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-        #     with record_function("model_train"):
-        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+        for k, v in losses_t.items():
+            tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
 
         if (rank == 0) or (rank == "cpu"):
             for k, v in losses_t.items():
@@ -379,8 +299,6 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                 losses["valid"][loss].append(losses_v[loss])
             for k, v in losses_v.items():
                 tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
-
-            tensorboard_writer.flush()
 
             t1 = time.time()
 
@@ -421,5 +339,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
 
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
+
+        tensorboard_writer.flush()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")

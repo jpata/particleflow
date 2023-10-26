@@ -33,11 +33,6 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-# @torch.compile
-def index_dim(a, b):
-    return a[b]
-
-
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     a = torch.argmax(cmul, axis=-1)
 
@@ -143,7 +138,6 @@ class NodePairGaussianKernel(nn.Module):
         return dm
 
 
-@torch.compile
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
     bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
 
@@ -162,6 +156,23 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
     msk_f_binned = torch.gather(msk, 1, bins_split_2)
     msk_f_binned = torch.reshape(msk_f_binned, (cmul.shape[0], n_bins, bin_size, 1))
     return x_msg_binned, x_features_binned, msk_f_binned
+
+
+def reverse_lsh(bins_split, points_binned_enc):
+    shp = points_binned_enc.shape
+    batch_dim = shp[0]
+    n_points = shp[1] * shp[2]
+    n_features = shp[-1]
+
+    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
+    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+
+    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
+    for ibatch in range(batch_dim):
+        # torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
+        # torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
+        ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
+    return ret
 
 
 class MessageBuildingLayerLSH(nn.Module):
@@ -225,24 +236,6 @@ class MessageBuildingLayerLSH(nn.Module):
         dm = torch.multiply(dm, msk_col)
 
         return bins_split, x_features_binned, dm, msk_f_binned
-
-
-@torch.compile
-def reverse_lsh(bins_split, points_binned_enc):
-    shp = points_binned_enc.shape
-    batch_dim = shp[0]
-    n_points = shp[1] * shp[2]
-    n_features = shp[-1]
-
-    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
-
-    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
-    for ibatch in range(batch_dim):
-        torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
-        torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
-        ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
-    return ret
 
 
 class CombinedGraphLayer(nn.Module):

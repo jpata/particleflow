@@ -51,7 +51,9 @@ parser.add_argument("--test", action="store_true", default=None, help="tests the
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
-parser.add_argument("--conv-type", type=str, default=None, help="choices are ['gnn_lsh', 'gravnet', 'attention']")
+parser.add_argument(
+    "--conv-type", type=str, default="gravnet", help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
+)
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -65,6 +67,9 @@ parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial f
 
 def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+
+    pad_3d = args.conv_type != "gravnet"
+    use_cuda = rank != "cpu"
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -123,10 +128,26 @@ def run(rank, world_size, config, args, outdir, logfile):
             version = config["train_dataset"][config["dataset"]][sample]["version"]
             batch_size = config["train_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
-            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", ["X", "ygen"], num_samples=config["ntrain"])
+            ds = PFDataset(
+                config["data_dir"],
+                f"{sample}:{version}",
+                "train",
+                ["X", "ygen"],
+                pad_3d=pad_3d,
+                num_samples=config["ntrain"],
+            )
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"]))
+            train_loaders.append(
+                ds.get_loader(
+                    batch_size,
+                    world_size,
+                    rank,
+                    use_cuda=use_cuda,
+                    num_workers=config["num_workers"],
+                    prefetch_factor=config["prefetch_factor"],
+                )
+            )
 
         train_loader = InterleavedIterator(train_loaders)
 
@@ -139,11 +160,25 @@ def run(rank, world_size, config, args, outdir, logfile):
                 )
 
                 ds = PFDataset(
-                    config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["nvalid"]
+                    config["data_dir"],
+                    f"{sample}:{version}",
+                    "test",
+                    ["X", "ygen"],
+                    pad_3d=pad_3d,
+                    num_samples=config["nvalid"],
                 )
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-                valid_loaders.append(ds.get_loader(batch_size, 1, config["num_workers"], config["prefetch_factor"]))
+                valid_loaders.append(
+                    ds.get_loader(
+                        batch_size,
+                        1,
+                        rank,
+                        use_cuda=use_cuda,
+                        num_workers=config["num_workers"],
+                        prefetch_factor=config["prefetch_factor"],
+                    )
+                )
 
             valid_loader = InterleavedIterator(valid_loaders)
         else:
@@ -177,12 +212,26 @@ def run(rank, world_size, config, args, outdir, logfile):
             batch_size = config["test_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
             ds = PFDataset(
-                config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["ntest"]
+                config["data_dir"],
+                f"{sample}:{version}",
+                "test",
+                ["X", "ygen", "ycand"],
+                pad_3d=pad_3d,
+                num_samples=config["ntest"],
             )
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator(
-                [ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"])]
+                [
+                    ds.get_loader(
+                        batch_size,
+                        world_size,
+                        0,
+                        use_cuda=use_cuda,
+                        num_workers=config["num_workers"],
+                        prefetch_factor=config["prefetch_factor"],
+                    )
+                ]
             )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
@@ -267,7 +316,7 @@ def device_agnostic_run(config, args, world_size, outdir):
     if config["gpus"]:
         assert (
             world_size <= torch.cuda.device_count()
-        ), f"--gpus is too high (specefied {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
 
         torch.cuda.empty_cache()
         if world_size > 1:
@@ -293,6 +342,9 @@ def device_agnostic_run(config, args, world_size, outdir):
 
 
 def main():
+
+    # torch.multiprocessing.set_start_method('spawn')
+
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 

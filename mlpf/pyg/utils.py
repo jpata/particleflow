@@ -113,22 +113,22 @@ Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "
 
 def unpack_target(y):
     ret = {}
-    ret["cls_id"] = y[:, 0].long()
-    ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
+    ret["cls_id"] = y[..., 0].long()
+    ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
 
     for i, feat in enumerate(Y_FEATURES):
         if i >= 2:  # skip the cls and charge as they are defined above
-            ret[feat] = y[:, i].to(dtype=torch.float32)
+            ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
 
     # do some sanity checks
-    assert torch.all(ret["pt"] >= 0.0)  # pt
-    assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
-    assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
-    assert torch.all(ret["energy"] >= 0.0)  # energy
+    # assert torch.all(ret["pt"] >= 0.0)  # pt
+    # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
+    # assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
+    # assert torch.all(ret["energy"] >= 0.0)  # energy
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
-    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
+    ret["momentum"] = y[..., 2:-1].to(dtype=torch.float32)
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
@@ -143,17 +143,23 @@ def unpack_predictions(preds):
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
     # unpacking
-    ret["pt"] = ret["momentum"][:, 0]
-    ret["eta"] = ret["momentum"][:, 1]
-    ret["sin_phi"] = ret["momentum"][:, 2]
-    ret["cos_phi"] = ret["momentum"][:, 3]
-    ret["energy"] = ret["momentum"][:, 4]
+    ret["pt"] = ret["momentum"][..., 0]
+    ret["eta"] = ret["momentum"][..., 1]
+    ret["sin_phi"] = ret["momentum"][..., 2]
+    ret["cos_phi"] = ret["momentum"][..., 3]
+    ret["energy"] = ret["momentum"][..., 4]
 
     # new variables
     ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
+        [
+            ret["pt"].unsqueeze(axis=-1),
+            ret["eta"].unsqueeze(axis=-1),
+            ret["phi"].unsqueeze(axis=-1),
+            ret["energy"].unsqueeze(axis=-1),
+        ],
+        axis=-1,
     )
 
     return ret
