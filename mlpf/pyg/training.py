@@ -7,7 +7,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.distributed as dist
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -131,161 +130,47 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def train(
-    rank,
-    world_size,
-    model,
-    optimizer,
-    train_loader,
-    valid_loader,
-    best_val_loss,
-    stale_epochs,
-    patience,
-    outdir,
-    tensorboard_writer=None,
-):
+def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train=True):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
-    global ISTEP_GLOBAL
 
-    N_STEPS = 1000  # number of steps before running validation
-
-    _logger.info(f"Initiating a training run on device {rank}", color="red")
-
-    # initialize loss counters (note: these will be reset after N_STEPS)
-    train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-    valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    _logger.info(f"Initiating a train={is_train} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
 
-    istep = 0
-    model.train()
-    for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
-        istep += 1
+    if is_train:
+        model.train()
+    else:
+        model.eval()
+
+    for itrain, batch in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen)
         ypred = model(batch)
         ypred = unpack_predictions(ypred)
 
-        # JP: need to debug this
-        # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
+        if is_train:
+            loss = mlpf_loss(ygen, ypred)
+            for param in model.parameters():
+                param.grad = None
+        else:
+            with torch.no_grad():
+                loss = mlpf_loss(ygen, ypred)
 
-        loss = mlpf_loss(ygen, ypred)
+        if is_train:
+            loss["Total"].backward()
+            optimizer.step()
 
-        for param in model.parameters():
-            param.grad = None
-        loss["Total"].backward()
-        optimizer.step()
-
-        for loss_ in train_loss:
-            train_loss[loss_] += loss[loss_].detach()
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
 
-        # run a quick validation run at intervals of N_STEPS or at the last step
-        if (((itrain % N_STEPS) == 0) and (itrain != 0)) or (itrain == (len(train_loader) - 1)):
-            if itrain == (len(train_loader) - 1):
-                nsteps = istep
-            else:
-                nsteps = N_STEPS
-                istep = 0
-
-            if tensorboard_writer:
-                for loss_ in train_loss:
-                    tensorboard_writer.add_scalar(f"step_train/loss_{loss_}", train_loss[loss_] / nsteps, ISTEP_GLOBAL)
-                tensorboard_writer.flush()
-
-            _logger.info(
-                f"Rank {rank}: "
-                + f"train_loss_tot={train_loss['Total']/nsteps:.2f} "
-                + f"train_loss_id={train_loss['Classification']/nsteps:.2f} "
-                + f"train_loss_momentum={train_loss['Regression']/nsteps:.2f} "
-                + f"train_loss_charge={train_loss['Charge']/nsteps:.2f} "
-            )
-            train_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-
-            if world_size > 1:
-                dist.barrier()  # wait until training run is finished on all ranks before running the validation
-
-            if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Initiating a quick validation run on device {rank}", color="red")
-                model.eval()
-
-                valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
-                with torch.no_grad():
-                    for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        batch = batch.to(rank, non_blocking=True)
-                        ygen = unpack_target(batch.ygen)
-
-                        if world_size > 1:  # validation is only run on a single machine
-                            ypred = model.module(batch)
-                        else:
-                            ypred = model(batch)
-
-                        ypred = unpack_predictions(ypred)
-                        loss = mlpf_loss(ygen, ypred)
-
-                        for loss_ in valid_loss:
-                            valid_loss[loss_] += loss[loss_].detach()
-
-                    for loss_ in valid_loss:
-                        valid_loss[loss_] = valid_loss[loss_].cpu().item() / len(valid_loader)
-
-                    if tensorboard_writer:
-                        for loss_ in valid_loss:
-                            tensorboard_writer.add_scalar(f"step_valid/loss_{loss_}", valid_loss[loss_], ISTEP_GLOBAL)
-
-                    if valid_loss["Total"] < best_val_loss:
-                        best_val_loss = valid_loss["Total"]
-
-                        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                            model_state_dict = model.module.state_dict()
-                        else:
-                            model_state_dict = model.state_dict()
-
-                        torch.save(
-                            {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                            f"{outdir}/best_weights.pth",
-                        )
-                        _logger.info(
-                            f"finished {itrain+1}/{len(train_loader)} iterations and saved the model at {outdir}/best_weights.pth"  # noqa
-                        )
-                        stale_epochs = torch.tensor(0, device=rank)
-                    else:
-                        _logger.info(f"finished {itrain}/{len(train_loader)} iterations")
-                        stale_epochs += 1
-
-                    _logger.info(
-                        f"Rank {rank}: "
-                        + f"val_loss_tot={valid_loss['Total']:.2f} "
-                        + f"val_loss_id={valid_loss['Classification']:.2f} "
-                        + f"val_loss_momentum={valid_loss['Regression']:.2f} "
-                        + f"val_loss_charge={valid_loss['Charge']:.2f} "
-                        + f"best_val_loss={best_val_loss:.2f} "
-                        + f"stale={stale_epochs} "
-                    )
-                    ISTEP_GLOBAL += 1
-
-                model.train()  # prepare for next training loop
-
-            if world_size > 1:
-                dist.barrier()  # wait until validation run on rank 0 is finished before going to the next epoch
-                dist.broadcast(stale_epochs, src=0)  # broadcast stale_epochs to all gpus
-
-            if stale_epochs > patience:
-                _logger.info("breaking due to stale epochs")
-                return None, None, None, stale_epochs
-
-        if tensorboard_writer:
-            tensorboard_writer.flush()
-
     for loss_ in epoch_loss:
-        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(train_loader)
+        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(data_loader)
 
-    return epoch_loss, valid_loss, best_val_loss, stale_epochs
+    return epoch_loss
 
 
 def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, num_epochs, patience, outdir, hpo=False):
@@ -342,34 +227,30 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
-                    losses_t, losses_v, best_val_loss, stale_epochs = train(
+                    losses_t = train_and_valid(
                         rank,
                         world_size,
                         model,
                         optimizer,
                         train_loader,
-                        valid_loader,
-                        best_val_loss,
-                        stale_epochs,
-                        patience,
-                        outdir,
-                        tensorboard_writer,
                     )
             prof.export_chrome_trace("trace.json")
         else:
-            losses_t, losses_v, best_val_loss, stale_epochs = train(
+            losses_t = train_and_valid(
                 rank,
                 world_size,
                 model,
                 optimizer,
                 train_loader,
-                valid_loader,
-                best_val_loss,
-                stale_epochs,
-                patience,
-                outdir,
-                tensorboard_writer,
             )
+
+        losses_v = train_and_valid(
+            rank,
+            world_size,
+            model,
+            optimizer,
+            valid_loader,
+        )
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
