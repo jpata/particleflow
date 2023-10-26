@@ -150,7 +150,15 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen)
-        ypred = model(batch)
+
+        if is_train:
+            ypred = model(batch)
+        else:
+            if world_size > 1:  # validation is only run on a single machine
+                ypred = model.module(batch)
+            else:
+                ypred = model(batch)
+
         ypred = unpack_predictions(ypred)
 
         if is_train:
