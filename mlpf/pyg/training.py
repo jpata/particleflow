@@ -261,7 +261,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                 {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
                 # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
                 #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
-                f"{outdir}/weights-best.pth",
+                f"{outdir}/best_weights.pth",
             )
 
         if hpo:
