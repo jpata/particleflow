@@ -51,7 +51,9 @@ parser.add_argument("--test", action="store_true", default=None, help="tests the
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
-parser.add_argument("--conv-type", type=str, default=None, help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"])
+parser.add_argument(
+    "--conv-type", type=str, default=None, help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
+)
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -65,6 +67,8 @@ parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial f
 
 def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+
+    pad_3d = args.conv_type != "gravnet"
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -123,7 +127,14 @@ def run(rank, world_size, config, args, outdir, logfile):
             version = config["train_dataset"][config["dataset"]][sample]["version"]
             batch_size = config["train_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
-            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", ["X", "ygen"], num_samples=config["ntrain"])
+            ds = PFDataset(
+                config["data_dir"],
+                f"{sample}:{version}",
+                "train",
+                ["X", "ygen"],
+                pad_3d=pad_3d,
+                num_samples=config["ntrain"],
+            )
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
             train_loaders.append(ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"]))
@@ -139,7 +150,12 @@ def run(rank, world_size, config, args, outdir, logfile):
                 )
 
                 ds = PFDataset(
-                    config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["nvalid"]
+                    config["data_dir"],
+                    f"{sample}:{version}",
+                    "test",
+                    ["X", "ygen", "ycand"],
+                    pad_3d=pad_3d,
+                    num_samples=config["nvalid"],
                 )
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
@@ -177,7 +193,12 @@ def run(rank, world_size, config, args, outdir, logfile):
             batch_size = config["test_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
 
             ds = PFDataset(
-                config["data_dir"], f"{sample}:{version}", "test", ["X", "ygen", "ycand"], num_samples=config["ntest"]
+                config["data_dir"],
+                f"{sample}:{version}",
+                "test",
+                ["X", "ygen", "ycand"],
+                pad_3d=pad_3d,
+                num_samples=config["ntest"],
             )
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 

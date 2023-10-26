@@ -1,17 +1,18 @@
 from typing import List, Optional
+from types import SimpleNamespace
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 from torch import Tensor
+import torch_geometric
 from torch_geometric.data import Batch, Data
-from torch_geometric.data.data import BaseData
 
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, keys_to_get, num_samples=None):
+    def __init__(self, data_dir, name, split, keys_to_get, pad_3d=True, num_samples=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -29,7 +30,6 @@ class PFDataset:
 
         # to make dataset_info pickable
         tmp = self.ds.dataset_info
-        from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
@@ -38,6 +38,8 @@ class PFDataset:
 
         # any selection of ["X", "ygen", "ycand"] to retrieve
         self.keys_to_get = keys_to_get
+
+        self.pad_3d = pad_3d
 
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
@@ -62,7 +64,7 @@ class PFDataset:
         return DataLoader(
             self.ds,
             batch_size=batch_size,
-            collate_fn=Collater(self.keys_to_get),
+            collate_fn=Collater(self.keys_to_get, pad_3d=self.pad_3d),
             sampler=sampler,
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
@@ -109,10 +111,12 @@ class DataLoader(torch.utils.data.DataLoader):
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None):
+    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_bin_size=640, pad_3d=True):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
         self.keys_to_get = keys_to_get
+        self.pad_bin_size = pad_bin_size
+        self.pad_3d = pad_3d
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
@@ -125,12 +129,28 @@ class Collater:
                 batch[ev][elem_key] = Tensor(inputs[ev][elem_key])
             batch[ev]["batch"] = torch.tensor([ev] * len(inputs[ev][elem_key]))
 
-        elem = batch[0]
+        ret = Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
-        if isinstance(elem, BaseData):
-            return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
+        if not self.pad_3d:
+            return ret
+        else:
+            _, num_nodes = torch.unique(ret.batch, return_counts=True)
+            max_num_nodes = torch.max(num_nodes)
+            max_num_nodes_padded = ((max_num_nodes // self.pad_bin_size) + 1) * self.pad_bin_size
 
-        raise TypeError(f"DataLoader found invalid type: {type(elem)}")
+            ret = {
+                k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch, max_num_nodes=max_num_nodes_padded)
+                for k in elem_keys
+            }
+
+            ret["mask"] = ret["X"][1]
+
+            # remove the mask from each element
+            for k in elem_keys:
+                ret[k] = ret[k][0]
+
+            ret = Batch(**ret)
+        return ret
 
 
 def my_getitem(self, vals):

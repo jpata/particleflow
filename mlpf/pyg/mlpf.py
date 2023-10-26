@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import torch_geometric
-import torch_geometric.utils
 from torch_geometric.nn.conv import GravNetConv
 
 from .gnn_lsh import CombinedGraphLayer
@@ -52,20 +50,6 @@ def ffn(input_dim, output_dim, width, act, dropout):
         nn.Linear(width, output_dim),
     )
 
-
-#@torch.compile
-def unpad(data_padded, mask, num_elems):
-    # A = data_padded[mask]
-    shp = data_padded.shape
-    A = torch.masked_select(data_padded, mask.unsqueeze(axis=-1).expand(shp[0], shp[1], shp[2])).reshape(num_elems, shp[2])
-    return A
-
-#@torch.compile
-def unpad_all(embeddings, mask, n_elems, n_embed):
-    ret = []
-    for i in range(n_embed):
-        ret.append(unpad(embeddings[i], mask, n_elems))
-    return ret
 
 class MLPF(nn.Module):
     def __init__(
@@ -140,20 +124,14 @@ class MLPF(nn.Module):
     def forward(self, event):
         # unfold the Batch object
         input_ = event.X.float()
-        batch_idx = event.batch
-
-        _, num_nodes = torch.unique(batch_idx, return_counts=True)
-        max_num_nodes = torch.max(num_nodes)
-        max_num_nodes_padded = ((max_num_nodes // self.bin_size) + 1) * self.bin_size
-        input_padded, mask = torch_geometric.utils.to_dense_batch(
-            input_, batch_idx, max_num_nodes=max_num_nodes_padded
-        )
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
 
             if self.conv_type == "gravnet":
                 embedding = self.nn0(input_)
+
+                batch_idx = event.batch
                 # perform a series of graph convolutions
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
@@ -162,7 +140,8 @@ class MLPF(nn.Module):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     embeddings_reg.append(conv(conv_input, batch_idx))
             else:
-                embedding = self.nn0(input_padded)
+                mask = event.mask
+                embedding = self.nn0(input_)
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
                     out_padded = conv(conv_input, ~mask)
@@ -172,19 +151,11 @@ class MLPF(nn.Module):
                     out_padded = conv(conv_input, ~mask)
                     embeddings_reg.append(out_padded)
 
-        if self.conv_type == "gravnet":
-            embeddings_id = [torch_geometric.utils.to_dense_batch(
-                emb, batch_idx, max_num_nodes=max_num_nodes_padded
-            )[0] for emb in embeddings_id]
-            embeddings_reg = [torch_geometric.utils.to_dense_batch(
-                emb, batch_idx, max_num_nodes=max_num_nodes_padded
-            )[0] for emb in embeddings_reg]
-
-        embedding_id = torch.cat([input_padded] + embeddings_id, axis=-1)
+        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
         preds_id = self.nn_id(embedding_id)
 
         # regression
-        embedding_reg = torch.cat([input_padded] + embeddings_reg + [preds_id], axis=-1)
+        embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data
         # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
@@ -194,10 +165,10 @@ class MLPF(nn.Module):
 
         # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
         # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
-        preds_pt = self.nn_pt(embedding_reg) + input_padded[..., 1:2]
-        preds_eta = self.nn_eta(embedding_reg) + input_padded[..., 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_padded[..., 3:5]
-        preds_energy = self.nn_energy(embedding_reg) + input_padded[..., 5:6]
+        preds_pt = self.nn_pt(embedding_reg) + input_[..., 1:2]
+        preds_eta = self.nn_eta(embedding_reg) + input_[..., 2:3]
+        preds_phi = self.nn_phi(embedding_reg) + input_[..., 3:5]
+        preds_energy = self.nn_energy(embedding_reg) + input_[..., 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
 

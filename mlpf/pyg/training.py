@@ -16,7 +16,6 @@ from torch.utils.tensorboard import SummaryWriter
 from .logger import _logger
 from .utils import unpack_predictions, unpack_target
 
-import torch_geometric
 from torch.profiler import profile, record_function, ProfilerActivity
 
 
@@ -35,16 +34,22 @@ def mlpf_loss(y, ypred):
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0)
 
-    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"].permute((0,2,1)), y["cls_id"])
-
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
 
-    loss["Regression"] = 10 * torch.nn.functional.huber_loss(
-        ypred["momentum"] * msk_true_particle, y["momentum"] * msk_true_particle
-    )
-    loss["Charge"] = torch.nn.functional.cross_entropy(
-        (ypred["charge"] * msk_true_particle).permute((0,2,1)), (y["charge"] * msk_true_particle[..., 0]).to(dtype=torch.int64)
-    )
+    ypred["momentum"] = ypred["momentum"] * msk_true_particle
+    ypred["charge"] = ypred["charge"] * msk_true_particle
+    y["momentum"] = y["momentum"] * msk_true_particle
+    y["charge"] = y["charge"] * msk_true_particle[..., 0]
+
+    # pytorch expects (N, C, ...)
+    if ypred["cls_id_onehot"].ndim > 2:
+        ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+        ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+
+    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
+
+    loss["Regression"] = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"])
+    loss["Charge"] = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64))
 
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
     return loss
@@ -81,13 +86,12 @@ class FocalLoss(nn.Module):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.ignore_index = ignore_index
         self.reduction = reduction
 
-        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none", ignore_index=ignore_index)
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction="none")
 
     def __repr__(self):
-        arg_keys = ["alpha", "gamma", "ignore_index", "reduction"]
+        arg_keys = ["alpha", "gamma", "reduction"]
         arg_vals = [self.__dict__[k] for k in arg_keys]
         arg_strs = [f"{k}={v!r}" for k, v in zip(arg_keys, arg_vals)]
         arg_str = ", ".join(arg_strs)
@@ -101,20 +105,16 @@ class FocalLoss(nn.Module):
             # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
             y = y.view(-1)
 
-        unignored_mask = y != self.ignore_index
-        y = y[unignored_mask]
-        if len(y) == 0:
-            return torch.tensor(0.0)
-        x = x[unignored_mask]
-
         # compute weighted cross entropy term: -alpha * log(pt)
         # (alpha is already part of self.nll_loss)
         log_p = F.log_softmax(x, dim=-1)
         ce = self.nll_loss(log_p, y)
 
         # get true class column from each row
-        all_rows = torch.arange(len(x))
-        log_pt = log_p[all_rows, y]
+        # this is slow due to indexing
+        # all_rows = torch.arange(len(x))
+        # log_pt = log_p[all_rows, y]
+        log_pt = torch.gather(log_p, 1, y.unsqueeze(axis=-1)).squeeze(axis=-1)
 
         # compute focal term: (1 - pt)^gamma
         pt = log_pt.exp()
@@ -164,25 +164,15 @@ def train(
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         istep += 1
+        batch = batch.to(rank)
 
-        ygen = unpack_target(batch.to(rank).ygen)
-        ypred = unpack_predictions(model(batch.to(rank)))
+        ygen = unpack_target(batch.ygen)
+        ypred = model(batch)
+        ypred = unpack_predictions(ypred)
 
         # JP: need to debug this
         # assert np.all(target_charge.unique().cpu().numpy() == [0, 1, 2])
 
-        bin_size = 640
-        _, num_nodes = torch.unique(batch.batch, return_counts=True)
-        max_num_nodes = torch.max(num_nodes)
-        max_num_nodes_padded = ((max_num_nodes // bin_size) + 1) * bin_size
-        ygen = {k: torch_geometric.utils.to_dense_batch(
-            ygen[k], batch.batch, max_num_nodes=max_num_nodes_padded
-        )[0] for k in ygen.keys()}
-        
-        for k in ygen.keys():
-            print(k, ygen[k].shape)
-        for k in ypred.keys():
-            print(k, ypred[k].shape)
         loss = mlpf_loss(ygen, ypred)
 
         for param in model.parameters():
@@ -227,19 +217,15 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        ygen = unpack_target(batch.to(rank).ygen)
+                        batch = batch.to(rank)
+                        ygen = unpack_target(batch.ygen)
+
                         if world_size > 1:  # validation is only run on a single machine
-                            ypred = unpack_predictions(model.module(batch.to(rank)))
+                            ypred = model.module(batch)
                         else:
-                            ypred = unpack_predictions(model(batch.to(rank)))
+                            ypred = model(batch)
 
-                        _, num_nodes = torch.unique(batch.batch, return_counts=True)
-                        max_num_nodes = torch.max(num_nodes)
-                        max_num_nodes_padded = ((max_num_nodes // bin_size) + 1) * bin_size
-                        ygen = {k: torch_geometric.utils.to_dense_batch(
-                            ygen[k], batch.batch, max_num_nodes=max_num_nodes_padded
-                        )[0] for k in ygen.keys()}
-
+                        ypred = unpack_predictions(ypred)
                         loss = mlpf_loss(ygen, ypred)
 
                         for loss_ in valid_loss:
@@ -351,8 +337,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         t0 = time.time()
 
         # training step
-        if epoch == 1:
-            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=False, with_stack=True) as prof:
+        if epoch == -1:
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=False, with_stack=False
+            ) as prof:
                 with record_function("model_train"):
                     losses_t, losses_v, best_val_loss, stale_epochs = train(
                         rank,

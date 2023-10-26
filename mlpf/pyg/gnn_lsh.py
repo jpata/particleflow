@@ -33,11 +33,6 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-# @torch.compile
-def index_dim(a, b):
-    return a[b]
-
-
 def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     a = torch.argmax(cmul, axis=-1)
 
