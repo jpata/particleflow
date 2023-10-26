@@ -725,8 +725,8 @@ def get_loss_dict(config):
         "sin_phi": config["loss"]["sin_phi_loss_coef"],
         "cos_phi": config["loss"]["cos_phi_loss_coef"],
         "energy": config["loss"]["energy_loss_coef"],
-        "energy_bins": 1,
-        "pt_bins": 1,
+        "energy_bins": 10,
+        "pt_bins": 10,
     }
 
     if config["loss"]["event_loss"] != "none":

@@ -29,11 +29,11 @@ dataset:
 loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 0.01
+  pt_loss_coef: 0.0001
   eta_loss_coef: 1.0
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
-  energy_loss_coef: 0.01
+  energy_loss_coef: 0.0001
   cls_loss:
     type: SigmoidFocalCrossEntropy
     from_logits: yes
@@ -111,7 +111,7 @@ parameters:
   input_encoding: cms
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 512
+  node_encoding_hidden_dim: 256
 
   combined_graph_layer:
     bin_size: 640
@@ -132,14 +132,14 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 512
+      output_dim: 256
       activation: elu
       #if this is enabled, it will break float16 training
       normalize_degrees: no
     activation: elu
 
-  num_graph_layers_id: 3
-  num_graph_layers_reg: 3
+  num_graph_layers_id: 2
+  num_graph_layers_reg: 2
   output_decoding:
     activation: elu
     regression_use_classification: yes
@@ -152,14 +152,14 @@ parameters:
     phi_dim_decrease: yes
     energy_dim_decrease: no
 
-    id_hidden_dim: 512
+    id_hidden_dim: 256
     charge_hidden_dim: 256
-    pt_hidden_dim: 512
+    pt_hidden_dim: 256
     eta_hidden_dim: 256
     phi_hidden_dim: 256
-    energy_hidden_dim: 512
+    energy_hidden_dim: 256
 
-    id_num_layers: 3
+    id_num_layers: 2
     charge_num_layers: 2
     pt_num_layers: 2
     eta_num_layers: 2
