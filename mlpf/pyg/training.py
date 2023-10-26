@@ -204,7 +204,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     for loss in losses_of_interest:
         losses["train"][loss], losses["valid"][loss] = [], []
 
-    stale_epochs, best_val_loss = torch.tensor(0, device=rank), 99999.9
+    stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
     start_epoch = 0
 
     if hpo:
@@ -236,7 +236,25 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         else:
             losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
 
-        losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
+        if (rank == 0) or (rank == "cpu"):
+            losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
+            if losses_v["Total"] < best_val_loss:
+                best_val_loss = losses_v["Total"]
+                stale_epochs = 0
+            else:
+                stale_epochs += 1
+
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                model_state_dict = model.module.state_dict()
+            else:
+                model_state_dict = model.state_dict()
+
+            torch.save(
+                {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
+                #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
+                f"{outdir}/weights-best.pth",
+            )
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
@@ -261,10 +279,6 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         if stale_epochs > patience:
             break
 
-        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-        #     with record_function("model_train"):
-        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
-
         for k, v in losses_t.items():
             tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
 
@@ -274,8 +288,6 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                 losses["valid"][loss].append(losses_v[loss])
             for k, v in losses_v.items():
                 tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
-
-            tensorboard_writer.flush()
 
             t1 = time.time()
 
@@ -316,5 +328,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
 
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
+
+        tensorboard_writer.flush()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
