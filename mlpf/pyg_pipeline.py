@@ -137,7 +137,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             )
             _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
 
-            train_loaders.append(ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"]))
+            train_loaders.append(ds.get_loader(batch_size, world_size, rank, num_workers=config["num_workers"], prefetch_factor=config["prefetch_factor"]))
 
         train_loader = InterleavedIterator(train_loaders)
 
@@ -159,7 +159,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 )
                 _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
 
-                valid_loaders.append(ds.get_loader(batch_size, 1, config["num_workers"], config["prefetch_factor"]))
+                valid_loaders.append(ds.get_loader(batch_size, 1, rank, num_workers=config["num_workers"], prefetch_factor=config["prefetch_factor"]))
 
             valid_loader = InterleavedIterator(valid_loaders)
         else:
@@ -203,7 +203,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
 
             test_loaders[sample] = InterleavedIterator(
-                [ds.get_loader(batch_size, world_size, config["num_workers"], config["prefetch_factor"])]
+                [ds.get_loader(batch_size, world_size, 0, num_workers=config["num_workers"], prefetch_factor=config["prefetch_factor"])]
             )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):

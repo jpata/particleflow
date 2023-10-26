@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.distributed as dist
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -166,6 +167,9 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
 
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
+
+    if world_size > 1:
+        dist.barrier()
 
     for loss_ in epoch_loss:
         epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(data_loader)
