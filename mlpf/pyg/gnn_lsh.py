@@ -158,6 +158,23 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
     return x_msg_binned, x_features_binned, msk_f_binned
 
 
+def reverse_lsh(bins_split, points_binned_enc):
+    shp = points_binned_enc.shape
+    batch_dim = shp[0]
+    n_points = shp[1] * shp[2]
+    n_features = shp[-1]
+
+    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
+    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+
+    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
+    for ibatch in range(batch_dim):
+        # torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
+        # torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
+        ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
+    return ret
+
+
 class MessageBuildingLayerLSH(nn.Module):
     def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
         self.initializer = kwargs.pop("initializer", "random_normal")
@@ -219,23 +236,6 @@ class MessageBuildingLayerLSH(nn.Module):
         dm = torch.multiply(dm, msk_col)
 
         return bins_split, x_features_binned, dm, msk_f_binned
-
-
-def reverse_lsh(bins_split, points_binned_enc):
-    shp = points_binned_enc.shape
-    batch_dim = shp[0]
-    n_points = shp[1] * shp[2]
-    n_features = shp[-1]
-
-    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
-
-    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
-    for ibatch in range(batch_dim):
-        # torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
-        # torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
-        ret[ibatch][bins_split_flat[ibatch]] = points_binned_enc_flat[ibatch]
-    return ret
 
 
 class CombinedGraphLayer(nn.Module):
