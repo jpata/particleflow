@@ -69,7 +69,7 @@ class PFDataset:
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
             pin_memory=use_cuda,
-            pin_memory_device="cuda:{}".format(rank) if use_cuda else None,
+            pin_memory_device="cuda:{}".format(rank) if use_cuda else '',
         )
 
     def __len__(self):
