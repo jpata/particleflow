@@ -164,7 +164,7 @@ def train(
     model.train()
     for itrain, batch in tqdm.tqdm(enumerate(train_loader), total=len(train_loader)):
         istep += 1
-        batch = batch.to(rank)
+        batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen)
         ypred = model(batch)
@@ -217,7 +217,7 @@ def train(
                 valid_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
                 with torch.no_grad():
                     for ival, batch in tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader)):
-                        batch = batch.to(rank)
+                        batch = batch.to(rank, non_blocking=True)
                         ygen = unpack_target(batch.ygen)
 
                         if world_size > 1:  # validation is only run on a single machine
@@ -339,7 +339,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         # training step
         if epoch == -1:
             with profile(
-                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=False, with_stack=False
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
                     losses_t, losses_v, best_val_loss, stale_epochs = train(

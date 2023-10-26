@@ -68,6 +68,8 @@ class PFDataset:
             sampler=sampler,
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
+            pin_memory=True,
+            pin_memory_device="cuda:0",
         )
 
     def __len__(self):
@@ -134,14 +136,7 @@ class Collater:
         if not self.pad_3d:
             return ret
         else:
-            _, num_nodes = torch.unique(ret.batch, return_counts=True)
-            max_num_nodes = torch.max(num_nodes)
-            max_num_nodes_padded = ((max_num_nodes // self.pad_bin_size) + 1) * self.pad_bin_size
-
-            ret = {
-                k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch, max_num_nodes=max_num_nodes_padded)
-                for k in elem_keys
-            }
+            ret = {k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch) for k in elem_keys}
 
             ret["mask"] = ret["X"][1]
 

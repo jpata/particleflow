@@ -288,7 +288,7 @@ def device_agnostic_run(config, args, world_size, outdir):
     if config["gpus"]:
         assert (
             world_size <= torch.cuda.device_count()
-        ), f"--gpus is too high (specefied {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
 
         torch.cuda.empty_cache()
         if world_size > 1:
@@ -314,6 +314,9 @@ def device_agnostic_run(config, args, world_size, outdir):
 
 
 def main():
+
+    # torch.multiprocessing.set_start_method('spawn')
+
     args = parser.parse_args()
     world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
 

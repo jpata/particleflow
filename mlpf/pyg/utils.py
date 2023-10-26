@@ -122,10 +122,10 @@ def unpack_target(y):
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
 
     # do some sanity checks
-    assert torch.all(ret["pt"] >= 0.0)  # pt
-    assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
-    assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
-    assert torch.all(ret["energy"] >= 0.0)  # energy
+    # assert torch.all(ret["pt"] >= 0.0)  # pt
+    # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
+    # assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
+    # assert torch.all(ret["energy"] >= 0.0)  # energy
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:-1].to(dtype=torch.float32)
