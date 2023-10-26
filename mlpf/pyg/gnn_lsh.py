@@ -138,7 +138,6 @@ class NodePairGaussianKernel(nn.Module):
         return dm
 
 
-@torch.compile
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
     bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
 
@@ -222,7 +221,6 @@ class MessageBuildingLayerLSH(nn.Module):
         return bins_split, x_features_binned, dm, msk_f_binned
 
 
-@torch.compile
 def reverse_lsh(bins_split, points_binned_enc):
     shp = points_binned_enc.shape
     batch_dim = shp[0]
