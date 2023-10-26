@@ -153,7 +153,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     config["data_dir"],
                     f"{sample}:{version}",
                     "test",
-                    ["X", "ygen", "ycand"],
+                    ["X", "ygen"],
                     pad_3d=pad_3d,
                     num_samples=config["nvalid"],
                 )

@@ -130,7 +130,7 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train=True):
+def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
@@ -227,30 +227,12 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
-                    losses_t = train_and_valid(
-                        rank,
-                        world_size,
-                        model,
-                        optimizer,
-                        train_loader,
-                    )
+                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
             prof.export_chrome_trace("trace.json")
         else:
-            losses_t = train_and_valid(
-                rank,
-                world_size,
-                model,
-                optimizer,
-                train_loader,
-            )
+            losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
 
-        losses_v = train_and_valid(
-            rank,
-            world_size,
-            model,
-            optimizer,
-            valid_loader,
-        )
+        losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
