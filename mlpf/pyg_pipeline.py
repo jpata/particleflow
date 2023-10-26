@@ -69,6 +69,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     pad_3d = args.conv_type != "gravnet"
+    use_cuda = rank != "cpu"
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -142,6 +143,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     batch_size,
                     world_size,
                     rank,
+                    use_cuda=use_cuda,
                     num_workers=config["num_workers"],
                     prefetch_factor=config["prefetch_factor"],
                 )
@@ -169,7 +171,12 @@ def run(rank, world_size, config, args, outdir, logfile):
 
                 valid_loaders.append(
                     ds.get_loader(
-                        batch_size, 1, rank, num_workers=config["num_workers"], prefetch_factor=config["prefetch_factor"]
+                        batch_size,
+                        1,
+                        rank,
+                        use_cuda=use_cuda,
+                        num_workers=config["num_workers"],
+                        prefetch_factor=config["prefetch_factor"],
                     )
                 )
 
@@ -220,6 +227,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                         batch_size,
                         world_size,
                         0,
+                        use_cuda=use_cuda,
                         num_workers=config["num_workers"],
                         prefetch_factor=config["prefetch_factor"],
                     )

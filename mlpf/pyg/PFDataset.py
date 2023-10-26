@@ -52,7 +52,7 @@ class PFDataset:
         sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
         return sampler
 
-    def get_loader(self, batch_size, world_size, rank, num_workers=0, prefetch_factor=None):
+    def get_loader(self, batch_size, world_size, rank, use_cuda=False, num_workers=0, prefetch_factor=None):
         if (num_workers > 0) and (prefetch_factor is None):
             prefetch_factor = 2  # default prefetch_factor when num_workers>0
 
@@ -68,8 +68,8 @@ class PFDataset:
             sampler=sampler,
             num_workers=num_workers,
             prefetch_factor=prefetch_factor,
-            pin_memory=True,
-            pin_memory_device="cuda:{}".format(rank),
+            pin_memory=use_cuda,
+            pin_memory_device="cuda:{}".format(rank) if use_cuda else None,
         )
 
     def __len__(self):
