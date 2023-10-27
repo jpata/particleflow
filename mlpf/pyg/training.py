@@ -136,6 +136,7 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
 
+    train_or_valid = "train" if is_train else "valid"
     _logger.info(f"Initiating a train={is_train} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
@@ -146,7 +147,13 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     else:
         model.eval()
 
-    for itrain, batch in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
+    for itrain, batch in tqdm.tqdm(
+        enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}"
+    ):
+
+        if world_size > 1:
+            _logger.info(f"Step {itrain} on rank={rank}")
+
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen)
@@ -154,10 +161,7 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
         if is_train:
             ypred = model(batch)
         else:
-            if world_size > 1:  # validation is only run on a single machine
-                ypred = model.module(batch)
-            else:
-                ypred = model(batch)
+            ypred = model(batch)
 
         ypred = unpack_predictions(ypred)
 
@@ -176,11 +180,16 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
 
-    if world_size > 1:
-        dist.barrier()
+    # sync up the losses from all workers
+    num_data = torch.tensor(len(data_loader), device=rank)
+    torch.distributed.all_reduce(num_data)
 
     for loss_ in epoch_loss:
-        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(data_loader)
+        torch.distributed.all_reduce(epoch_loss[loss_])
+        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / num_data.cpu().item()
+
+    if world_size > 1:
+        dist.barrier()
 
     return epoch_loss
 
@@ -201,7 +210,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer = SummaryWriter(f"{outdir}/runs/")
     else:
-        tensorboard_writer = False
+        tensorboard_writer = None
 
     t0_initial = time.time()
 
@@ -230,7 +239,8 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
                     start_epoch = torch.load(checkpoint_dir / "extra_state.pt")["epoch"] + 1
 
     for epoch in range(start_epoch, num_epochs):
-        _logger.info(f"Initiating epoch # {epoch}", color="bold")
+        if (rank == 0) or (rank == "cpu"):
+            _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
 
         # training step
@@ -244,8 +254,9 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         else:
             losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
 
+        losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
+
         if (rank == 0) or (rank == "cpu"):
-            losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
@@ -286,9 +297,6 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         if stale_epochs > patience:
             break
 
-        for k, v in losses_t.items():
-            tensorboard_writer.add_scalar(f"epoch/train_loss_rank_{rank}_" + k, v, epoch)
-
         if (rank == 0) or (rank == "cpu"):
             for k, v in losses_t.items():
                 tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
@@ -296,6 +304,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             for loss in losses_of_interest:
                 losses["train"][loss].append(losses_t[loss])
                 losses["valid"][loss].append(losses_v[loss])
+
             for k, v in losses_v.items():
                 tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
 
@@ -339,6 +348,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-        tensorboard_writer.flush()
+        if tensorboard_writer:
+            tensorboard_writer.flush()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
