@@ -158,11 +158,7 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
 
         ygen = unpack_target(batch.ygen)
 
-        if is_train:
-            ypred = model(batch)
-        else:
-            ypred = model(batch)
-
+        ypred = model(batch)
         ypred = unpack_predictions(ypred)
 
         if is_train:
