@@ -50,7 +50,7 @@ parser.add_argument("--train", action="store_true", default=None, help="initiate
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
-parser.add_argument("--lr", type=float, default=None, help="learning rate")
+parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
 parser.add_argument(
     "--conv-type", type=str, default="gravnet", help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
 )
@@ -216,7 +216,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 f"{sample}:{version}",
                 "test",
                 ["X", "ygen", "ycand"],
-                pad_3d=pad_3d,
+                pad_3d=False, #in inference, use sparse dataset
                 num_samples=config["ntest"],
             )
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")

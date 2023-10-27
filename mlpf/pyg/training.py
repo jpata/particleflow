@@ -249,20 +249,19 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
+                if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                    model_state_dict = model.module.state_dict()
+                else:
+                    model_state_dict = model.state_dict()
+
+                torch.save(
+                    {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                    # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
+                    #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
+                    f"{outdir}/weights-best.pth",
+                )
             else:
                 stale_epochs += 1
-
-            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                model_state_dict = model.module.state_dict()
-            else:
-                model_state_dict = model.state_dict()
-
-            torch.save(
-                {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
-                #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
-                f"{outdir}/best_weights.pth",
-            )
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
