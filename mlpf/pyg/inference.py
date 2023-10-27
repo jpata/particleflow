@@ -24,6 +24,8 @@ from plotting.plot_utils import (
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
+import torch_geometric
+from torch_geometric.data import Batch
 
 
 @torch.no_grad()
@@ -34,9 +36,18 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
 
     ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+
+        if model.conv_type != "gravnet":
+            X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
+            batch_pad = Batch(X=X_pad, mask=mask)
+            ypred = model(batch_pad.to(rank))
+            ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
+        else:
+            ypred = model(batch.to(rank))
+
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
-        ypred = unpack_predictions(model(batch.to(rank)))
+        ypred = unpack_predictions(ypred)
 
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
