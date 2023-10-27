@@ -73,7 +73,7 @@ class MLPF(nn.Module):
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
-        
+
         self.bin_size = 640
 
         # embedding of the inputs

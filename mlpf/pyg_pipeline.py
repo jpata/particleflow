@@ -216,7 +216,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 f"{sample}:{version}",
                 "test",
                 ["X", "ygen", "ycand"],
-                pad_3d=False, #in inference, use sparse dataset
+                pad_3d=False,  # in inference, use sparse dataset
                 num_samples=config["ntest"],
             )
             _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
