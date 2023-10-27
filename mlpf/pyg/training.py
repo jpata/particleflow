@@ -180,12 +180,15 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
 
-    # sync up the losses from all workers
     num_data = torch.tensor(len(data_loader), device=rank)
-    torch.distributed.all_reduce(num_data)
+    # sum up the number of steps from all workers
+    if world_size > 1:
+        torch.distributed.all_reduce(num_data)
 
     for loss_ in epoch_loss:
-        torch.distributed.all_reduce(epoch_loss[loss_])
+        # sum up the losses from all workers
+        if world_size > 1:
+            torch.distributed.all_reduce(epoch_loss[loss_])
         epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / num_data.cpu().item()
 
     if world_size > 1:
