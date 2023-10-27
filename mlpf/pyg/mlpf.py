@@ -74,10 +74,11 @@ class MLPF(nn.Module):
         self.input_dim = input_dim
         self.num_convs = num_convs
 
+        self.bin_size = 640
+
         # embedding of the inputs
         if num_convs != 0:
             self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
-            self.bin_size = 640
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()

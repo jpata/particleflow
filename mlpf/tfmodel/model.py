@@ -258,8 +258,9 @@ class InputEncodingCMS(tf.keras.layers.Layer):
             dtype=X.dtype,
         )
 
-        tf.debugging.assert_greater_equal(X[:, :, 1], 0.0, message="pt", summarize=100)
-        tf.debugging.assert_greater_equal(X[:, :, 5], 0.0, message="energy", summarize=100)
+        if DEBUGGING:
+            tf.debugging.assert_greater_equal(X[:, :, 1], 0.0, message="pt", summarize=100)
+            tf.debugging.assert_greater_equal(X[:, :, 5], 0.0, message="energy", summarize=100)
         Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
         Xe = tf.expand_dims(tf.math.log(X[:, :, 5] + 1.0), axis=-1)
 
