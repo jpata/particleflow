@@ -202,17 +202,15 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     sampler = torch.utils.data.RandomSampler(ds)
 
-                test_loaders[sample].append(
-                    PFDataLoader(
-                        ds,
-                        batch_size=batch_size,
-                        collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
-                        sampler=sampler,
-                        num_workers=config["num_workers"],
-                        prefetch_factor=config["prefetch_factor"],
-                        pin_memory=use_cuda,
-                        pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
-                    )
+                test_loaders[sample] = PFDataLoader(
+                    ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                    sampler=sampler,
+                    num_workers=config["num_workers"],
+                    prefetch_factor=config["prefetch_factor"],
+                    pin_memory=use_cuda,
+                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
