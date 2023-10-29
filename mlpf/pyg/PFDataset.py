@@ -47,9 +47,10 @@ class PFDataset:
     def __repr__(self):
         return self.rep
 
-    def my_getitem(self, vals):
-        records = self.data_source.__getitems__(vals)
-        return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+def my_getitem(self, vals):
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class PFDataLoader(torch.utils.data.DataLoader):
