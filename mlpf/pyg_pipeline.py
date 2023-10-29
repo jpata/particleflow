@@ -133,7 +133,9 @@ def run(rank, world_size, config, args, outdir, logfile):
                     version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
 
                     ds = PFDataset(config["data_dir"], f"{sample}:{version}", split, num_samples=config[f"n{split}"]).ds
-                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+
+                    if (rank == 0) or (rank == "cpu"):
+                        _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
 
                     dataset.append(ds)
                 dataset = torch.utils.data.ConcatDataset(dataset)
