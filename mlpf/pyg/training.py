@@ -13,8 +13,8 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-from .logger import _logger
-from .utils import unpack_predictions, unpack_target
+from pyg.logger import _logger
+from pyg.utils import unpack_predictions, unpack_target, get_model_state_dict, load_checkpoint, save_checkpoint
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -137,7 +137,7 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     """
 
     train_or_valid = "train" if is_train else "valid"
-    _logger.info(f"Initiating a train={is_train} run on device rank={rank}", color="red")
+    _logger.info(f"Initiating a {train_or_valid} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
@@ -193,7 +193,19 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     return epoch_loss
 
 
-def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, num_epochs, patience, outdir, hpo=False):
+def train_mlpf(
+    rank,
+    world_size,
+    model,
+    optimizer,
+    train_loader,
+    valid_loader,
+    num_epochs,
+    patience,
+    outdir,
+    hpo=False,
+    checkpoint_freq=None,
+):
     """
     Will run a full training by calling train().
 
@@ -221,7 +233,7 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         losses["train"][loss], losses["valid"][loss] = [], []
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
-    start_epoch = 0
+    start_epoch = 1
 
     if hpo:
         import ray.train as ray_train
@@ -231,13 +243,11 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         if checkpoint:
             with checkpoint.as_directory() as checkpoint_dir:
                 with checkpoint.as_directory() as checkpoint_dir:
-                    checkpoint_dir = Path(checkpoint_dir)
-                    # TODO: EW, check if map_location should be "cpu" below
-                    model.load_state_dict(torch.load(checkpoint_dir / "model.pt"))
-                    optimizer.load_state_dict(torch.load(checkpoint_dir / "optim.pt"))
-                    start_epoch = torch.load(checkpoint_dir / "extra_state.pt")["epoch"] + 1
+                    checkpoint = torch.load(Path(checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
+                    model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+                    start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
-    for epoch in range(start_epoch, num_epochs):
+    for epoch in range(start_epoch, num_epochs + 1):
         if (rank == 0) or (rank == "cpu"):
             _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
@@ -256,32 +266,31 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
 
         if (rank == 0) or (rank == "cpu"):
+            extra_state = {"epoch": epoch}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
-                if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                    model_state_dict = model.module.state_dict()
-                else:
-                    model_state_dict = model.state_dict()
-
                 torch.save(
-                    {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
-                    # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
-                    #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
+                    {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
                     f"{outdir}/best_weights.pth",
                 )
+                save_checkpoint(f"{outdir}/best_weights.pth", model, optimizer, extra_state)
             else:
                 stale_epochs += 1
+
+            if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
+                checkpoint_dir = Path(outdir) / "checkpoints"
+                checkpoint_dir.mkdir(exist_ok=True)
+                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}.pth".format(checkpoint_dir, epoch, losses_v["Total"])
+                save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
             if (rank == 0) or (rank == "cpu"):
-                # Ray automatically syncs the cehckpoint to persistent storage
+                # Ray automatically syncs the checkpoint to persistent storage
                 with TemporaryDirectory() as temp_checkpoint_dir:
                     temp_checkpoint_dir = Path(temp_checkpoint_dir)
-                    torch.save(model.state_dict(), temp_checkpoint_dir / "model.pt")
-                    torch.save(optimizer.state_dict(), temp_checkpoint_dir / "optim.pt")
-                    torch.save({"epoch": epoch}, temp_checkpoint_dir / "extra_state.pt")
+                    save_checkpoint(temp_checkpoint_dir / "checkpoint.pth", model, optimizer, extra_state)
 
                     # report metrics and checkpoint to Ray
                     ray_train.report(
@@ -309,12 +318,12 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
 
             t1 = time.time()
 
-            epochs_remaining = num_epochs - (epoch + 1)
-            time_per_epoch = (t1 - t0_initial) / (epoch + 1)
+            epochs_remaining = num_epochs - epoch
+            time_per_epoch = (t1 - t0_initial) / epoch
             eta = epochs_remaining * time_per_epoch / 60
 
             _logger.info(
-                f"Rank {rank}: epoch={epoch + 1} / {num_epochs} "
+                f"Rank {rank}: epoch={epoch} / {num_epochs} "
                 + f"train_loss={losses_t['Total']:.4f} "
                 + f"valid_loss={losses_v['Total']:.4f} "
                 + f"stale={stale_epochs} "

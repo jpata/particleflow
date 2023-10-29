@@ -11,8 +11,10 @@ lr: 0.0001
 conv_type: gnn_lsh
 ntrain:
 ntest:
+nvalid: 500
 num_workers: 0
 prefetch_factor:
+checkpoint_freq: 2
 
 model:
   gnn_lsh:
@@ -40,7 +42,7 @@ model:
     dropout: 0.0
 
 raytune:
-  local_dir: /mnt/ceph/users/ewulff/ray_results/  # Note: please specify an absolute path
+  local_dir:  # Note: please specify an absolute path
   sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
