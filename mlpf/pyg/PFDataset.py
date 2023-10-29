@@ -28,7 +28,7 @@ class PFDataset:
         self.ds = builder.as_data_source(split=split)
 
         # to prevent a warning from tfds about accessing sequences of indices
-        self.ds.__class__.__getitems__ = self.my_getitem
+        self.ds.__class__.__getitems__ = my_getitem
 
         # to make dataset_info pickable
         tmp = self.ds.dataset_info
