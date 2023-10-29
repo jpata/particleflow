@@ -123,9 +123,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        # build train,valid dataset and dataloaders
-        loaders = {"train": [], "valid": []}
-        for split in loaders:
+        loaders = {}
+        for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
+            loaders[split] = []
             # build dataloader for physical and gun samples seperately
             for type_ in config[f"{split}_dataset"][config["dataset"]]:  # will be "physical", "gun"
                 dataset = []
