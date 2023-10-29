@@ -40,9 +40,9 @@ model:
     dropout: 0.0
 
 raytune:
-  local_dir: /mnt/ceph/users/ewulff/ray_results/ # Note: please specify an absolute path
-  sched: # asha, hyperband
-  search_alg: # bayes, bohb, hyperopt, nevergrad, scikit
+  local_dir: /mnt/ceph/users/ewulff/ray_results/  # Note: please specify an absolute path
+  sched:  # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
   # Tune schedule specific parameters
@@ -61,40 +61,42 @@ raytune:
 
 train_dataset:
   clic:
-    physical:
+    clic_edm_qq_pf:
+      version: 1.5.0
       batch_size: 100
-      samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+    clic_edm_ttbar_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_ttbar_pu10_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_ww_fullhad_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_zh_tautau_pf:
+      version: 1.5.0
+      batch_size: 100
 
 valid_dataset:
   clic:
-    physical:
+    clic_edm_qq_pf:
+      version: 1.5.0
       batch_size: 100
-      samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
 
 test_dataset:
   clic:
-    physical:
+    clic_edm_qq_pf:
+      version: 1.5.0
       batch_size: 100
-      samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+    clic_edm_ttbar_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_ttbar_pu10_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_ww_fullhad_pf:
+      version: 1.5.0
+      batch_size: 100
+    clic_edm_zh_tautau_pf:
+      version: 1.5.0
+      batch_size: 100

@@ -123,91 +123,53 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        # build dataset for physical and gun samples seperately
-        dataset = {}
-        for type_ in config["train_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            dataset[type_] = []
-            for sample in config["train_dataset"][config["dataset"]][type_]["samples"]:
-                version = config["train_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+        # build train,valid dataset and dataloaders
+        loaders = {"train": [], "valid": []}
+        for split in loaders:
+            # build dataloader for physical and gun samples seperately
+            for type_ in config[f"{split}_dataset"][config["dataset"]]:  # will be "physical", "gun"
+                dataset = []
+                for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
+                    version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
 
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", num_samples=config["ntrain"]).ds
-                _logger.info(f"train_dataset: {sample}, {len(ds)}", color="blue")
+                    ds = PFDataset(config["data_dir"], f"{sample}:{version}", split, num_samples=config[f"n{split}"]).ds
+                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
 
-                dataset[type_].append(ds)
+                    dataset.append(ds)
+                dataset = torch.utils.data.ConcatDataset(dataset)
 
-            dataset[type_] = torch.utils.data.ConcatDataset(dataset[type_])
-
-        # build dataloaders
-        train_loaders = []
-        for type_ in config["train_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            batch_size = config["train_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-
-            if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(dataset[type_])
-            else:
-                sampler = torch.utils.data.RandomSampler(dataset[type_])
-
-            train_loaders.append(
-                PFDataLoader(
-                    dataset[type_],
-                    batch_size=batch_size,
-                    collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
-                    sampler=sampler,
-                    num_workers=config["num_workers"],
-                    prefetch_factor=config["prefetch_factor"],
-                    pin_memory=use_cuda,
-                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                # build dataloaders
+                batch_size = (
+                    config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
                 )
-            )
 
-        train_loader = InterleavedIterator(train_loaders)  # will interleave just two dataloaders
+                if world_size > 1:
+                    sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+                else:
+                    sampler = torch.utils.data.RandomSampler(dataset)
 
-        # build dataset for physical and gun samples seperately
-        dataset = {}
-        for type_ in config["valid_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            dataset[type_] = []
-            for sample in config["valid_dataset"][config["dataset"]][type_]["samples"]:
-                version = config["valid_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
-
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", num_samples=config["nvalid"]).ds
-                _logger.info(f"valid_dataset: {sample}, {len(ds)}", color="blue")
-
-                dataset[type_].append(ds)
-
-            dataset[type_] = torch.utils.data.ConcatDataset(dataset[type_])
-
-        # build dataloaders
-        valid_loaders = []
-        for type_ in config["valid_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            batch_size = config["valid_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-
-            if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(dataset[type_])
-            else:
-                sampler = torch.utils.data.RandomSampler(dataset[type_])
-
-            valid_loaders.append(
-                PFDataLoader(
-                    dataset[type_],
-                    batch_size=batch_size,
-                    collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
-                    sampler=sampler,
-                    num_workers=config["num_workers"],
-                    prefetch_factor=config["prefetch_factor"],
-                    pin_memory=use_cuda,
-                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                loaders[split].append(
+                    PFDataLoader(
+                        dataset,
+                        batch_size=batch_size,
+                        collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                        sampler=sampler,
+                        num_workers=config["num_workers"],
+                        prefetch_factor=config["prefetch_factor"],
+                        pin_memory=use_cuda,
+                        pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                    )
                 )
-            )
 
-        valid_loader = InterleavedIterator(valid_loaders)  # will interleave just two dataloaders
+            loaders[split] = InterleavedIterator(loaders[split])  # will interleave just two dataloaders
 
         train_mlpf(
             rank,
             world_size,
             model,
             optimizer,
-            train_loader,
-            valid_loader,
+            loaders["train"],
+            loaders["valid"],
             config["num_epochs"],
             config["patience"],
             outdir,
