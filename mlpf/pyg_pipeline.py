@@ -5,27 +5,27 @@ Author: Farouk Mokhtar
 """
 
 import argparse
-from datetime import datetime
-from functools import partial
 import logging
 import os
 import os.path as osp
 import pickle as pkl
-from pathlib import Path
 import shutil
-import yaml
+from datetime import datetime
+from functools import partial
+from pathlib import Path
+
 import fastjet
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import yaml
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
-from pyg.PFDataset import InterleavedIterator, PFDataset
+from pyg.PFDataset import Collater, InterleavedIterator, PFDataLoader, PFDataset
 from pyg.training import train_mlpf
 from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs
 from utils import create_experiment_dir
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -123,61 +123,83 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        train_loaders = []
-        for sample in config["train_dataset"][config["dataset"]]:
-            version = config["train_dataset"][config["dataset"]][sample]["version"]
-            batch_size = config["train_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
+        # build dataset for physical and gun samples seperately
+        dataset = {}
+        for type_ in config["train_dataset"][config["dataset"]]:  # will be "physical", "gun"
+            dataset[type_] = []
+            for sample in config["train_dataset"][config["dataset"]][type_]["samples"]:
+                version = config["train_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
 
-            ds = PFDataset(
-                config["data_dir"],
-                f"{sample}:{version}",
-                "train",
-                ["X", "ygen"],
-                pad_3d=pad_3d,
-                num_samples=config["ntrain"],
-            )
-            _logger.info(f"train_dataset: {ds}, {len(ds)}", color="blue")
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", num_samples=config["ntrain"]).ds
+                _logger.info(f"train_dataset: {sample}, {len(ds)}", color="blue")
+
+                dataset[type_].append(ds)
+
+            dataset[type_] = torch.utils.data.ConcatDataset(dataset[type_])
+
+        # build dataloaders
+        train_loaders = []
+        for type_ in config["train_dataset"][config["dataset"]]:  # will be "physical", "gun"
+            batch_size = config["train_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset[type_])
+            else:
+                sampler = torch.utils.data.RandomSampler(dataset[type_])
 
             train_loaders.append(
-                ds.get_loader(
-                    batch_size,
-                    world_size,
-                    rank,
-                    use_cuda=use_cuda,
+                PFDataLoader(
+                    dataset[type_],
+                    batch_size=batch_size,
+                    collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                    sampler=sampler,
                     num_workers=config["num_workers"],
                     prefetch_factor=config["prefetch_factor"],
+                    pin_memory=use_cuda,
+                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
             )
 
-        train_loader = InterleavedIterator(train_loaders)
+        train_loader = InterleavedIterator(train_loaders)  # will interleave just two dataloaders
 
+        # build dataset for physical and gun samples seperately
+        dataset = {}
+        for type_ in config["valid_dataset"][config["dataset"]]:  # will be "physical", "gun"
+            dataset[type_] = []
+            for sample in config["valid_dataset"][config["dataset"]][type_]["samples"]:
+                version = config["valid_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "train", num_samples=config["nvalid"]).ds
+                _logger.info(f"valid_dataset: {sample}, {len(ds)}", color="blue")
+
+                dataset[type_].append(ds)
+
+            dataset[type_] = torch.utils.data.ConcatDataset(dataset[type_])
+
+        # build dataloaders
         valid_loaders = []
-        for sample in config["valid_dataset"][config["dataset"]]:
-            version = config["valid_dataset"][config["dataset"]][sample]["version"]
-            batch_size = config["valid_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
+        for type_ in config["valid_dataset"][config["dataset"]]:  # will be "physical", "gun"
+            batch_size = config["valid_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
 
-            ds = PFDataset(
-                config["data_dir"],
-                f"{sample}:{version}",
-                "test",
-                ["X", "ygen"],
-                pad_3d=pad_3d,
-                num_samples=config["nvalid"],
-            )
-            _logger.info(f"valid_dataset: {ds}, {len(ds)}", color="blue")
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset[type_])
+            else:
+                sampler = torch.utils.data.RandomSampler(dataset[type_])
 
             valid_loaders.append(
-                ds.get_loader(
-                    batch_size,
-                    world_size,
-                    rank,
-                    use_cuda=use_cuda,
+                PFDataLoader(
+                    dataset[type_],
+                    batch_size=batch_size,
+                    collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                    sampler=sampler,
                     num_workers=config["num_workers"],
                     prefetch_factor=config["prefetch_factor"],
+                    pin_memory=use_cuda,
+                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
             )
 
-        valid_loader = InterleavedIterator(valid_loaders)
+        valid_loader = InterleavedIterator(valid_loaders)  # will interleave just two dataloaders
 
         train_mlpf(
             rank,
@@ -193,7 +215,6 @@ def run(rank, world_size, config, args, outdir, logfile):
         )
 
     if args.test:
-
         if config["load"] is None:
             # if we don't load, we must have a newly trained model
             assert args.train, "Please train a model before testing, or load a model with --load"
@@ -295,7 +316,6 @@ def override_config(config, args):
 
 
 def device_agnostic_run(config, args, world_size, outdir):
-
     if args.train:  # create a new outdir when training a model to never overwrite
         logfile = f"{outdir}/train.log"
         _configLogger("mlpf", filename=logfile)
@@ -337,7 +357,6 @@ def device_agnostic_run(config, args, world_size, outdir):
 
 
 def main():
-
     # torch.multiprocessing.set_start_method('spawn')
 
     args = parser.parse_args()
@@ -351,8 +370,8 @@ def main():
 
     if args.hpo:
         import ray
-        from ray import tune
         from ray import train as ray_train
+        from ray import tune
 
         # from ray.tune.logger import TBXLoggerCallback
         from raytune.pt_search_space import raytune_num_samples, search_space, set_hps_from_search_space
