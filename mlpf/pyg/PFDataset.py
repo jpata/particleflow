@@ -27,6 +27,9 @@ class PFDataset:
 
         self.ds = builder.as_data_source(split=split)
 
+        # to prevent a warning from tfds about accessing sequences of indices
+        self.ds.__class__.__getitems__ = self.my_getitem
+
         # to make dataset_info pickable
         tmp = self.ds.dataset_info
 
@@ -43,6 +46,10 @@ class PFDataset:
 
     def __repr__(self):
         return self.rep
+
+    def my_getitem(self, vals):
+        records = self.data_source.__getitems__(vals)
+        return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class PFDataLoader(torch.utils.data.DataLoader):
