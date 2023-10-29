@@ -186,7 +186,14 @@ def run(rank, world_size, config, args, outdir, logfile):
         else:
             outdir = config["load"]
 
-        test_loaders = {}
+        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model.module.load_state_dict(checkpoint["model_state_dict"])
+        else:
+            model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
         for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
             batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
             for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
@@ -202,7 +209,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     sampler = torch.utils.data.RandomSampler(ds)
 
-                test_loaders[sample] = PFDataLoader(
+                test_loader = PFDataLoader(
                     ds,
                     batch_size=batch_size,
                     collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
@@ -213,28 +220,19 @@ def run(rank, world_size, config, args, outdir, logfile):
                     pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
 
-            if not osp.isdir(f"{outdir}/preds/{sample}"):
-                if (rank == 0) or (rank == "cpu"):
-                    os.system(f"mkdir -p {outdir}/preds/{sample}")
+                if not osp.isdir(f"{outdir}/preds/{sample}"):
+                    if (rank == 0) or (rank == "cpu"):
+                        os.system(f"mkdir -p {outdir}/preds/{sample}")
 
-        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+                _logger.info(f"Running predictions on {sample}")
+                torch.cuda.empty_cache()
 
-        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(checkpoint["model_state_dict"])
-        else:
-            model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                if args.dataset == "clic":
+                    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+                else:
+                    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
-        for sample in test_loaders:
-            _logger.info(f"Running predictions on {sample}")
-            torch.cuda.empty_cache()
-
-            if args.dataset == "clic":
-                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-            else:
-                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-
-            run_predictions(rank, model, test_loaders[sample], sample, outdir, jetdef, jet_ptcut=5.0, jet_match_dr=0.1)
+                run_predictions(rank, model, test_loader, sample, outdir, jetdef, jet_ptcut=5.0, jet_match_dr=0.1)
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
