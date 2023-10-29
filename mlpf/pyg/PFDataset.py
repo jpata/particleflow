@@ -17,9 +17,11 @@ class PFDataset:
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
-            split: "train" or "test
+            split: "train" or "test" (if "valid" then will use "test")
             keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
         """
+        if split == "valid":
+            split = "test"
 
         builder = tfds.builder(name, data_dir=data_dir)
 
