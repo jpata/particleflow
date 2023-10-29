@@ -186,33 +186,34 @@ def run(rank, world_size, config, args, outdir, logfile):
         else:
             outdir = config["load"]
 
-        test_loaders = {}
-        for sample in config["test_dataset"][config["dataset"]]:
-            version = config["test_dataset"][config["dataset"]][sample]["version"]
-            batch_size = config["test_dataset"][config["dataset"]][sample]["batch_size"] * config["gpu_batch_multiplier"]
+            test_loaders = {}
+            for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
+                batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+                for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
+                    version = config["test_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
 
-            ds = PFDataset(
-                config["data_dir"],
-                f"{sample}:{version}",
-                "test",
-                ["X", "ygen", "ycand"],
-                pad_3d=False,  # in inference, use sparse dataset
-                num_samples=config["ntest"],
-            )
-            _logger.info(f"test_dataset: {ds}, {len(ds)}", color="blue")
+                    ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
 
-            test_loaders[sample] = InterleavedIterator(
-                [
-                    ds.get_loader(
-                        batch_size,
-                        world_size,
-                        0,
-                        use_cuda=use_cuda,
-                        num_workers=config["num_workers"],
-                        prefetch_factor=config["prefetch_factor"],
+                    if (rank == 0) or (rank == "cpu"):
+                        _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+
+                    if world_size > 1:
+                        sampler = torch.utils.data.distributed.DistributedSampler(ds)
+                    else:
+                        sampler = torch.utils.data.RandomSampler(ds)
+
+                    test_loaders[sample].append(
+                        PFDataLoader(
+                            ds,
+                            batch_size=batch_size,
+                            collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                            sampler=sampler,
+                            num_workers=config["num_workers"],
+                            prefetch_factor=config["prefetch_factor"],
+                            pin_memory=use_cuda,
+                            pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                        )
                     )
-                ]
-            )
 
             if not osp.isdir(f"{outdir}/preds/{sample}"):
                 if (rank == 0) or (rank == "cpu"):
