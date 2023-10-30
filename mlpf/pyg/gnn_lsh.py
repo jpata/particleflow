@@ -33,7 +33,7 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
+def split_indices_to_bins_batch(cmul, nbins, bin_size, msk, stable_sort=False):
     a = torch.argmax(cmul, axis=-1)
 
     # This gives a CUDA error for some reason
@@ -45,7 +45,11 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     b[~msk] = nbins - 1
 
     bin_idx = a + b
-    bins_split = torch.argsort(bin_idx)
+    if stable_sort:
+        bins_split = torch.argsort(bin_idx, stable=True)
+    else:
+        # for ONNX export to work, stable must not be provided at all as an argument
+        bins_split = torch.argsort(bin_idx)
     bins_split = bins_split.reshape((cmul.shape[0], nbins, bin_size))
     return bins_split
 
@@ -185,6 +189,7 @@ class MessageBuildingLayerLSH(nn.Module):
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.kernel = kernel
+        self.stable_sort = False
 
         # generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = nn.Parameter(
@@ -208,7 +213,7 @@ class MessageBuildingLayerLSH(nn.Module):
             self.codebook_random_rotations[:, : torch.maximum(torch.tensor(1), n_bins // 2)],
         )
         cmul = torch.concatenate([mul, -mul], axis=-1)
-        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
+        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk, self.stable_sort)
 
         # replaced tf.gather with torch.vmap, indexing and reshape
         x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(
