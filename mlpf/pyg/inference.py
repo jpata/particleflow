@@ -7,6 +7,7 @@ import fastjet
 import mplhep
 import numpy as np
 import torch
+import torch_geometric
 import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
@@ -21,23 +22,26 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
+from torch_geometric.data import Batch
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
-import torch_geometric
-from torch_geometric.data import Batch
 
 
 @torch.no_grad()
-def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
+def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
     """Runs inference on the given sample and stores the output as .parquet files."""
 
     model.eval()
 
     ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+        if world_size > 1:
+            conv_type = model.module.conv_type
+        else:
+            conv_type = model.conv_type
 
-        if model.conv_type != "gravnet":
+        if conv_type != "gravnet":
             X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
             batch_pad = Batch(X=X_pad, mask=mask)
             ypred = model(batch_pad.to(rank))
@@ -49,6 +53,10 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
         ycand = unpack_target(batch.ycand)
         ypred = unpack_predictions(ypred)
 
+        for k, v in ygen.items():
+            ygen[k] = v.detach().cpu()
+        for k, v in ycand.items():
+            ycand[k] = v.detach().cpu()
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
 
