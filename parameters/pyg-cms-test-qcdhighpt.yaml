@@ -43,6 +43,8 @@ model:
 
 test_dataset:
   cms:
-    cms_pf_qcd_high_pt:
-      version: 1.6.0
+    physical:
       batch_size: 1
+      samples:
+        cms_pf_qcd_high_pt:
+          version: 1.6.0

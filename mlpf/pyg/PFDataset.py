@@ -1,25 +1,27 @@
-from typing import List, Optional
 from types import SimpleNamespace
+from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
-from torch import Tensor
 import torch_geometric
+from torch import Tensor
 from torch_geometric.data import Batch, Data
 
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, keys_to_get, pad_3d=True, num_samples=None):
+    def __init__(self, data_dir, name, split, num_samples=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
-            split: "train" or "test
+            split: "train" or "test" (if "valid" then will use "test")
             keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
         """
+        if split == "valid":
+            split = "test"
 
         builder = tfds.builder(name, data_dir=data_dir)
 
@@ -36,41 +38,8 @@ class PFDataset:
         self.ds.dataset_info.features = tmp.features
         self.rep = self.ds.__repr__()
 
-        # any selection of ["X", "ygen", "ycand"] to retrieve
-        self.keys_to_get = keys_to_get
-
-        self.pad_3d = pad_3d
-
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
-
-    def get_sampler(self):
-        sampler = torch.utils.data.RandomSampler(self.ds)
-        return sampler
-
-    def get_distributed_sampler(self):
-        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
-        return sampler
-
-    def get_loader(self, batch_size, world_size, rank, use_cuda=False, num_workers=0, prefetch_factor=None):
-        if (num_workers > 0) and (prefetch_factor is None):
-            prefetch_factor = 2  # default prefetch_factor when num_workers>0
-
-        if world_size > 1:
-            sampler = self.get_distributed_sampler()
-        else:
-            sampler = self.get_sampler()
-
-        return DataLoader(
-            self.ds,
-            batch_size=batch_size,
-            collate_fn=Collater(self.keys_to_get, pad_3d=self.pad_3d),
-            sampler=sampler,
-            num_workers=num_workers,
-            prefetch_factor=prefetch_factor,
-            pin_memory=use_cuda,
-            pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
-        )
 
     def __len__(self):
         return len(self.ds)
@@ -79,7 +48,12 @@ class PFDataset:
         return self.rep
 
 
-class DataLoader(torch.utils.data.DataLoader):
+def my_getitem(self, vals):
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+
+class PFDataLoader(torch.utils.data.DataLoader):
     """
     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
     because we need to implement our own Collater class to load the tensorflow_datasets (see below).
@@ -146,14 +120,6 @@ class Collater:
 
             ret = Batch(**ret)
         return ret
-
-
-def my_getitem(self, vals):
-    # print(
-    #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
-    # )
-    records = self.data_source.__getitems__(vals)
-    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class InterleavedIterator(object):

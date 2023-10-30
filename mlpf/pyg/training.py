@@ -1,8 +1,8 @@
 import pickle as pkl
-from tempfile import TemporaryDirectory
 import time
-from typing import Optional
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,13 +11,11 @@ import torch.distributed as dist
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
+from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
 from pyg.logger import _logger
 from pyg.utils import unpack_predictions, unpack_target, get_model_state_dict, load_checkpoint, save_checkpoint
-
-from torch.profiler import profile, record_function, ProfilerActivity
-
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -150,7 +148,6 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     for itrain, batch in tqdm.tqdm(
         enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}"
     ):
-
         if world_size > 1:
             _logger.info(f"Step {itrain} on rank={rank}")
 
@@ -356,7 +353,10 @@ def train_mlpf(
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-        if tensorboard_writer:
-            tensorboard_writer.flush()
+            if tensorboard_writer:
+                tensorboard_writer.flush()
+
+    if world_size > 1:
+        dist.barrier()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
