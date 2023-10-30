@@ -246,21 +246,21 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         if args.export_onnx:
             try:
-                dummy_features = torch.randn(256, model_kwargs["input_dim"], rank=rank)
-                dummy_batch = torch.zeros(256, dtype=torch.int64, rank=rank)
+                dummy_features = torch.randn(1, 640, model_kwargs["input_dim"], device=rank)
+                dummy_mask = torch.zeros(1, 640, dtype=torch.bool, device=rank)
                 torch.onnx.export(
                     model,
-                    (dummy_features, dummy_batch),
+                    (dummy_features, dummy_mask),
                     "test.onnx",
                     verbose=True,
-                    input_names=["features", "batch"],
+                    input_names=["features", "mask"],
                     output_names=["id", "momentum", "charge"],
                     dynamic_axes={
-                        "features": {0: "num_elements"},
-                        "batch": [0],
-                        "id": [0],
-                        "momentum": [0],
-                        "charge": [0],
+                        "features": {0: "num_batch", 1: "num_elements"},
+                        "mask": [0, 1],
+                        "id": [0, 1],
+                        "momentum": [0, 1],
+                        "charge": [0, 1],
                     },
                 )
             except Exception as e:

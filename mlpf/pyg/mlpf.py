@@ -122,17 +122,21 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward(self, event):
-        # unfold the Batch object
-        input_ = event.X.float()
+    def forward_batch(self, batch):
+        if self.conv_type == "gravnet":
+            return self.forward(batch.X, batch.batch_index)
+        else:
+            return self.forward(batch.X, batch.mask)
+
+    def forward(self, X_features, batch_or_mask):
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
 
             if self.conv_type == "gravnet":
-                embedding = self.nn0(input_)
+                embedding = self.nn0(X_features)
 
-                batch_idx = event.batch
+                batch_idx = batch_or_mask
                 # perform a series of graph convolutions
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
@@ -141,8 +145,8 @@ class MLPF(nn.Module):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
                     embeddings_reg.append(conv(conv_input, batch_idx))
             else:
-                mask = event.mask
-                embedding = self.nn0(input_)
+                mask = batch_or_mask
+                embedding = self.nn0(X_features)
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
                     out_padded = conv(conv_input, ~mask)
@@ -152,11 +156,11 @@ class MLPF(nn.Module):
                     out_padded = conv(conv_input, ~mask)
                     embeddings_reg.append(out_padded)
 
-        embedding_id = torch.cat([input_] + embeddings_id, axis=-1)
+        embedding_id = torch.cat([X_features] + embeddings_id, axis=-1)
         preds_id = self.nn_id(embedding_id)
 
         # regression
-        embedding_reg = torch.cat([input_] + embeddings_reg + [preds_id], axis=-1)
+        embedding_reg = torch.cat([X_features] + embeddings_reg + [preds_id], axis=-1)
 
         # do some sanity checks on the PFElement input data
         # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
@@ -166,10 +170,10 @@ class MLPF(nn.Module):
 
         # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
         # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
-        preds_pt = self.nn_pt(embedding_reg) + input_[..., 1:2]
-        preds_eta = self.nn_eta(embedding_reg) + input_[..., 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + input_[..., 3:5]
-        preds_energy = self.nn_energy(embedding_reg) + input_[..., 5:6]
+        preds_pt = self.nn_pt(embedding_reg) + X_features[..., 1:2]
+        preds_eta = self.nn_eta(embedding_reg) + X_features[..., 2:3]
+        preds_phi = self.nn_phi(embedding_reg) + X_features[..., 3:5]
+        preds_energy = self.nn_energy(embedding_reg) + X_features[..., 5:6]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
         pred_charge = self.nn_charge(embedding_reg)
 
