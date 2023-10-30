@@ -124,7 +124,7 @@ class MLPF(nn.Module):
 
     def forward_batch(self, batched_events):
         batch_or_mask = batched_events.batch if self.conv_type == "gravnet" else batched_events.mask
-        return self.forward(batched_events.X, batch_or_mask)
+        return self(batched_events.X, batch_or_mask)
 
     def forward(self, X_features, batch_or_mask):
 
