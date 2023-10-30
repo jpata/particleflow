@@ -1,7 +1,7 @@
 """
 Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
 
-Author: Farouk Mokhtar
+Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 """
 
 import argparse
