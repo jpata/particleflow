@@ -175,3 +175,33 @@ def save_HPs(args, mlpf, model_kwargs, outdir):
 
     with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
+
+
+def get_model_state_dict(model):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        return model.module.state_dict()
+    else:
+        return model.state_dict()
+
+
+def load_checkpoint(checkpoint, model, optimizer=None):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.module.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    if optimizer:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        return model, optimizer
+    else:
+        return model
+
+
+def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
+    torch.save(
+        {
+            "model_state_dict": get_model_state_dict(model),
+            "optimizer_state_dict": optimizer.state_dict() if optimizer else None,
+            "extra_state": extra_state,
+        },
+        checkpoint_path,
+    )
