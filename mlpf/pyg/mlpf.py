@@ -122,20 +122,16 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward_batch(self, batch):
-        if self.conv_type == "gravnet":
-            return self.forward(batch.X, batch.batch_index)
-        else:
-            return self.forward(batch.X, batch.mask)
+    def forward_batch(self, batched_events):
+        batch_or_mask = batched_events.batch if self.conv_type == "gravnet" else batched_events.mask
+        return self.forward(batched_events.X, batch_or_mask)
 
     def forward(self, X_features, batch_or_mask):
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
-
+            embedding = self.nn0(X_features)
             if self.conv_type == "gravnet":
-                embedding = self.nn0(X_features)
-
                 batch_idx = batch_or_mask
                 # perform a series of graph convolutions
                 for num, conv in enumerate(self.conv_id):
@@ -146,7 +142,6 @@ class MLPF(nn.Module):
                     embeddings_reg.append(conv(conv_input, batch_idx))
             else:
                 mask = batch_or_mask
-                embedding = self.nn0(X_features)
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
                     out_padded = conv(conv_input, ~mask)
