@@ -31,16 +31,15 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 @torch.no_grad()
 def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
     """Runs inference on the given sample and stores the output as .parquet files."""
+    if world_size > 1:
+        conv_type = model.module.conv_type
+    else:
+        conv_type = model.conv_type
 
     model.eval()
 
     ti = time.time()
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
-        if world_size > 1:
-            conv_type = model.module.conv_type
-        else:
-            conv_type = model.conv_type
-
         if conv_type != "gravnet":
             X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
             batch_pad = Batch(X=X_pad, mask=mask)
