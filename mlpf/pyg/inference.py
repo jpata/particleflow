@@ -42,17 +42,12 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
         if conv_type != "gravnet":
             X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
-            batch_pad = Batch(X=X_pad, mask=mask)
-            if world_size > 1:
-                ypred = model.module.forward_batch(batch_pad.to(rank))
-            else:
-                ypred = model.forward_batch(batch_pad.to(rank))
+            batch_pad = Batch(X=X_pad, mask=mask).to(rank)
+            ypred = model(batch_pad.X, batch_pad.mask)
             ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
         else:
-            if world_size > 1:
-                ypred = model.module.forward_batch(batch.to(rank))
-            else:
-                ypred = model.forward_batch(batch.to(rank))
+            _batch = batch.to(rank)
+            ypred = model(_batch.X, _batch.batch)
 
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
