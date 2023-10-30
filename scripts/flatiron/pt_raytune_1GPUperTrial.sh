@@ -82,7 +82,8 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --ray-cpus $((SLURM_CPUS_PER_TASK/4)) \
     --ray-gpus 1 \
     --gpus "0" \
-    --ntrain 1000 \
-    --ntest 1000
+    --ntrain 100 \
+    --ntest 100 \
+    --num-workers 0
 
 exit

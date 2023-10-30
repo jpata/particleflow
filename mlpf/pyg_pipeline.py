@@ -1,7 +1,7 @@
 """
 Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
 
-Author: Farouk Mokhtar
+Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 """
 
 import argparse
@@ -24,7 +24,7 @@ from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.PFDataset import Collater, InterleavedIterator, PFDataLoader, PFDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs, load_checkpoint
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -52,13 +52,14 @@ parser.add_argument("--num-epochs", type=int, default=None, help="number of trai
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
 parser.add_argument(
-    "--conv-type", type=str, default="gravnet", help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
+    "--conv-type", type=str, default=None, help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
 )
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
-parser.add_argument("--nvalid", type=int, default=500, help="validation samples to use, default will use 500 events")
+parser.add_argument("--nvalid", type=int, default=None, help="validation samples to use")
+parser.add_argument("--checkpoint-freq", type=int, default=None, help="epoch frequency for checkpointing")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
@@ -68,7 +69,7 @@ parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial f
 def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
-    pad_3d = args.conv_type != "gravnet"
+    pad_3d = config["conv_type"] != "gravnet"
     use_cuda = rank != "cpu"
 
     if world_size > 1:
@@ -89,12 +90,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
-
-        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(checkpoint["model_state_dict"])
-        else:
-            model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
         if (rank == 0) or (rank == "cpu"):
             _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
@@ -176,6 +172,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["patience"],
             outdir,
             hpo=True if args.hpo is not None else False,
+            checkpoint_freq=config["checkpoint_freq"],
         )
 
     if args.test:
@@ -187,12 +184,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             outdir = config["load"]
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
-
-        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model.module.load_state_dict(checkpoint["model_state_dict"])
-        else:
-            model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
         for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
             batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
