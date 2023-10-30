@@ -352,7 +352,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-        if tensorboard_writer:
-            tensorboard_writer.flush()
+            if tensorboard_writer:
+                tensorboard_writer.flush()
+
+    if world_size > 1:
+        dist.barrier()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
