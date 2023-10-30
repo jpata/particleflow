@@ -1,8 +1,8 @@
 import pickle as pkl
-from tempfile import TemporaryDirectory
 import time
-from typing import Optional
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,13 +11,11 @@ import torch.distributed as dist
 import tqdm
 from torch import Tensor, nn
 from torch.nn import functional as F
+from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
 from .logger import _logger
 from .utils import unpack_predictions, unpack_target
-
-from torch.profiler import profile, record_function, ProfilerActivity
-
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -150,7 +148,6 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     for itrain, batch in tqdm.tqdm(
         enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}"
     ):
-
         if world_size > 1:
             _logger.info(f"Step {itrain} on rank={rank}")
 
@@ -256,13 +253,21 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
         losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
 
         if (rank == 0) or (rank == "cpu"):
+            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+                model_state_dict = model.module.state_dict()
+            else:
+                model_state_dict = model.state_dict()
+
+            torch.save(
+                {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
+                # "{outdir}/weights-{epoch:02d}-{val_loss:.6f}.pth".format(
+                #   outdir=outdir, epoch=epoch+1, val_loss=losses_v["Total"]),
+                f"{outdir}/weights_epoch{epoch}.pth",
+            )
+
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
-                if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                    model_state_dict = model.module.state_dict()
-                else:
-                    model_state_dict = model.state_dict()
 
                 torch.save(
                     {"model_state_dict": model_state_dict, "optimizer_state_dict": optimizer.state_dict()},
@@ -347,7 +352,10 @@ def train_mlpf(rank, world_size, model, optimizer, train_loader, valid_loader, n
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-        if tensorboard_writer:
-            tensorboard_writer.flush()
+            if tensorboard_writer:
+                tensorboard_writer.flush()
+
+    if world_size > 1:
+        dist.barrier()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
