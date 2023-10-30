@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Walltime limit
-#SBATCH -t 1:00:00
+#SBATCH -t 2:00:00
 #SBATCH -N 1
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
@@ -36,11 +36,13 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --prefix $2 \
     --gpus "0" \
-    --num-epochs 3 \
+    --num-epochs 4 \
     --lr 0.0001 \
     --conv-type gnn_lsh \
-    --ntrain 400 \
-    --ntest 400 \
-    --num-workers 1
+    --ntrain 100 \
+    --ntest 100 \
+    --nvalid 100 \
+    --gpu-batch-multiplier 16 \
+    --num-workers 0
 
 echo 'Training done.'
