@@ -122,10 +122,6 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
-    def forward_batch(self, batched_events):
-        batch_or_mask = batched_events.batch if self.conv_type == "gravnet" else batched_events.mask
-        return self(batched_events.X, batch_or_mask)
-
     def forward(self, X_features, batch_or_mask):
 
         embeddings_id, embeddings_reg = [], []
