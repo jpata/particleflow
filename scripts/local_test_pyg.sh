@@ -28,3 +28,5 @@ mkdir -p experiments
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 python mlpf/pyg_pipeline.py --config parameters/pyg-workflow-test.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus "" --train --test --make-plots
+
+python mlpf/pyg_pipeline.py --config parameters/pyg-workflow-test.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus "" --train --test --make-plots --conv-type gnn_lsh --export-onnx

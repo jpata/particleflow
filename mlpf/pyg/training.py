@@ -155,7 +155,13 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
 
         ygen = unpack_target(batch.ygen)
 
-        ypred = model(batch)
+        if world_size > 1:
+            conv_type = model.module.conv_type
+        else:
+            conv_type = model.conv_type
+
+        batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
+        ypred = model(batch.X, batchidx_or_mask)
         ypred = unpack_predictions(ypred)
 
         if is_train:

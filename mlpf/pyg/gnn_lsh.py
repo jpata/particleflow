@@ -33,7 +33,7 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
+def split_indices_to_bins_batch(cmul, nbins, bin_size, msk, stable_sort=False):
     a = torch.argmax(cmul, axis=-1)
 
     # This gives a CUDA error for some reason
@@ -45,7 +45,12 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk):
     b[~msk] = nbins - 1
 
     bin_idx = a + b
-    bins_split = torch.reshape(torch.argsort(bin_idx, stable=True), (cmul.shape[0], nbins, bin_size))
+    if stable_sort:
+        bins_split = torch.argsort(bin_idx, stable=True)
+    else:
+        # for ONNX export to work, stable must not be provided at all as an argument
+        bins_split = torch.argsort(bin_idx)
+    bins_split = bins_split.reshape((cmul.shape[0], nbins, bin_size))
     return bins_split
 
 
@@ -184,6 +189,7 @@ class MessageBuildingLayerLSH(nn.Module):
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
         self.kernel = kernel
+        self.stable_sort = False
 
         # generate the LSH codebook for random rotations (num_features, max_num_bins/2)
         self.codebook_random_rotations = nn.Parameter(
@@ -193,7 +199,7 @@ class MessageBuildingLayerLSH(nn.Module):
 
     def forward(self, x_msg, x_node, msk, training=False):
         shp = x_msg.shape
-        n_points = shp[1]
+        n_points = torch.tensor(shp[1])
 
         if n_points % self.bin_size != 0:
             raise Exception("Number of elements per event must be exactly divisible by the bin size")
@@ -202,25 +208,17 @@ class MessageBuildingLayerLSH(nn.Module):
         # n_points must be divisible by bin_size exactly due to the use of reshape
         n_bins = torch.floor_divide(n_points, self.bin_size)
 
-        msk_f = torch.unsqueeze(msk, -1)
-        if n_bins > 1:
-            mul = torch.linalg.matmul(
-                x_msg,
-                self.codebook_random_rotations[:, : torch.maximum(torch.tensor(1), n_bins // 2)],
-            )
-            cmul = torch.concatenate([mul, -mul], axis=-1)
-            bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk)
+        mul = torch.linalg.matmul(
+            x_msg,
+            self.codebook_random_rotations[:, : torch.maximum(torch.tensor(1), n_bins // 2)],
+        )
+        cmul = torch.concatenate([mul, -mul], axis=-1)
+        bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk, self.stable_sort)
 
-            # replaced tf.gather with torch.vmap, indexing and reshape
-            x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(
-                bins_split, cmul, x_msg, x_node, msk, n_bins, self.bin_size
-            )
-        else:
-            x_msg_binned = torch.unsqueeze(x_msg, axis=1)
-            x_features_binned = torch.unsqueeze(x_node, axis=1)
-            msk_f_binned = torch.unsqueeze(msk_f, axis=1)
-            shp = x_msg_binned.shape
-            bins_split = torch.zeros([shp[0], shp[1], shp[2]], dtype=torch.int32)
+        # replaced tf.gather with torch.vmap, indexing and reshape
+        x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(
+            bins_split, cmul, x_msg, x_node, msk, n_bins, self.bin_size
+        )
 
         # Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
