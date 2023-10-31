@@ -48,6 +48,8 @@ class TestGNNTorchAndTensorflow(unittest.TestCase):
         from mlpf.pyg.gnn_lsh import MessageBuildingLayerLSH as MessageBuildingLayerLSHTorch
 
         nn2 = MessageBuildingLayerLSHTorch(distance_dim=128, bin_size=64)
+        # for testing, use the slower TF-like stable sort
+        nn2.stable_sort = True
 
         x_dist = np.random.normal(size=(2, 256, 128)).astype(np.float32)
         x_node = np.random.normal(size=(2, 256, 32)).astype(np.float32)
