@@ -40,8 +40,8 @@ def unpack_target(y, num_output_classes, config):
     tf.debugging.assert_less_equal(tf.math.abs(cos_phi), 1e5)
     tf.debugging.assert_less_equal(tf.math.abs(energy), 1e5)
 
-    energy_bins_edges = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
-    pt_bins_edges = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
+    energy_bins_edges = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
+    pt_bins_edges = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
 
     energy_bins = tf.searchsorted(energy_bins_edges, tf.squeeze(energy, axis=-1))
     energy_bins = tf.one_hot(energy_bins, energy_bins_edges.shape[0])

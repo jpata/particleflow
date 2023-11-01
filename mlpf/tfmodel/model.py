@@ -258,8 +258,9 @@ class InputEncodingCMS(tf.keras.layers.Layer):
             dtype=X.dtype,
         )
 
-        tf.debugging.assert_greater_equal(X[:, :, 1], 0.0, message="pt", summarize=100)
-        tf.debugging.assert_greater_equal(X[:, :, 5], 0.0, message="energy", summarize=100)
+        if DEBUGGING:
+            tf.debugging.assert_greater_equal(X[:, :, 1], 0.0, message="pt", summarize=100)
+            tf.debugging.assert_greater_equal(X[:, :, 5], 0.0, message="energy", summarize=100)
         Xpt = tf.expand_dims(tf.math.log(X[:, :, 1] + 1.0), axis=-1)
         Xe = tf.expand_dims(tf.math.log(X[:, :, 5] + 1.0), axis=-1)
 
@@ -770,10 +771,8 @@ class OutputDecoding(tf.keras.Model):
         dropout=0.0,
         id_dim_decrease=True,
         charge_dim_decrease=True,
-        pt_dim_decrease=False,
         eta_dim_decrease=False,
         phi_dim_decrease=False,
-        energy_dim_decrease=False,
         pt_as_correction=True,
         id_hidden_dim=128,
         charge_hidden_dim=128,
@@ -812,8 +811,8 @@ class OutputDecoding(tf.keras.Model):
         self.cls_output_as_logits = cls_output_as_logits
 
         # FIXME: figure out how to get this consistent with the definition in the dataset side (BaseDatasetFactory.py)
-        self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
-        self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
+        self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
+        self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
 
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
@@ -840,7 +839,6 @@ class OutputDecoding(tf.keras.Model):
             "ffn_pt",
             num_layers=pt_num_layers,
             activation=activation,
-            dim_decrease=pt_dim_decrease,
             dropout=dropout,
         )
 
@@ -871,7 +869,6 @@ class OutputDecoding(tf.keras.Model):
             "ffn_energy",
             num_layers=energy_num_layers,
             activation=activation,
-            dim_decrease=energy_dim_decrease,
             dropout=dropout,
         )
 
