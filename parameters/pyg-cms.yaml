@@ -95,6 +95,9 @@ train_dataset:
           version: 1.6.0
         cms_pf_single_proton:
           version: 1.6.0
+    multiparticlegun:
+      batch_size: 2
+      samples:
         cms_pf_multi_particle_gun:
           version: 1.6.0
 
@@ -141,5 +144,8 @@ test_dataset:
           version: 1.6.0
         cms_pf_single_proton:
           version: 1.6.0
+    multiparticlegun:
+      batch_size: 2
+      samples:
         cms_pf_multi_particle_gun:
           version: 1.6.0
