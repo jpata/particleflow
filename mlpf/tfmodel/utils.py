@@ -824,7 +824,10 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
                 logging.info("grad_vars={}".format(len(grad_vars)))
                 if loaded_opt:
                     logging.info("setting optimizer state")
-                    opt.load_own_variables(loaded_opt["weights"])
+                    try:
+                        opt.load_own_variables(loaded_opt["weights"])
+                    except Exception as e:
+                        logging.error("could not restore optimizer: {}".format(e))
 
             logging.info("distributing optimizer state")
             strategy = tf.distribute.get_strategy()
