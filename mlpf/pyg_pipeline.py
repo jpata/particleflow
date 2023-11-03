@@ -111,6 +111,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             testdir_name = "_bestweights"
 
     else:  # instantiate a new model in the outdir created
+        testdir_name = "_bestweights"
+
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
