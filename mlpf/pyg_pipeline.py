@@ -64,6 +64,9 @@ parser.add_argument("--hpo", type=str, default=None, help="perform hyperparamete
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
+parser.add_argument(
+    "--load-checkpoint", type=str, default=None, help="which checkpoint to load. if None then will load best weights"
+)
 
 
 def run(rank, world_size, config, args, outdir, logfile):
@@ -89,7 +92,13 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
-        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+        if args.load_checkpoint:
+            if not args.load_checkpoint.endswith(".pth"):
+                args.load_checkpoint += ".pth"
+            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
+        else:
+            checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
         if (rank == 0) or (rank == "cpu"):
@@ -224,17 +233,36 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
+                if args.load_checkpoint:
+                    dir_name = f"_{args.load_checkpoint}"
+                else:
+                    dir_name = "_bestweights"
+
                 run_predictions(
-                    world_size, rank, model, test_loader, sample, outdir, jetdef, jet_ptcut=5.0, jet_match_dr=0.1
+                    world_size,
+                    rank,
+                    model,
+                    test_loader,
+                    sample,
+                    outdir,
+                    jetdef,
+                    jet_ptcut=5.0,
+                    jet_match_dr=0.1,
+                    dir_name=dir_name,
                 )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
+            if args.load_checkpoint:
+                dir_name = f"_{args.load_checkpoint}"
+            else:
+                dir_name = "_bestweights"
+
             for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
                 for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
                     _logger.info(f"Plotting distributions for {sample}")
 
-                    make_plots(outdir, sample, config["dataset"])
+                    make_plots(outdir, sample, config["dataset"], dir_name)
 
         if args.export_onnx:
             try:
