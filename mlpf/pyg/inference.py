@@ -29,7 +29,7 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 @torch.no_grad()
-def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
+def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
     if world_size > 1:
         conv_type = model.module.conv_type
@@ -143,22 +143,22 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{outpath}/preds/{sample}/pred_{rank}_{i}.parquet",
+            f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
+        _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def make_plots(outpath, sample, dataset):
+def make_plots(outpath, sample, dataset, dir_name=""):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
     mplhep.set_style(mplhep.styles.CMS)
 
-    os.system(f"mkdir -p {outpath}/plots/{sample}")
+    os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
-    plots_path = Path(f"{outpath}/plots/{sample}/")
-    pred_path = Path(f"{outpath}/preds/{sample}/")
+    plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
+    pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
