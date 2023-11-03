@@ -105,6 +105,11 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
+        if args.load_checkpoint:
+            testdir_name = f"_{args.load_checkpoint[:13]}"
+        else:
+            testdir_name = "_bestweights"
+
     else:  # instantiate a new model in the outdir created
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -222,9 +227,9 @@ def run(rank, world_size, config, args, outdir, logfile):
                     pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
 
-                if not osp.isdir(f"{outdir}/preds/{sample}"):
+                if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
                     if (rank == 0) or (rank == "cpu"):
-                        os.system(f"mkdir -p {outdir}/preds/{sample}")
+                        os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
 
                 _logger.info(f"Running predictions on {sample}")
                 torch.cuda.empty_cache()
@@ -233,11 +238,6 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
                 else:
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-
-                if args.load_checkpoint:
-                    dir_name = f"_{args.load_checkpoint[:13]}"
-                else:
-                    dir_name = "_bestweights"
 
                 run_predictions(
                     world_size,
@@ -249,21 +249,16 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef,
                     jet_ptcut=5.0,
                     jet_match_dr=0.1,
-                    dir_name=dir_name,
+                    dir_name=testdir_name,
                 )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
-            if args.load_checkpoint:
-                dir_name = f"_{args.load_checkpoint[:13]}"
-            else:
-                dir_name = "_bestweights"
-
             for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
                 for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
                     _logger.info(f"Plotting distributions for {sample}")
 
-                    make_plots(outdir, sample, config["dataset"], dir_name)
+                    make_plots(outdir, sample, config["dataset"], testdir_name)
 
         if args.export_onnx:
             try:
