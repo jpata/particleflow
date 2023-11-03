@@ -22,10 +22,10 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=4, width=128, dropout=0.1):
+    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
-        self.mha = torch.nn.MultiheadAttention(embedding_dim, 8, batch_first=True)
+        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
