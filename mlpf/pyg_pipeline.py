@@ -93,11 +93,11 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         if args.load_checkpoint:
-            if args.load_checkpoint.endswith(".pth"):  # remove extension as it will be a dir name
-                args.load_checkpoint = args.load_checkpoint.replace(".pth", "")
-            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}.pth", map_location=torch.device(rank))
+            if not args.load_checkpoint.endswith(".pth"):
+                args.load_checkpoint += ".pth"
+            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
             if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}.pth")
+                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}")
         else:
             checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
             if (rank == 0) or (rank == "cpu"):
@@ -235,7 +235,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
                 if args.load_checkpoint:
-                    dir_name = f"_{args.load_checkpoint}"
+                    dir_name = f"_{args.load_checkpoint[:13]}"
                 else:
                     dir_name = "_bestweights"
 
@@ -255,7 +255,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
             if args.load_checkpoint:
-                dir_name = f"_{args.load_checkpoint}"
+                dir_name = f"_{args.load_checkpoint[:13]}"
             else:
                 dir_name = "_bestweights"
 
