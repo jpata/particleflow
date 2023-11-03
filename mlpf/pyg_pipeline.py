@@ -192,6 +192,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             checkpoint_freq=config["checkpoint_freq"],
         )
 
+        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+
     if args.test:
         if config["load"] is None:
             # if we don't load, we must have a newly trained model
@@ -199,9 +202,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             assert outdir is not None, "Error: no outdir to evaluate model from"
         else:
             outdir = config["load"]
-
-        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
         for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
             batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
