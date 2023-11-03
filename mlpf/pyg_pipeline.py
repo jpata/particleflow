@@ -64,6 +64,9 @@ parser.add_argument("--hpo", type=str, default=None, help="perform hyperparamete
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
+parser.add_argument(
+    "--load-checkpoint", type=str, default=None, help="which checkpoint to load. if None then will load best weights"
+)
 
 
 def run(rank, world_size, config, args, outdir, logfile):
@@ -89,13 +92,27 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
-        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+        if args.load_checkpoint:
+            if not args.load_checkpoint.endswith(".pth"):
+                args.load_checkpoint += ".pth"
+            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}")
+        else:
+            checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
+
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
-        if (rank == 0) or (rank == "cpu"):
-            _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
+        if args.load_checkpoint:
+            testdir_name = f"_{args.load_checkpoint[:13]}"
+        else:
+            testdir_name = "_bestweights"
 
     else:  # instantiate a new model in the outdir created
+        testdir_name = "_bestweights"
+
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
@@ -212,9 +229,9 @@ def run(rank, world_size, config, args, outdir, logfile):
                     pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 )
 
-                if not osp.isdir(f"{outdir}/preds/{sample}"):
+                if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
                     if (rank == 0) or (rank == "cpu"):
-                        os.system(f"mkdir -p {outdir}/preds/{sample}")
+                        os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
 
                 _logger.info(f"Running predictions on {sample}")
                 torch.cuda.empty_cache()
@@ -225,7 +242,16 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
                 run_predictions(
-                    world_size, rank, model, test_loader, sample, outdir, jetdef, jet_ptcut=5.0, jet_match_dr=0.1
+                    world_size,
+                    rank,
+                    model,
+                    test_loader,
+                    sample,
+                    outdir,
+                    jetdef,
+                    jet_ptcut=5.0,
+                    jet_match_dr=0.1,
+                    dir_name=testdir_name,
                 )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
@@ -234,7 +260,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
                     _logger.info(f"Plotting distributions for {sample}")
 
-                    make_plots(outdir, sample, config["dataset"])
+                    make_plots(outdir, sample, config["dataset"], testdir_name)
 
         if args.export_onnx:
             try:
