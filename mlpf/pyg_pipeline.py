@@ -96,13 +96,14 @@ def run(rank, world_size, config, args, outdir, logfile):
             if not args.load_checkpoint.endswith(".pth"):
                 args.load_checkpoint += ".pth"
             checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}")
         else:
             checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-
-        if (rank == 0) or (rank == "cpu"):
-            _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
 
     else:  # instantiate a new model in the outdir created
         model_kwargs = {
