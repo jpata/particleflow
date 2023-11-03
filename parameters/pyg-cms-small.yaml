@@ -30,15 +30,15 @@ model:
     width: 512
     num_convs: 3
     k: 16
-    propagate_dimensions: 22
+    propagate_dimensions: 32
     space_dimensions: 4
     dropout: 0.0
 
   attention:
     conv_type: attention
-    embedding_dim: 128
-    width: 128
-    num_convs: 2
+    embedding_dim: 256
+    width: 256
+    num_convs: 3
     dropout: 0.0
 
 train_dataset:
