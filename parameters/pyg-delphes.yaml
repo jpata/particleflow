@@ -15,6 +15,9 @@ nvalid: 500
 num_workers: 0
 prefetch_factor:
 checkpoint_freq:
+comet_name: particleflow-pt
+comet_offline: False
+comet_step_freq: 10
 
 model:
   gnn_lsh:
