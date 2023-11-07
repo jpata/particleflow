@@ -138,6 +138,7 @@ class InterleavedIterator(object):
                     self.loader_ds_indices.append(iloader)
 
         self.cur_index = 0
+        self._len = None
 
     def __iter__(self):
         return self
@@ -154,8 +155,12 @@ class InterleavedIterator(object):
         return next(self.data_loaders_iter[iloader])
 
     def __len__(self):
-        len_ = 0
-        for iloader in range(len(self.data_loaders_iter)):
-            len_ += len(self.data_loaders_iter[iloader])
-
-        return len_
+        if self._len:
+            return self._len
+        else:
+            # compute and cache the length
+            len_ = 0
+            for iloader in range(len(self.data_loaders_iter)):
+                len_ += len(self.data_loaders_iter[iloader])
+            self._len = len_
+            return len_

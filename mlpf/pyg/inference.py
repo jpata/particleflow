@@ -38,8 +38,14 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 
     model.eval()
 
+    # only show progress bar on rank 0
+    if (world_size > 1) and (rank != 0):
+        iterator = enumerate(loader)
+    else:
+        iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
+
     ti = time.time()
-    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+    for i, batch in iterator:
         if conv_type != "gravnet":
             X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
             batch_pad = Batch(X=X_pad, mask=mask).to(rank)

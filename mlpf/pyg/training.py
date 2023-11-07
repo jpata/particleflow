@@ -129,7 +129,9 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
+def train_and_valid(
+    rank, world_size, model, optimizer, data_loader, is_train, comet_experiment=None, comet_step_freq=None, epoch=None
+):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
     """
@@ -145,12 +147,13 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
     else:
         model.eval()
 
-    for itrain, batch in tqdm.tqdm(
-        enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}"
-    ):
-        if world_size > 1:
-            _logger.info(f"Step {itrain} on rank={rank}")
+    # only show progress bar on rank 0
+    if (world_size > 1) and (rank != 0):
+        iterator = enumerate(data_loader)
+    else:
+        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}")
 
+    for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen)
@@ -178,6 +181,11 @@ def train_and_valid(rank, world_size, model, optimizer, data_loader, is_train):
 
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
+
+        if comet_experiment:
+            if itrain % comet_step_freq == 0:
+                # this loss is not normalized to batch size
+                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=(epoch - 1) * len(data_loader) + itrain)
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -208,6 +216,8 @@ def train_mlpf(
     outdir,
     hpo=False,
     checkpoint_freq=None,
+    comet_experiment=None,
+    comet_step_freq=None,
 ):
     """
     Will run a full training by calling train().
@@ -264,9 +274,13 @@ def train_mlpf(
                     losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
             prof.export_chrome_trace("trace.json")
         else:
-            losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
+            losses_t = train_and_valid(
+                rank, world_size, model, optimizer, train_loader, True, comet_experiment, comet_step_freq, epoch
+            )
 
-        losses_v = train_and_valid(rank, world_size, model, optimizer, valid_loader, False)
+        losses_v = train_and_valid(
+            rank, world_size, model, optimizer, valid_loader, False, comet_experiment, comet_step_freq, epoch
+        )
 
         if (rank == 0) or (rank == "cpu"):
             extra_state = {"epoch": epoch}
@@ -362,6 +376,8 @@ def train_mlpf(
             if tensorboard_writer:
                 tensorboard_writer.flush()
 
+        if comet_experiment:
+            comet_experiment.log_epoch_end(epoch)
     if world_size > 1:
         dist.barrier()
 
