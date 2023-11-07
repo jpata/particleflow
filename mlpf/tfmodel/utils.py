@@ -824,6 +824,7 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
                 logging.info("grad_vars={}".format(len(grad_vars)))
                 if loaded_opt:
                     logging.info("setting optimizer state")
+                    opt.build(grad_vars)
                     try:
                         opt.load_own_variables(loaded_opt["weights"])
                     except Exception as e:
