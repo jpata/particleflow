@@ -14,6 +14,9 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 import fastjet
 import torch
 import torch.distributed as dist
@@ -24,8 +27,8 @@ from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.PFDataset import Collater, InterleavedIterator, PFDataLoader, PFDataset
 from pyg.training import train_mlpf
-from pyg.utils import CLASS_LABELS, X_FEATURES, load_checkpoint, save_HPs
-from utils import create_experiment_dir
+from pyg.utils import CLASS_LABELS, X_FEATURES, save_HPs, load_checkpoint
+from utils import create_experiment_dir, create_comet_experiment
 
 logging.basicConfig(level=logging.INFO)
 
@@ -67,6 +70,9 @@ parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial f
 parser.add_argument(
     "--load-checkpoint", type=str, default=None, help="which checkpoint to load. if None then will load best weights"
 )
+parser.add_argument("--comet", action="store_true", help="use comet ml logging")
+parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
+parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
 
 
 def run(rank, world_size, config, args, outdir, logfile):
@@ -136,6 +142,22 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
+        if args.comet:
+            comet_experiment = create_comet_experiment(
+                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+            )
+            comet_experiment.set_name(f"rank_{rank}")
+            comet_experiment.log_parameter("run_id", outdir)
+            comet_experiment.log_parameter("world_size", world_size)
+            comet_experiment.log_parameter("rank", rank)
+            comet_experiment.log_parameters(config, prefix="config:")
+            comet_experiment.set_model_graph(model)
+            comet_experiment.log_code("mlpf/pyg/training.py")
+            comet_experiment.log_code("mlpf/pyg_pipeline.py")
+            comet_experiment.log_code(args.config)
+        else:
+            comet_experiment = None
+
         loaders = {}
         for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
             loaders[split] = []
@@ -190,6 +212,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             outdir,
             hpo=True if args.hpo is not None else False,
             checkpoint_freq=config["checkpoint_freq"],
+            comet_experiment=comet_experiment,
+            comet_step_freq=config["comet_step_freq"],
         )
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))

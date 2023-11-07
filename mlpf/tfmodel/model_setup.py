@@ -1,5 +1,4 @@
 import logging
-from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 try:
     import horovod.tensorflow.keras as hvd
@@ -153,7 +152,6 @@ def prepare_callbacks(
     train_samples=None,
     is_hpo_run=False,
 ):
-
     callbacks = []
     callbacks.append(tf.keras.callbacks.TerminateOnNaN())
     callbacks += get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run)
@@ -198,7 +196,6 @@ def prepare_callbacks(
 
 
 def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, horovod_enabled, is_hpo_run=False):
-
     callbacks = []
 
     if not horovod_enabled or hvd.rank() == 0:
@@ -276,7 +273,6 @@ def make_model(config, dtype):
 
 
 def make_gnn_dense(config, dtype):
-
     parameters = [
         "do_node_encoding",
         "node_update_mode",
@@ -353,7 +349,6 @@ def eval_model(
     jet_match_dr=0.1,
     verbose=False,
 ):
-
     ibatch = 0
 
     if config["evaluation_jet_algo"] == "ee_genkt_algorithm":
@@ -364,7 +359,6 @@ def eval_model(
         raise KeyError("Unknown evaluation_jet_algo: {}".format(config["evaluation_jet_algo"]))
 
     for elem in tqdm(dataset, desc="Evaluating model"):
-
         if verbose:
             print("evaluating model")
         ypred = model.predict(elem["X"], verbose=verbose)
@@ -568,7 +562,6 @@ def configure_model_weights(model, trainable_layers):
 
 def make_focal_loss(config):
     def loss(x, y):
-
         from .tfa import sigmoid_focal_crossentropy
 
         return sigmoid_focal_crossentropy(
@@ -580,36 +573,3 @@ def make_focal_loss(config):
         )
 
     return loss
-
-
-def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
-    try:
-        if comet_offline:
-            logging.info("Using comet-ml OfflineExperiment, saving logs locally.")
-            if outdir is None:
-                raise ValueError("Please specify am output directory when setting comet_offline to True")
-
-            experiment = OfflineExperiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-                offline_directory=outdir + "/cometml",
-            )
-        else:
-            logging.info("Using comet-ml Experiment, streaming logs to www.comet.ml.")
-
-            experiment = Experiment(
-                project_name=comet_exp_name,
-                auto_metric_logging=True,
-                auto_param_logging=True,
-                auto_histogram_weight_logging=True,
-                auto_histogram_gradient_logging=False,
-                auto_histogram_activation_logging=False,
-            )
-    except Exception as e:
-        logging.warning("Failed to initialize comet-ml dashboard: {}".format(e))
-        experiment = None
-    return experiment

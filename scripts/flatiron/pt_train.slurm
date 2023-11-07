@@ -7,7 +7,7 @@
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --gpus-per-task=4
-#SBATCH --constraint=a100-80gb,ib
+#SBATCH --constraint=h100,ib
 
 # Job name
 #SBATCH -J pt_train
@@ -32,17 +32,16 @@ python3 --version
 
 
 echo 'Starting training.'
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pyg_pipeline.py --train \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --prefix $2 \
-    --gpus "0" \
-    --num-epochs 4 \
+    --gpus "0,1,2,3,4,5,6,7" \
     --lr 0.0001 \
-    --conv-type gnn_lsh \
-    --ntrain 100 \
-    --ntest 100 \
-    --nvalid 100 \
-    --gpu-batch-multiplier 16 \
-    --num-workers 0
+    --gpu-batch-multiplier 4 \
+    --num-workers 1 \
+    --prefetch-factor 2 \
+    --checkpoint-freq 1 \
+    --comet \
+    --comet-step-freq 20
 
 echo 'Training done.'
