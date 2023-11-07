@@ -73,6 +73,7 @@ parser.add_argument(
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
+parser.add_argument("--experiments-dir", type=str, default=None, help="base directory within which trainings are stored")
 
 
 def run(rank, world_size, config, args, outdir, logfile):
@@ -447,7 +448,10 @@ def main():
         )
 
     else:
-        outdir = create_experiment_dir(prefix=(args.prefix or "") + Path(args.config).stem + "_")
+        outdir = create_experiment_dir(
+            prefix=(args.prefix or "") + Path(args.config).stem + "_",
+            experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
+        )
         device_agnostic_run(config, args, world_size, outdir)
 
 
