@@ -1,21 +1,46 @@
+import os
+import os.path as osp
 import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
+import logging
+import shutil
+from datetime import datetime
+import tqdm
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 import torch
 import torch.distributed as dist
-import tqdm
+import torch.multiprocessing as mp
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
-from pyg.logger import _logger
-from pyg.utils import unpack_predictions, unpack_target, get_model_state_dict, load_checkpoint, save_checkpoint
+from pyg.logger import _logger, _configLogger
+from pyg.utils import (
+    unpack_predictions,
+    unpack_target,
+    get_model_state_dict,
+    load_checkpoint,
+    save_checkpoint,
+    CLASS_LABELS,
+    X_FEATURES,
+    save_HPs,
+)
+
+
+import fastjet
+from pyg.inference import make_plots, run_predictions
+from pyg.mlpf import MLPF
+from pyg.PFDataset import Collater, PFDataLoader, PFDataset, get_interleaved_dataloaders
+from utils import create_comet_experiment
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -249,10 +274,10 @@ def train_mlpf(
     start_epoch = 1
 
     if hpo:
-        import ray.train as ray_train
+        import ray
         from ray.train import Checkpoint
 
-        checkpoint = ray_train.get_checkpoint()
+        checkpoint = ray.train.get_checkpoint()
         if checkpoint:
             with checkpoint.as_directory() as checkpoint_dir:
                 with checkpoint.as_directory() as checkpoint_dir:
@@ -303,21 +328,26 @@ def train_mlpf(
 
         if hpo:
             # save model, optimizer and epoch number for HPO-supported checkpointing
+            # Ray automatically syncs the checkpoint to persistent storage
+            metrics = dict(
+                loss=losses_t["Total"],
+                val_loss=losses_v["Total"],
+                epoch=epoch,
+            )
             if (rank == 0) or (rank == "cpu"):
-                # Ray automatically syncs the checkpoint to persistent storage
+                # only save checkpoint on first worker
                 with TemporaryDirectory() as temp_checkpoint_dir:
                     temp_checkpoint_dir = Path(temp_checkpoint_dir)
                     save_checkpoint(temp_checkpoint_dir / "checkpoint.pth", model, optimizer, extra_state)
 
                     # report metrics and checkpoint to Ray
-                    ray_train.report(
-                        dict(
-                            loss=losses_t["Total"],
-                            val_loss=losses_v["Total"],
-                            epoch=epoch,
-                        ),
-                        checkpoint=Checkpoint.from_directory(temp_checkpoint_dir),
+                    ray.train.report(
+                        metrics,
+                        checkpoint=Checkpoint.from_directory(temp_checkpoint_dir) if rank == 0 else None,
                     )
+            else:
+                # ray requires all workers to report metrics
+                ray.train.report(metrics)
 
         if stale_epochs > patience:
             break
@@ -382,3 +412,440 @@ def train_mlpf(
         dist.barrier()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
+
+
+def run(rank, world_size, config, args, outdir, logfile):
+    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+
+    pad_3d = config["conv_type"] != "gravnet"
+    use_cuda = rank != "cpu"
+
+    if world_size > 1:
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", filename=logfile)
+
+    if config["load"]:  # load a pre-trained model
+        outdir = config["load"]  # in case both --load and --train are provided
+
+        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+            model_kwargs = pkl.load(f)
+
+        model = MLPF(**model_kwargs)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+
+        if args.load_checkpoint:
+            if not args.load_checkpoint.endswith(".pth"):
+                args.load_checkpoint += ".pth"
+            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}")
+        else:
+            checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
+
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+
+        if args.load_checkpoint:
+            testdir_name = f"_{args.load_checkpoint[:13]}"
+        else:
+            testdir_name = "_bestweights"
+
+    else:  # instantiate a new model in the outdir created
+        testdir_name = "_bestweights"
+
+        model_kwargs = {
+            "input_dim": len(X_FEATURES[config["dataset"]]),
+            "num_classes": len(CLASS_LABELS[config["dataset"]]),
+            **config["model"][config["conv_type"]],
+        }
+        model = MLPF(**model_kwargs)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+
+    model.to(rank)
+
+    if world_size > 1:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(model)
+
+    if args.train:
+        if (rank == 0) or (rank == "cpu"):
+            save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            _logger.info("Creating experiment dir {}".format(outdir))
+            _logger.info(f"Model directory {outdir}", color="bold")
+
+        if args.comet:
+            comet_experiment = create_comet_experiment(
+                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+            )
+            comet_experiment.set_name(f"rank_{rank}")
+            comet_experiment.log_parameter("run_id", outdir)
+            comet_experiment.log_parameter("world_size", world_size)
+            comet_experiment.log_parameter("rank", rank)
+            comet_experiment.log_parameters(config, prefix="config:")
+            comet_experiment.set_model_graph(model)
+            comet_experiment.log_code("mlpf/pyg/training.py")
+            comet_experiment.log_code("mlpf/pyg_pipeline.py")
+            comet_experiment.log_code(args.config)
+        else:
+            comet_experiment = None
+
+        loaders = get_interleaved_dataloaders(
+            world_size, rank, config, use_cuda, pad_3d, hpo=True if args.hpo is not None else False
+        )
+
+        train_mlpf(
+            rank,
+            world_size,
+            model,
+            optimizer,
+            loaders["train"],
+            loaders["valid"],
+            config["num_epochs"],
+            config["patience"],
+            outdir,
+            hpo=True if args.hpo is not None else False,
+            checkpoint_freq=config["checkpoint_freq"],
+            comet_experiment=comet_experiment,
+            comet_step_freq=config["comet_step_freq"],
+        )
+
+        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+
+    if args.test:
+        if config["load"] is None:
+            # if we don't load, we must have a newly trained model
+            assert args.train, "Please train a model before testing, or load a model with --load"
+            assert outdir is not None, "Error: no outdir to evaluate model from"
+        else:
+            outdir = config["load"]
+
+        for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
+            batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+            for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
+                version = config["test_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
+
+                if (rank == 0) or (rank == "cpu"):
+                    _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+
+                if world_size > 1:
+                    sampler = torch.utils.data.distributed.DistributedSampler(ds)
+                else:
+                    sampler = torch.utils.data.RandomSampler(ds)
+
+                test_loader = PFDataLoader(
+                    ds,
+                    batch_size=batch_size,
+                    collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                    sampler=sampler,
+                    num_workers=config["num_workers"],
+                    prefetch_factor=config["prefetch_factor"],
+                    pin_memory=use_cuda,
+                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                )
+
+                if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
+                    if (rank == 0) or (rank == "cpu"):
+                        os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
+
+                _logger.info(f"Running predictions on {sample}")
+                torch.cuda.empty_cache()
+
+                if args.dataset == "clic":
+                    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+                else:
+                    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
+                run_predictions(
+                    world_size,
+                    rank,
+                    model,
+                    test_loader,
+                    sample,
+                    outdir,
+                    jetdef,
+                    jet_ptcut=5.0,
+                    jet_match_dr=0.1,
+                    dir_name=testdir_name,
+                )
+
+    if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
+        if args.make_plots:
+            for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
+                for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
+                    _logger.info(f"Plotting distributions for {sample}")
+
+                    make_plots(outdir, sample, config["dataset"], testdir_name)
+
+        if args.export_onnx:
+            try:
+                dummy_features = torch.randn(1, 640, model_kwargs["input_dim"], device=rank)
+                dummy_mask = torch.zeros(1, 640, dtype=torch.bool, device=rank)
+                torch.onnx.export(
+                    model,
+                    (dummy_features, dummy_mask),
+                    "test.onnx",
+                    verbose=True,
+                    input_names=["features", "mask"],
+                    output_names=["id", "momentum", "charge"],
+                    dynamic_axes={
+                        "features": {0: "num_batch", 1: "num_elements"},
+                        "mask": [0, 1],
+                        "id": [0, 1],
+                        "momentum": [0, 1],
+                        "charge": [0, 1],
+                    },
+                )
+            except Exception as e:
+                print("ONNX export failed: {}".format(e))
+
+    if world_size > 1:
+        dist.destroy_process_group()
+
+
+def override_config(config, args):
+    """override config with values from argparse Namespace"""
+    for arg in vars(args):
+        arg_value = getattr(args, arg)
+        if arg_value is not None:
+            config[arg] = arg_value
+    return config
+
+
+def device_agnostic_run(config, args, world_size, outdir):
+    if args.train:  # create a new outdir when training a model to never overwrite
+        logfile = f"{outdir}/train.log"
+        _configLogger("mlpf", filename=logfile)
+
+        os.system(f"cp {args.config} {outdir}/train-config.yaml")
+    else:
+        outdir = args.load
+        logfile = f"{outdir}/test.log"
+        _configLogger("mlpf", filename=logfile)
+
+        os.system(f"cp {args.config} {outdir}/test-config.yaml")
+
+    if config["gpus"]:
+        assert (
+            world_size <= torch.cuda.device_count()
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
+
+        torch.cuda.empty_cache()
+        if world_size > 1:
+            _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
+            for rank in range(world_size):
+                _logger.info(torch.cuda.get_device_name(rank), color="purple")
+
+            mp.spawn(
+                run,
+                args=(world_size, config, args, outdir, logfile),
+                nprocs=world_size,
+                join=True,
+            )
+        elif world_size == 1:
+            rank = 0
+            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            run(rank, world_size, config, args, outdir, logfile)
+
+    else:
+        rank = "cpu"
+        _logger.info("Will use cpu", color="purple")
+        run(rank, world_size, config, args, outdir, logfile)
+
+
+def train_ray_trial(config, args):
+    import ray
+
+    outdir = ray.train.get_context().get_trial_dir()
+    logfile = f"{outdir}/train.log"
+    pad_3d = config["conv_type"] != "gravnet"
+    use_cuda = True
+
+    rank = ray.train.get_context().get_local_rank()
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", filename=logfile)
+
+    model_kwargs = {
+        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        **config["model"][config["conv_type"]],
+    }
+    model = MLPF(**model_kwargs)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+
+    world_size = ray.train.get_context().get_world_size()
+
+    if world_size > 1:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    model = ray.train.torch.prepare_model(model)
+
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(model)
+
+    if (rank == 0) or (rank == "cpu"):
+        save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+        _logger.info("Creating experiment dir {}".format(outdir))
+        _logger.info(f"Model directory {outdir}", color="bold")
+
+    loaders = get_interleaved_dataloaders(
+        world_size, rank, config, use_cuda, pad_3d, hpo=True if args.hpo is not None else False
+    )
+
+    train_mlpf(
+        rank,
+        world_size,
+        model,
+        optimizer,
+        loaders["train"],
+        loaders["valid"],
+        config["num_epochs"],
+        config["patience"],
+        outdir,
+        hpo=True if args.hpo is not None else False,
+        checkpoint_freq=config["checkpoint_freq"],
+        comet_experiment=None,
+        comet_step_freq=config["comet_step_freq"],
+    )
+
+
+def run_hpo(args, config):
+    import ray
+    from ray import tune
+    from ray.train.torch import TorchTrainer
+
+    from raytune.pt_search_space import raytune_num_samples, search_space, set_hps_from_search_space
+    from raytune.utils import get_raytune_schedule, get_raytune_search_alg
+
+    # create ray cache for intermediate storage of trials
+    tmp_ray_cache = TemporaryDirectory()
+    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
+    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}", color="bold")
+
+    name = args.hpo  # name of Ray Tune experiment directory
+
+    os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"  # don't crash if a metric is missing
+    if isinstance(config["raytune"]["local_dir"], type(None)):
+        raise TypeError("Please specify a local_dir in the raytune section of the config file.")
+    trd = config["raytune"]["local_dir"] + "/tune_result_dir"
+    os.environ["TUNE_RESULT_DIR"] = trd
+
+    expdir = Path(config["raytune"]["local_dir"]) / name
+    expdir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(
+        "mlpf/raytune/search_space.py",
+        str(Path(config["raytune"]["local_dir"]) / name / "search_space.py"),
+    )  # Copy the search space definition file to the train dir for later reference
+    shutil.copy(
+        args.config,
+        str(Path(config["raytune"]["local_dir"]) / name / "config.yaml"),
+    )  # Copy the config file to the train dir for later reference
+
+    ray.init(address="auto")
+
+    sched = get_raytune_schedule(config["raytune"])
+    search_alg = get_raytune_search_alg(config["raytune"])
+
+    def hpo(search_space, config, args):
+        config = set_hps_from_search_space(search_space, config)
+        train_ray_trial(config, args)
+        # device_agnostic_run(config, args, world_size, outdir)
+
+    scaling_config = ray.train.ScalingConfig(
+        num_workers=args.ray_gpus,
+        use_gpu=True,
+        resources_per_worker={"CPU": int(args.ray_cpus / (args.ray_gpus + 1)), "GPU": 1},  # +1 to avoid blocking
+    )
+    trainable = tune.with_parameters(hpo, config=config, args=args)
+    trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
+
+    search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
+    start = datetime.now()
+    tuner = tune.Tuner(
+        trainer,
+        param_space=search_space,
+        tune_config=tune.TuneConfig(
+            num_samples=raytune_num_samples,
+            metric=config["raytune"]["default_metric"],
+            mode=config["raytune"]["default_mode"],
+            search_alg=search_alg,
+            scheduler=sched,
+        ),
+        run_config=ray.train.RunConfig(
+            name=name,
+            storage_path=config["raytune"]["local_dir"],
+            log_to_file=False,
+            failure_config=ray.train.FailureConfig(max_failures=2),
+            checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
+            sync_config=ray.train.SyncConfig(sync_artifacts=True),
+        ),
+    )
+
+    result_grid = tuner.fit()
+    end = datetime.now()
+
+    print("Number of errored trials: {}".format(result_grid.num_errors))
+    print("Number of terminated (not errored) trials: {}".format(result_grid.num_terminated))
+    print("Ray Tune experiment path: {}".format(result_grid.experiment_path))
+
+    best_result = result_grid.get_best_result(scope="last-10-avg")
+    best_config = best_result.config
+    print("Best trial path: {}".format(best_result.path))
+
+    result_df = result_grid.get_dataframe()
+    print(result_df)
+    print(result_df.columns)
+
+    print("Number of errored trials: {}".format(result_grid.num_errors))
+    print("Number of terminated (not errored) trials: {}".format(result_grid.num_terminated))
+    print("Ray Tune experiment path: {}".format(result_grid.experiment_path))
+
+    # analysis = tune.run(
+    #     partial(
+    #         hpo,
+    #         config=config,
+    #         args=args,
+    #         world_size=world_size,
+    #     ),
+    #     config=search_space,
+    #     resources_per_trial={"cpu": args.ray_cpus, "gpu": args.ray_gpus},
+    #     name=name,
+    #     scheduler=sched,
+    #     search_alg=search_alg,
+    #     num_samples=raytune_num_samples,
+    #     local_dir=config["raytune"]["local_dir"],
+    #     # callbacks=[TBXLoggerCallback()],
+    #     log_to_file=True,
+    #     resume=False,  # TODO: make this configurable
+    #     max_failures=2,
+    #     # sync_config=sync_config,
+    # )
+    # end = datetime.now()
+
+    # print(analysis.results_df)
+    # print(analysis.results_df.columns)
+
+    # best_config = (
+    #     analysis.get_best_config(
+    #         metric=config["raytune"]["default_metric"],
+    #         mode=config["raytune"]["default_mode"],
+    #         scope="all",
+    #     ),
+    # )
+
+    logging.info("Total time of tune.run(...): {}".format(end - start))
+    logging.info(
+        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
+    )
+
+    # clean up ray cache
+    tmp_ray_cache.cleanup()

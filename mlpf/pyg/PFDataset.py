@@ -8,6 +8,8 @@ import torch_geometric
 from torch import Tensor
 from torch_geometric.data import Batch, Data
 
+from pyg.logger import _logger
+
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
@@ -164,3 +166,54 @@ class InterleavedIterator(object):
                 len_ += len(self.data_loaders_iter[iloader])
             self._len = len_
             return len_
+
+
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, hpo):
+    loaders = {}
+    for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
+        loaders[split] = []
+        # build dataloader for physical and gun samples seperately
+        for type_ in config[f"{split}_dataset"][config["dataset"]]:  # will be "physical", "gun", "multiparticlegun"
+            dataset = []
+            for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
+                version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", split, num_samples=config[f"n{split}"]).ds
+
+                if (rank == 0) or (rank == "cpu"):
+                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+
+                dataset.append(ds)
+            dataset = torch.utils.data.ConcatDataset(dataset)
+
+            # build dataloaders
+            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+            else:
+                sampler = torch.utils.data.RandomSampler(dataset)
+
+            # build dataloaders
+            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+            loader = PFDataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                sampler=sampler,
+                num_workers=config["num_workers"],
+                prefetch_factor=config["prefetch_factor"],
+                pin_memory=use_cuda,
+                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            )
+
+            if hpo:
+                import ray
+
+                # prepare loader for distributed training, adds distributed sampler
+                loader = ray.train.torch.prepare_data_loader(loader)
+
+            loaders[split].append(loader)
+
+        loaders[split] = InterleavedIterator(loaders[split])  # will interleave maximum of three dataloaders
+    return loaders
