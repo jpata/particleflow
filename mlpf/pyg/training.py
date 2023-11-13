@@ -729,7 +729,7 @@ def run_hpo(args, config):
     # create ray cache for intermediate storage of trials
     tmp_ray_cache = TemporaryDirectory()
     os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
-    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}", color="bold")
+    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
 
     name = args.hpo  # name of Ray Tune experiment directory
 
@@ -763,7 +763,7 @@ def run_hpo(args, config):
     scaling_config = ray.train.ScalingConfig(
         num_workers=args.ray_gpus,
         use_gpu=True,
-        resources_per_worker={"CPU": int(args.ray_cpus / (args.ray_gpus + 1)), "GPU": 1},  # +1 to avoid blocking
+        resources_per_worker={"CPU": args.ray_cpus // (args.ray_gpus) - 1, "GPU": 1},  # -1 to avoid blocking
     )
     trainable = tune.with_parameters(hpo, config=config, args=args)
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)

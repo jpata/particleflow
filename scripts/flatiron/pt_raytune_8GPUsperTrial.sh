@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 6
+#SBATCH -N 3
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
-#SBATCH --constraint=a100-80gb,ib
-#SBATCH --gpus-per-task=4
+#SBATCH --constraint=h100,ib
+#SBATCH --gpus-per-task=8
 #SBATCH --cpus-per-task=64
 
 # Job name
@@ -31,7 +31,7 @@ which python3
 python3 --version
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-num_gpus=4
+num_gpus=8
 
 
 ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
@@ -74,9 +74,9 @@ echo All Ray workers started.
 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
-    --ray-cpus $((SLURM_CPUS_PER_TASK/4)) \
-    --ray-gpus 1 \
-    --gpus "0" \
+    --ray-cpus $((SLURM_CPUS_PER_TASK)) \
+    --ray-gpus $num_gpus \
+    --gpus "0,1,2,3,4,5,6,7" \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2

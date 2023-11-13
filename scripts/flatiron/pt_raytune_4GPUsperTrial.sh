@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#SBATCH -t 2:00:00
-#SBATCH -N 2
+#SBATCH -t 168:00:00
+#SBATCH -N 6
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --constraint=a100-80gb,ib
@@ -75,10 +75,8 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK)) \
-    --ray-gpus 4 \
+    --ray-gpus $num_gpus \
     --gpus "0,1,2,3" \
-    --ntrain 500 \
-    --ntest 500 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2
