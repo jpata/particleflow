@@ -663,9 +663,11 @@ def device_agnostic_run(config, args, world_size, outdir):
         run(rank, world_size, config, args, outdir, logfile)
 
 
-def train_ray_trial(config, args):
+def train_ray_trial(search_space, config, args):
     import ray
+    from raytune.pt_search_space import set_hps_from_search_space
 
+    config = set_hps_from_search_space(search_space, config)
     outdir = ray.train.get_context().get_trial_dir()
     logfile = f"{outdir}/train.log"
     pad_3d = config["conv_type"] != "gravnet"
@@ -723,7 +725,7 @@ def run_hpo(args, config):
     from ray import tune
     from ray.train.torch import TorchTrainer
 
-    from raytune.pt_search_space import raytune_num_samples, search_space, set_hps_from_search_space
+    from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
     # create ray cache for intermediate storage of trials
@@ -755,17 +757,12 @@ def run_hpo(args, config):
     sched = get_raytune_schedule(config["raytune"])
     search_alg = get_raytune_search_alg(config["raytune"])
 
-    def hpo(search_space, config, args):
-        config = set_hps_from_search_space(search_space, config)
-        train_ray_trial(config, args)
-        # device_agnostic_run(config, args, world_size, outdir)
-
     scaling_config = ray.train.ScalingConfig(
         num_workers=args.ray_gpus,
         use_gpu=True,
         resources_per_worker={"CPU": args.ray_cpus // (args.ray_gpus) - 1, "GPU": 1},  # -1 to avoid blocking
     )
-    trainable = tune.with_parameters(hpo, config=config, args=args)
+    trainable = tune.with_parameters(train_ray_trial, config=config, args=args)
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
 
     search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
