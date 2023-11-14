@@ -168,7 +168,7 @@ class InterleavedIterator(object):
             return len_
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, hpo):
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
         loaders[split] = []
@@ -207,7 +207,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, hpo)
                 pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
             )
 
-            if hpo:
+            if use_ray:
                 import ray
 
                 # prepare loader for distributed training, adds distributed sampler

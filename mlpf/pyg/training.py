@@ -239,7 +239,7 @@ def train_mlpf(
     num_epochs,
     patience,
     outdir,
-    hpo=False,
+    use_ray=False,
     checkpoint_freq=None,
     comet_experiment=None,
     comet_step_freq=None,
@@ -273,7 +273,7 @@ def train_mlpf(
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
     start_epoch = 1
 
-    if hpo:
+    if use_ray:
         import ray
         from ray.train import Checkpoint
 
@@ -326,12 +326,18 @@ def train_mlpf(
                 checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}.pth".format(checkpoint_dir, epoch, losses_v["Total"])
                 save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
-        if hpo:
+        if use_ray:
             # save model, optimizer and epoch number for HPO-supported checkpointing
             # Ray automatically syncs the checkpoint to persistent storage
             metrics = dict(
                 loss=losses_t["Total"],
+                reg_loss=losses_t["Regression"],
+                cls_loss=losses_t["Classification"],
+                charge_loss=losses_t["Charge"],
                 val_loss=losses_v["Total"],
+                val_reg_loss=losses_v["Regression"],
+                val_cls_loss=losses_v["Classification"],
+                val_charge_loss=losses_v["Charge"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
@@ -498,7 +504,12 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment = None
 
         loaders = get_interleaved_dataloaders(
-            world_size, rank, config, use_cuda, pad_3d, hpo=True if args.hpo is not None else False
+            world_size,
+            rank,
+            config,
+            use_cuda,
+            pad_3d,
+            use_ray=False,
         )
 
         train_mlpf(
@@ -511,7 +522,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
-            hpo=True if args.hpo is not None else False,
+            use_ray=False,
             checkpoint_freq=config["checkpoint_freq"],
             comet_experiment=comet_experiment,
             comet_step_freq=config["comet_step_freq"],
@@ -663,19 +674,18 @@ def device_agnostic_run(config, args, world_size, outdir):
         run(rank, world_size, config, args, outdir, logfile)
 
 
-def train_ray_trial(search_space, config, args):
+def train_ray_trial(config, args, outdir=None):
     import ray
-    from raytune.pt_search_space import set_hps_from_search_space
 
-    config = set_hps_from_search_space(search_space, config)
-    outdir = ray.train.get_context().get_trial_dir()
-    logfile = f"{outdir}/train.log"
+    print(config.keys())
+
+    if outdir is None:
+        outdir = ray.train.get_context().get_trial_dir()
+
     pad_3d = config["conv_type"] != "gravnet"
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
-    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", filename=logfile)
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -699,9 +709,7 @@ def train_ray_trial(search_space, config, args):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(
-        world_size, rank, config, use_cuda, pad_3d, hpo=True if args.hpo is not None else False
-    )
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
 
     train_mlpf(
         rank,
@@ -713,14 +721,68 @@ def train_ray_trial(search_space, config, args):
         config["num_epochs"],
         config["patience"],
         outdir,
-        hpo=True if args.hpo is not None else False,
+        use_ray=True,
         checkpoint_freq=config["checkpoint_freq"],
         comet_experiment=None,
         comet_step_freq=config["comet_step_freq"],
     )
 
 
-def run_hpo(args, config):
+def run_ray_training(config, args, outdir):
+    import ray
+    from ray import tune
+    from ray.train.torch import TorchTrainer
+
+    # create ray cache for intermediate storage of trials
+    tmp_ray_cache = TemporaryDirectory()
+    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
+    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
+
+    num_workers = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+    scaling_config = ray.train.ScalingConfig(
+        num_workers=num_workers,
+        use_gpu=True,
+        resources_per_worker={"CPU": args.ray_cpus // num_workers - 1, "GPU": 1},  # -1 to avoid blocking
+    )
+    storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
+    run_config = ray.train.RunConfig(
+        name=Path(outdir).name,
+        storage_path=storage_path,
+        log_to_file=False,
+        failure_config=ray.train.FailureConfig(max_failures=2),
+        checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
+        sync_config=ray.train.SyncConfig(sync_artifacts=True),
+    )
+    trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
+    trainer = TorchTrainer(
+        train_loop_per_worker=trainable, train_loop_config=config, scaling_config=scaling_config, run_config=run_config
+    )
+    result = trainer.fit()
+
+    _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")
+    _logger.info("Final cls_loss: {}".format(result.metrics["cls_loss"]), color="bold")
+    _logger.info("Final reg_loss: {}".format(result.metrics["reg_loss"]), color="bold")
+    _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
+
+    _logger.info("Final val_loss: {}".format(result.metrics["val_loss"]), color="bold")
+    _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
+    _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
+    _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
+
+    _logger.info(f"filesystem to access the result path: {result.filesystem}")
+
+    # clean up ray cache
+    tmp_ray_cache.cleanup()
+
+
+def set_searchspace_and_run_trial(search_space, config, args):
+    from raytune.pt_search_space import set_hps_from_search_space
+
+    config = set_hps_from_search_space(search_space, config)
+    train_ray_trial(config, args, outdir=None)  # outdir will be taken from the TrainContext in each trial
+
+
+def run_hpo(config, args):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer
@@ -752,7 +814,8 @@ def run_hpo(args, config):
         str(Path(config["raytune"]["local_dir"]) / name / "config.yaml"),
     )  # Copy the config file to the train dir for later reference
 
-    ray.init(address="auto")
+    if not args.local:
+        ray.init(address="auto")
 
     sched = get_raytune_schedule(config["raytune"])
     search_alg = get_raytune_search_alg(config["raytune"])
@@ -762,7 +825,7 @@ def run_hpo(args, config):
         use_gpu=True,
         resources_per_worker={"CPU": args.ray_cpus // (args.ray_gpus) - 1, "GPU": 1},  # -1 to avoid blocking
     )
-    trainable = tune.with_parameters(train_ray_trial, config=config, args=args)
+    trainable = tune.with_parameters(set_searchspace_and_run_trial, config=config, args=args)
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
 
     search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config

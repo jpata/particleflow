@@ -12,7 +12,7 @@ from pathlib import Path
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
 import yaml
-from pyg.training import device_agnostic_run, override_config, run_hpo
+from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +49,7 @@ parser.add_argument("--ntest", type=int, default=None, help="training samples to
 parser.add_argument("--nvalid", type=int, default=None, help="validation samples to use")
 parser.add_argument("--checkpoint-freq", type=int, default=None, help="epoch frequency for checkpointing")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
+parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
@@ -74,13 +75,16 @@ def main():
     config = override_config(config, args)
 
     if args.hpo:
-        run_hpo(args, config)
+        run_hpo(config, args)
     else:
         outdir = create_experiment_dir(
             prefix=(args.prefix or "") + Path(args.config).stem + "_",
             experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
         )
-        device_agnostic_run(config, args, world_size, outdir)
+        if args.ray_train:
+            run_ray_training(config, args, outdir)
+        else:
+            device_agnostic_run(config, args, world_size, outdir)
 
 
 if __name__ == "__main__":
