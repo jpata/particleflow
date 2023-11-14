@@ -46,8 +46,8 @@ model:
 
 raytune:
   local_dir: # Note: please specify an absolute path
-  sched: # asha, hyperband
-  search_alg: # bayes, bohb, hyperopt, nevergrad, scikit
+  sched: asha # asha, hyperband
+  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
   # Tune schedule specific parameters

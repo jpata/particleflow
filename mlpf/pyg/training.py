@@ -677,8 +677,6 @@ def device_agnostic_run(config, args, world_size, outdir):
 def train_ray_trial(config, args, outdir=None):
     import ray
 
-    print(config.keys())
-
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
 
@@ -835,8 +833,8 @@ def run_hpo(config, args):
         param_space=search_space,
         tune_config=tune.TuneConfig(
             num_samples=raytune_num_samples,
-            metric=config["raytune"]["default_metric"],
-            mode=config["raytune"]["default_mode"],
+            metric=config["raytune"]["default_metric"] if (search_alg is None and sched is None) else None,
+            mode=config["raytune"]["default_mode"] if (search_alg is None and sched is None) else None,
             search_alg=search_alg,
             scheduler=sched,
         ),
@@ -857,7 +855,7 @@ def run_hpo(config, args):
     print("Number of terminated (not errored) trials: {}".format(result_grid.num_terminated))
     print("Ray Tune experiment path: {}".format(result_grid.experiment_path))
 
-    best_result = result_grid.get_best_result(scope="last-10-avg")
+    best_result = result_grid.get_best_result(scope="last-10-avg", metric="val_loss", mode="min")
     best_config = best_result.config
     print("Best trial path: {}".format(best_result.path))
 
