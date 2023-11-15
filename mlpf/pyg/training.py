@@ -827,7 +827,6 @@ def run_hpo(config, args):
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
 
     search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
-    start = datetime.now()
     tuner = tune.Tuner(
         trainer,
         param_space=search_space,
@@ -847,7 +846,7 @@ def run_hpo(config, args):
             sync_config=ray.train.SyncConfig(sync_artifacts=True),
         ),
     )
-
+    start = datetime.now()
     result_grid = tuner.fit()
     end = datetime.now()
 
@@ -867,40 +866,7 @@ def run_hpo(config, args):
     print("Number of terminated (not errored) trials: {}".format(result_grid.num_terminated))
     print("Ray Tune experiment path: {}".format(result_grid.experiment_path))
 
-    # analysis = tune.run(
-    #     partial(
-    #         hpo,
-    #         config=config,
-    #         args=args,
-    #         world_size=world_size,
-    #     ),
-    #     config=search_space,
-    #     resources_per_trial={"cpu": args.ray_cpus, "gpu": args.ray_gpus},
-    #     name=name,
-    #     scheduler=sched,
-    #     search_alg=search_alg,
-    #     num_samples=raytune_num_samples,
-    #     local_dir=config["raytune"]["local_dir"],
-    #     # callbacks=[TBXLoggerCallback()],
-    #     log_to_file=True,
-    #     resume=False,  # TODO: make this configurable
-    #     max_failures=2,
-    #     # sync_config=sync_config,
-    # )
-    # end = datetime.now()
-
-    # print(analysis.results_df)
-    # print(analysis.results_df.columns)
-
-    # best_config = (
-    #     analysis.get_best_config(
-    #         metric=config["raytune"]["default_metric"],
-    #         mode=config["raytune"]["default_mode"],
-    #         scope="all",
-    #     ),
-    # )
-
-    logging.info("Total time of tune.run(...): {}".format(end - start))
+    logging.info("Total time of Tuner.fit(): {}".format(end - start))
     logging.info(
         "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
     )
