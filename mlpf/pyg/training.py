@@ -684,6 +684,7 @@ def train_ray_trial(config, args, outdir=None):
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
+    world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
     model_kwargs = {
@@ -708,6 +709,24 @@ def train_ray_trial(config, args, outdir=None):
 
     loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
 
+    if args.comet:
+        comet_experiment = create_comet_experiment(
+            config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+        )
+        comet_experiment.set_name(f"world_rank_{world_rank}")
+        comet_experiment.log_parameter("run_id", outdir)
+        comet_experiment.log_parameter("world_size", world_size)
+        comet_experiment.log_parameter("rank", rank)
+        comet_experiment.log_parameter("world_rank", world_rank)
+        comet_experiment.log_parameters(config, prefix="config:")
+        comet_experiment.set_model_graph(model)
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg/training.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg_pipeline.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
+        comet_experiment.log_code(args.config)
+    else:
+        comet_experiment = None
+
     train_mlpf(
         rank,
         world_size,
@@ -720,7 +739,7 @@ def train_ray_trial(config, args, outdir=None):
         outdir,
         use_ray=True,
         checkpoint_freq=config["checkpoint_freq"],
-        comet_experiment=None,
+        comet_experiment=comet_experiment,
         comet_step_freq=config["comet_step_freq"],
     )
 
@@ -742,7 +761,7 @@ def run_ray_training(config, args, outdir):
     scaling_config = ray.train.ScalingConfig(
         num_workers=num_workers,
         use_gpu=True,
-        resources_per_worker={"CPU": args.ray_cpus // num_workers - 1, "GPU": 1},  # -1 to avoid blocking
+        resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": 1},  # -1 to avoid blocking
     )
     storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
     run_config = ray.train.RunConfig(
