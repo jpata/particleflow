@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
-parser.add_argument("--gpus", type=str, default=None, help="to use CPU set to empty string; else e.g., `0,1`")
+parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
 parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
 )
@@ -66,7 +66,7 @@ def main():
     # torch.multiprocessing.set_start_method('spawn')
 
     args = parser.parse_args()
-    world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+    world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)

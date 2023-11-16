@@ -684,6 +684,7 @@ def train_ray_trial(config, args, outdir=None):
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
+    world_size = ray.train.get_context().get_world_size()
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -691,13 +692,11 @@ def train_ray_trial(config, args, outdir=None):
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
-
-    world_size = ray.train.get_context().get_world_size()
-
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
     model = ray.train.torch.prepare_model(model)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)
@@ -736,7 +735,10 @@ def run_ray_training(config, args, outdir):
     os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
     _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
 
-    num_workers = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+    if not args.local:
+        ray.init(address="auto")
+
+    num_workers = args.gpus
     scaling_config = ray.train.ScalingConfig(
         num_workers=num_workers,
         use_gpu=True,
@@ -766,8 +768,6 @@ def run_ray_training(config, args, outdir):
     _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
     _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
     _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
-
-    _logger.info(f"filesystem to access the result path: {result.filesystem}")
 
     # clean up ray cache
     tmp_ray_cache.cleanup()
@@ -819,9 +819,9 @@ def run_hpo(config, args):
     search_alg = get_raytune_search_alg(config["raytune"])
 
     scaling_config = ray.train.ScalingConfig(
-        num_workers=args.ray_gpus,
+        num_workers=args.gpus,
         use_gpu=True,
-        resources_per_worker={"CPU": args.ray_cpus // (args.ray_gpus) - 1, "GPU": 1},  # -1 to avoid blocking
+        resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1},  # -1 to avoid blocking
     )
     trainable = tune.with_parameters(set_searchspace_and_run_trial, config=config, args=args)
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
