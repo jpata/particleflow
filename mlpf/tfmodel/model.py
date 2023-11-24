@@ -9,6 +9,7 @@ SEED_KERNELATTENTION = 0
 # set to true to enable TF debug asserts and printouts
 DEBUGGING = False
 
+
 def debugging_train_step(self, data):
     print("\n")
     x, y, sample_weights = data
