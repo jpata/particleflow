@@ -279,7 +279,8 @@ def get_optimizer(config, lr_schedule=None):
 
     if config["setup"]["optimizer"] == "adam":
         cfg_adam = config["optimizer"]["adam"]
-        return tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        opt = tf.keras.optimizers.Adam(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])
+        return opt
     elif config["setup"]["optimizer"] == "adamw":
         cfg_adam = config["optimizer"]["adamw"]
         return tf.keras.optimizers.AdamW(learning_rate=lr, amsgrad=cfg_adam["amsgrad"])

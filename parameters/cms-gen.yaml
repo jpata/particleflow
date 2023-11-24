@@ -114,7 +114,7 @@ parameters:
   node_encoding_hidden_dim: 512
 
   combined_graph_layer:
-    bin_size: 640
+    bin_size: 320
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mlpf-train-clic-hits-ln-full
+#SBATCH --job-name=mlpf-train-cms
 #SBATCH --account=project_465000301
 #SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
@@ -13,7 +13,7 @@
 
 cd /scratch/project_465000301/particleflow
 
-module load LUMI/22.08 partition/G
+# module load LUMI/22.08 partition/G
 
 export IMG=/scratch/project_465000301/tf-rocm.simg
 export PYTHONPATH=hep_tfds
@@ -22,9 +22,14 @@ export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
 export TF_CPP_MAX_VLOG_LEVEL=-1 #to suppress ROCm fusion is enabled messages
+export ROCM_PATH=/opt/rocm
 #export MIOPEN_ENABLE_LOGGING=1
 #export MIOPEN_ENABLE_LOGGING_CMD=1
 #export MIOPEN_LOG_LEVEL=4
+
+singularity exec \
+    --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
+    --rocm $IMG rocm-smi
 
 #TF training
 singularity exec \
@@ -33,14 +38,5 @@ singularity exec \
     -B /tmp \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     $IMG python3 mlpf/pipeline.py train \
-    --config parameters/clic-test.yaml --plot-freq 1 --num-cpus 8 \
-    --batch-multiplier 5 --ntrain 50000 --ntest 50000 --benchmark_dir exp_dir
-
-#    --env MIOPEN_USER_DB_PATH=$MIPEN_USER_DB_PATH \
-#    --env MIOPEN_CUSTOM_CACHE_DIR=$MIOPEN_CUSTOM_CACHE_DIR \
-#    --env MIOPEN_ENABLE_LOGGING=1 \
-#    --env MIOPEN_ENABLE_LOGGING_CMD=1 \
-#    --env MIOPEN_LOG_LEVEL=7 \
-#    --env MIOPEN_ENABLE_LOGGING=1 \
-#    --env MIOPEN_ENABLE_LOGGING_CMD=1 \
-#    --env MIOPEN_LOG_LEVEL=5 \
+    --config parameters/cms-gen.yaml --plot-freq 1 --num-cpus 8 \
+    --batch-multiplier 4 --weights experiments/cms-gen_20231104_082738_031639.gpu1.local/weights/weights-10-4.203166.hdf5

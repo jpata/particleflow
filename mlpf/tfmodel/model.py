@@ -9,7 +9,6 @@ SEED_KERNELATTENTION = 0
 # set to true to enable TF debug asserts and printouts
 DEBUGGING = False
 
-
 def debugging_train_step(self, data):
     print("\n")
     x, y, sample_weights = data
@@ -345,11 +344,6 @@ class GHConvDense(tf.keras.layers.Layer):
     def call(self, inputs):
         x, adj, msk = inputs
 
-        if DEBUGGING:
-            tf.print("GHConvDense.call:x", x.shape)
-            tf.print("GHConvDense.call:adj", adj.shape)
-            tf.print("GHConvDense.call:msk", msk.shape)
-
         # remove last dim from distance/adjacency matrix
         if DEBUGGING:
             tf.debugging.assert_equal(tf.shape(adj)[-1], 1)
@@ -387,7 +381,6 @@ class GHConvDense(tf.keras.layers.Layer):
                     ),
                 ]
             )
-            tf.print("GHConvDense.call:out", out.shape)
         return self.activation(out) * msk
 
 
@@ -880,7 +873,7 @@ class OutputDecoding(tf.keras.Model):
 
     def call(self, args, training=False):
 
-        X_input, X_encoded, X_encoded_energy, msk_input = args
+        X_input, X_encoded, X_encoded_energy, msk_input, n_points = args
 
         if self.do_layernorm:
             X_encoded = self.layernorm(X_encoded)
@@ -960,6 +953,7 @@ class OutputDecoding(tf.keras.Model):
         }
 
         for k in ret.keys():
+            ret[k] = ret[k][:, :n_points]
             ret[k] = tf.where(tf.math.is_inf(ret[k]), tf.zeros_like(ret[k]), ret[k])
             ret[k] = tf.where(tf.math.is_nan(ret[k]), tf.zeros_like(ret[k]), ret[k])
 
@@ -1071,11 +1065,6 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         # compute the element-to-element messages / distance matrix / graph structure
         bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
         if DEBUGGING:
-            tf.print("CombinedGraphLayer.call:bins_split", bins_split.shape)
-            tf.print("CombinedGraphLayer.call:x", x.shape)
-            tf.print("CombinedGraphLayer.call:dm", dm.shape)
-            tf.print("CombinedGraphLayer.call:msk_f", msk_f.shape)
-
             tf.debugging.assert_shapes(
                 [
                     (bins_split, ("n_batch", "n_bins", "n_points_bin")),
@@ -1219,11 +1208,6 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        # zero_pad_fraction = tf.reduce_sum(tf.cast(Xorig[:, :, 0] == 0, dtype=tf.int32)) / (
-        #     tf.shape(Xorig)[0] * tf.shape(Xorig)[1]
-        # )
-        # tf.print("PFNetDense.call Xorig=", tf.shape(Xorig), "zpf=", zero_pad_fraction)
-
         # normalize all features except the PFElement type (feature 0)
         if self.use_normalizer:
             X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
@@ -1320,10 +1304,11 @@ class PFNetDense(tf.keras.Model):
 
         ret = self.output_dec(
             [
-                Xorig[:, :n_points],
-                dec_output_id[:, :n_points],
-                dec_output_reg[:, :n_points],
-                msk_input[:, :n_points],
+                X,
+                dec_output_id,
+                dec_output_reg,
+                msk_input,
+                n_points,
             ],
             training=training,
         )
