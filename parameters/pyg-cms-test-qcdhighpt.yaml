@@ -44,6 +44,26 @@ model:
     num_convs: 2
     dropout: 0.0
 
+raytune:
+  local_dir: # Note: please specify an absolute path
+  sched: asha # asha, hyperband
+  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
 test_dataset:
   cms:
     physical:

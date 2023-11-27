@@ -1,10 +1,10 @@
 #!/bin/bash
 
-#SBATCH -t 2:00:00
-#SBATCH -N 2
+#SBATCH -t 168:00:00
+#SBATCH -N 6
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
-#SBATCH --constraint=a100,ib
+#SBATCH --constraint=a100-80gb,ib
 #SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=64
 
@@ -35,8 +35,6 @@ num_gpus=4
 
 
 ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
-# This script is a modification to the implementation suggest by gregSchwartz18 here:
-# https://github.com/ray-project/ray/issues/826#issuecomment-522116599
 redis_password=$(uuidgen)
 export redis_password
 echo "Redis password: ${redis_password}"
@@ -71,10 +69,7 @@ done
 
 echo All Ray workers started.
 ##############################################################################################
-
-#### call your code below
-# python3 mlpf/pipeline.py raytune -c $1 -n $2 --cpus $((SLURM_CPUS_PER_TASK/4)) \
-#   --gpus 1 --seeds --comet-exp-name particleflow-raytune
+# call your code below
 
 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
@@ -82,8 +77,8 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --ray-cpus $((SLURM_CPUS_PER_TASK/4)) \
     --ray-gpus 1 \
     --gpus "0" \
-    --ntrain 100 \
-    --ntest 100 \
-    --num-workers 0
+    --gpu-batch-multiplier 4 \
+    --num-workers 1 \
+    --prefetch-factor 2
 
-exit
+# exit
