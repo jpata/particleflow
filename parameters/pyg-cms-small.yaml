@@ -2,7 +2,7 @@ backend: pytorch
 
 dataset: cms
 data_dir:
-gpus: "0"
+gpus: 1
 gpu_batch_multiplier: 1
 load:
 num_epochs: 10
