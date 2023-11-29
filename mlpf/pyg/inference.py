@@ -7,6 +7,7 @@ import fastjet
 import mplhep
 import numpy as np
 import torch
+import torch_geometric
 import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
@@ -21,23 +22,47 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
+from torch_geometric.data import Batch
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 @torch.no_grad()
-def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1):
+def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
+    if world_size > 1:
+        conv_type = model.module.conv_type
+    else:
+        conv_type = model.conv_type
 
     model.eval()
 
+    # only show progress bar on rank 0
+    if (world_size > 1) and (rank != 0):
+        iterator = enumerate(loader)
+    else:
+        iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
+
     ti = time.time()
-    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
+    for i, batch in iterator:
+        if conv_type != "gravnet":
+            X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
+            batch_pad = Batch(X=X_pad, mask=mask).to(rank)
+            ypred = model(batch_pad.X, batch_pad.mask)
+            ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
+        else:
+            _batch = batch.to(rank)
+            ypred = model(_batch.X, _batch.batch)
+
         ygen = unpack_target(batch.ygen)
         ycand = unpack_target(batch.ycand)
-        ypred = unpack_predictions(model(batch.to(rank)))
+        ypred = unpack_predictions(ypred)
 
+        for k, v in ygen.items():
+            ygen[k] = v.detach().cpu()
+        for k, v in ycand.items():
+            ycand[k] = v.detach().cpu()
         for k, v in ypred.items():
             ypred[k] = v.detach().cpu()
 
@@ -124,22 +149,22 @@ def run_predictions(rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0,
                     "matched_jets": matched_jets,
                 }
             ),
-            f"{outpath}/preds/{sample}/pred_{rank}_{i}.parquet",
+            f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
         )
-        _logger.info(f"Saved predictions at {outpath}/preds/{sample}/pred_{rank}_{i}.parquet")
+        _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def make_plots(outpath, sample, dataset):
+def make_plots(outpath, sample, dataset, dir_name=""):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
     mplhep.set_style(mplhep.styles.CMS)
 
-    os.system(f"mkdir -p {outpath}/plots/{sample}")
+    os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
-    plots_path = Path(f"{outpath}/plots/{sample}/")
-    pred_path = Path(f"{outpath}/preds/{sample}/")
+    plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
+    pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 

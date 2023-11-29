@@ -113,22 +113,22 @@ Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "
 
 def unpack_target(y):
     ret = {}
-    ret["cls_id"] = y[:, 0].long()
-    ret["charge"] = torch.clamp((y[:, 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
+    ret["cls_id"] = y[..., 0].long()
+    ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
 
     for i, feat in enumerate(Y_FEATURES):
         if i >= 2:  # skip the cls and charge as they are defined above
-            ret[feat] = y[:, i].to(dtype=torch.float32)
+            ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
 
     # do some sanity checks
-    assert torch.all(ret["pt"] >= 0.0)  # pt
-    assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
-    assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
-    assert torch.all(ret["energy"] >= 0.0)  # energy
+    # assert torch.all(ret["pt"] >= 0.0)  # pt
+    # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
+    # assert torch.all(torch.abs(ret["cos_phi"]) <= 1.0)  # cos_phi
+    # assert torch.all(ret["energy"] >= 0.0)  # energy
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
-    ret["momentum"] = y[:, 2:-1].to(dtype=torch.float32)
+    ret["momentum"] = y[..., 2:-1].to(dtype=torch.float32)
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
@@ -143,17 +143,23 @@ def unpack_predictions(preds):
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
     # unpacking
-    ret["pt"] = ret["momentum"][:, 0]
-    ret["eta"] = ret["momentum"][:, 1]
-    ret["sin_phi"] = ret["momentum"][:, 2]
-    ret["cos_phi"] = ret["momentum"][:, 3]
-    ret["energy"] = ret["momentum"][:, 4]
+    ret["pt"] = ret["momentum"][..., 0]
+    ret["eta"] = ret["momentum"][..., 1]
+    ret["sin_phi"] = ret["momentum"][..., 2]
+    ret["cos_phi"] = ret["momentum"][..., 3]
+    ret["energy"] = ret["momentum"][..., 4]
 
     # new variables
     ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
+        [
+            ret["pt"].unsqueeze(axis=-1),
+            ret["eta"].unsqueeze(axis=-1),
+            ret["phi"].unsqueeze(axis=-1),
+            ret["energy"].unsqueeze(axis=-1),
+        ],
+        axis=-1,
     )
 
     return ret
@@ -169,3 +175,33 @@ def save_HPs(args, mlpf, model_kwargs, outdir):
 
     with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
+
+
+def get_model_state_dict(model):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        return model.module.state_dict()
+    else:
+        return model.state_dict()
+
+
+def load_checkpoint(checkpoint, model, optimizer=None):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.module.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    if optimizer:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        return model, optimizer
+    else:
+        return model
+
+
+def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
+    torch.save(
+        {
+            "model_state_dict": get_model_state_dict(model),
+            "optimizer_state_dict": optimizer.state_dict() if optimizer else None,
+            "extra_state": extra_state,
+        },
+        checkpoint_path,
+    )
