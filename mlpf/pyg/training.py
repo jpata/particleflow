@@ -504,7 +504,11 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment.set_model_graph(model)
             comet_experiment.log_code("mlpf/pyg/training.py")
             comet_experiment.log_code("mlpf/pyg_pipeline.py")
-            comet_experiment.log_code(args.config)
+            # save overridden config then log to comet
+            config_filename = "overridden_config.yaml"
+            with open((Path(outdir) / config_filename), "w") as file:
+                yaml.dump(config, file)
+            comet_experiment.log_code(str(Path(outdir) / config_filename))
         else:
             comet_experiment = None
 
@@ -727,7 +731,11 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg/training.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg_pipeline.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
-        comet_experiment.log_code(args.config)
+        # save overridden config then log to comet
+        config_filename = "overridden_config.yaml"
+        with open((Path(outdir) / config_filename), "w") as file:
+            yaml.dump(config, file)
+        comet_experiment.log_code(str(Path(outdir) / config_filename))
     else:
         comet_experiment = None
 
