@@ -1,6 +1,6 @@
 backend: pytorch
 
-dataset: delphes
+dataset: cms
 data_dir:
 gpus: "0"
 gpu_batch_multiplier: 1
@@ -15,9 +15,6 @@ nvalid: 500
 num_workers: 0
 prefetch_factor:
 checkpoint_freq:
-comet_name: particleflow-pt
-comet_offline: False
-comet_step_freq: 10
 
 model:
   gnn_lsh:
@@ -33,15 +30,15 @@ model:
     width: 512
     num_convs: 3
     k: 16
-    propagate_dimensions: 22
+    propagate_dimensions: 32
     space_dimensions: 4
     dropout: 0.0
 
   attention:
     conv_type: attention
-    embedding_dim: 128
-    width: 128
-    num_convs: 2
+    embedding_dim: 256
+    width: 256
+    num_convs: 3
     dropout: 0.0
 
 raytune:
@@ -65,29 +62,29 @@ raytune:
     n_random_steps: 10
 
 train_dataset:
-  delphes:
+  cms:
     physical:
-      batch_size: 10
+      batch_size: 1
       samples:
-        delphes_ttbar_pf:
-          version: 1.2.0
-        delphes_qcd_pf:
-          version: 1.2.0
+        cms_pf_ttbar:
+          version: 1.6.0
+        cms_pf_qcd:
+          version: 1.6.0
+        cms_pf_qcd_high_pt:
+          version: 1.6.0
 
 valid_dataset:
-  delphes:
+  cms:
     physical:
-      batch_size: 10
+      batch_size: 1
       samples:
-        delphes_qcd_pf:
-          version: 1.2.0
+        cms_pf_qcd_high_pt:
+          version: 1.6.0
 
 test_dataset:
-  delphes:
+  cms:
     physical:
-      batch_size: 10
+      batch_size: 1
       samples:
-        delphes_ttbar_pf:
-          version: 1.2.0
-        delphes_qcd_pf:
-          version: 1.2.0
+        cms_pf_qcd_high_pt:
+          version: 1.6.0

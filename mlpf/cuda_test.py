@@ -23,7 +23,7 @@ parser.add_argument("--gpus", type=str, default="0", help="to use CPU set to emp
 
 def main():
     args = parser.parse_args()
-    world_size = len(args.gpus.split(","))  # will be 1 for both cpu ("") and single-gpu ("0")
+    world_size = args.gpus  # will be 1 for both cpu ("") and single-gpu ("0")
 
     if args.gpus:
         assert (

@@ -1,24 +1,29 @@
+from types import SimpleNamespace
 from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
+import torch_geometric
 from torch import Tensor
 from torch_geometric.data import Batch, Data
-from torch_geometric.data.data import BaseData
+
+from pyg.logger import _logger
 
 
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, keys_to_get, num_samples=None):
+    def __init__(self, data_dir, name, split, num_samples=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
-            split: "train" or "test
+            split: "train" or "test" (if "valid" then will use "test")
             keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
         """
+        if split == "valid":
+            split = "test"
 
         builder = tfds.builder(name, data_dir=data_dir)
 
@@ -29,44 +34,14 @@ class PFDataset:
 
         # to make dataset_info pickable
         tmp = self.ds.dataset_info
-        from types import SimpleNamespace
 
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
         self.rep = self.ds.__repr__()
 
-        # any selection of ["X", "ygen", "ycand"] to retrieve
-        self.keys_to_get = keys_to_get
-
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
-
-    def get_sampler(self):
-        sampler = torch.utils.data.RandomSampler(self.ds)
-        return sampler
-
-    def get_distributed_sampler(self):
-        sampler = torch.utils.data.distributed.DistributedSampler(self.ds)
-        return sampler
-
-    def get_loader(self, batch_size, world_size, num_workers=0, prefetch_factor=None):
-        if (num_workers > 0) and (prefetch_factor is None):
-            prefetch_factor = 2  # default prefetch_factor when num_workers>0
-
-        if world_size > 1:
-            sampler = self.get_distributed_sampler()
-        else:
-            sampler = self.get_sampler()
-
-        return DataLoader(
-            self.ds,
-            batch_size=batch_size,
-            collate_fn=Collater(self.keys_to_get),
-            sampler=sampler,
-            num_workers=num_workers,
-            prefetch_factor=prefetch_factor,
-        )
 
     def __len__(self):
         return len(self.ds)
@@ -75,7 +50,12 @@ class PFDataset:
         return self.rep
 
 
-class DataLoader(torch.utils.data.DataLoader):
+def my_getitem(self, vals):
+    records = self.data_source.__getitems__(vals)
+    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+
+
+class PFDataLoader(torch.utils.data.DataLoader):
     """
     Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
     because we need to implement our own Collater class to load the tensorflow_datasets (see below).
@@ -109,10 +89,12 @@ class DataLoader(torch.utils.data.DataLoader):
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None):
+    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_bin_size=640, pad_3d=True):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
         self.keys_to_get = keys_to_get
+        self.pad_bin_size = pad_bin_size
+        self.pad_3d = pad_3d
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
@@ -125,20 +107,21 @@ class Collater:
                 batch[ev][elem_key] = Tensor(inputs[ev][elem_key])
             batch[ev]["batch"] = torch.tensor([ev] * len(inputs[ev][elem_key]))
 
-        elem = batch[0]
+        ret = Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
-        if isinstance(elem, BaseData):
-            return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
+        if not self.pad_3d:
+            return ret
+        else:
+            ret = {k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch) for k in elem_keys}
 
-        raise TypeError(f"DataLoader found invalid type: {type(elem)}")
+            ret["mask"] = ret["X"][1]
 
+            # remove the mask from each element
+            for k in elem_keys:
+                ret[k] = ret[k][0]
 
-def my_getitem(self, vals):
-    # print(
-    #     "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
-    # )
-    records = self.data_source.__getitems__(vals)
-    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
+            ret = Batch(**ret)
+        return ret
 
 
 class InterleavedIterator(object):
@@ -157,6 +140,7 @@ class InterleavedIterator(object):
                     self.loader_ds_indices.append(iloader)
 
         self.cur_index = 0
+        self._len = None
 
     def __iter__(self):
         return self
@@ -173,8 +157,63 @@ class InterleavedIterator(object):
         return next(self.data_loaders_iter[iloader])
 
     def __len__(self):
-        len_ = 0
-        for iloader in range(len(self.data_loaders_iter)):
-            len_ += len(self.data_loaders_iter[iloader])
+        if self._len:
+            return self._len
+        else:
+            # compute and cache the length
+            len_ = 0
+            for iloader in range(len(self.data_loaders_iter)):
+                len_ += len(self.data_loaders_iter[iloader])
+            self._len = len_
+            return len_
 
-        return len_
+
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray):
+    loaders = {}
+    for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
+        loaders[split] = []
+        # build dataloader for physical and gun samples seperately
+        for type_ in config[f"{split}_dataset"][config["dataset"]]:  # will be "physical", "gun", "multiparticlegun"
+            dataset = []
+            for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
+                version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+
+                ds = PFDataset(config["data_dir"], f"{sample}:{version}", split, num_samples=config[f"n{split}"]).ds
+
+                if (rank == 0) or (rank == "cpu"):
+                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+
+                dataset.append(ds)
+            dataset = torch.utils.data.ConcatDataset(dataset)
+
+            # build dataloaders
+            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+            else:
+                sampler = torch.utils.data.RandomSampler(dataset)
+
+            # build dataloaders
+            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+            loader = PFDataLoader(
+                dataset,
+                batch_size=batch_size,
+                collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                sampler=sampler,
+                num_workers=config["num_workers"],
+                prefetch_factor=config["prefetch_factor"],
+                pin_memory=use_cuda,
+                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            )
+
+            if use_ray:
+                import ray
+
+                # prepare loader for distributed training, adds distributed sampler
+                loader = ray.train.torch.prepare_data_loader(loader)
+
+            loaders[split].append(loader)
+
+        loaders[split] = InterleavedIterator(loaders[split])  # will interleave maximum of three dataloaders
+    return loaders

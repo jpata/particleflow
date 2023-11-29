@@ -1,8 +1,27 @@
 backend: pytorch
 
+dataset: cms
+data_dir:
+gpus: "0"
+gpu_batch_multiplier: 1
+load:
+num_epochs: 2
+patience: 20
+lr: 0.0001
+conv_type: gnn_lsh
+ntrain:
+ntest:
+nvalid: 500
+num_workers: 0
+prefetch_factor:
+checkpoint_freq:
+comet_name: particleflow-pt
+comet_offline: False
+comet_step_freq: 10
+
 model:
-  gnn-lsh:
-    conv_type: gnn-lsh
+  gnn_lsh:
+    conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
     num_convs: 3
@@ -25,98 +44,111 @@ model:
     num_convs: 2
     dropout: 0.0
 
+raytune:
+  local_dir: # Note: please specify an absolute path
+  sched: asha # asha, hyperband
+  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
 train_dataset:
   cms:
-    cms_pf_ttbar:
-      version: 1.6.0
+    physical:
       batch_size: 1
-    cms_pf_qcd:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_ztt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_qcd_high_pt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_sms_t1tttt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_single_electron:
-      version: 1.6.0
+      samples:
+        cms_pf_ttbar:
+          version: 1.6.0
+        cms_pf_qcd:
+          version: 1.6.0
+        cms_pf_ztt:
+          version: 1.6.0
+        cms_pf_qcd_high_pt:
+          version: 1.6.0
+        cms_pf_sms_t1tttt:
+          version: 1.6.0
+    gun:
       batch_size: 20
-    cms_pf_single_gamma:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_pi0:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_neutron:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_pi:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_tau:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_mu:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_proton:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_multi_particle_gun:
-      version: 1.6.0
-      batch_size: 5
+      samples:
+        cms_pf_single_electron:
+          version: 1.6.0
+        cms_pf_single_gamma:
+          version: 1.6.0
+        cms_pf_single_pi0:
+          version: 1.6.0
+        cms_pf_single_neutron:
+          version: 1.6.0
+        cms_pf_single_pi:
+          version: 1.6.0
+        cms_pf_single_tau:
+          version: 1.6.0
+        cms_pf_single_mu:
+          version: 1.6.0
+        cms_pf_single_proton:
+          version: 1.6.0
+    multiparticlegun:
+      batch_size: 2
+      samples:
+        cms_pf_multi_particle_gun:
+          version: 1.6.0
 
 valid_dataset:
   cms:
-    cms_pf_qcd_high_pt:
-      version: 1.6.0
+    physical:
       batch_size: 1
+      samples:
+        cms_pf_qcd_high_pt:
+          version: 1.6.0
 
 test_dataset:
   cms:
-    cms_pf_ttbar:
-      version: 1.6.0
+    physical:
       batch_size: 1
-    cms_pf_qcd:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_ztt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_qcd_high_pt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_sms_t1tttt:
-      version: 1.6.0
-      batch_size: 1
-    cms_pf_single_electron:
-      version: 1.6.0
+      samples:
+        cms_pf_ttbar:
+          version: 1.6.0
+        cms_pf_qcd:
+          version: 1.6.0
+        cms_pf_ztt:
+          version: 1.6.0
+        cms_pf_qcd_high_pt:
+          version: 1.6.0
+        cms_pf_sms_t1tttt:
+          version: 1.6.0
+    gun:
       batch_size: 20
-    cms_pf_single_gamma:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_pi0:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_neutron:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_pi:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_tau:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_mu:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_single_proton:
-      version: 1.6.0
-      batch_size: 20
-    cms_pf_multi_particle_gun:
-      version: 1.6.0
-      batch_size: 5
+      samples:
+        cms_pf_single_electron:
+          version: 1.6.0
+        cms_pf_single_gamma:
+          version: 1.6.0
+          batch_size: 20
+        cms_pf_single_pi0:
+          version: 1.6.0
+        cms_pf_single_neutron:
+          version: 1.6.0
+        cms_pf_single_pi:
+          version: 1.6.0
+        cms_pf_single_tau:
+          version: 1.6.0
+        cms_pf_single_mu:
+          version: 1.6.0
+        cms_pf_single_proton:
+          version: 1.6.0
+    multiparticlegun:
+      batch_size: 2
+      samples:
+        cms_pf_multi_particle_gun:
+          version: 1.6.0
