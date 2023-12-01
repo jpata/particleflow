@@ -2,7 +2,7 @@
 
 # Walltime limit
 #SBATCH -t 1:00:00
-#SBATCH -N 1
+#SBATCH -N 2
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
@@ -35,42 +35,44 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 num_gpus=${SLURM_GPUS_PER_TASK}  # gpus per compute node
 
 
-################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
-redis_password=$(uuidgen)
-export redis_password
-echo "Redis password: ${redis_password}"
+if [ "$SLURM_JOB_NUM_NODES" -gt 1 ]; then
+  ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
+  redis_password=$(uuidgen)
+  export redis_password
+  echo "Redis password: ${redis_password}"
 
-nodes=$(scontrol show hostnames $SLURM_JOB_NODELIST) # Getting the node names
-nodes_array=( $nodes )
+  nodes=$(scontrol show hostnames $SLURM_JOB_NODELIST) # Getting the node names
+  nodes_array=( $nodes )
 
-node_1=${nodes_array[0]}
-ip=$(srun --nodes=1 --ntasks=1 -w $node_1 hostname --ip-address) # making redis-address
-port=6379
-ip_head=$ip:$port
-export ip_head
-echo "IP Head: $ip_head"
+  node_1=${nodes_array[0]}
+  ip=$(srun --nodes=1 --ntasks=1 -w $node_1 hostname --ip-address) # making redis-address
+  port=6379
+  ip_head=$ip:$port
+  export ip_head
+  echo "IP Head: $ip_head"
 
-echo "STARTING HEAD at $node_1"
-srun --nodes=1 --ntasks=1 -w $node_1 \
-  ray start --head --node-ip-address="$node_1" --port=$port \
-  --num-cpus $((SLURM_CPUS_PER_TASK)) --num-gpus $num_gpus --block &
-
-sleep 10
-
-worker_num=$(($SLURM_JOB_NUM_NODES - 1)) #number of nodes other than the head node
-for ((  i=1; i<=$worker_num; i++ ))
-do
-  node_i=${nodes_array[$i]}
-  echo "STARTING WORKER $i at $node_i"
-  srun --nodes=1 --ntasks=1 -w $node_i \
-    ray start --address "$node_1":"$port" \
+  echo "STARTING HEAD at $node_1"
+  srun --nodes=1 --ntasks=1 -w $node_1 \
+    ray start --head --node-ip-address="$node_1" --port=$port \
     --num-cpus $((SLURM_CPUS_PER_TASK)) --num-gpus $num_gpus --block &
-  sleep 5
-done
 
-echo All Ray workers started.
-##############################################################################################
-# call your code below
+  sleep 10
+
+  worker_num=$(($SLURM_JOB_NUM_NODES - 1)) #number of nodes other than the head node
+  for ((  i=1; i<=$worker_num; i++ ))
+  do
+    node_i=${nodes_array[$i]}
+    echo "STARTING WORKER $i at $node_i"
+    srun --nodes=1 --ntasks=1 -w $node_i \
+      ray start --address "$node_1":"$port" \
+      --num-cpus $((SLURM_CPUS_PER_TASK)) --num-gpus $num_gpus --block &
+    sleep 5
+  done
+
+  echo All Ray workers started.
+  ##############################################################################################
+  # call your code below
+fi
 
 
 echo 'Starting training.'
@@ -83,6 +85,8 @@ python3 -u mlpf/pyg_pipeline.py --train --ray-train \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2 \
-    --experiments-dir /mnt/ceph/users/ewulff/particleflow/experiments
+    --experiments-dir /mnt/ceph/users/ewulff/particleflow/experiments \
+    --local \
+    --comet
 
 echo 'Training done.'

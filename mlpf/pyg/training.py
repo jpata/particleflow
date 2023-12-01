@@ -9,6 +9,7 @@ import logging
 import shutil
 from datetime import datetime
 import tqdm
+import yaml
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -162,7 +163,7 @@ def train_and_valid(
     """
 
     train_or_valid = "train" if is_train else "valid"
-    _logger.info(f"Initiating a {train_or_valid} run on device rank={rank}", color="red")
+    _logger.info(f"Initiating epoch #{epoch} {train_or_valid} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
@@ -176,7 +177,9 @@ def train_and_valid(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(data_loader)
     else:
-        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"{train_or_valid} loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
+        )
 
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -207,7 +210,7 @@ def train_and_valid(
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
 
-        if comet_experiment:
+        if comet_experiment and is_train:
             if itrain % comet_step_freq == 0:
                 # this loss is not normalized to batch size
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=(epoch - 1) * len(data_loader) + itrain)
@@ -286,8 +289,6 @@ def train_mlpf(
                     start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
     for epoch in range(start_epoch, num_epochs + 1):
-        if (rank == 0) or (rank == "cpu"):
-            _logger.info(f"Initiating epoch # {epoch}", color="bold")
         t0 = time.time()
 
         # training step
@@ -306,6 +307,11 @@ def train_mlpf(
         losses_v = train_and_valid(
             rank, world_size, model, optimizer, valid_loader, False, comet_experiment, comet_step_freq, epoch
         )
+
+        if comet_experiment:
+            comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
+            comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
+            comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
             extra_state = {"epoch": epoch}
@@ -381,7 +387,8 @@ def train_mlpf(
                 + f"valid_loss={losses_v['Total']:.4f} "
                 + f"stale={stale_epochs} "
                 + f"time={round((t1-t0)/60, 2)}m "
-                + f"eta={round(eta, 1)}m"
+                + f"eta={round(eta, 1)}m",
+                color="bold",
             )
 
             for loss in losses_of_interest:
@@ -412,8 +419,6 @@ def train_mlpf(
             if tensorboard_writer:
                 tensorboard_writer.flush()
 
-        if comet_experiment:
-            comet_experiment.log_epoch_end(epoch)
     if world_size > 1:
         dist.barrier()
 
@@ -492,14 +497,18 @@ def run(rank, world_size, config, args, outdir, logfile):
                 config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
             )
             comet_experiment.set_name(f"rank_{rank}")
-            comet_experiment.log_parameter("run_id", outdir)
+            comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
             comet_experiment.log_parameter("rank", rank)
             comet_experiment.log_parameters(config, prefix="config:")
             comet_experiment.set_model_graph(model)
             comet_experiment.log_code("mlpf/pyg/training.py")
             comet_experiment.log_code("mlpf/pyg_pipeline.py")
-            comet_experiment.log_code(args.config)
+            # save overridden config then log to comet
+            config_filename = "overridden_config.yaml"
+            with open((Path(outdir) / config_filename), "w") as file:
+                yaml.dump(config, file)
+            comet_experiment.log_code(str(Path(outdir) / config_filename))
         else:
             comet_experiment = None
 
@@ -634,17 +643,13 @@ def override_config(config, args):
 
 
 def device_agnostic_run(config, args, world_size, outdir):
-    if args.train:  # create a new outdir when training a model to never overwrite
+    if args.train:
         logfile = f"{outdir}/train.log"
         _configLogger("mlpf", filename=logfile)
-
-        os.system(f"cp {args.config} {outdir}/train-config.yaml")
     else:
         outdir = args.load
         logfile = f"{outdir}/test.log"
         _configLogger("mlpf", filename=logfile)
-
-        os.system(f"cp {args.config} {outdir}/test-config.yaml")
 
     if config["gpus"]:
         assert (
@@ -687,6 +692,9 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
+    # keep writing the logs
+    _configLogger("mlpf", filename=f"{outdir}/train.log")
+
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
@@ -714,7 +722,7 @@ def train_ray_trial(config, args, outdir=None):
             config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
         )
         comet_experiment.set_name(f"world_rank_{world_rank}")
-        comet_experiment.log_parameter("run_id", outdir)
+        comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
         comet_experiment.log_parameter("rank", rank)
         comet_experiment.log_parameter("world_rank", world_rank)
@@ -723,7 +731,11 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg/training.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg_pipeline.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
-        comet_experiment.log_code(args.config)
+        # save overridden config then log to comet
+        config_filename = "overridden_config.yaml"
+        with open((Path(outdir) / config_filename), "w") as file:
+            yaml.dump(config, file)
+        comet_experiment.log_code(str(Path(outdir) / config_filename))
     else:
         comet_experiment = None
 
@@ -756,6 +768,8 @@ def run_ray_training(config, args, outdir):
 
     if not args.local:
         ray.init(address="auto")
+
+    _configLogger("mlpf", filename=f"{outdir}/train.log")
 
     num_workers = args.gpus
     scaling_config = ray.train.ScalingConfig(
@@ -822,14 +836,14 @@ def run_hpo(config, args):
 
     expdir = Path(config["raytune"]["local_dir"]) / name
     expdir.mkdir(parents=True, exist_ok=True)
+    dirname = Path(config["raytune"]["local_dir"]) / name
     shutil.copy(
         "mlpf/raytune/search_space.py",
-        str(Path(config["raytune"]["local_dir"]) / name / "search_space.py"),
+        str(dirname / "search_space.py"),
     )  # Copy the search space definition file to the train dir for later reference
-    shutil.copy(
-        args.config,
-        str(Path(config["raytune"]["local_dir"]) / name / "config.yaml"),
-    )  # Copy the config file to the train dir for later reference
+    # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
+    with open((dirname / "config.yaml"), "w") as file:
+        yaml.dump(config, file)
 
     if not args.local:
         ray.init(address="auto")
