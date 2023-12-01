@@ -36,10 +36,11 @@ echo 'Starting training.'
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --prefix $2 \
-    --gpus "0,1,2,3,4,5,6,7" \
+    --gpus 8 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2 \
-    --checkpoint-freq 1
+    --checkpoint-freq 1 \
+    --comet
 
 echo 'Training done.'
