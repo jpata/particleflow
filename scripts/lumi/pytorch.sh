@@ -36,5 +36,3 @@ singularity exec --rocm \
   --conv-type gnn_lsh \
   --gpus 8 \
   --num-epochs 100 --gpu-batch-multiplier 10 --num-workers 1 --prefetch-factor 10 --load experiments/pyg-cms_20231129_193432_982100
-
-
