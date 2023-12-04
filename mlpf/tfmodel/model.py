@@ -804,10 +804,6 @@ class OutputDecoding(tf.keras.Model):
         self.met_output = met_output
         self.cls_output_as_logits = cls_output_as_logits
 
-        # FIXME: figure out how to get this consistent with the definition in the dataset side (BaseDatasetFactory.py)
-        self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
-        self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3.5, 1024), dtype=tf.float32)
-
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
             id_hidden_dim,
@@ -828,7 +824,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_pt = point_wise_feed_forward_network(
-            self.pt_bins.shape[0],
+            1,
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
@@ -858,7 +854,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            self.energy_bins.shape[0],
+            1,
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
@@ -932,15 +928,10 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
 
-        ffn_energy = self.ffn_energy(X_encoded_energy, training=training)
-        pred_energy_corr = tf.nn.softmax(ffn_energy, axis=-1)
-        pred_energy = tf.reduce_sum(self.energy_bins * pred_energy_corr, axis=-1, keepdims=True) * msk_input_outtype
-
-        pred_pt_corr = tf.nn.softmax(self.ffn_pt(X_encoded_energy, training=training), axis=-1)
-        pred_pt = tf.reduce_sum(self.pt_bins * pred_pt_corr, axis=-1, keepdims=True) * msk_input_outtype
+        pred_energy = self.ffn_energy(X_encoded_energy, training=training)
+        pred_pt = self.ffn_pt(X_encoded_energy, training=training)
 
         # mask the regression outputs for the nodes with a class prediction 0
-
         ret = {
             "cls": out_id_transformed,
             "charge": out_charge,
@@ -949,8 +940,6 @@ class OutputDecoding(tf.keras.Model):
             "sin_phi": pred_sin_phi * msk_input_outtype,
             "cos_phi": pred_cos_phi * msk_input_outtype,
             "energy": pred_energy * msk_input_outtype,
-            "pt_bins": pred_pt_corr,
-            "energy_bins": pred_energy_corr,
         }
 
         for k in ret.keys():

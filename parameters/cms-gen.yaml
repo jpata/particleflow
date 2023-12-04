@@ -29,11 +29,11 @@ dataset:
 loss:
   classification_loss_coef: 100.0
   charge_loss_coef: 1.0
-  pt_loss_coef: 0.0001
+  pt_loss_coef: 1.0
   eta_loss_coef: 1.0
   sin_phi_loss_coef: 1.0
   cos_phi_loss_coef: 1.0
-  energy_loss_coef: 0.0001
+  energy_loss_coef: 1.0
   cls_loss:
     type: SigmoidFocalCrossEntropy
     from_logits: yes
