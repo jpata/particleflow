@@ -440,24 +440,22 @@ def run(rank, world_size, config, args, outdir, logfile):
         _configLogger("mlpf", filename=logfile)
 
     if config["load"]:  # load a pre-trained model
-        outdir = config["load"]  # in case both --load and --train are provided
+        loaddir = config["load"]  # in case both --load and --train are provided
 
-        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+        with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         if args.load_checkpoint:
-            if not args.load_checkpoint.endswith(".pth"):
-                args.load_checkpoint += ".pth"
-            checkpoint = torch.load(f"{outdir}/checkpoints/{args.load_checkpoint}", map_location=torch.device(rank))
+            checkpoint = torch.load(f"{args.load_checkpoint}", map_location=torch.device(rank))
             if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Loaded model weights from {outdir}/checkpoints/{args.load_checkpoint}")
+                _logger.info(f"Loaded model weights from {loaddir}/checkpoints/{args.load_checkpoint}")
         else:
-            checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+            checkpoint = torch.load(f"{loaddir}/best_weights.pth", map_location=torch.device(rank))
             if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Loaded model weights from {outdir}/best_weights.pth")
+                _logger.info(f"Loaded model weights from {loaddir}/best_weights.pth")
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
