@@ -445,7 +445,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
 
-        model = MLPF(**model_kwargs)
+        model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         if args.load_checkpoint:
