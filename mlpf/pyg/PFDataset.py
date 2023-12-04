@@ -11,6 +11,30 @@ from torch_geometric.data import Batch, Data
 from pyg.logger import _logger
 
 
+class TFDSDataSource:
+    def __init__(self, ds):
+        self.ds = ds
+        tmp = self.ds.dataset_info
+        self.ds.dataset_info = SimpleNamespace()
+        self.ds.dataset_info.name = tmp.name
+        self.ds.dataset_info.features = tmp.features
+        self.rep = self.ds.__repr__()
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            item = [item]
+        records = self.ds.data_source.__getitems__(item)
+        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
+        if len(item) == 1:
+            ret = ret[0]
+        return ret
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __repr__(self):
+        return self.rep
+
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
@@ -27,32 +51,13 @@ class PFDataset:
 
         builder = tfds.builder(name, data_dir=data_dir)
 
-        self.ds = builder.as_data_source(split=split)
-
-        # to prevent a warning from tfds about accessing sequences of indices
-        self.ds.__class__.__getitems__ = my_getitem
-
-        # to make dataset_info pickable
-        tmp = self.ds.dataset_info
-
-        self.ds.dataset_info = SimpleNamespace()
-        self.ds.dataset_info.name = tmp.name
-        self.ds.dataset_info.features = tmp.features
-        self.rep = self.ds.__repr__()
+        self.ds = TFDSDataSource(builder.as_data_source(split=split))
 
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
 
     def __len__(self):
         return len(self.ds)
-
-    def __repr__(self):
-        return self.rep
-
-
-def my_getitem(self, vals):
-    records = self.data_source.__getitems__(vals)
-    return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
 
 class PFDataLoader(torch.utils.data.DataLoader):
