@@ -1,12 +1,13 @@
 #!/bin/sh
 
 # Walltime limit
-#SBATCH -t 2:00:00
+#SBATCH -t 4:00:00
 #SBATCH -N 1
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --gpus-per-task=4
+#SBATCH --cpus-per-task=64
 #SBATCH --constraint=a100-80gb,ib
 
 # Job name
@@ -35,8 +36,7 @@ echo 'Starting training.'
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pyg_pipeline.py \
     --config $1 \
     --load $2 \
-    --gpus "0,1,2,3" \
-    --conv-type gnn_lsh \
+    --gpus 4 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2 \
