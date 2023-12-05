@@ -34,6 +34,7 @@ from pyg.utils import (
     CLASS_LABELS,
     X_FEATURES,
     save_HPs,
+    get_lr_schedule,
 )
 
 
@@ -156,7 +157,16 @@ class FocalLoss(nn.Module):
 
 
 def train_and_valid(
-    rank, world_size, model, optimizer, data_loader, is_train, comet_experiment=None, comet_step_freq=None, epoch=None
+    rank,
+    world_size,
+    model,
+    optimizer,
+    data_loader,
+    is_train,
+    lr_schedule=None,
+    comet_experiment=None,
+    comet_step_freq=None,
+    epoch=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -206,6 +216,8 @@ def train_and_valid(
         if is_train:
             loss["Total"].backward()
             optimizer.step()
+            if lr_schedule:
+                lr_schedule.step()
 
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
@@ -213,7 +225,10 @@ def train_and_valid(
         if comet_experiment and is_train:
             if itrain % comet_step_freq == 0:
                 # this loss is not normalized to batch size
-                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=(epoch - 1) * len(data_loader) + itrain)
+                step = (epoch - 1) * len(data_loader) + itrain
+                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
+                if lr_schedule:
+                    comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -235,6 +250,7 @@ def train_and_valid(
 def train_mlpf(
     rank,
     world_size,
+    config,
     model,
     optimizer,
     train_loader,
@@ -276,6 +292,9 @@ def train_mlpf(
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
     start_epoch = 1
 
+    steps_per_epoch = len(train_loader)
+    lr_schedule = get_lr_schedule(config, optimizer, num_epochs, steps_per_epoch)
+
     if use_ray:
         import ray
         from ray.train import Checkpoint
@@ -297,20 +316,23 @@ def train_mlpf(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
-                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
+                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True, lr_schedule)
             prof.export_chrome_trace("trace.json")
         else:
             losses_t = train_and_valid(
-                rank, world_size, model, optimizer, train_loader, True, comet_experiment, comet_step_freq, epoch
+                rank, world_size, model, optimizer, train_loader, True, lr_schedule, comet_experiment, comet_step_freq, epoch
             )
 
         losses_v = train_and_valid(
-            rank, world_size, model, optimizer, valid_loader, False, comet_experiment, comet_step_freq, epoch
+            rank, world_size, model, optimizer, valid_loader, False, None, comet_experiment, comet_step_freq, epoch
         )
 
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
             comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
+            comet_experiment.log_metric(
+                "learning_rate", lr_schedule.get_last_lr() if lr_schedule else config["lr"], epoch=epoch
+            )
             comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
@@ -522,6 +544,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         train_mlpf(
             rank,
             world_size,
+            config,
             model,
             optimizer,
             loaders["train"],
@@ -740,6 +763,7 @@ def train_ray_trial(config, args, outdir=None):
     train_mlpf(
         rank,
         world_size,
+        config,
         model,
         optimizer,
         loaders["train"],

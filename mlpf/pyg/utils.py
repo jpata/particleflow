@@ -3,6 +3,8 @@ import pickle as pkl
 
 import torch
 import torch.utils.data
+from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR
+
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -205,3 +207,23 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
         },
         checkpoint_path,
     )
+
+
+def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
+    # we step teh schedule every mini-batch so need to multiply by steps_per_epoch
+    last_batch = last_epoch * steps_per_epoch if last_epoch != -1 else -1
+    if config["lr_schedule"] == "constant":
+        lr_schedule = None
+    elif config["lr_schedule"] == "onecycle":
+        lr_schedule = OneCycleLR(
+            opt,
+            max_lr=config["lr"],
+            steps_per_epoch=steps_per_epoch,
+            epochs=epochs,
+            last_epoch=last_batch,
+        )
+    elif config["lr_schedule"] == "cosinedecay":
+        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch)
+    else:
+        raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
+    return lr_schedule

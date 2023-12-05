@@ -8,6 +8,7 @@ load:
 num_epochs: 2
 patience: 20
 lr: 0.0001
+lr_schedule: constant  # constant, cosinedecay, onecycle
 conv_type: gravnet
 ntrain:
 ntest:
