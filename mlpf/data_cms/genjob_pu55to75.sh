@@ -1,12 +1,8 @@
 #!/bin/bash
-#SBATCH --partition main
-#SBATCH --cpus-per-task 1
-#SBATCH --mem-per-cpu 5G
-#SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_pre1/
+OUTDIR=/local/joosep/mlpf/cms/v3_pre1_pu55to75/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -14,26 +10,19 @@ MLPF_PATH=/home/joosep/particleflow/
 SAMPLE=$1
 SEED=$2
 
-WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
-#WORKDIR=`pwd`/$SAMPLE/$SEED
+WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 
-OUTDIR=/local/joosep/mlpf/cms/v2/$SAMPLE/raw
-mkdir -p $OUTDIR
+PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
-PILEUP=NoPileUp
-
-N=100
+N=10
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 cd $CMSSWDIR
 eval `scramv1 runtime -sh`
-which python
-which python3
-
-env
 
 cd $WORKDIR
 
@@ -47,6 +36,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
