@@ -824,7 +824,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_pt = point_wise_feed_forward_network(
-            1,
+            2,
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
@@ -854,7 +854,7 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            1,
+            2,
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
@@ -891,10 +891,12 @@ class OutputDecoding(tf.keras.Model):
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
+        orig_pt = tf.cast(X_input[:, :, 1:2], out_dtype)
         orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
         orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
+        orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
 
         if self.regression_use_classification:
             X_encoded = tf.concat(
@@ -928,13 +930,18 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
 
-        pred_energy = self.ffn_energy(X_encoded_energy, training=training)
-        pred_pt = self.ffn_pt(X_encoded_energy, training=training)
+        pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training) * msk_input_outtype
+        pred_energy = tf.cast(orig_energy, out_dtype) * pred_energy_corr[..., 0:1] + pred_energy_corr[..., 1:2]
+        pred_energy = tf.abs(pred_energy)
+
+        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
+        pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+        pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
         ret = {
             "cls": out_id_transformed,
-            "charge": out_charge,
+            "charge": out_charge * msk_input_outtype,
             "pt": pred_pt * msk_input_outtype,
             "eta": pred_eta * msk_input_outtype,
             "sin_phi": pred_sin_phi * msk_input_outtype,
