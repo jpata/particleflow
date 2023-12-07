@@ -32,6 +32,9 @@ elem_branches = [
     "px",
     "py",
     "pz",
+    "sigma_x",
+    "sigma_y",
+    "sigma_z",
     "deltap",
     "sigmadeltap",
     "gsf_electronseed_trkorecal",
@@ -54,6 +57,16 @@ elem_branches = [
     "lambdaerror",
     "theta",
     "thetaerror",
+    "time",
+    "timeerror",
+    "etaerror1",
+    "etaerror2",
+    "etaerror3",
+    "etaerror4",
+    "phierror1",
+    "phierror2",
+    "phierror3",
+    "phierror4",
 ]
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
@@ -552,6 +565,9 @@ def make_graph(ev, iev):
     element_px = ev["element_px"][iev]
     element_py = ev["element_py"][iev]
     element_pz = ev["element_pz"][iev]
+    element_sigma_x = ev["element_sigma_x"][iev]
+    element_sigma_y = ev["element_sigma_y"][iev]
+    element_sigma_z = ev["element_sigma_z"][iev]
     element_muon_dt_hits = ev["element_muon_dt_hits"][iev]
     element_muon_csc_hits = ev["element_muon_csc_hits"][iev]
     element_muon_type = ev["element_muon_type"][iev]
@@ -575,6 +591,16 @@ def make_graph(ev, iev):
     element_vx = ev["element_vx"][iev]
     element_vy = ev["element_vy"][iev]
     element_vz = ev["element_vz"][iev]
+    element_time = ev["element_time"][iev]
+    element_timeerror = ev["element_timeerror"][iev]
+    element_etaerror1 = ev["element_etaerror1"][iev]
+    element_etaerror2 = ev["element_etaerror2"][iev]
+    element_etaerror3 = ev["element_etaerror3"][iev]
+    element_etaerror4 = ev["element_etaerror4"][iev]
+    element_phierror1 = ev["element_phierror1"][iev]
+    element_phierror2 = ev["element_phierror2"][iev]
+    element_phierror3 = ev["element_phierror3"][iev]
+    element_phierror4 = ev["element_phierror4"][iev]
 
     trackingparticle_pid = ev["trackingparticle_pid"][iev]
     trackingparticle_charge = ev["trackingparticle_charge"][iev]
@@ -628,6 +654,9 @@ def make_graph(ev, iev):
             px=element_px[iobj],
             py=element_py[iobj],
             pz=element_pz[iobj],
+            sigma_x=element_sigma_x[iobj],
+            sigma_y=element_sigma_y[iobj],
+            sigma_z=element_sigma_z[iobj],
             muon_dt_hits=element_muon_dt_hits[iobj],
             muon_csc_hits=element_muon_csc_hits[iobj],
             muon_type=element_muon_type[iobj],
@@ -651,6 +680,16 @@ def make_graph(ev, iev):
             vx=element_vx[iobj],
             vy=element_vy[iobj],
             vz=element_vz[iobj],
+            time=element_time[iobj],
+            timeerror=element_timeerror[iobj],
+            etaerror1=element_etaerror1[iobj],
+            etaerror2=element_etaerror2[iobj],
+            etaerror3=element_etaerror3[iobj],
+            etaerror4=element_etaerror4[iobj],
+            phierror1=element_phierror1[iobj],
+            phierror2=element_phierror2[iobj],
+            phierror3=element_phierror3[iobj],
+            phierror4=element_phierror4[iobj],
         )
     for iobj in range(len(gen_pdgid)):
         g.add_node(
