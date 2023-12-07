@@ -289,8 +289,11 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
             typ = g.nodes[node]["typ"]
 
             # charged particles that leave no track should not be reconstructed as charged
-            if typ in [211, 13, 11] and g.nodes[node]["E_track"] == 0:
+            if typ in [211, 13] and g.nodes[node]["E_track"] == 0:
                 g.nodes[node]["typ"] = 130
+                g.nodes[node]["charge"] = 0
+            if typ in [11] and g.nodes[node]["E_track"] == 0:
+                g.nodes[node]["typ"] = 22
                 g.nodes[node]["charge"] = 0
 
             # if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate

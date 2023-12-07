@@ -6,6 +6,7 @@
 set -e
 set -x
 
+OUTDIR=/local/joosep/mlpf/cms/v3_pre1/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -73,9 +74,10 @@ ls -lrt
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
-cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
+#cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
 python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
 cp *.pkl.bz2 $OUTDIR/
+cp pfntuple_${SEED}.root $OUTDIR/
 rm -Rf $WORKDIR
