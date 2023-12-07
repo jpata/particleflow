@@ -33,7 +33,11 @@ parser.add_argument(
 )
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
-parser.add_argument("--load", type=str, default=None, help="dir from which to load a saved model")
+parser.add_argument(
+    "--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume"
+)
+parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
+
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
@@ -53,9 +57,6 @@ parser.add_argument("--ray-train", action="store_true", help="run training using
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
-parser.add_argument(
-    "--load-checkpoint", type=str, default=None, help="which checkpoint to load. if None then will load best weights"
-)
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
@@ -77,10 +78,13 @@ def main():
     if args.hpo:
         run_hpo(config, args)
     else:
-        outdir = create_experiment_dir(
-            prefix=(args.prefix or "") + Path(args.config).stem + "_",
-            experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
-        )
+        if args.resume_training:
+            outdir = args.resume_training
+        else:
+            outdir = create_experiment_dir(
+                prefix=(args.prefix or "") + Path(args.config).stem + "_",
+                experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
+            )
         # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
         config_filename = "train-config.yaml" if args.train else "test-config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:

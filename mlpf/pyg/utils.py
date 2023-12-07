@@ -3,7 +3,7 @@ import pickle as pkl
 
 import torch
 import torch.utils.data
-from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
@@ -209,11 +209,24 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
     )
 
 
+def load_lr_schedule(lr_schedule, checkpoint):
+    "Loads the lr_schedule's state dict from checkpoint"
+    if "lr_schedule_state_dict" in checkpoint["extra_state"].keys():
+        lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
+        return lr_schedule
+    else:
+        raise KeyError(
+            "Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(
+                checkpoint["extra_state"].keys()
+            )
+        )
+
+
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
     # we step teh schedule every mini-batch so need to multiply by steps_per_epoch
-    last_batch = last_epoch * steps_per_epoch if last_epoch != -1 else -1
+    last_batch = last_epoch * steps_per_epoch - 1 if last_epoch != -1 else -1
     if config["lr_schedule"] == "constant":
-        lr_schedule = None
+        lr_schedule = ConstantLR(opt, factor=1.0, total_iters=steps_per_epoch * epochs)
     elif config["lr_schedule"] == "onecycle":
         lr_schedule = OneCycleLR(
             opt,
