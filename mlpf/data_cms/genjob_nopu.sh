@@ -6,7 +6,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_pre1_nopu/
+OUTDIR=/local/joosep/mlpf/cms/v3/nopu/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -17,11 +17,10 @@ SEED=$2
 WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
 #WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
-
-OUTDIR=/local/joosep/mlpf/cms/v2/$SAMPLE/raw
 mkdir -p $OUTDIR
 
 PILEUP=NoPileUp
+PILEUP_INPUT=
 
 N=100
 
@@ -78,6 +77,6 @@ cmsRun step3_phase1_new.py
 mv pfntuple.root pfntuple_${SEED}.root
 python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
-cp *.pkl.bz2 $OUTDIR/
-cp pfntuple_${SEED}.root $OUTDIR/
+cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
+#cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 rm -Rf $WORKDIR
