@@ -59,11 +59,18 @@ class MLPF(nn.Module):
         embedding_dim=128,
         width=128,
         num_convs=2,
+        dropout=0.0,
+        # gravnet specific parameters
         k=32,
         propagate_dimensions=32,
         space_dimensions=4,
-        dropout=0.0,
         conv_type="gravnet",
+        # gnn-lsh specific parameters
+        max_num_bins=200,
+        distance_dim=128,
+        layernorm=True,
+        num_node_messages=2,
+        ffn_dist_hidden_dim=128,
     ):
         super(MLPF, self).__init__()
 
@@ -98,12 +105,12 @@ class MLPF(nn.Module):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
                         "bin_size": self.bin_size,
-                        "max_num_bins": 200,
-                        "distance_dim": 128,
-                        "layernorm": True,
-                        "num_node_messages": 2,
+                        "max_num_bins": max_num_bins,
+                        "distance_dim": distance_dim,
+                        "layernorm": layernorm,
+                        "num_node_messages": num_node_messages,
                         "dropout": dropout,
-                        "ffn_dist_hidden_dim": 128,
+                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
