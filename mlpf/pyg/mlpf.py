@@ -62,7 +62,7 @@ class MLPF(nn.Module):
         k=32,
         propagate_dimensions=32,
         space_dimensions=4,
-        dropout=0.4,
+        dropout=0.0,
         conv_type="gravnet",
     ):
         super(MLPF, self).__init__()
@@ -102,7 +102,7 @@ class MLPF(nn.Module):
                         "distance_dim": 128,
                         "layernorm": True,
                         "num_node_messages": 2,
-                        "dropout": 0.0,
+                        "dropout": dropout,
                         "ffn_dist_hidden_dim": 128,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
@@ -123,7 +123,6 @@ class MLPF(nn.Module):
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
     def forward(self, X_features, batch_or_mask):
-
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(X_features)
