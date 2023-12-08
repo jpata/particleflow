@@ -391,27 +391,27 @@ def train_mlpf(
                 color="bold",
             )
 
-            for loss in losses_of_interest:
-                fig, ax = plt.subplots()
+            # for loss in losses_of_interest:
+            #     fig, ax = plt.subplots()
 
-                ax.plot(
-                    range(len(losses["train"][loss])),
-                    losses["train"][loss],
-                    label="training",
-                )
-                ax.plot(
-                    range(len(losses["valid"][loss])),
-                    losses["valid"][loss],
-                    label=f"validation ({best_val_loss:.3f})",
-                )
+            #     ax.plot(
+            #         range(len(losses["train"][loss])),
+            #         losses["train"][loss],
+            #         label="training",
+            #     )
+            #     ax.plot(
+            #         range(len(losses["valid"][loss])),
+            #         losses["valid"][loss],
+            #         label=f"validation ({best_val_loss:.3f})",
+            #     )
 
-                ax.set_xlabel("Epochs")
-                ax.set_ylabel(f"{loss} Loss")
-                ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
-                ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
-                plt.tight_layout()
-                plt.savefig(f"{outdir}/mlpf_loss_{loss}.pdf")
-                plt.close()
+            #     ax.set_xlabel("Epochs")
+            #     ax.set_ylabel(f"{loss} Loss")
+            #     ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
+            #     ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
+            #     plt.tight_layout()
+            #     plt.savefig(f"{outdir}/mlpf_loss_{loss}.pdf")
+            #     plt.close()
 
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
