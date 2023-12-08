@@ -40,7 +40,7 @@ parser.add_argument("--num-epochs", type=int, default=None, help="number of trai
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
 parser.add_argument(
-    "--conv-type", type=str, default=None, help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh"]
+    "--conv-type", type=str, default=None, help="which graph layer to use", choices=["gravnet", "attention", "gnn_lsh", "mamba"]
 )
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
