@@ -71,6 +71,7 @@ elem_branches = [
 
 target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
 
+
 def map_pdgid_to_candid(pdgid, charge):
     if pdgid in [22, 11, 13]:
         return pdgid
@@ -331,7 +332,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
                 if g.nodes[node]["E_track"] > g.nodes[node]["E_calo"]:
                     g.nodes[node]["typ"] = 211
                 else:
-                    if abs(nd["typ") == 11:
+                    if abs(nd["typ"]) == 11:
                         g.nodes[node]["typ"] = 22
                     else:
                         g.nodes[node]["typ"] = 130
