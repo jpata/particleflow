@@ -60,28 +60,40 @@ class MLPF(nn.Module):
         width=128,
         num_convs=2,
         dropout=0.0,
+        activation="elu",
         # gravnet specific parameters
         k=32,
         propagate_dimensions=32,
         space_dimensions=4,
         conv_type="gravnet",
         # gnn-lsh specific parameters
+        bin_size=640,
         max_num_bins=200,
         distance_dim=128,
         layernorm=True,
         num_node_messages=2,
         ffn_dist_hidden_dim=128,
+        # self-attention specific parameters
+        num_heads=2,
     ):
         super(MLPF, self).__init__()
 
         self.conv_type = conv_type
 
-        self.act = nn.ELU
+        if activation == "elu":
+            self.act = nn.ELU
+        elif activation == "relu":
+            self.act = nn.ReLU
+        elif activation == "relu6":
+            self.act = nn.ReLU6
+        elif activation == "leakyrelu":
+            self.act = nn.LeakyReLU
+
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
 
-        self.bin_size = 640
+        self.bin_size = bin_size
 
         # embedding of the inputs
         if num_convs != 0:
@@ -96,8 +108,8 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(SelfAttentionLayer(embedding_dim))
-                    self.conv_reg.append(SelfAttentionLayer(embedding_dim))
+                    self.conv_id.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
+                    self.conv_reg.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()

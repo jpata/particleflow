@@ -27,7 +27,9 @@ model:
     width: 512
     num_convs: 3
     dropout: 0.0
+    activation: "elu"
     # gnn-lsh specific parameters
+    bin_size: 640
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -39,17 +41,22 @@ model:
     embedding_dim: 512
     width: 512
     num_convs: 3
-    k: 16
-    propagate_dimensions: 22
-    space_dimensions: 4
     dropout: 0.0
+    activation: "elu"
+    # gravnet specific parameters
+    k: 16
+    propagate_dimensions: 32
+    space_dimensions: 4
 
   attention:
     conv_type: attention
-    embedding_dim: 128
-    width: 128
-    num_convs: 2
+    embedding_dim: 256
+    width: 256
+    num_convs: 3
     dropout: 0.0
+    activation: "elu"
+    # attention specific paramters
+    num_heads: 2
 
 train_dataset:
   cms:
