@@ -499,7 +499,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment = create_comet_experiment(
                 config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
             )
-            comet_experiment.set_name(f"rank_{rank}")
+            comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
             comet_experiment.log_parameter("rank", rank)
@@ -729,7 +729,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment = create_comet_experiment(
             config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
         )
-        comet_experiment.set_name(f"world_rank_{world_rank}")
+        comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
         comet_experiment.log_parameter("rank", rank)

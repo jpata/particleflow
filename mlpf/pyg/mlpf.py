@@ -41,6 +41,32 @@ class SelfAttentionLayer(nn.Module):
         return x
 
 
+class MambaLayer(nn.Module):
+    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, d_state=16, d_conv=4, expand=2):
+        super(MambaLayer, self).__init__()
+        self.act = nn.ELU
+        from mamba_ssm import Mamba
+
+        self.mamba = Mamba(
+            d_model=embedding_dim,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+        )
+        self.norm0 = torch.nn.LayerNorm(embedding_dim)
+        self.seq = torch.nn.Sequential(
+            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
+        )
+        self.dropout = torch.nn.Dropout(dropout)
+
+    def forward(self, x, mask):
+        x = self.mamba(x)
+        x = self.norm0(x + self.seq(x))
+        x = self.dropout(x)
+        x = x * (~mask.unsqueeze(-1))
+        return x
+
+
 def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
         nn.Linear(input_dim, width),
@@ -75,6 +101,10 @@ class MLPF(nn.Module):
         ffn_dist_hidden_dim=128,
         # self-attention specific parameters
         num_heads=2,
+        # mamba specific parameters
+        d_state=16,
+        d_conv=4,
+        expand=2,
     ):
         super(MLPF, self).__init__()
 
@@ -110,6 +140,12 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     self.conv_id.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
                     self.conv_reg.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
+            elif self.conv_type == "mamba":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                for i in range(num_convs):
+                    self.conv_id.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
+                    self.conv_reg.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
