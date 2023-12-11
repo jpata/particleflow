@@ -8,6 +8,7 @@ load:
 num_epochs: 10
 patience: 20
 lr: 0.0001
+lr_schedule: constant  # constant, cosinedecay, onecycle
 conv_type: gravnet
 ntrain: 500
 ntest: 500
@@ -26,16 +27,26 @@ model:
     width: 512
     num_convs: 3
     dropout: 0.0
+    activation: "elu"
+    # gnn-lsh specific parameters
+    bin_size: 640
+    max_num_bins: 200
+    distance_dim: 128
+    layernorm: True
+    num_node_messages: 2
+    ffn_dist_hidden_dim: 128
 
   gravnet:
     conv_type: gravnet
     embedding_dim: 512
     width: 512
     num_convs: 3
+    dropout: 0.0
+    activation: "elu"
+    # gravnet specific parameters
     k: 16
     propagate_dimensions: 32
     space_dimensions: 4
-    dropout: 0.0
 
   attention:
     conv_type: attention
@@ -43,6 +54,23 @@ model:
     width: 256
     num_convs: 3
     dropout: 0.0
+    activation: "elu"
+    # attention specific paramters
+    num_heads: 2
+
+  mamba:
+    conv_type: mamba
+    embedding_dim: 128
+    width: 128
+    num_convs: 2
+    dropout: 0.0
+    activation: "elu"
+    # transformer specific paramters
+    num_heads: 2
+    # mamba specific paramters
+    d_state: 16
+    d_conv: 4
+    expand: 2
 
 raytune:
   local_dir: # Note: please specify an absolute path

@@ -75,8 +75,7 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK)) \
-    --ray-gpus $num_gpus \
-    --gpus "0,1,2,3,4,5,6,7" \
+    --gpus 8 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2
