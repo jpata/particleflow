@@ -449,7 +449,12 @@ def run(rank, world_size, config, args, outdir, logfile):
     start_epoch = 1
 
     if config["load"]:  # load a pre-trained model
-        loaddir = str(Path(config["load"]).parent.parent)
+        if Path(config["load"]).name == "checkpoint.pth":
+            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
+            loaddir = str(Path(config["load"]).parent.parent.parent)
+        else:
+            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            loaddir = str(Path(config["load"]).parent.parent)
 
         with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
