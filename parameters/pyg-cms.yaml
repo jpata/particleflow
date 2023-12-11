@@ -72,13 +72,6 @@ model:
     d_conv: 4
     expand: 2
 
-  mamba:
-    conv_type: mamba
-    embedding_dim: 256
-    width: 256
-    num_convs: 4
-    dropout: 0.1
-
 raytune:
   local_dir: # Note: please specify an absolute path
   sched: asha # asha, hyperband
