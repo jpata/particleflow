@@ -11,7 +11,6 @@ from datetime import datetime
 import tqdm
 import yaml
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 # comet needs to be imported before torch

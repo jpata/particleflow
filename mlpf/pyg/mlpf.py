@@ -46,6 +46,7 @@ class MambaLayer(nn.Module):
         super(MambaLayer, self).__init__()
         self.act = nn.ELU
         from mamba_ssm import Mamba
+
         self.mamba = Mamba(
             d_model=embedding_dim,
             d_state=16,
