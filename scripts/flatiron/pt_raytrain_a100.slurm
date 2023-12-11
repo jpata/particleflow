@@ -2,7 +2,7 @@
 
 # Walltime limit
 #SBATCH -t 1:00:00
-#SBATCH -N 2
+#SBATCH -N 1
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
@@ -11,7 +11,7 @@
 #SBATCH --constraint=a100-80gb,ib
 
 # Job name
-#SBATCH -J pt_train
+#SBATCH -J pt_raytrain
 
 # Output and error logs
 #SBATCH -o logs_slurm/log_%x_%j.out
