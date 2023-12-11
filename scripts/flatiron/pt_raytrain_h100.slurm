@@ -11,7 +11,7 @@
 #SBATCH --constraint=h100,ib
 
 # Job name
-#SBATCH -J pt_train
+#SBATCH -J pt_raytrain
 
 # Output and error logs
 #SBATCH -o logs_slurm/log_%x_%j.out

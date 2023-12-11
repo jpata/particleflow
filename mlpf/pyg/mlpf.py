@@ -42,16 +42,16 @@ class SelfAttentionLayer(nn.Module):
 
 
 class MambaLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1):
+    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, d_state=16, d_conv=4, expand=2):
         super(MambaLayer, self).__init__()
         self.act = nn.ELU
         from mamba_ssm import Mamba
 
         self.mamba = Mamba(
             d_model=embedding_dim,
-            d_state=16,
-            d_conv=4,
-            expand=2,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
         )
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
@@ -85,22 +85,45 @@ class MLPF(nn.Module):
         embedding_dim=128,
         width=128,
         num_convs=2,
+        dropout=0.0,
+        activation="elu",
+        # gravnet specific parameters
         k=32,
         propagate_dimensions=32,
         space_dimensions=4,
-        dropout=0.4,
         conv_type="gravnet",
+        # gnn-lsh specific parameters
+        bin_size=640,
+        max_num_bins=200,
+        distance_dim=128,
+        layernorm=True,
+        num_node_messages=2,
+        ffn_dist_hidden_dim=128,
+        # self-attention specific parameters
+        num_heads=2,
+        # mamba specific parameters
+        d_state=16,
+        d_conv=4,
+        expand=2,
     ):
         super(MLPF, self).__init__()
 
         self.conv_type = conv_type
 
-        self.act = nn.ELU
+        if activation == "elu":
+            self.act = nn.ELU
+        elif activation == "relu":
+            self.act = nn.ReLU
+        elif activation == "relu6":
+            self.act = nn.ReLU6
+        elif activation == "leakyrelu":
+            self.act = nn.LeakyReLU
+
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
 
-        self.bin_size = 640
+        self.bin_size = bin_size
 
         # embedding of the inputs
         if num_convs != 0:
@@ -115,14 +138,14 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(SelfAttentionLayer(embedding_dim))
-                    self.conv_reg.append(SelfAttentionLayer(embedding_dim))
+                    self.conv_id.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
+                    self.conv_reg.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
             elif self.conv_type == "mamba":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(embedding_dim))
-                    self.conv_reg.append(MambaLayer(embedding_dim))
+                    self.conv_id.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
+                    self.conv_reg.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -130,12 +153,12 @@ class MLPF(nn.Module):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
                         "bin_size": self.bin_size,
-                        "max_num_bins": 200,
-                        "distance_dim": 128,
-                        "layernorm": True,
-                        "num_node_messages": 2,
-                        "dropout": 0.0,
-                        "ffn_dist_hidden_dim": 128,
+                        "max_num_bins": max_num_bins,
+                        "distance_dim": distance_dim,
+                        "layernorm": layernorm,
+                        "num_node_messages": num_node_messages,
+                        "dropout": dropout,
+                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
@@ -155,8 +178,6 @@ class MLPF(nn.Module):
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
     def forward(self, X_features, batch_or_mask):
-
-        print(X_features.shape)
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(X_features)

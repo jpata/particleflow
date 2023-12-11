@@ -33,6 +33,7 @@ from pyg.utils import (
     CLASS_LABELS,
     X_FEATURES,
     save_HPs,
+    get_lr_schedule,
 )
 
 
@@ -155,7 +156,16 @@ class FocalLoss(nn.Module):
 
 
 def train_and_valid(
-    rank, world_size, model, optimizer, data_loader, is_train, comet_experiment=None, comet_step_freq=None, epoch=None
+    rank,
+    world_size,
+    model,
+    optimizer,
+    data_loader,
+    is_train,
+    lr_schedule=None,
+    comet_experiment=None,
+    comet_step_freq=None,
+    epoch=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -205,6 +215,8 @@ def train_and_valid(
         if is_train:
             loss["Total"].backward()
             optimizer.step()
+            if lr_schedule:
+                lr_schedule.step()
 
         for loss_ in epoch_loss:
             epoch_loss[loss_] += loss[loss_].detach()
@@ -212,7 +224,9 @@ def train_and_valid(
         if comet_experiment and is_train:
             if itrain % comet_step_freq == 0:
                 # this loss is not normalized to batch size
-                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=(epoch - 1) * len(data_loader) + itrain)
+                step = (epoch - 1) * len(data_loader) + itrain
+                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
+                comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -241,6 +255,8 @@ def train_mlpf(
     num_epochs,
     patience,
     outdir,
+    start_epoch=1,
+    lr_schedule=None,
     use_ray=False,
     checkpoint_freq=None,
     comet_experiment=None,
@@ -273,19 +289,6 @@ def train_mlpf(
         losses["train"][loss], losses["valid"][loss] = [], []
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
-    start_epoch = 1
-
-    if use_ray:
-        import ray
-        from ray.train import Checkpoint
-
-        checkpoint = ray.train.get_checkpoint()
-        if checkpoint:
-            with checkpoint.as_directory() as checkpoint_dir:
-                with checkpoint.as_directory() as checkpoint_dir:
-                    checkpoint = torch.load(Path(checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
-                    model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-                    start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
@@ -296,24 +299,25 @@ def train_mlpf(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
-                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True)
+                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True, lr_schedule)
             prof.export_chrome_trace("trace.json")
         else:
             losses_t = train_and_valid(
-                rank, world_size, model, optimizer, train_loader, True, comet_experiment, comet_step_freq, epoch
+                rank, world_size, model, optimizer, train_loader, True, lr_schedule, comet_experiment, comet_step_freq, epoch
             )
 
         losses_v = train_and_valid(
-            rank, world_size, model, optimizer, valid_loader, False, comet_experiment, comet_step_freq, epoch
+            rank, world_size, model, optimizer, valid_loader, False, None, comet_experiment, comet_step_freq, epoch
         )
 
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
             comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
+            comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
             comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
-            extra_state = {"epoch": epoch}
+            extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
@@ -332,6 +336,9 @@ def train_mlpf(
                 save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
         if use_ray:
+            import ray
+            from ray.train import Checkpoint
+
             # save model, optimizer and epoch number for HPO-supported checkpointing
             # Ray automatically syncs the checkpoint to persistent storage
             metrics = dict(
@@ -438,8 +445,15 @@ def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
         _configLogger("mlpf", filename=logfile)
 
+    start_epoch = 1
+
     if config["load"]:  # load a pre-trained model
-        loaddir = config["load"]  # in case both --load and --train are provided
+        if Path(config["load"]).name == "checkpoint.pth":
+            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
+            loaddir = str(Path(config["load"]).parent.parent.parent)
+        else:
+            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            loaddir = str(Path(config["load"]).parent.parent)
 
         with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
@@ -447,22 +461,18 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
-        if args.load_checkpoint:
-            checkpoint = torch.load(f"{args.load_checkpoint}", map_location=torch.device(rank))
-            if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Loaded model weights from {loaddir}/checkpoints/{args.load_checkpoint}")
-        else:
-            checkpoint = torch.load(f"{loaddir}/best_weights.pth", map_location=torch.device(rank))
-            if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"Loaded model weights from {loaddir}/best_weights.pth")
+        checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+        testdir_name = "_" + Path(config["load"]).name
+        if (rank == 0) or (rank == "cpu"):
+            _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-
-        if args.load_checkpoint:
-            testdir_name = f"_{args.load_checkpoint[:13]}"
-        else:
-            testdir_name = "_bestweights"
-
+    elif args.resume_training:
+        raise NotImplementedError(
+            "Resuming an interrupted training is only supported in our \
+                Ray Train-based training. Consider using `--load` instead, \
+                which starts a new training using model weights from a pre-trained checkpoint."
+        )
     else:  # instantiate a new model in the outdir created
         testdir_name = "_bestweights"
 
@@ -493,7 +503,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment = create_comet_experiment(
                 config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
             )
-            comet_experiment.set_name(f"rank_{rank}")
+            comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
             comet_experiment.log_parameter("rank", rank)
@@ -517,6 +527,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             pad_3d,
             use_ray=False,
         )
+        steps_per_epoch = len(loaders["train"])
+        last_epoch = -1 if start_epoch == 1 else start_epoch - 1
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
         train_mlpf(
             rank,
@@ -528,6 +541,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
+            start_epoch=start_epoch,
+            lr_schedule=lr_schedule,
             use_ray=False,
             checkpoint_freq=config["checkpoint_freq"],
             comet_experiment=comet_experiment,
@@ -543,7 +558,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             assert args.train, "Please train a model before testing, or load a model with --load"
             assert outdir is not None, "Error: no outdir to evaluate model from"
         else:
-            outdir = config["load"]
+            outdir = str(Path(config["load"]).parent.parent)
 
         for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
             batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
@@ -644,7 +659,7 @@ def device_agnostic_run(config, args, world_size, outdir):
         logfile = f"{outdir}/train.log"
         _configLogger("mlpf", filename=logfile)
     else:
-        outdir = args.load
+        outdir = str(Path(args.load).parent.parent)
         logfile = f"{outdir}/test.log"
         _configLogger("mlpf", filename=logfile)
 
@@ -718,7 +733,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment = create_comet_experiment(
             config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
         )
-        comet_experiment.set_name(f"world_rank_{world_rank}")
+        comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
         comet_experiment.log_parameter("rank", rank)
@@ -736,6 +751,24 @@ def train_ray_trial(config, args, outdir=None):
     else:
         comet_experiment = None
 
+    steps_per_epoch = len(loaders["train"])
+    start_epoch = 1
+    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=-1)
+
+    checkpoint = ray.train.get_checkpoint()
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            with checkpoint.as_directory() as checkpoint_dir:
+                checkpoint = torch.load(Path(checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
+                if args.resume_training:
+                    model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+                    start_epoch = checkpoint["extra_state"]["epoch"] + 1
+                    lr_schedule = get_lr_schedule(
+                        config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1
+                    )
+                else:  # start a new training with model weights loaded from a pre-trained model
+                    model = load_checkpoint(checkpoint, model)
+
     train_mlpf(
         rank,
         world_size,
@@ -746,6 +779,8 @@ def train_ray_trial(config, args, outdir=None):
         config["num_epochs"],
         config["patience"],
         outdir,
+        start_epoch=start_epoch,
+        lr_schedule=lr_schedule,
         use_ray=True,
         checkpoint_freq=config["checkpoint_freq"],
         comet_experiment=comet_experiment,
@@ -766,6 +801,9 @@ def run_ray_training(config, args, outdir):
     if not args.local:
         ray.init(address="auto")
 
+    if args.resume_training:
+        outdir = args.resume_training  # continue training in the same directory
+
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
     num_workers = args.gpus
@@ -784,9 +822,21 @@ def run_ray_training(config, args, outdir):
         sync_config=ray.train.SyncConfig(sync_artifacts=True),
     )
     trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
-    trainer = TorchTrainer(
-        train_loop_per_worker=trainable, train_loop_config=config, scaling_config=scaling_config, run_config=run_config
-    )
+    # Resume from checkpoint if a checkpoitn is found in outdir
+    if TorchTrainer.can_restore(outdir):
+        _logger.info(f"Restoring Ray Trainer from {outdir}", color="bold")
+        trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
+    else:
+        resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
+        if resume_from_checkpoint:
+            _logger.info("Loading checkpoint {}".format(config["load"]), color="bold")
+        trainer = TorchTrainer(
+            train_loop_per_worker=trainable,
+            train_loop_config=config,
+            scaling_config=scaling_config,
+            run_config=run_config,
+            resume_from_checkpoint=resume_from_checkpoint,
+        )
     result = trainer.fit()
 
     _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")

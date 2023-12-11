@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 3
+#SBATCH -N 2
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --constraint=h100,ib
@@ -31,7 +31,7 @@ which python3
 python3 --version
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-num_gpus=8
+num_gpus=${SLURM_GPUS_PER_TASK}  # gpus per compute node
 
 
 ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
@@ -75,8 +75,7 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK/8)) \
-    --ray-gpus 1 \
-    --gpus "0" \
+    --gpus 1 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2
