@@ -155,6 +155,7 @@ class MLPF(nn.Module):
 
     def forward(self, X_features, batch_or_mask):
 
+        print(X_features.shape)
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(X_features)

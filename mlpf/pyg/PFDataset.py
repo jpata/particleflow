@@ -192,9 +192,6 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_
                 dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
-            # build dataloaders
-            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset)
             else:
