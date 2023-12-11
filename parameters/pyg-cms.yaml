@@ -5,14 +5,14 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 2
+num_epochs: 50
 patience: 20
 lr: 0.0001
-lr_schedule: constant  # constant, cosinedecay, onecycle
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
 ntest:
-nvalid: 500
+nvalid:
 num_workers: 0
 prefetch_factor:
 checkpoint_freq:
@@ -137,8 +137,41 @@ valid_dataset:
     physical:
       batch_size: 1
       samples:
+        cms_pf_ttbar:
+          version: 1.6.0
+        cms_pf_qcd:
+          version: 1.6.0
+        cms_pf_ztt:
+          version: 1.6.0
         cms_pf_qcd_high_pt:
           version: 1.6.0
+        cms_pf_sms_t1tttt:
+          version: 1.6.0
+    gun:
+      batch_size: 20
+      samples:
+        cms_pf_single_electron:
+          version: 1.6.0
+        cms_pf_single_gamma:
+          version: 1.6.0
+        cms_pf_single_pi0:
+          version: 1.6.0
+        cms_pf_single_neutron:
+          version: 1.6.0
+        cms_pf_single_pi:
+          version: 1.6.0
+        cms_pf_single_tau:
+          version: 1.6.0
+        cms_pf_single_mu:
+          version: 1.6.0
+        cms_pf_single_proton:
+          version: 1.6.0
+    multiparticlegun:
+      batch_size: 4
+      samples:
+        cms_pf_multi_particle_gun:
+          version: 1.6.0
+
 
 test_dataset:
   cms:
