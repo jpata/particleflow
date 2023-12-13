@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --partition main
 #SBATCH --cpus-per-task 1
-#SBATCH --mem-per-cpu 5G
+#SBATCH --mem-per-cpu 6G
 #SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
+OUTDIR=/local/joosep/mlpf/cms/v3/nopu/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -16,11 +17,10 @@ SEED=$2
 WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
 #WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
-
-OUTDIR=/local/joosep/mlpf/cms/v2/$SAMPLE/raw
 mkdir -p $OUTDIR
 
 PILEUP=NoPileUp
+PILEUP_INPUT=
 
 N=100
 
@@ -73,9 +73,10 @@ ls -lrt
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py
 cmsRun step3_phase1_new.py
-cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
+#cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
 python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
 bzip2 -z pfntuple_${SEED}.pkl
-cp *.pkl.bz2 $OUTDIR/
+cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
+#cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 rm -Rf $WORKDIR

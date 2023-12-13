@@ -3,41 +3,36 @@ from __future__ import print_function
 
 import os
 
-outdir = "/local/joosep/mlpf/cms/v2/"
+outdir = "/local/joosep/mlpf/cms/v3"
 
 samples = [
-    #    "SingleElectronFlatPt1To1000_pythia8_cfi",
-    #    "SingleGammaFlatPt1To1000_pythia8_cfi",
-    #    "SingleMuFlatPt1To1000_pythia8_cfi",
-    #    "SingleNeutronFlatPt0p7To1000_cfi",
-    #    "SinglePi0Pt1To1000_pythia8_cfi",
-    #    "SinglePiMinusFlatPt0p7To1000_cfi",
-    #    "SingleProtonMinusFlatPt0p7To1000_cfi",
-    #    "SingleTauFlatPt1To1000_cfi",
-    #    "MultiParticlePFGun_cfi",
-    ("MultiParticlePFGun50_cfi", 100000, 110050),
-]
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 105010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 205010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 305010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",                400000, 405010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 500000, 505010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 605010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 
-samples_pu = [
-    #    "TTbar_14TeV_TuneCUETP8M1_cfi",
-    #    "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
-    #    "QCDForPF_14TeV_TuneCUETP8M1_cfi",
-    #    "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",
-    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 200000, 202050),
-    #    "ZpTT_1500_14TeV_TuneCP5_cfi",
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 701000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("MultiParticlePFGun50_cfi",                               800000, 810000, "genjob_nopu.sh", outdir + "/nopu"),
+
+    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 901000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1001000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1101000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleNeutronFlatPt0p7To1000_cfi",                      1200000,1201000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SinglePi0Pt1To1000_pythia8_cfi",                        1300000,1301000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SinglePiMinusFlatPt0p7To1000_cfi",                      1400000,1401000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleProtonMinusFlatPt0p7To1000_cfi",                  1500000,1501000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleTauFlatPt1To1000_cfi",                            1600000,1601000, "genjob_nopu.sh", outdir + "/nopu"),
 ]
 
 if __name__ == "__main__":
 
-    for s, seed0, seed1 in samples_pu + samples:
-        is_pu = s in samples_pu
-
-        os.makedirs(outdir + "/" + s + "/raw", exist_ok=True)
-        os.makedirs(outdir + "/" + s + "/root", exist_ok=True)
+    for s, seed0, seed1, script, this_outdir in samples:
+        os.makedirs(this_outdir + "/" + s + "/raw", exist_ok=True)
+        os.makedirs(this_outdir + "/" + s + "/root", exist_ok=True)
 
         for seed in range(seed0, seed1):
-            if not os.path.isfile(outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(seed)):
-                if is_pu:
-                    print("sbatch genjob_pu.sh {} {}".format(s, seed))
-                else:
-                    print("sbatch genjob.sh {} {}".format(s, seed))
+            p = this_outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(seed)
+            if not os.path.isfile(p):
+                print("sbatch {} {} {}".format(script, s, seed))

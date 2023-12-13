@@ -345,11 +345,6 @@ class GHConvDense(tf.keras.layers.Layer):
     def call(self, inputs):
         x, adj, msk = inputs
 
-        if DEBUGGING:
-            tf.print("GHConvDense.call:x", x.shape)
-            tf.print("GHConvDense.call:adj", adj.shape)
-            tf.print("GHConvDense.call:msk", msk.shape)
-
         # remove last dim from distance/adjacency matrix
         if DEBUGGING:
             tf.debugging.assert_equal(tf.shape(adj)[-1], 1)
@@ -387,7 +382,6 @@ class GHConvDense(tf.keras.layers.Layer):
                     ),
                 ]
             )
-            tf.print("GHConvDense.call:out", out.shape)
         return self.activation(out) * msk
 
 
@@ -771,10 +765,8 @@ class OutputDecoding(tf.keras.Model):
         dropout=0.0,
         id_dim_decrease=True,
         charge_dim_decrease=True,
-        pt_dim_decrease=False,
         eta_dim_decrease=False,
         phi_dim_decrease=False,
-        energy_dim_decrease=False,
         pt_as_correction=True,
         id_hidden_dim=128,
         charge_hidden_dim=128,
@@ -812,10 +804,6 @@ class OutputDecoding(tf.keras.Model):
         self.met_output = met_output
         self.cls_output_as_logits = cls_output_as_logits
 
-        # FIXME: figure out how to get this consistent with the definition in the dataset side (BaseDatasetFactory.py)
-        self.energy_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
-        self.pt_bins = tf.cast(tf.experimental.numpy.logspace(-1, 3, 500), dtype=tf.float32)
-
         self.ffn_id = point_wise_feed_forward_network(
             num_output_classes,
             id_hidden_dim,
@@ -836,12 +824,11 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_pt = point_wise_feed_forward_network(
-            self.pt_bins.shape[0],
+            2,
             pt_hidden_dim,
             "ffn_pt",
             num_layers=pt_num_layers,
             activation=activation,
-            dim_decrease=pt_dim_decrease,
             dropout=dropout,
         )
 
@@ -867,12 +854,11 @@ class OutputDecoding(tf.keras.Model):
         )
 
         self.ffn_energy = point_wise_feed_forward_network(
-            self.energy_bins.shape[0],
+            2,
             energy_hidden_dim,
             "ffn_energy",
             num_layers=energy_num_layers,
             activation=activation,
-            dim_decrease=energy_dim_decrease,
             dropout=dropout,
         )
 
@@ -884,7 +870,7 @@ class OutputDecoding(tf.keras.Model):
 
     def call(self, args, training=False):
 
-        X_input, X_encoded, X_encoded_energy, msk_input = args
+        X_input, X_encoded, X_encoded_energy, msk_input, n_points = args
 
         if self.do_layernorm:
             X_encoded = self.layernorm(X_encoded)
@@ -905,10 +891,12 @@ class OutputDecoding(tf.keras.Model):
         out_charge = self.ffn_charge(X_encoded, training=training)
         out_charge = out_charge * msk_input_outtype
 
+        orig_pt = tf.cast(X_input[:, :, 1:2], out_dtype)
         orig_eta = tf.cast(X_input[:, :, 2:3], out_dtype)
 
         orig_sin_phi = tf.cast(X_input[:, :, 3:4] * msk_input, out_dtype)
         orig_cos_phi = tf.cast(X_input[:, :, 4:5] * msk_input, out_dtype)
+        orig_energy = tf.cast(X_input[:, :, 5:6] * msk_input, out_dtype)
 
         if self.regression_use_classification:
             X_encoded = tf.concat(
@@ -942,29 +930,27 @@ class OutputDecoding(tf.keras.Model):
                 axis=-1,
             )
 
-        ffn_energy = self.ffn_energy(X_encoded_energy, training=training)
-        tf.print("energy", tf.reduce_min(ffn_energy), tf.reduce_max(ffn_energy), tf.reduce_mean(ffn_energy))
-        pred_energy_corr = tf.nn.softmax(ffn_energy, axis=-1)
-        pred_energy = tf.reduce_sum(self.energy_bins * pred_energy_corr, axis=-1, keepdims=True) * msk_input_outtype
+        pred_energy_corr = self.ffn_energy(X_encoded_energy, training=training) * msk_input_outtype
+        pred_energy = tf.cast(orig_energy, out_dtype) * pred_energy_corr[..., 0:1] + pred_energy_corr[..., 1:2]
+        pred_energy = tf.abs(pred_energy)
 
-        pred_pt_corr = tf.nn.softmax(self.ffn_pt(X_encoded_energy, training=training), axis=-1)
-        pred_pt = tf.reduce_sum(self.pt_bins * pred_pt_corr, axis=-1, keepdims=True) * msk_input_outtype
+        pred_pt_corr = self.ffn_pt(X_encoded_energy, training=training) * msk_input_outtype
+        pred_pt = tf.cast(orig_pt, out_dtype) * pred_pt_corr[..., 0:1] + pred_pt_corr[..., 1:2]
+        pred_pt = tf.abs(pred_pt)
 
         # mask the regression outputs for the nodes with a class prediction 0
-
         ret = {
             "cls": out_id_transformed,
-            "charge": out_charge,
+            "charge": out_charge * msk_input_outtype,
             "pt": pred_pt * msk_input_outtype,
             "eta": pred_eta * msk_input_outtype,
             "sin_phi": pred_sin_phi * msk_input_outtype,
             "cos_phi": pred_cos_phi * msk_input_outtype,
             "energy": pred_energy * msk_input_outtype,
-            "pt_bins": pred_pt_corr,
-            "energy_bins": pred_energy_corr,
         }
 
         for k in ret.keys():
+            ret[k] = ret[k][:, :n_points]
             ret[k] = tf.where(tf.math.is_inf(ret[k]), tf.zeros_like(ret[k]), ret[k])
             ret[k] = tf.where(tf.math.is_nan(ret[k]), tf.zeros_like(ret[k]), ret[k])
 
@@ -1076,11 +1062,6 @@ class CombinedGraphLayer(tf.keras.layers.Layer):
         # compute the element-to-element messages / distance matrix / graph structure
         bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
         if DEBUGGING:
-            tf.print("CombinedGraphLayer.call:bins_split", bins_split.shape)
-            tf.print("CombinedGraphLayer.call:x", x.shape)
-            tf.print("CombinedGraphLayer.call:dm", dm.shape)
-            tf.print("CombinedGraphLayer.call:msk_f", msk_f.shape)
-
             tf.debugging.assert_shapes(
                 [
                     (bins_split, ("n_batch", "n_bins", "n_points_bin")),
@@ -1224,11 +1205,6 @@ class PFNetDense(tf.keras.Model):
     def call(self, inputs, training=False):
         Xorig = inputs
 
-        # zero_pad_fraction = tf.reduce_sum(tf.cast(Xorig[:, :, 0] == 0, dtype=tf.int32)) / (
-        #     tf.shape(Xorig)[0] * tf.shape(Xorig)[1]
-        # )
-        # tf.print("PFNetDense.call Xorig=", tf.shape(Xorig), "zpf=", zero_pad_fraction)
-
         # normalize all features except the PFElement type (feature 0)
         if self.use_normalizer:
             X = tf.concat([Xorig[:, :, 0:1], tf.cast(self.normalizer(Xorig[:, :, 1:]), dtype=Xorig.dtype)], axis=-1)
@@ -1325,10 +1301,11 @@ class PFNetDense(tf.keras.Model):
 
         ret = self.output_dec(
             [
-                Xorig[:, :n_points],
-                dec_output_id[:, :n_points],
-                dec_output_reg[:, :n_points],
-                msk_input[:, :n_points],
+                X,
+                dec_output_id,
+                dec_output_reg,
+                msk_input,
+                n_points,
             ],
             training=training,
         )
