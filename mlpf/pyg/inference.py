@@ -29,7 +29,7 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 @torch.no_grad()
-def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1, dir_name=""):
+def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
     if world_size > 1:
         conv_type = model.module.conv_type
