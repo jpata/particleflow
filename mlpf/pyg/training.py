@@ -73,7 +73,7 @@ def mlpf_loss(y, ypred):
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    npart = y["cls_id"].shape[0] * y["cls_id"].shape[1]
+    npart = y["pt"].numel()
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     ypred["charge"] = ypred["charge"] * msk_true_particle
