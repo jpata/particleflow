@@ -648,7 +648,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     sample,
                     outdir,
                     jetdef,
-                    jet_ptcut=5.0,
+                    jet_ptcut=15.0,
                     jet_match_dr=0.1,
                     dir_name=testdir_name,
                 )
