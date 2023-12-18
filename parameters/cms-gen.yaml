@@ -66,8 +66,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0002
-  num_epochs: 40
+  lr: 0.0005
+  num_epochs: 10
   dtype: float32
   trainable:
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none

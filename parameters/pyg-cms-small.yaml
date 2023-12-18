@@ -7,12 +7,12 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 10
 patience: 20
-lr: 0.0001
-lr_schedule: constant  # constant, cosinedecay, onecycle
+lr: 0.001
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gravnet
-ntrain: 500
-ntest: 500
-nvalid: 500
+ntrain: 10000 
+ntest: 1000
+nvalid: 1000
 num_workers: 0
 prefetch_factor:
 checkpoint_freq:
@@ -60,10 +60,10 @@ model:
 
   mamba:
     conv_type: mamba
-    embedding_dim: 128
-    width: 128
-    num_convs: 2
-    dropout: 0.0
+    embedding_dim: 256
+    width: 256
+    num_convs: 4
+    dropout: 0.2
     activation: "elu"
     # transformer specific paramters
     num_heads: 2
@@ -98,22 +98,20 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.6.0
-        cms_pf_qcd:
-          version: 1.6.0
+          version: 2.0.0
 
 valid_dataset:
   cms:
     physical:
       batch_size: 1
       samples:
-        cms_pf_qcd_high_pt:
-          version: 1.6.0
+        cms_pf_ttbar:
+          version: 2.0.0
 
 test_dataset:
   cms:
     physical:
       batch_size: 1
       samples:
-        cms_pf_qcd_high_pt:
-          version: 1.6.0
+        cms_pf_ttbar:
+          version: 2.0.0

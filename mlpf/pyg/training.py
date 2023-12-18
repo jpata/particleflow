@@ -457,11 +457,18 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
-
+        _logger.info("model_kwargs: {}".format(model_kwargs))
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+
+        for k in model.state_dict().keys():
+            shp0 = model.state_dict()[k].shape 
+            shp1 = checkpoint["model_state_dict"][k].shape
+            if shp0 != shp1:
+                raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+    
         testdir_name = "_" + Path(config["load"]).name
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")

@@ -858,8 +858,8 @@ def process_one_file(fn, ofn):
 
 
 def process_sample(sample):
-    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_05_09/"
+    inp = "/local/joosep/clic_edm4hep/"
+    outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
 
     pool = multiprocessing.Pool(16)
 
