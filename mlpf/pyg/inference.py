@@ -28,6 +28,108 @@ from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
+def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+    if conv_type != "gravnet":
+        X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
+        batch_pad = Batch(X=X_pad, mask=mask).to(rank)
+        ypred = model(batch_pad.X, batch_pad.mask)
+        ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
+    else:
+        _batch = batch.to(rank)
+        ypred = model(_batch.X, _batch.batch)
+
+    ygen = unpack_target(batch.ygen)
+    ycand = unpack_target(batch.ycand)
+    ypred = unpack_predictions(ypred)
+
+    for k, v in ygen.items():
+        ygen[k] = v.detach().cpu()
+    for k, v in ycand.items():
+        ycand[k] = v.detach().cpu()
+    for k, v in ypred.items():
+        ypred[k] = v.detach().cpu()
+
+    # loop over the batch to disentangle the events
+    batch_ids = batch.batch.cpu().numpy()
+
+    jets_coll = {}
+
+    cs = np.unique(batch_ids, return_counts=True)[1]
+    Xs = awkward.unflatten(awkward.from_numpy(batch.X.numpy()), cs)
+
+    for typ, ydata in zip(["gen", "cand"], [ygen, ycand]):
+        clsid = awkward.unflatten(ydata["cls_id"], cs)
+        msk = clsid != 0
+        p4 = awkward.unflatten(ydata["p4"], cs)
+        vec = vector.awk(
+            awkward.zip(
+                {
+                    "pt": p4[msk][:, :, 0],
+                    "eta": p4[msk][:, :, 1],
+                    "phi": p4[msk][:, :, 2],
+                    "e": p4[msk][:, :, 3],
+                }
+            )
+        )
+        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+        jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
+
+    # in case of no predicted particles in the batch
+    if torch.sum(ypred["cls_id"] != 0) == 0:
+        vec = vector.awk(
+            awkward.zip(
+                {
+                    "pt": build_dummy_array(len(vec), np.float64),
+                    "eta": build_dummy_array(len(vec), np.float64),
+                    "phi": build_dummy_array(len(vec), np.float64),
+                    "e": build_dummy_array(len(vec), np.float64),
+                }
+            )
+        )
+    else:
+        clsid = awkward.unflatten(ypred["cls_id"], cs)
+        msk = clsid != 0
+        p4 = awkward.unflatten(ypred["p4"], cs)
+
+        vec = vector.awk(
+            awkward.zip(
+                {
+                    "pt": p4[msk][:, :, 0],
+                    "eta": p4[msk][:, :, 1],
+                    "phi": p4[msk][:, :, 2],
+                    "e": p4[msk][:, :, 3],
+                }
+            )
+        )
+
+    cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+    jets_coll["pred"] = cluster.inclusive_jets(min_pt=jet_ptcut)
+
+    gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
+    gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
+
+    matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
+
+    awkvals = {
+        "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
+        "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ycand.keys()} for b in np.unique(batch_ids)]),
+        "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ypred.keys()} for b in np.unique(batch_ids)]),
+    }
+
+    awkward.to_parquet(
+        awkward.Array(
+            {
+                "inputs": Xs,
+                "particles": awkvals,
+                "jets": jets_coll,
+                "matched_jets": matched_jets,
+            }
+        ),
+        f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
+    )
+    _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
+
+
 @torch.no_grad()
 def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=5.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
@@ -46,112 +148,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 
     ti = time.time()
     for i, batch in iterator:
-        if conv_type != "gravnet":
-            X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
-            batch_pad = Batch(X=X_pad, mask=mask).to(rank)
-            ypred = model(batch_pad.X, batch_pad.mask)
-            ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
-        else:
-            _batch = batch.to(rank)
-            ypred = model(_batch.X, _batch.batch)
-
-        ygen = unpack_target(batch.ygen)
-        ycand = unpack_target(batch.ycand)
-        ypred = unpack_predictions(ypred)
-
-        for k, v in ygen.items():
-            ygen[k] = v.detach().cpu()
-        for k, v in ycand.items():
-            ycand[k] = v.detach().cpu()
-        for k, v in ypred.items():
-            ypred[k] = v.detach().cpu()
-
-        # loop over the batch to disentangle the events
-        batch_ids = batch.batch.cpu().numpy()
-
-        jets_coll = {}
-        Xs, p4s = [], {"gen": [], "cand": [], "pred": []}
-        for _ibatch in np.unique(batch_ids):
-            msk_batch = batch_ids == _ibatch
-
-            Xs.append(batch.X[msk_batch].cpu().numpy())
-
-            # mask nulls for jet reconstruction
-            msk = (ygen["cls_id"][msk_batch] != 0).numpy()
-            p4s["gen"].append(ygen["p4"][msk_batch][msk].numpy())
-
-            msk = (ycand["cls_id"][msk_batch] != 0).numpy()
-            p4s["cand"].append(ycand["p4"][msk_batch][msk].numpy())
-
-            msk = (ypred["cls_id"][msk_batch] != 0).numpy()
-            p4s["pred"].append(ypred["p4"][msk_batch][msk].numpy())
-
-        Xs = awkward.from_iter(Xs)
-
-        for typ in ["gen", "cand"]:
-            vec = vector.awk(
-                awkward.zip(
-                    {
-                        "pt": awkward.from_iter(p4s[typ])[:, :, 0],
-                        "eta": awkward.from_iter(p4s[typ])[:, :, 1],
-                        "phi": awkward.from_iter(p4s[typ])[:, :, 2],
-                        "e": awkward.from_iter(p4s[typ])[:, :, 3],
-                    }
-                )
-            )
-            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-            jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
-
-        # in case of no predicted particles in the batch
-        if torch.sum(ypred["cls_id"] != 0) == 0:
-            vec = vector.awk(
-                awkward.zip(
-                    {
-                        "pt": build_dummy_array(len(p4s["pred"]), np.float64),
-                        "eta": build_dummy_array(len(p4s["pred"]), np.float64),
-                        "phi": build_dummy_array(len(p4s["pred"]), np.float64),
-                        "e": build_dummy_array(len(p4s["pred"]), np.float64),
-                    }
-                )
-            )
-        else:
-            vec = vector.awk(
-                awkward.zip(
-                    {
-                        "pt": awkward.from_iter(p4s["pred"])[:, :, 0],
-                        "eta": awkward.from_iter(p4s["pred"])[:, :, 1],
-                        "phi": awkward.from_iter(p4s["pred"])[:, :, 2],
-                        "e": awkward.from_iter(p4s["pred"])[:, :, 3],
-                    }
-                )
-            )
-
-        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets_coll["pred"] = cluster.inclusive_jets(min_pt=jet_ptcut)
-
-        gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
-        gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
-
-        matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
-
-        awkvals = {
-            "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-            "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ycand.keys()} for b in np.unique(batch_ids)]),
-            "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ypred.keys()} for b in np.unique(batch_ids)]),
-        }
-
-        awkward.to_parquet(
-            awkward.Array(
-                {
-                    "inputs": Xs,
-                    "particles": awkvals,
-                    "jets": jets_coll,
-                    "matched_jets": matched_jets,
-                }
-            ),
-            f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
-        )
-        _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
+        predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 

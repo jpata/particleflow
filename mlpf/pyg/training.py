@@ -46,7 +46,21 @@ from utils import create_comet_experiment
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
-ISTEP_GLOBAL = 0
+
+def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
+    # create normalized random basis vectors
+    theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
+    theta = theta / torch.sqrt(torch.sum(theta**2, axis=1, keepdims=True))
+
+    # project the features with the random basis
+    A = torch.matmul(y_true, torch.transpose(theta, -1, -2))
+    B = torch.matmul(y_pred, torch.transpose(theta, -1, -2))
+
+    A_sorted = torch.sort(A, axis=-2).values
+    B_sorted = torch.sort(B, axis=-2).values
+
+    ret = torch.sqrt(torch.sum(torch.pow(A_sorted - B_sorted, 2), axis=[-1, -2]))
+    return ret
 
 
 def mlpf_loss(y, ypred):
@@ -56,9 +70,10 @@ def mlpf_loss(y, ypred):
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
     loss = {}
-    loss_obj_id = FocalLoss(gamma=2.0)
+    loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
+    npart = y["pt"].numel()
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     ypred["charge"] = ypred["charge"] * msk_true_particle
@@ -70,12 +85,37 @@ def mlpf_loss(y, ypred):
         ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
         ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
-    loss["Classification"] = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"])
+    loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_charge = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
-    loss["Regression"] = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"])
-    loss["Charge"] = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64))
+    loss["Classification"] = loss_classification.sum() / npart
+    loss["Regression"] = loss_regression.sum() / npart
+    loss["Charge"] = loss_charge.sum() / npart
+
+    # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
+    if len(msk_true_particle.shape) == 3:
+        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_true_particle
+        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_true_particle
+        pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+
+        px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
+        py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
+        true_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+        loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
+        loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
+
+    # Keep track of loss components for each true particle type
+    for icls in range(0, 7):
+        loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
+        loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
+
+    loss["Classification"] = loss["Classification"].detach()
+    loss["Regression"] = loss["Regression"].detach()
+    loss["Charge"] = loss["Charge"].detach()
+
     return loss
 
 
@@ -175,7 +215,7 @@ def train_and_valid(
     _logger.info(f"Initiating epoch #{epoch} {train_or_valid} run on device rank={rank}", color="red")
 
     # this one will keep accumulating `train_loss` and then return the average
-    epoch_loss = {"Total": 0.0, "Classification": 0.0, "Regression": 0.0, "Charge": 0.0}
+    epoch_loss = {}
 
     if is_train:
         model.train()
@@ -218,7 +258,9 @@ def train_and_valid(
             if lr_schedule:
                 lr_schedule.step()
 
-        for loss_ in epoch_loss:
+        for loss_ in loss.keys():
+            if loss_ not in epoch_loss:
+                epoch_loss[loss_] = 0.0
             epoch_loss[loss_] += loss[loss_].detach()
 
         if comet_experiment and is_train:

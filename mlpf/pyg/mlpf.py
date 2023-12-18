@@ -42,7 +42,7 @@ class SelfAttentionLayer(nn.Module):
 
 
 class MambaLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, d_state=16, d_conv=4, expand=2):
+    def __init__(self, embedding_dim=128, width=128, dropout=0.1, d_state=16, d_conv=4, expand=2):
         super(MambaLayer, self).__init__()
         self.act = nn.ELU
         from mamba_ssm import Mamba
@@ -144,8 +144,8 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
-                    self.conv_reg.append(MambaLayer(embedding_dim, num_heads, width, dropout, d_state, d_conv, expand))
+                    self.conv_id.append(MambaLayer(embedding_dim, width, dropout, d_state, d_conv, expand))
+                    self.conv_reg.append(MambaLayer(embedding_dim, width, dropout, d_state, d_conv, expand))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
