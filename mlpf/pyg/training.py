@@ -464,11 +464,11 @@ def run(rank, world_size, config, args, outdir, logfile):
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
         for k in model.state_dict().keys():
-            shp0 = model.state_dict()[k].shape 
+            shp0 = model.state_dict()[k].shape
             shp1 = checkpoint["model_state_dict"][k].shape
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
-    
+
         testdir_name = "_" + Path(config["load"]).name
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")

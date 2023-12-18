@@ -10,7 +10,7 @@ patience: 20
 lr: 0.001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gravnet
-ntrain: 10000 
+ntrain: 10000
 ntest: 1000
 nvalid: 1000
 num_workers: 0
