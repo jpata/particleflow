@@ -15,10 +15,11 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 
 # CMS
 # $CMD mlpf/heptfds/cms_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ttbar.log &
-$CMD mlpf/heptfds/cms_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd.log &
-$CMD mlpf/heptfds/cms_pf/ztt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log &
-$CMD mlpf/heptfds/cms_pf/qcd_high_pt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd_high_pt.log &
-$CMD mlpf/heptfds/cms_pf/smst1tttt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_smst1tttt.log &
+#$CMD mlpf/heptfds/cms_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd.log &
+#$CMD mlpf/heptfds/cms_pf/ztt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log &
+#$CMD mlpf/heptfds/cms_pf/qcd_high_pt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd_high_pt.log &
+#$CMD mlpf/heptfds/cms_pf/smst1tttt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_smst1tttt.log &
+$CMD mlpf/heptfds/cms_pf/vbf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_vbf.log &
 $CMD mlpf/heptfds/cms_pf/singlepi0 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singlepi0.log &
 $CMD mlpf/heptfds/cms_pf/singleneutron --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singleneutron.log &
 $CMD mlpf/heptfds/cms_pf/singleele --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singleele.log &
@@ -27,7 +28,7 @@ $CMD mlpf/heptfds/cms_pf/singlemu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/
 $CMD mlpf/heptfds/cms_pf/singlepi --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singlepi.log &
 $CMD mlpf/heptfds/cms_pf/singleproton --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singleproton.log &
 $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singletau.log &
-$CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
+#$CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
 wait
 
 # CLIC cluster-based
