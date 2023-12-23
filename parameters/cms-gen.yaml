@@ -5,7 +5,7 @@ cache: caches/cms_gen
 dataset:
   schema: cms
   target_particles: gen
-  num_input_features: 42
+  num_input_features: 55
 #       NONE = 0,
 #       TRACK = 1,
 #       PS1 = 2,
@@ -231,6 +231,7 @@ train_test_datasets:
       - cms_pf_qcd
       - cms_pf_qcd_high_pt
       - cms_pf_sms_t1tttt
+      - cms_pf_vbf
   gun:
     batch_per_gpu: 50
     event_pad_size: -1
@@ -245,11 +246,17 @@ train_test_datasets:
       - cms_pf_single_proton
 
 evaluation_datasets:
+  cms_pf_ttbar:
+    batch_size: 5
+    num_events: 5000
   cms_pf_qcd_high_pt:
     batch_size: 5
     num_events: 5000
-  cms_pf_single_neutron:
-    batch_size: 100
+  cms_pf_ztt:
+    batch_size: 5
+    num_events: 5000
+  cms_pf_qcd:
+    batch_size: 5
     num_events: 5000
 
 validation_dataset: cms_pf_qcd_high_pt
@@ -260,58 +267,62 @@ evaluation_jet_algo: antikt_algorithm
 
 datasets:
   cms_pf_ttbar:
-    version: 1.6.0
+    version: 2.0.0
+    data_dir:
+    manual_dir:
+  cms_pf_vbf:
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_electron:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_gamma:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_pi0:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_neutron:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_pi:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_tau:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_mu:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_single_proton:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_multi_particle_gun:
-    version: 1.6.1
+    version: 2.0.0
     data_dir:
     manual_dir:
   cms_pf_sms_t1tttt:
-    version: 1.6.0
+    version: 2.0.0
     data_dir:
     manual_dir:

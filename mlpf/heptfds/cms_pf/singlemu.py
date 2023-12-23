@@ -61,7 +61,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleMuFlatLogPt_100MeVto2TeV_cfi"
+        sample_dir = "SingleMuFlatPt1To1000_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):
