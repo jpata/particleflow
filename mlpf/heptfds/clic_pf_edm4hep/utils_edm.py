@@ -2,6 +2,7 @@ import awkward as ak
 import fastjet
 import numpy as np
 import vector
+import random
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
 min_jet_pt = 5.0  # GeV
@@ -65,29 +66,23 @@ def split_sample(path, test_frac=0.8):
 
 
 def split_sample_several(paths, test_frac=0.8):
-    files_train_tot = []
-    files_test_tot = []
-    for path in paths:
-        files = sorted(list(path.glob("*.parquet")))
-        print("Found {} files in {}".format(files, path))
-        assert len(files) > 0
-        idx_split = int(test_frac * len(files))
-        files_train = files[:idx_split]
-        files_test = files[idx_split:]
-        assert len(files_train) > 0
-        assert len(files_test) > 0
-        files_train_tot.append(files_train)
-        files_test_tot.append(files_test)
-
+    files = sum([list(path.glob("*.parquet")) for path in paths], [])
+    random.shuffle(files)
+    print("Found {} files".format(len(files)))
+    assert len(files) > 0
+    idx_split = int(test_frac * len(files))
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
+    assert len(files_train) > 0
+    assert len(files_test) > 0
     return {
-        "train": generate_examples(files_train_tot),
-        "test": generate_examples(files_test_tot),
+        "train": generate_examples(files_train),
+        "test": generate_examples(files_test),
     }
 
 
 def prepare_data_clic(fn, with_jet_idx=True):
     ret = ak.from_parquet(fn)
-
     X_track = ret["X_track"]
     X_cluster = ret["X_cluster"]
 
@@ -194,6 +189,7 @@ def prepare_data_clic(fn, with_jet_idx=True):
 
 def generate_examples(files, with_jet_idx=True):
     for fi in files:
+        print(fi)
         Xs, ygens, ycands = prepare_data_clic(fi, with_jet_idx=with_jet_idx)
         for iev in range(len(Xs)):
             yield str(fi) + "_" + str(iev), {
@@ -204,5 +200,5 @@ def generate_examples(files, with_jet_idx=True):
 
 
 if __name__ == "__main__":
-    for ex in generate_examples(["data/p8_ee_ZZ_fullhad_ecm365/reco_p8_ee_ZZ_fullhad_ecm365_1.parquet"]):
+    for ex in generate_examples(["/local/joosep/mlpf/clic_edm4hep/pi+/reco_pi+_98.parquet", "/local/joosep/mlpf/clic_edm4hep/pi-/reco_pi-_11.parquet"]):
         print(ex[0], ex[1]["X"].shape, ex[1]["ygen"].shape, ex[1]["ycand"].shape)

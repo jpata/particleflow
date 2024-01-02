@@ -6,6 +6,7 @@ import glob
 import os
 import sys
 import multiprocessing
+import tqdm
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -454,7 +455,7 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
 
     mask_visible = (gen_features["energy"] > 0.01) & gp_interacted_with_detector
-    print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
+    # print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
@@ -702,6 +703,7 @@ def process_one_file(fn, ofn):
         print("{} exists".format(ofn))
         return
 
+    print("loading {}".format(fn))
     fi = uproot.open(fn)
 
     arrs = fi["events"]
@@ -744,7 +746,7 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
-    for iev in range(arrs.num_entries):
+    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -835,7 +837,7 @@ def process_one_file(fn, ofn):
 
         sanitize(X_track)
         sanitize(X_cluster)
-        print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
+        # print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
         sanitize(ygen_track)
         sanitize(ygen_cluster)
         sanitize(ycand_track)
@@ -861,7 +863,7 @@ def process_sample(sample):
     inp = "/local/joosep/clic_edm4hep/"
     outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
 
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(4)
 
     inpath_samp = inp + sample
     outpath_samp = outp + sample
@@ -869,6 +871,9 @@ def process_sample(sample):
     if not os.path.isdir(outpath_samp):
         os.makedirs(outpath_samp)
 
+    #for inf in infiles:
+    #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
+    #    process_one_file(inf, of)
     args = []
     for inf in infiles:
         of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")

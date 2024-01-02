@@ -6,7 +6,7 @@ from utils_edm import (
     X_FEATURES_TRK,
     Y_FEATURES,
     generate_examples,
-    split_sample,
+    split_sample_several,
 )
 
 import tensorflow_datasets as tfds
@@ -72,7 +72,7 @@ class ClicEdmSinglePiPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "pi-/"))
+        return split_sample_several([Path(path / "pi-/"), Path(path / "pi+/")])
 
     def _generate_examples(self, files):
         return generate_examples(files)
