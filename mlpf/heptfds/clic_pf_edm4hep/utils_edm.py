@@ -200,5 +200,10 @@ def generate_examples(files, with_jet_idx=True):
 
 
 if __name__ == "__main__":
-    for ex in generate_examples(["/local/joosep/mlpf/clic_edm4hep/pi+/reco_pi+_98.parquet", "/local/joosep/mlpf/clic_edm4hep/pi-/reco_pi-_11.parquet"]):
+    for ex in generate_examples(
+        [
+            "/local/joosep/mlpf/clic_edm4hep/pi+/reco_pi+_98.parquet",
+            "/local/joosep/mlpf/clic_edm4hep/pi-/reco_pi-_11.parquet",
+        ]
+    ):
         print(ex[0], ex[1]["X"].shape, ex[1]["ygen"].shape, ex[1]["ycand"].shape)

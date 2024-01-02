@@ -871,7 +871,7 @@ def process_sample(sample):
     if not os.path.isdir(outpath_samp):
         os.makedirs(outpath_samp)
 
-    #for inf in infiles:
+    # for inf in infiles:
     #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
     #    process_one_file(inf, of)
     args = []
