@@ -204,11 +204,11 @@ def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
     )
 
     # add all edges from genparticle to calohit
-    calohit_to_gen_weight = calohit_links["CalohitMCTruthLink"]["CalohitMCTruthLink.weight"][iev]
-    calohit_to_gen_calo_colid = calohit_links["CalohitMCTruthLink#0"]["CalohitMCTruthLink#0.collectionID"][iev]
-    calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1"]["CalohitMCTruthLink#1.collectionID"][iev]
-    calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0"]["CalohitMCTruthLink#0.index"][iev]
-    calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1"]["CalohitMCTruthLink#1.index"][iev]
+    calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
+    calohit_to_gen_calo_colid = calohit_links["CalohitMCTruthLink#0.collectionID"][iev]
+    calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1.collectionID"][iev]
+    calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
+    calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
     genparticle_to_hit_matrix_coo0 = []
     genparticle_to_hit_matrix_coo1 = []
     genparticle_to_hit_matrix_w = []
@@ -727,7 +727,15 @@ def process_one_file(fn, ofn):
             "MergedRecoParticles",
         ]
     )
-    calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
+    calohit_links = arrs.arrays(
+        [
+            "CalohitMCTruthLink.weight",
+            "CalohitMCTruthLink#0.index",
+            "CalohitMCTruthLink#0.collectionID",
+            "CalohitMCTruthLink#1.index",
+            "CalohitMCTruthLink#1.collectionID",
+        ]
+    )
     sitrack_links = arrs.arrays(
         [
             "SiTracksMCTruthLink.weight",
