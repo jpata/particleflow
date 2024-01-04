@@ -293,9 +293,9 @@ def gen_to_features(prop_data, iev):
 
 
 def genparticle_track_adj(sitrack_links, iev):
-    trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0"]["SiTracksMCTruthLink#0.index"][iev]
-    trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1"]["SiTracksMCTruthLink#1.index"][iev]
-    trk_to_gen_w = sitrack_links["SiTracksMCTruthLink"]["SiTracksMCTruthLink.weight"][iev]
+    trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
+    trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
+    trk_to_gen_w = sitrack_links["SiTracksMCTruthLink.weight"][iev]
 
     genparticle_to_track_matrix_coo0 = awkward.to_numpy(trk_to_gen_genidx)
     genparticle_to_track_matrix_coo1 = awkward.to_numpy(trk_to_gen_trkidx)
@@ -728,7 +728,15 @@ def process_one_file(fn, ofn):
         ]
     )
     calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
-    sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
+    sitrack_links = arrs.arrays(
+        [
+            "SiTracksMCTruthLink.weight",
+            "SiTracksMCTruthLink#0.index",
+            "SiTracksMCTruthLink#0.collectionID",
+            "SiTracksMCTruthLink#1.index",
+            "SiTracksMCTruthLink#1.collectionID",
+        ]
+    )
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection
