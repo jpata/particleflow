@@ -61,7 +61,7 @@ inp.collections = [
     "BeamCalCollection",
     "BeamCalCollectionContributions",
 ]
-inp.OutputLevel = DEBUG
+inp.OutputLevel = INFO
 
 
 MyAIDAProcessor = MarlinProcessorWrapper("MyAIDAProcessor")
@@ -72,7 +72,7 @@ MyAIDAProcessor.Parameters = {"Compress": ["1"], "FileName": ["histograms"], "Fi
 # EDM4hep to LCIO converter
 edmConvTool = EDM4hep2LcioTool("EDM4hep2lcio")
 edmConvTool.convertAll = True
-edmConvTool.OutputLevel = DEBUG
+edmConvTool.OutputLevel = INFO
 MyAIDAProcessor.EDM4hep2LcioTool = edmConvTool
 
 
@@ -132,7 +132,7 @@ VXDBarrelDigitiserLCIOConv.collNameMapping = {
     "VXDTrackerHits": "VXDTrackerHits",
     "VXDTrackerHitRelations": "VXDTrackerHitRelations",
 }
-VXDBarrelDigitiserLCIOConv.OutputLevel = DEBUG
+VXDBarrelDigitiserLCIOConv.OutputLevel = INFO
 # Add it to VXDBarrelDigitiser Algorithm
 VXDBarrelDigitiser.Lcio2EDM4hepTool = VXDBarrelDigitiserLCIOConv
 
@@ -158,7 +158,7 @@ VXDEndcapDigitiserLCIOConv.collNameMapping = {
     "VXDEndcapTrackerHits": "VXDEndcapTrackerHits",
     "VXDEndcapTrackerHitRelations": "VXDEndcapTrackerHitRelations",
 }
-VXDEndcapDigitiserLCIOConv.OutputLevel = DEBUG
+VXDEndcapDigitiserLCIOConv.OutputLevel = INFO
 # Add it to VXDEndcapDigitiser Algorithm
 VXDEndcapDigitiser.Lcio2EDM4hepTool = VXDEndcapDigitiserLCIOConv
 
@@ -184,7 +184,7 @@ InnerPlanarDigiProcessorLCIOConv.collNameMapping = {
     "ITrackerHits": "ITrackerHits",
     "InnerTrackerBarrelHitsRelations": "InnerTrackerBarrelHitsRelations",
 }
-InnerPlanarDigiProcessorLCIOConv.OutputLevel = DEBUG
+InnerPlanarDigiProcessorLCIOConv.OutputLevel = INFO
 # Add it to InnerPlanarDigiProcessor Algorithm
 InnerPlanarDigiProcessor.Lcio2EDM4hepTool = InnerPlanarDigiProcessorLCIOConv
 
@@ -209,7 +209,7 @@ InnerEndcapPlanarDigiProcessorLCIOConv.collNameMapping = {
     "ITrackerEndcapHits": "ITrackerEndcapHits",
     "InnerTrackerEndcapHitsRelations": "InnerTrackerEndcapHitsRelations",
 }
-InnerEndcapPlanarDigiProcessorLCIOConv.OutputLevel = DEBUG
+InnerEndcapPlanarDigiProcessorLCIOConv.OutputLevel = INFO
 # Add it to InnerEndcapPlanarDigiProcessor Algorithm
 InnerEndcapPlanarDigiProcessor.Lcio2EDM4hepTool = InnerEndcapPlanarDigiProcessorLCIOConv
 
@@ -234,7 +234,7 @@ OuterPlanarDigiProcessorLCIOConv.collNameMapping = {
     "OTrackerHits": "OTrackerHits",
     "OuterTrackerBarrelHitsRelations": "OuterTrackerBarrelHitsRelations",
 }
-OuterPlanarDigiProcessorLCIOConv.OutputLevel = DEBUG
+OuterPlanarDigiProcessorLCIOConv.OutputLevel = INFO
 # Add it to OuterPlanarDigiProcessor Algorithm
 OuterPlanarDigiProcessor.Lcio2EDM4hepTool = OuterPlanarDigiProcessorLCIOConv
 
@@ -259,7 +259,7 @@ OuterEndcapPlanarDigiProcessorLCIOConv.collNameMapping = {
     "OTrackerEndcapHits": "OTrackerEndcapHits",
     "OuterTrackerEndcapHitsRelations": "OuterTrackerEndcapHitsRelations",
 }
-OuterEndcapPlanarDigiProcessorLCIOConv.OutputLevel = DEBUG
+OuterEndcapPlanarDigiProcessorLCIOConv.OutputLevel = INFO
 # Add it to OuterEndcapPlanarDigiProcessor Algorithm
 OuterEndcapPlanarDigiProcessor.Lcio2EDM4hepTool = OuterEndcapPlanarDigiProcessorLCIOConv
 
@@ -543,7 +543,7 @@ MyConformalTrackingLCIOConv.collNameMapping = {
     "DebugHits": "DebugHits",
     "SiTracksCT": "SiTracksCT",
 }
-MyConformalTrackingLCIOConv.OutputLevel = DEBUG
+MyConformalTrackingLCIOConv.OutputLevel = INFO
 # Add it to MyConformalTracking Algorithm
 MyConformalTracking.Lcio2EDM4hepTool = MyConformalTrackingLCIOConv
 
@@ -568,7 +568,7 @@ ClonesAndSplitTracksFinder.Parameters = {
 ClonesAndSplitTracksFinderLCIOConv = Lcio2EDM4hepTool("ClonesAndSplitTracksFinderLCIOConv")
 ClonesAndSplitTracksFinderLCIOConv.convertAll = False
 ClonesAndSplitTracksFinderLCIOConv.collNameMapping = {"SiTracks": "SiTracks"}
-ClonesAndSplitTracksFinderLCIOConv.OutputLevel = DEBUG
+ClonesAndSplitTracksFinderLCIOConv.OutputLevel = INFO
 # Add it to ClonesAndSplitTracksFinder Algorithm
 ClonesAndSplitTracksFinder.Lcio2EDM4hepTool = ClonesAndSplitTracksFinderLCIOConv
 
@@ -593,7 +593,7 @@ Refit.Parameters = {
 RefitLCIOConv = Lcio2EDM4hepTool("Refit")
 RefitLCIOConv.convertAll = False
 RefitLCIOConv.collNameMapping = {"SiTracks_Refitted": "SiTracks_Refitted"}
-RefitLCIOConv.OutputLevel = DEBUG
+RefitLCIOConv.OutputLevel = INFO
 # Add it to RefitLCIOConv Algorithm
 Refit.Lcio2EDM4hepTool = RefitLCIOConv
 
@@ -633,7 +633,7 @@ MyClicEfficiencyCalculator.Parameters = {
 MyClicEfficiencyCalculatorLCIOConv = Lcio2EDM4hepTool("MyClicEfficiencyCalculator")
 MyClicEfficiencyCalculatorLCIOConv.convertAll = False
 MyClicEfficiencyCalculatorLCIOConv.collNameMapping = {"MCParticleNotReco": "MCParticleNotReco"}
-MyClicEfficiencyCalculatorLCIOConv.OutputLevel = DEBUG
+MyClicEfficiencyCalculatorLCIOConv.OutputLevel = INFO
 # Add it to MyClicEfficiencyCalculatorLCIOConv Algorithm
 MyClicEfficiencyCalculator.Lcio2EDM4hepTool = MyClicEfficiencyCalculatorLCIOConv
 
@@ -749,7 +749,7 @@ MyDDCaloDigiLCIOConv.collNameMapping = {
     "HCALOther": "HCALOther",
     "RelationCaloHit": "RelationCaloHit",
 }
-MyDDCaloDigiLCIOConv.OutputLevel = DEBUG
+MyDDCaloDigiLCIOConv.OutputLevel = INFO
 # Add it to MyDDCaloDigi Algorithm
 MyDDCaloDigi.Lcio2EDM4hepTool = MyDDCaloDigiLCIOConv
 
@@ -889,7 +889,7 @@ MyDDMarlinPandoraLCIOConv.collNameMapping = {
     "PandoraPFOs": "PandoraPFOs",
     "PandoraStartVertices": "PandoraStartVertices",
 }
-MyDDMarlinPandoraLCIOConv.OutputLevel = DEBUG
+MyDDMarlinPandoraLCIOConv.OutputLevel = INFO
 # Add it to MyDDMarlinPandora Algorithm
 MyDDMarlinPandora.Lcio2EDM4hepTool = MyDDMarlinPandoraLCIOConv
 
@@ -909,7 +909,7 @@ MyDDSimpleMuonDigi.Parameters = {
 MyDDSimpleMuonDigiLCIOConv = Lcio2EDM4hepTool("MyDDSimpleMuonDigiLCIOConv")
 MyDDSimpleMuonDigiLCIOConv.convertAll = False
 MyDDSimpleMuonDigiLCIOConv.collNameMapping = {"MUON": "MUON", "RelationMuonHit": "RelationMuonHit"}
-MyDDSimpleMuonDigiLCIOConv.OutputLevel = DEBUG
+MyDDSimpleMuonDigiLCIOConv.OutputLevel = INFO
 # Add it to MyDDSimpleMuonDigi Algorithm
 MyDDSimpleMuonDigi.Lcio2EDM4hepTool = MyDDSimpleMuonDigiLCIOConv
 
@@ -978,7 +978,7 @@ MyRecoMCTruthLinkerLCIOConv.collNameMapping = {
     "RecoMCTruthLink": "RecoMCTruthLink",
     "SiTracksMCTruthLink": "SiTracksMCTruthLink",
 }
-MyRecoMCTruthLinkerLCIOConv.OutputLevel = DEBUG
+MyRecoMCTruthLinkerLCIOConv.OutputLevel = INFO
 # Add it to MyRecoMCTruthLinker Algorithm
 MyRecoMCTruthLinker.Lcio2EDM4hepTool = MyRecoMCTruthLinkerLCIOConv
 
@@ -1023,7 +1023,7 @@ LumiCalReco_Obs.Parameters = {
 }
 
 LumiCalReco = MarlinProcessorWrapper("LumiCalReco")
-LumiCalReco.OutputLevel = DEBUG
+LumiCalReco.OutputLevel = INFO
 LumiCalReco.ProcessorType = "BeamCalClusterReco"
 LumiCalReco.Parameters = {
     "BackgroundMethod": ["Empty"],
@@ -1062,7 +1062,7 @@ LumiCalRecoLCIOConv.collNameMapping = {
     "LumiCalClusters": "LumiCalClusters",
     "LumiCalRecoParticles": "LumiCalRecoParticles",
 }
-LumiCalRecoLCIOConv.OutputLevel = DEBUG
+LumiCalRecoLCIOConv.OutputLevel = INFO
 # Add it to LumiCalReco Algorithm
 LumiCalReco.Lcio2EDM4hepTool = LumiCalRecoLCIOConv
 
@@ -1082,7 +1082,7 @@ RenameCollectionLCIOConv.convertAll = False
 RenameCollectionLCIOConv.collNameMapping = {
     "PFOsFromJets": "PFOsFromJets",
 }
-RenameCollectionLCIOConv.OutputLevel = DEBUG
+RenameCollectionLCIOConv.OutputLevel = INFO
 # Add it to RenameCollection Algorithm
 RenameCollection.Lcio2EDM4hepTool = RenameCollectionLCIOConv
 
@@ -1101,7 +1101,7 @@ MyFastJetProcessor.Parameters = {
 }
 
 OverlayFalse = MarlinProcessorWrapper("OverlayFalse")
-OverlayFalse.OutputLevel = DEBUG
+OverlayFalse.OutputLevel = INFO
 OverlayFalse.ProcessorType = "OverlayTimingGeneric"
 OverlayFalse.Parameters = {
     "BackgroundFileNames": [],
@@ -1153,7 +1153,7 @@ OverlayFalse.Parameters = {
 OverlayFalseLCIOConv = Lcio2EDM4hepTool("OverlayFalseLCIOConv")
 OverlayFalseLCIOConv.convertAll = False
 OverlayFalseLCIOConv.collNameMapping = {"MCPhysicsParticles": "MCPhysicsParticles"}
-OverlayFalseLCIOConv.OutputLevel = DEBUG
+OverlayFalseLCIOConv.OutputLevel = INFO
 # Add it to OverlayFalse Algorithm
 OverlayFalse.Lcio2EDM4hepTool = OverlayFalseLCIOConv
 
@@ -1721,7 +1721,7 @@ MergeRP.Parameters = {
 MergeRPLCIOConv = Lcio2EDM4hepTool("MergeRPLCIOConv")
 MergeRPLCIOConv.convertAll = False
 MergeRPLCIOConv.collNameMapping = {"MergedRecoParticles": "MergedRecoParticles"}
-MergeRPLCIOConv.OutputLevel = DEBUG
+MergeRPLCIOConv.OutputLevel = INFO
 # Add it to MergeRP Algorithm
 MergeRP.Lcio2EDM4hepTool = MergeRPLCIOConv
 
@@ -1739,7 +1739,7 @@ MergeClusters.Parameters = {
 MergeClustersLCIOConv = Lcio2EDM4hepTool("MergeClustersLCIOConv")
 MergeClustersLCIOConv.convertAll = False
 MergeClustersLCIOConv.collNameMapping = {"MergedClusters": "MergedClusters"}
-MergeClustersLCIOConv.OutputLevel = DEBUG
+MergeClustersLCIOConv.OutputLevel = INFO
 # Add it to MergeClusters Algorithm
 MergeClusters.Lcio2EDM4hepTool = MergeClustersLCIOConv
 
@@ -1858,7 +1858,7 @@ CLICPfoSelectorDefault_HE.Parameters = {
 CLICPfoSelectorDefault_HELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorDefault_HELCIOConv")
 CLICPfoSelectorDefault_HELCIOConv.convertAll = False
 CLICPfoSelectorDefault_HELCIOConv.collNameMapping = {"SelectedPandoraPFOs": "SelectedPandoraPFOs"}
-CLICPfoSelectorDefault_HELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorDefault_HELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorDefault_HE Algorithm
 CLICPfoSelectorDefault_HE.Lcio2EDM4hepTool = CLICPfoSelectorDefault_HELCIOConv
 
@@ -1917,7 +1917,7 @@ CLICPfoSelectorLoose_HE.Parameters = {
 CLICPfoSelectorLoose_HELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorLoose_HELCIOConv")
 CLICPfoSelectorLoose_HELCIOConv.convertAll = False
 CLICPfoSelectorLoose_HELCIOConv.collNameMapping = {"CLICPfoSelectorLoose_HE": "CLICPfoSelectorLoose_HE"}
-CLICPfoSelectorLoose_HELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorLoose_HELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorLoose_HE Algorithm
 CLICPfoSelectorLoose_HE.Lcio2EDM4hepTool = CLICPfoSelectorLoose_HELCIOConv
 
@@ -1976,7 +1976,7 @@ CLICPfoSelectorTight_HE.Parameters = {
 CLICPfoSelectorTight_HELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorTight_HELCIOConv")
 CLICPfoSelectorTight_HELCIOConv.convertAll = False
 CLICPfoSelectorTight_HELCIOConv.collNameMapping = {"TightSelectedPandoraPFOs": "TightSelectedPandoraPFOs"}
-CLICPfoSelectorTight_HELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorTight_HELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorTight_HE Algorithm
 CLICPfoSelectorTight_HE.Lcio2EDM4hepTool = CLICPfoSelectorTight_HELCIOConv
 
@@ -2035,7 +2035,7 @@ CLICPfoSelectorDefault_LE.Parameters = {
 CLICPfoSelectorDefault_LELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorDefault_LELCIOConv")
 CLICPfoSelectorDefault_LELCIOConv.convertAll = False
 CLICPfoSelectorDefault_LELCIOConv.collNameMapping = {"LE_SelectedPandoraPFOs": "LE_SelectedPandoraPFOs"}
-CLICPfoSelectorDefault_LELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorDefault_LELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorDefault_LE Algorithm
 CLICPfoSelectorDefault_LE.Lcio2EDM4hepTool = CLICPfoSelectorDefault_LELCIOConv
 
@@ -2094,7 +2094,7 @@ CLICPfoSelectorLoose_LE.Parameters = {
 CLICPfoSelectorLoose_LELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorLoose_LELCIOConv")
 CLICPfoSelectorLoose_LELCIOConv.convertAll = False
 CLICPfoSelectorLoose_LELCIOConv.collNameMapping = {"LE_LooseSelectedPandoraPFOs": "LE_LooseSelectedPandoraPFOs"}
-CLICPfoSelectorLoose_LELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorLoose_LELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorLoose_LE Algorithm
 CLICPfoSelectorLoose_LE.Lcio2EDM4hepTool = CLICPfoSelectorLoose_LELCIOConv
 
@@ -2153,7 +2153,7 @@ CLICPfoSelectorTight_LE.Parameters = {
 CLICPfoSelectorTight_LELCIOConv = Lcio2EDM4hepTool("CLICPfoSelectorTight_LELCIOConv")
 CLICPfoSelectorTight_LELCIOConv.convertAll = False
 CLICPfoSelectorTight_LELCIOConv.collNameMapping = {"LE_TightSelectedPandoraPFOs": "LE_TightSelectedPandoraPFOs"}
-CLICPfoSelectorTight_LELCIOConv.OutputLevel = DEBUG
+CLICPfoSelectorTight_LELCIOConv.OutputLevel = INFO
 # Add it to CLICPfoSelectorTight_LE Algorithm
 CLICPfoSelectorTight_LE.Lcio2EDM4hepTool = CLICPfoSelectorTight_LELCIOConv
 
@@ -2219,7 +2219,7 @@ VertexFinderLCIOConv.collNameMapping = {
     "BuildUpVertices": "BuildUpVertices",
     "PrimaryVertices": "PrimaryVertices",
 }
-VertexFinderLCIOConv.OutputLevel = DEBUG
+VertexFinderLCIOConv.OutputLevel = INFO
 # Add it to VertexFinder Algorithm
 VertexFinder.Lcio2EDM4hepTool = VertexFinderLCIOConv
 
