@@ -18,8 +18,8 @@ singularity exec -B /scratch/persistent --nv \
     $IMG python3.10 mlpf/pipeline.py evaluate \
     --train-dir $EXPDIR --weights $WEIGHTS
 
-#singularity exec -B /scratch/persistent --nv \
-#    --env PYTHONPATH=hep_tfds \
-#    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-#    $IMG python mlpf/pipeline.py plots \
-#    --train-dir $EXPDIR
+singularity exec -B /scratch/persistent --nv \
+    --env PYTHONPATH=hep_tfds \
+    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
+    $IMG python3.10 mlpf/pipeline.py plots \
+    --train-dir $EXPDIR

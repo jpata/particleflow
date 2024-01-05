@@ -439,7 +439,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
-    
+
     physical_devices = tf.config.list_physical_devices("GPU")
     for pd in physical_devices:
         tf.config.experimental.set_memory_growth(pd, True)
@@ -472,7 +472,7 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
-        for split in ["train", "test"]:
+        for split in val_ds["splits"]:
             ds_test = mlpf_dataset_from_config(
                 dsname,
                 config,
@@ -1332,77 +1332,79 @@ def plots(train_dir, max_files):
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir
         for dataset in sorted(os.listdir(str(eval_epoch_dir))):
-            class_names = get_class_names(dataset)
+            for split in sorted(os.listdir(str(eval_epoch_dir / dataset))):
+                dataset_dir = eval_epoch_dir / dataset / split
+                print(dataset_dir)
 
-            _title = format_dataset_name(dataset)
-            dataset_dir = eval_epoch_dir / dataset
-            print(dataset_dir)
-            cp_dir = dataset_dir / "plots"
-            if not os.path.isdir(str(cp_dir)):
-                os.makedirs(str(cp_dir))
-            yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
+                class_names = get_class_names(dataset)
 
-            plot_num_elements(X, cp_dir=cp_dir, title=_title)
-            plot_sum_energy(yvals, class_names, cp_dir=cp_dir, title=_title)
-            plot_particle_multiplicity(X, yvals, class_names, cp_dir=cp_dir, title=_title)
-            plot_rocs(yvals, class_names, cp_dir=cp_dir, title=_title)
+                _title = format_dataset_name(dataset)
+                cp_dir = dataset_dir / "plots"
+                if not os.path.isdir(str(cp_dir)):
+                    os.makedirs(str(cp_dir))
+                yvals, X, _ = load_eval_data(str(dataset_dir / "*.parquet"), max_files)
 
-            plot_jet_ratio(
-                yvals,
-                cp_dir=cp_dir,
-                title=_title,
-                bins=np.linspace(0, 5, 100),
-                logy=True,
-            )
-            plot_jet_ratio(
-                yvals,
-                cp_dir=cp_dir,
-                title=_title,
-                bins=np.linspace(0.5, 1.5, 100),
-                logy=False,
-                file_modifier="_bins_0p5_1p5",
-            )
+                plot_num_elements(X, cp_dir=cp_dir, title=_title)
+                plot_sum_energy(yvals, class_names, cp_dir=cp_dir, title=_title)
+                plot_particle_multiplicity(X, yvals, class_names, cp_dir=cp_dir, title=_title)
+                plot_rocs(yvals, class_names, cp_dir=cp_dir, title=_title)
 
-            met_data = compute_met_and_ratio(yvals)
-            plot_met(met_data, cp_dir=cp_dir, title=_title)
-            plot_met_ratio(
-                met_data,
-                cp_dir=cp_dir,
-                title=_title,
-                bins=np.linspace(0, 20, 100),
-                logy=True,
-            )
-            plot_met_ratio(
-                met_data,
-                cp_dir=cp_dir,
-                title=_title,
-                bins=np.linspace(0, 2, 100),
-                logy=False,
-                file_modifier="_bins_0_2",
-            )
-            plot_met_ratio(
-                met_data,
-                cp_dir=cp_dir,
-                title=_title,
-                bins=np.linspace(0, 5, 100),
-                logy=False,
-                file_modifier="_bins_0_5",
-            )
+                plot_jet_ratio(
+                    yvals,
+                    cp_dir=cp_dir,
+                    title=_title,
+                    bins=np.linspace(0, 5, 100),
+                    logy=True,
+                )
+                plot_jet_ratio(
+                    yvals,
+                    cp_dir=cp_dir,
+                    title=_title,
+                    bins=np.linspace(0.5, 1.5, 100),
+                    logy=False,
+                    file_modifier="_bins_0p5_1p5",
+                )
 
-            plot_particles(yvals, cp_dir=cp_dir, title=_title)
+                met_data = compute_met_and_ratio(yvals)
+                plot_met(met_data, cp_dir=cp_dir, title=_title)
+                plot_met_ratio(
+                    met_data,
+                    cp_dir=cp_dir,
+                    title=_title,
+                    bins=np.linspace(0, 20, 100),
+                    logy=True,
+                )
+                plot_met_ratio(
+                    met_data,
+                    cp_dir=cp_dir,
+                    title=_title,
+                    bins=np.linspace(0, 2, 100),
+                    logy=False,
+                    file_modifier="_bins_0_2",
+                )
+                plot_met_ratio(
+                    met_data,
+                    cp_dir=cp_dir,
+                    title=_title,
+                    bins=np.linspace(0, 5, 100),
+                    logy=False,
+                    file_modifier="_bins_0_5",
+                )
 
-            plot_jet_response_binned(yvals, cp_dir=cp_dir, title=_title)
-            plot_met_response_binned(met_data, cp_dir=cp_dir, title=_title)
+                plot_particles(yvals, cp_dir=cp_dir, title=_title)
 
-            mom_data = compute_3dmomentum_and_ratio(yvals)
-            plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
-            plot_3dmomentum_ratio(
-                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=True, file_modifier="_bins_0_2"
-            )
-            plot_3dmomentum_ratio(
-                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True, file_modifier="_bins_0_5"
-            )
-            plot_3dmomentum_response_binned(mom_data, cp_dir=cp_dir, title=_title)
+                plot_jet_response_binned(yvals, cp_dir=cp_dir, title=_title)
+                plot_met_response_binned(met_data, cp_dir=cp_dir, title=_title)
+
+                mom_data = compute_3dmomentum_and_ratio(yvals)
+                plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
+                plot_3dmomentum_ratio(
+                    mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=True, file_modifier="_bins_0_2"
+                )
+                plot_3dmomentum_ratio(
+                    mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True, file_modifier="_bins_0_5"
+                )
+                plot_3dmomentum_response_binned(mom_data, cp_dir=cp_dir, title=_title)
 
 
 if __name__ == "__main__":
