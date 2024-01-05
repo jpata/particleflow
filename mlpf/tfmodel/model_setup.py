@@ -349,7 +349,7 @@ def eval_model(
     dataset,
     config,
     outdir,
-    jet_ptcut=5.0,
+    jet_ptcut=20.0,
     jet_match_dr=0.1,
     verbose=False,
 ):
@@ -458,6 +458,15 @@ def eval_model(
 
         ibatch += 1
 
+#https://stackoverflow.com/a/59571639
+def get_nvidia_mem():
+    import subprocess as sp
+    command = "nvidia-smi --query-gpu=memory.used --format=csv"
+    memory_used_info = sp.check_output(command.split()).decode('ascii').split('\n')[1:-1]
+    memory_used_values = [int(x.split()[0]) for i, x in enumerate(memory_used_info)]
+    #idevs = [int(x) for x in os.environ["CUDA_VISIBLE_DEVICES"].split(",")]
+    #return [memory_used_values[d] for d in idevs]
+    return memory_used_values
 
 def freeze_model(model, config, outdir):
     def model_output(ret):
@@ -481,11 +490,11 @@ def freeze_model(model, config, outdir):
 
     if "combined_graph_layer" in config["parameters"]:
         bin_size = config["parameters"]["combined_graph_layer"]["bin_size"]
-        elem_range = list(range(bin_size, 5 * bin_size, bin_size))
+        elem_range = list(range(bin_size, 20 * bin_size, bin_size))
     else:
         elem_range = range(100, 1000, 200)
 
-    for ibatch in [1, 2, 4]:
+    for ibatch in [1, 2, 4, 8, 16]:
         for nptcl in elem_range:
             X = np.random.rand(ibatch, nptcl, nfeat)
             full_model(X)
@@ -495,7 +504,8 @@ def freeze_model(model, config, outdir):
                 full_model(X)
             t1 = time.time()
 
-            print(ibatch, nptcl, (t1 - t0) / niter)
+            mem = get_nvidia_mem()
+            print(ibatch, nptcl, (t1 - t0) / niter, mem)
 
     # we need to use opset 12 for the version of ONNXRuntime in CMSSW
     # the warnings "RuntimeError: Opset (12) must be >= 13 for operator 'batch_dot'." do not seem to be critical

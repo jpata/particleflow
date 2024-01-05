@@ -439,6 +439,10 @@ def evaluate(config, train_dir, weights, customize, nevents):
         config = Path(train_dir) / "config.yaml"
         assert config.exists(), "Could not find config file in train_dir, please provide one with -c <path/to/config>"
     config, _ = parse_config(config, weights=weights)
+    
+    physical_devices = tf.config.list_physical_devices("GPU")
+    for pd in physical_devices:
+        tf.config.experimental.set_memory_growth(pd, True)
 
     if customize:
         config = customization_functions[customize](config)
@@ -468,16 +472,17 @@ def evaluate(config, train_dir, weights, customize, nevents):
 
     for dsname in config["evaluation_datasets"]:
         val_ds = config["evaluation_datasets"][dsname]
-        ds_test = mlpf_dataset_from_config(
-            dsname,
-            config,
-            "test",
-            nevents if nevents >= 0 else val_ds["num_events"],
-        )
-        ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
-        eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname)
-        Path(eval_dir).mkdir(parents=True, exist_ok=True)
-        eval_model(model, ds_test_tfds, config, eval_dir)
+        for split in ["train", "test"]:
+            ds_test = mlpf_dataset_from_config(
+                dsname,
+                config,
+                split,
+                nevents if nevents >= 0 else val_ds["num_events"],
+            )
+            ds_test_tfds = ds_test.tensorflow_dataset.padded_batch(val_ds["batch_size"])
+            eval_dir = str(Path(train_dir) / "evaluation" / "epoch_{}".format(initial_epoch) / dsname / split)
+            Path(eval_dir).mkdir(parents=True, exist_ok=True)
+            eval_model(model, ds_test_tfds, config, eval_dir)
 
     freeze_model(model, config, train_dir)  # export to ONNX
 
