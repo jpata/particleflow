@@ -767,6 +767,8 @@ class OutputDecoding(tf.keras.Model):
         charge_dim_decrease=True,
         eta_dim_decrease=False,
         phi_dim_decrease=False,
+        pt_dim_decrease=False,
+        energy_dim_decrease=False,
         pt_as_correction=True,
         id_hidden_dim=128,
         charge_hidden_dim=128,
@@ -830,6 +832,7 @@ class OutputDecoding(tf.keras.Model):
             num_layers=pt_num_layers,
             activation=activation,
             dropout=dropout,
+            dim_decrease=pt_dim_decrease,
         )
 
         self.ffn_eta = point_wise_feed_forward_network(
@@ -860,6 +863,7 @@ class OutputDecoding(tf.keras.Model):
             num_layers=energy_num_layers,
             activation=activation,
             dropout=dropout,
+            dim_decrease=energy_dim_decrease,
         )
 
     """
