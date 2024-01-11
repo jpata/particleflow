@@ -456,10 +456,11 @@ def load_and_interleave(
         ds._num_steps = num_steps
 
     statefile = f"{cachedir}/{ds.name}_{ds.split}.json"
-    if os.path.isfile(statefile):
+    if config["batching"]["bucket_by_sequence_length"] and os.path.isfile(statefile):
         ds.load_state(statefile)
     logging.info("Dataset {} after batching, {} steps, {} samples".format(ds.name, ds.num_steps(), ds.num_samples))
-    ds.save_state(statefile)
+    if config["batching"]["bucket_by_sequence_length"]:
+        ds.save_state(statefile)
     return ds
 
 
@@ -821,7 +822,10 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
                     try:
                         opt.load_own_variables(loaded_opt["weights"])
                     except Exception as e:
-                        logging.error("could not restore optimizer: {}".format(e))
+                        logging.error("could not restore optimizer with load_own_variables: {}".format(e))
+                        # TF 2.12 compatibility
+                        for i, variable in enumerate(opt.variables):
+                            variable.assign(loaded_opt["weights"][str(i)])
 
             logging.info("distributing optimizer state")
             strategy = tf.distribute.get_strategy()

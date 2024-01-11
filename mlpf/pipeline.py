@@ -410,7 +410,6 @@ def train(
                 callbacks=callbacks,
                 steps_per_epoch=ds_train.num_steps(),
                 validation_steps=ds_test.num_steps(),
-                initial_epoch=initial_epoch,
                 verbose=1,
             )
 
@@ -686,7 +685,7 @@ def find_lr(config, outdir, figname, logscale):
     )
 
     with strategy.scope():
-        model, _, _ = model_scope(config, 1)
+        model, _, initial_epoch = model_scope(config, 1)
         max_steps = 200
         lr_finder = LRFinder(max_steps=max_steps)
         callbacks = [lr_finder]
