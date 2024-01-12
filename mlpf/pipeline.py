@@ -775,6 +775,7 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     tuner.search_space_summary()
 
     from tensorflow.keras.callbacks import TensorBoard
+
     tuner.search(
         ds_train.tensorflow_dataset.repeat(),
         epochs=config["setup"]["num_epochs"],
