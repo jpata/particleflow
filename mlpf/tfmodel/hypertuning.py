@@ -6,7 +6,7 @@ def get_model_builder(config, total_steps):
     lr_schedule, optim_callbacks, lr = get_lr_schedule(config, steps=total_steps)
 
     def model_builder(hp):
-        node_encoding_hidden_dim = hp.Choice("node_dim", values=[128, 256, 512])
+        node_encoding_hidden_dim = hp.Choice("node_dim", values=[128, 256, 512, 1024])
 
         config["parameters"]["node_encoding_hidden_dim"] = node_encoding_hidden_dim
 

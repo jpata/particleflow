@@ -15,7 +15,7 @@ cd /scratch/project_465000301/particleflow
 
 module load LUMI/22.08 partition/G
 
-export IMG=/scratch/project_465000301/tf-rocm5.6-tf2.12.simg
+export IMG=/scratch/project_465000301/tf-rocm5.6-tf2.12-2024-01-11.simg
 export PYTHONPATH=hep_tfds
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
@@ -38,6 +38,4 @@ singularity exec \
     -B /scratch/project_465000301 \
     -B /tmp \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
-    $IMG python3 mlpf/pipeline.py train \
-    --config parameters/cms-gen.yaml --plot-freq 1 --num-cpus 8 \
-    --batch-multiplier 2 --plot-freq -1
+    $IMG python3.9 mlpf/pipeline.py hypertune --config parameters/bench/clic-hits-bench.yaml --ntrain 100 --ntest 100 -o hypertuning_100
