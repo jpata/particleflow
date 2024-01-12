@@ -49,6 +49,9 @@ X_FEATURES_CL = [
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 labels = [0, 211, 130, 22, 11, 13]
 
+N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
+N_Y_FEATURES = len(Y_FEATURES)
+
 
 def split_sample(path, test_frac=0.8):
     files = sorted(list(path.glob("*.parquet")))
@@ -97,30 +100,45 @@ def prepare_data_clic(fn, with_jet_idx=True):
         X1 = ak.to_numpy(X_track[iev])
         X2 = ak.to_numpy(X_cluster[iev])
 
-        if len(X1) == 0 or len(X2) == 0:
+        if len(X1) == 0 and len(X2) == 0:
             continue
+
+        if len(X1) == 0:
+            X1 = np.zeros((0, N_X_FEATURES))
+        if len(X2) == 0:
+            X2 = np.zeros((0, N_X_FEATURES))
 
         ygen_track = ak.to_numpy(ret["ygen_track"][iev])
         ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
 
-        if len(ygen_track) == 0 or len(ygen_cluster) == 0:
+        if len(ygen_track) == 0 and len(ygen_cluster) == 0:
             continue
 
+        if len(ygen_track) == 0:
+            ygen_track = np.zeros((0, N_Y_FEATURES - 1))
+        if len(ygen_cluster) == 0:
+            ygen_cluster = np.zeros((0, N_Y_FEATURES - 1))
+        if len(ycand_track) == 0:
+            ycand_track = np.zeros((0, N_Y_FEATURES - 1))
+        if len(ycand_cluster) == 0:
+            ycand_cluster = np.zeros((0, N_Y_FEATURES - 1))
+
         # pad feature dim between tracks and clusters to the same size
-        if X1.shape[1] < X2.shape[1]:
-            X1 = np.pad(X1, [[0, 0], [0, X2.shape[1] - X1.shape[1]]])
-        if X2.shape[1] < X1.shape[1]:
-            X2 = np.pad(X2, [[0, 0], [0, X1.shape[1] - X2.shape[1]]])
+        if X1.shape[1] < N_X_FEATURES:
+            X1 = np.pad(X1, [[0, 0], [0, N_X_FEATURES - X1.shape[1]]])
+        if X2.shape[1] < N_X_FEATURES:
+            X2 = np.pad(X2, [[0, 0], [0, N_X_FEATURES - X2.shape[1]]])
 
         # concatenate tracks and clusters in features and targets
         X = np.concatenate([X1, X2])
         ygen = np.concatenate([ygen_track, ygen_cluster])
         ycand = np.concatenate([ycand_track, ycand_cluster])
 
-        assert ygen.shape[0] == X.shape[0]
-        assert ycand.shape[0] == X.shape[0]
+        if (ygen.shape[0] != X.shape[0]) or (ycand.shape[0] != X.shape[0]):
+            print(X.shape, ygen.shape, ycand.shape)
+            continue
 
         # add jet_idx column
         if with_jet_idx:
