@@ -51,7 +51,7 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.0005
+  lr: 0.001
   num_epochs: 20
   dtype: float32
   trainable:
@@ -60,13 +60,12 @@ setup:
   horovod_enabled: no
   cls_output_as_logits: yes
   small_graph_opt: no
-  use_normalizer: yes
+  use_normalizer: no
 
 batching:
   # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
-  bucket_by_sequence_length: yes
+  bucket_by_sequence_length: no
   bucket_batch_sizes: auto
-  # use this batch multiplier to increase all batch sizes by a constant factor
   batch_multiplier: 1
 
 optimizer:
@@ -96,14 +95,14 @@ parameters:
   input_encoding: clic
   node_update_mode: additive
   do_node_encoding: yes
-  node_encoding_hidden_dim: 512
+  node_encoding_hidden_dim: 1024
 
   combined_graph_layer:
     bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: yes
-    dropout: 0.0
+    dropout: 0.1
     dist_activation: elu
     ffn_dist_num_layers: 2
     ffn_dist_hidden_dim: 128
@@ -130,10 +129,10 @@ parameters:
     num_node_messages: 2
     node_message:
       type: GHConvDense
-      output_dim: 512
+      output_dim: 1024
       activation: elu
       #if this is enabled, it will break float16 training
-      normalize_degrees: no
+      normalize_degrees: yes
     activation: elu
 
   num_graph_layers_id: 6
@@ -142,8 +141,6 @@ parameters:
     activation: elu
     regression_use_classification: yes
     dropout: 0.1
-
-    pt_as_correction: no
 
     id_dim_decrease: yes
     charge_dim_decrease: yes
@@ -166,7 +163,7 @@ parameters:
     layernorm: yes
     mask_reg_cls0: yes
 
-  skip_connection: no
+  skip_connection: yes
   debug: no
 
 timing:
@@ -220,20 +217,10 @@ raytune:
 train_test_datasets:
   physical:
     batch_per_gpu: 1
-    event_pad_size: 15360
+    event_pad_size: -1
     datasets:
       - clic_edm_ttbar_hits_pf
       - clic_edm_qq_hits_pf
-  gun:
-    batch_per_gpu: 5
-    event_pad_size: 3840
-    datasets:
-      - clic_edm_single_kaon0l_hits_pf
-      - clic_edm_single_pi_hits_pf
-      - clic_edm_single_pi0_hits_pf
-      - clic_edm_single_neutron_hits_pf
-      - clic_edm_single_electron_hits_pf
-      - clic_edm_single_muon_hits_pf
 
 validation_dataset: clic_edm_ttbar_hits_pf
 validation_batch_size: 20
