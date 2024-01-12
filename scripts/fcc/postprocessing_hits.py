@@ -186,8 +186,24 @@ def process_one_file(fn, ofn):
             "MergedRecoParticles",
         ]
     )
-    calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
-    sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
+    calohit_links = arrs.arrays(
+        [
+            "CalohitMCTruthLink.weight",
+            "CalohitMCTruthLink#0.index",
+            "CalohitMCTruthLink#0.collectionID",
+            "CalohitMCTruthLink#1.index",
+            "CalohitMCTruthLink#1.collectionID",
+        ]
+    )
+    sitrack_links = arrs.arrays(
+        [
+            "SiTracksMCTruthLink.weight",
+            "SiTracksMCTruthLink#0.index",
+            "SiTracksMCTruthLink#0.collectionID",
+            "SiTracksMCTruthLink#1.index",
+            "SiTracksMCTruthLink#1.collectionID",
+        ]
+    )
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection

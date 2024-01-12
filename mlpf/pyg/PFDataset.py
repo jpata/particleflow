@@ -27,6 +27,7 @@ class TFDSDataSource:
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         if len(item) == 1:
             ret = ret[0]
+
         return ret
 
     def __len__(self):

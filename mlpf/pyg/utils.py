@@ -148,6 +148,8 @@ def unpack_target(y):
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )
 
+    ret["genjet_idx"] = y[..., -1].long()
+
     return ret
 
 

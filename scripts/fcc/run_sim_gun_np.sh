@@ -44,7 +44,7 @@ ddsim --compactFile $LCGEO/CLIC/compact/CLIC_o3_v14/CLIC_o3_v14.xml \
       --random.seed $NUM
 cp out_sim_edm4hep.root $FULLOUTDIR/sim_${SAMPLE}_${NUM}.root
 
-k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root
+\time -v k4run clicRec_e4h_input.py -n $NEV --EventDataSvc.input out_sim_edm4hep.root --PodioOutput.filename out_reco_edm4hep.root
 cp out_reco_edm4hep.root $FULLOUTDIR/reco_${SAMPLE}_${NUM}.root
 cp timing_histos.root $FULLOUTDIR/timing_${SAMPLE}_${NUM}.root
 

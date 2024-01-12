@@ -7,7 +7,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 50
 patience: 20
-lr: 0.0001
+lr: 0.001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
@@ -23,10 +23,10 @@ comet_step_freq: 10
 model:
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 512
-    width: 512
-    num_convs: 3
-    dropout: 0.0
+    embedding_dim: 1024
+    width: 1024
+    num_convs: 5
+    dropout: 0.1
     activation: "elu"
     # gnn-lsh specific parameters
     bin_size: 640

@@ -78,7 +78,7 @@ train_dataset:
       batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 1.6.0
+          version: 2.0.0
 
 valid_dataset:
   cms:
@@ -86,7 +86,7 @@ valid_dataset:
       batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 1.6.0
+          version: 2.0.0
 
 test_dataset:
   cms:
@@ -94,4 +94,4 @@ test_dataset:
       batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 1.6.0
+          version: 2.0.0
