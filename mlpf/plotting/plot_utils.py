@@ -115,6 +115,10 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
+    "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
+    "clic_edm_single_gamma_pf": "single photon",
+    "clic_edm_single_kaon0l_pf": "single neutral hadron",
+    "clic_edm_single_pi_pf": "single pion",
 }
 
 

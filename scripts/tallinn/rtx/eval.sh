@@ -12,11 +12,11 @@ cd ~/particleflow2
 EXPDIR=experiments/mlpf-clic-2023-results/clusters_best_tuned_gnn_clic_v130/
 WEIGHTS=experiments/mlpf-clic-2023-results/clusters_best_tuned_gnn_clic_v130/weights/weights-96-5.346523.hdf5
 
-singularity exec -B /scratch/persistent --nv \
-    --env PYTHONPATH=hep_tfds \
-    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
-    $IMG python3.10 mlpf/pipeline.py evaluate \
-    --train-dir $EXPDIR --weights $WEIGHTS
+#singularity exec -B /scratch/persistent --nv \
+#    --env PYTHONPATH=hep_tfds \
+#    --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
+#    $IMG python3.10 mlpf/pipeline.py evaluate \
+#    --train-dir $EXPDIR --weights $WEIGHTS
 
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \

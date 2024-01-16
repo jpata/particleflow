@@ -1332,6 +1332,11 @@ def plots(train_dir, max_files):
     for epoch_dir in sorted(os.listdir(str(eval_dir))):
         eval_epoch_dir = eval_dir / epoch_dir
         for dataset in sorted(os.listdir(str(eval_epoch_dir))):
+            # avoid plotting the single-particle gun samples for now
+            if "_single_" in dataset:
+                logging.info("skipping {}".format(dataset))
+                continue
+
             for split in sorted(os.listdir(str(eval_epoch_dir / dataset))):
                 dataset_dir = eval_epoch_dir / dataset / split
                 print(dataset_dir)
