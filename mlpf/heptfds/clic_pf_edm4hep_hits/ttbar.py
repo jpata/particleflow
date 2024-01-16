@@ -26,7 +26,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version("1.6.0")
     RELEASE_NOTES = {
         "0.9.0": "Small stats",
         "1.0.0": "Initial release",
