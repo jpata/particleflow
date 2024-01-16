@@ -15,9 +15,10 @@ from qq import _DESCRIPTION, _CITATION
 
 
 class ClicEdmQqHitsPf10k(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version("1.6.0")
     RELEASE_NOTES = {
         "1.5.0": "Regenerate with ARRAY_RECORD",
+        "1.6.0": "Update track features",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

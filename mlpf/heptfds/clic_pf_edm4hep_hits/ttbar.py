@@ -33,6 +33,7 @@ class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
         "1.1.0": "Remove track referencepoint feature",
         "1.2.0": "Keep all interacting genparticles",
         "1.5.0": "Regenerate with ARRAY_RECORD",
+        "1.6.0": "Update track features",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
