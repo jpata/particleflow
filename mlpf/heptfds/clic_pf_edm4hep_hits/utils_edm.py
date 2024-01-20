@@ -13,13 +13,14 @@ X_FEATURES_TRK = [
     "p",
     "chi2",
     "ndf",
+    "dEdx",
+    "dEdxError",
     "radiusOfInnermostHit",
     "tanLambda",
     "D0",
     "omega",
     "Z0",
     "time",
-    "type",
 ]
 X_FEATURES_CH = [
     "elemtype",

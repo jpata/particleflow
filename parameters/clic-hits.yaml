@@ -5,7 +5,7 @@ cache: caches/clic_hits
 dataset:
   schema: clic
   target_particles: gen
-  num_input_features: 15
+  num_input_features: 16
   #(none=0, track=1, hit=2)
   num_input_classes: 3
   #(none=0, ch.had=1, n.had=2, gamma=3, e=4, mu=5)
@@ -235,38 +235,38 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_kaon0l_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_gamma_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_pi_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_pi0_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_neutron_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_electron_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
   clic_edm_single_muon_hits_pf:
-    version: 1.5.0
+    version: 1.6.0
     data_dir:
     manual_dir:
