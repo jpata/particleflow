@@ -278,9 +278,7 @@ def train(
         ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.cache()
         ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.cache()
 
-    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.shuffle(1000, reshuffle_each_iteration=True).prefetch(
-        tf.data.AUTOTUNE
-    )
+    ds_train.tensorflow_dataset = ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
     ds_test.tensorflow_dataset = ds_test.tensorflow_dataset.prefetch(tf.data.AUTOTUNE)
 
     if config["dataset"]["enable_tfds_caching"]:
