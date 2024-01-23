@@ -412,6 +412,7 @@ def train(
                 callbacks=callbacks,
                 steps_per_epoch=ds_train.num_steps(),
                 validation_steps=ds_test.num_steps(),
+                initial_epoch=initial_epoch,
                 verbose=1,
             )
 

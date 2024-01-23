@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:a100:1
+#SBATCH --gres gpu:rtx:4
 #SBATCH --mem-per-gpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
@@ -12,4 +12,5 @@ singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env TFDS_DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets \
     $IMG python3.10 mlpf/pipeline.py train -c parameters/clic.yaml \
-    --plot-freq 1 --num-cpus 32 --batch-multiplier 8
+    --plot-freq 1 \
+    --batch-multiplier 0.5

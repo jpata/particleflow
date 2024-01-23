@@ -42,11 +42,11 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # wait
 
 # CLIC hit-based
-# export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_hits/
+export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_hits/
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq_hits.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq_hits_10k.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep_hits/qq_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq_hits_10k.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_hits.log &
-# $CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_hits_10k.log &
+$CMD mlpf/heptfds/clic_pf_edm4hep_hits/ttbar_10k --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_hits_10k.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_kaon0L --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_kaon0L_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_ele --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_ele_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_pi0 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_pi0_hits.log &
@@ -54,7 +54,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_neutron --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_neutron_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_gamma --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_gamma_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_mu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_mu_hits.log &
-# wait
+wait
 
 # Delphes
 # export MANUAL_DIR=/local/joosep/mlpf/delphes/
