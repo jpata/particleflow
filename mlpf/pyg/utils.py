@@ -12,22 +12,26 @@ CLASS_LABELS = {
     "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
     "delphes": [0, 211, 130, 22, 11, 13],
     "clic": [0, 211, 130, 22, 11, 13],
+    "clic_hits": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
     "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
     "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -121,9 +125,27 @@ X_FEATURES = {
         "time | sigma_y",
         "Null | sigma_z",
     ],
+    "clic_hits": [
+        "elemtype",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | time",
+        "radiusOfInnermostHit | subdetector",
+        "tanLambda | type",
+        "D0 | Null",
+        "omega | Null",
+        "Z0 | Null",
+        "time | Null",
+    ],
 }
 
-Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 
 def unpack_target(y):
@@ -143,7 +165,7 @@ def unpack_target(y):
     # assert torch.all(ret["energy"] >= 0.0)  # energy
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
-    ret["momentum"] = y[..., 2:-1].to(dtype=torch.float32)
+    ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
     ret["p4"] = torch.cat(
         [ret["pt"].unsqueeze(1), ret["eta"].unsqueeze(1), ret["phi"].unsqueeze(1), ret["energy"].unsqueeze(1)], axis=1
     )

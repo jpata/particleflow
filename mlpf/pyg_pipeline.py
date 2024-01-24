@@ -29,7 +29,12 @@ parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
 )
 parser.add_argument(
-    "--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?"
+    "--dataset",
+    type=str,
+    default=None,
+    choices=["clic", "cms", "delphes", "clic_hits"],
+    required=False,
+    help="which dataset?",
 )
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
