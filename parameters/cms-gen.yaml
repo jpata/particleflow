@@ -66,8 +66,8 @@ setup:
   train: yes
   weights:
   weights_config:
-  lr: 0.001
-  num_epochs: 20
+  lr: 0.0005
+  num_epochs: 10
   dtype: float32
   trainable:
   lr_schedule: cosinedecay  # cosinedecay, exponentialdecay, onecycle, none
@@ -76,7 +76,7 @@ setup:
   cls_output_as_logits: yes
   #if enabled, do not create LSH bins for small graphs (less than one bin size)
   #enabling results in some speedup for gun samples, but must be disabled for XLA
-  small_graph_opt: yes
+  small_graph_opt: no
   use_normalizer: no
 
 batching:
