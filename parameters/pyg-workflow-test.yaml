@@ -2,6 +2,7 @@ backend: pytorch
 
 dataset: cms
 data_dir:
+sort_data: no
 gpus:
 gpu_batch_multiplier: 1
 load:
