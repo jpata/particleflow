@@ -31,7 +31,7 @@ tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type gravnet --pipeline
 
 #test transformer
-python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type transformer --pipeline
+python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type attention --pipeline
 
 #test mamba
 python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type mamba --pipeline
