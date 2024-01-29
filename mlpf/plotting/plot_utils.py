@@ -115,6 +115,10 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
+    "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
+    "clic_edm_single_gamma_pf": "single photon",
+    "clic_edm_single_kaon0l_pf": "single neutral hadron",
+    "clic_edm_single_pi_pf": "single pion",
 }
 
 
@@ -705,8 +709,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
 
         mean = np.mean(sum_gen_energy)
         std = np.std(sum_gen_energy)
-        max_e = mean + 2 * std
-        min_e = max(mean - 2 * std, 0)
+        max_e = mean + 3 * std
+        min_e = max(mean - 3 * std, 0)
 
         # 1D hist of sum energy
         b = np.linspace(min_e, max_e, 100)
@@ -718,6 +722,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.ylabel("events / bin")
         if title:
             plt.title(title + ", " + clname)
+        plt.legend(loc="best")
         save_img(
             "sum_energy_cls{}.png".format(cls_id),
             epoch,
