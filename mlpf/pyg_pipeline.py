@@ -70,6 +70,7 @@ parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
 parser.add_argument("--experiments-dir", type=str, default=None, help="base directory within which trainings are stored")
+parser.add_argument("--pipeline", action="store_true", default=None, help="test is running in pipeline")
 
 
 def main():
@@ -80,6 +81,12 @@ def main():
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
+
+    # override some options for the pipeline test
+    if args.pipeline:
+        if config["dataset"] == "cms":
+            for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
+                config[ds]["cms"] = {"physical": {"batch_size": 1, "samples": {"cms_pf_ttbar": {"version": "2.0.0"}}}}
 
     # override loaded config with values from command line args
     config = override_config(config, args)

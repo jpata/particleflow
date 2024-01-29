@@ -8,10 +8,10 @@ IMG=/home/software/singularity/pytorch.simg:2023-12-06
 
 # singularity exec -B /scratch/persistent --nv \
 #     --env PYTHONPATH=hep_tfds \
-#     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 4 \
+#     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 0 \
 #     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pyg-cms.yaml \
-#     --train --test --make-plots --conv-type gnn_lsh --num-epochs 20 --gpu-batch-multiplier 1 --num-workers 1 --prefetch-factor 10
-
+#     --train --test --make-plots --conv-type gnn_lsh --num-epochs 20 --gpu-batch-multiplier 1 --num-workers 1 --prefetch-factor 10 --pipeline
+#
 # singularity exec -B /scratch/persistent --nv \
 #     --env PYTHONPATH=hep_tfds \
 #     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 4 \
@@ -29,9 +29,8 @@ IMG=/home/software/singularity/pytorch.simg:2023-12-06
 #     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 4 \
 #     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pyg-cms.yaml \
 #     --train --test --make-plots --conv-type attention --num-epochs 20 --gpu-batch-multiplier 5 --num-workers 1 --prefetch-factor 10
-
-
-#Eval
+#
+#
 # singularity exec -B /scratch/persistent --nv \
 #     --env PYTHONPATH=hep_tfds \
 #     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \

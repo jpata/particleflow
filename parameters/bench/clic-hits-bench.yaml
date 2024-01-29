@@ -239,10 +239,10 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf10k:
-    version: 1.5.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf10k:
-    version: 1.5.0
+    version: 1.7.0
     data_dir:
     manual_dir:

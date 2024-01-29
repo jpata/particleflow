@@ -26,14 +26,14 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "0.9.0": "Small stats",
         "1.0.0": "Initial release",
         "1.1.0": "Remove track referencepoint feature",
         "1.2.0": "Keep all interacting genparticles",
         "1.5.0": "Regenerate with ARRAY_RECORD",
-        "1.6.0": "Update track features",
+        "1.7.0": "Update track features",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

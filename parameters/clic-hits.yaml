@@ -246,38 +246,38 @@ evaluation_jet_algo: ee_genkt_algorithm
 
 datasets:
   clic_edm_ttbar_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_qq_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_kaon0l_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_gamma_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_pi_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_pi0_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_neutron_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_electron_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   clic_edm_single_muon_hits_pf:
-    version: 1.6.0
+    version: 1.7.0
     data_dir:
     manual_dir:

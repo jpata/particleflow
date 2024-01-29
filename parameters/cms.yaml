@@ -267,62 +267,62 @@ evaluation_jet_algo: antikt_algorithm
 
 datasets:
   cms_pf_ttbar:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_vbf:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_ztt:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_qcd:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_qcd_high_pt:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_electron:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_gamma:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_pi0:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_neutron:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_pi:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_tau:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_mu:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_single_proton:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_multi_particle_gun:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:
   cms_pf_sms_t1tttt:
-    version: 2.0.0
+    version: 1.7.0
     data_dir:
     manual_dir:

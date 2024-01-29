@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfSinglePi0(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlepi0 dataset."""
 
-    VERSION = tfds.core.Version("2.0.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "1.1.0": "Initial release",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
@@ -29,7 +29,7 @@ class CmsPfSinglePi0(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
         "1.5.1": "Remove outlier caps",
         "1.6.0": "Regenerate with ARRAY_RECORD",
-        "2.0.0": "Add cluster shape vars",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \
