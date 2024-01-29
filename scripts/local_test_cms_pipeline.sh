@@ -28,7 +28,7 @@ mkdir -p experiments
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
 #Run a simple training on a few events
-python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test
+python mlpf/pipeline.py train --config parameters/cms.yaml --nepochs 1 --customize pipeline_test
 
 ls ./experiments/cms*/weights/
 
@@ -39,4 +39,4 @@ python mlpf/pipeline.py evaluate --nevents 5 --customize pipeline_test --train-d
 python mlpf/pipeline.py plots --train-dir ./experiments/cms*
 
 #Retrain from existing weights
-python mlpf/pipeline.py train --config parameters/cms-gen.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5
+python mlpf/pipeline.py train --config parameters/cms.yaml --nepochs 1 --customize pipeline_test --weights ./experiments/cms*/weights/weights-01-*.hdf5
