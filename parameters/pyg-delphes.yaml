@@ -2,6 +2,7 @@ backend: pytorch
 
 dataset: delphes
 data_dir:
+sort_data: no
 gpus: 1
 gpu_batch_multiplier: 1
 load:

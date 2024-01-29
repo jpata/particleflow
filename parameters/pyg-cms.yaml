@@ -1,6 +1,7 @@
 backend: pytorch
 
 dataset: cms
+sort_data: yes
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
@@ -60,13 +61,13 @@ model:
 
   mamba:
     conv_type: mamba
-    embedding_dim: 256
-    width: 256
+    embedding_dim: 1024
+    width: 1024
     num_convs: 4
     dropout: 0.1
     activation: "elu"
     # mamba specific paramters
-    d_state: 16
+    d_state: 32
     d_conv: 4
     expand: 2
 
@@ -180,38 +181,5 @@ test_dataset:
       samples:
         cms_pf_ttbar:
           version: 2.0.0
-        cms_pf_qcd:
-          version: 2.0.0
-        cms_pf_ztt:
-          version: 2.0.0
         cms_pf_qcd_high_pt:
-          version: 2.0.0
-        cms_pf_sms_t1tttt:
-          version: 2.0.0
-        cms_pf_vbf:
-          version: 2.0.0
-    gun:
-      batch_size: 20
-      samples:
-        cms_pf_single_electron:
-          version: 2.0.0
-        cms_pf_single_gamma:
-          version: 2.0.0
-          batch_size: 20
-        cms_pf_single_pi0:
-          version: 2.0.0
-        cms_pf_single_neutron:
-          version: 2.0.0
-        cms_pf_single_pi:
-          version: 2.0.0
-        cms_pf_single_tau:
-          version: 2.0.0
-        cms_pf_single_mu:
-          version: 2.0.0
-        cms_pf_single_proton:
-          version: 2.0.0
-    multiparticlegun:
-      batch_size: 4
-      samples:
-        cms_pf_multi_particle_gun:
           version: 2.0.0

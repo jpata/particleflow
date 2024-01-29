@@ -1,6 +1,7 @@
 backend: pytorch
 
 dataset: clic
+sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
