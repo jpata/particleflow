@@ -86,7 +86,12 @@ def main():
     if args.pipeline:
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
-                config[ds]["cms"] = {"physical": {"batch_size": 1, "samples": {"cms_pf_ttbar": {"version": "2.0.0"}}}}
+                config[ds]["cms"] = {
+                    "physical": {
+                        "batch_size": config[ds]["cms"]["physical"]["batch_size"],
+                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
+                    }
+                }
 
     # override loaded config with values from command line args
     config = override_config(config, args)
