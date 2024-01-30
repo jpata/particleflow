@@ -33,8 +33,8 @@ python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --dat
 #test transformer
 python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots --conv-type transformer --pipeline
 
-#test mamba
-python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots --conv-type mamba --pipeline
+# test mamba, only works on CUDA GPU
+# python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots --conv-type mamba --pipeline
 
 #test GNN-LSH with export
 python mlpf/pyg_pipeline.py --config parameters/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots --conv-type gnn_lsh --export-onnx --pipeline
