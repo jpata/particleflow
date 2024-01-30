@@ -34,7 +34,7 @@ singularity exec --rocm \
   -B /tmp \
   --env PYTHONPATH=hep_tfds \
   $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus $SLURM_GPUS_PER_TASK \
-  --data-dir $TFDS_DATA_DIR --config parameters/pyg-cms.yaml \
+  --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
   --train \
   --conv-type gnn_lsh \
   --num-epochs 20 --gpu-batch-multiplier 4 --num-workers 1 --prefetch-factor 5 --checkpoint-freq 1

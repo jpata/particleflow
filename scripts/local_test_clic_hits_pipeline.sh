@@ -19,6 +19,6 @@ python3 scripts/fcc/postprocessing_hits.py data/p8_ee_tt_ecm380/reco_p8_ee_tt_ec
 tfds build mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --manual_dir data
 
 # #Train, evaluate and make plots
-python mlpf/pipeline.py train --config parameters/clic-hits.yaml --nepochs 1 --customize pipeline_test --ntrain 1 --ntest 1
+python mlpf/pipeline.py train --config parameters/tensorflow/clic-hits.yaml --nepochs 1 --customize pipeline_test --ntrain 1 --ntest 1
 python mlpf/pipeline.py evaluate --nevents 10 --customize pipeline_test --train-dir ./experiments/clic* --weights ./experiments/clic*/weights/weights-01-*.hdf5
 python mlpf/pipeline.py plots --train-dir ./experiments/clic*
