@@ -169,10 +169,10 @@ class MLPF(nn.Module):
         self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
-        self.nn_eta = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
-        self.nn_phi = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
-        self.nn_energy = ffn(decoding_dim + num_classes, 1, width, self.act, dropout)
+        self.nn_pt = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
+        self.nn_eta = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
+        self.nn_phi = ffn(decoding_dim + num_classes, 4, width, self.act, dropout)
+        self.nn_energy = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
@@ -202,7 +202,7 @@ class MLPF(nn.Module):
                     embeddings_reg.append(out_padded)
 
         embedding_id = torch.cat([X_features] + embeddings_id, axis=-1)
-        preds_id = self.nn_id(embedding_id)
+        preds_id = self.nn_id(embedding_id)    
 
         # regression
         embedding_reg = torch.cat([X_features] + embeddings_reg + [preds_id], axis=-1)
@@ -213,13 +213,22 @@ class MLPF(nn.Module):
         # assert torch.all(input_[:, 1] >= 0.0)  # pt
         # assert torch.all(input_[:, 5] >= 0.0)  # energy
 
-        # predict the 4-momentum, add it to the (pt, eta, sin phi, cos phi, E) of the input PFelement
-        # the feature order is defined in fcc/postprocessing.py -> track_feature_order, cluster_feature_order
-        preds_pt = self.nn_pt(embedding_reg) + X_features[..., 1:2]
-        preds_eta = self.nn_eta(embedding_reg) + X_features[..., 2:3]
-        preds_phi = self.nn_phi(embedding_reg) + X_features[..., 3:5]
-        preds_energy = self.nn_energy(embedding_reg) + X_features[..., 5:6]
+        # predict the 4-momentum values
+        pred_pt_corr = self.nn_pt(embedding_reg)
+        pred_energy_corr = self.nn_energy(embedding_reg)
+        pred_eta_corr = self.nn_eta(embedding_reg)
+        pred_phi_corr = self.nn_phi(embedding_reg)
+
+        #Compute output as y=ax + b, where x is the PFElement value and y is the predicted value.
+        #The NN predicts the slope a and bias b. 
+        #The PFElement feature order in X_features defined in fcc/postprocessing.py
+        #  -> track_feature_order, cluster_feature_order
+        preds_pt = pred_pt_corr[..., 0:1]*X_features[..., 1:2] + pred_pt_corr[..., 1:2]
+        preds_eta = pred_eta_corr[..., 0:1]*X_features[..., 2:3] + pred_eta_corr[..., 1:2]
+        preds_phi = pred_phi_corr[..., 0:2]*X_features[..., 3:5] + pred_phi_corr[..., 2:4]
+        preds_energy = pred_energy_corr[..., 0:1]*X_features[..., 5:6] + pred_energy_corr[..., 1:2]
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
+
         pred_charge = self.nn_charge(embedding_reg)
 
         return preds_id, preds_momentum, pred_charge
