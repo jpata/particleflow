@@ -241,7 +241,11 @@ def train_and_valid(
             conv_type = model.conv_type
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
-        ypred = model(batch.X, batchidx_or_mask)
+        if is_train:
+            ypred = model(batch.X, batchidx_or_mask)
+        else:
+            with torch.no_grad():
+                ypred = model(batch.X, batchidx_or_mask)
         ypred = unpack_predictions(ypred)
 
         if is_train:
