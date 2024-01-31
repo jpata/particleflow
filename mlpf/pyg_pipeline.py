@@ -29,7 +29,12 @@ parser.add_argument(
     "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
 )
 parser.add_argument(
-    "--dataset", type=str, default=None, choices=["clic", "cms", "delphes"], required=False, help="which dataset?"
+    "--dataset",
+    type=str,
+    default=None,
+    choices=["clic", "cms", "delphes", "clic_hits"],
+    required=False,
+    help="which dataset?",
 )
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
@@ -65,6 +70,7 @@ parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
 parser.add_argument("--experiments-dir", type=str, default=None, help="base directory within which trainings are stored")
+parser.add_argument("--pipeline", action="store_true", default=None, help="test is running in pipeline")
 
 
 def main():
@@ -75,6 +81,17 @@ def main():
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
+
+    # override some options for the pipeline test
+    if args.pipeline:
+        if config["dataset"] == "cms":
+            for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
+                config[ds]["cms"] = {
+                    "physical": {
+                        "batch_size": config[ds]["cms"]["physical"]["batch_size"],
+                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
+                    }
+                }
 
     # override loaded config with values from command line args
     config = override_config(config, args)

@@ -35,12 +35,22 @@ from jet_utils import match_two_jet_collections, build_dummy_array, squeeze_if_o
 
 
 class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
-    def on_epoch_end(self, epoch, logs=None):
-        super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
-        weightfile_path = self.opt_path.format(epoch=epoch + 1, **logs)
+    def save_opt_weights(self, logs):
+        weightfile_path = self.opt_path.format(epoch=self._current_epoch + 1, **logs)
         weights = {}
-        self.model.optimizer.save_own_variables(weights)
+
+        try:
+            self.model.optimizer.save_own_variables(weights)
+        except Exception as e:
+            print("could not save optimizer weights with save_own_variables: {}".format(e))
+
+        # TF 2.12 compatibility
+        if len(weights) == 0:
+            for i, variable in enumerate(self.model.optimizer.variables):
+                weights[str(i)] = variable.numpy()
+
         with open(weightfile_path, "wb") as fi:
+            print("saving {} optimizer weights to {}".format(len(weights), weightfile_path))
             pickle.dump(
                 {
                     # "lr": lr,
@@ -48,6 +58,15 @@ class ModelOptimizerCheckpoint(tf.keras.callbacks.ModelCheckpoint):
                 },
                 fi,
             )
+
+    def on_epoch_end(self, epoch, logs=None):
+        super(ModelOptimizerCheckpoint, self).on_epoch_end(epoch, logs=logs)
+        self.save_opt_weights(logs)
+
+    def on_train_batch_end(self, batch, logs=None):
+        super(ModelOptimizerCheckpoint, self).on_train_batch_end(batch, logs=logs)
+        if isinstance(self.save_freq, int) and batch > 0 and batch % self.save_freq == 0:
+            self.save_opt_weights(logs)
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
@@ -211,6 +230,12 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
         cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-{val_loss:.6f}.pkl")
         if config.get("do_checkpoint_callback", True):
             callbacks += [cp_callback]
+
+        cp_callback = ModelOptimizerCheckpoint(
+            filepath=str(cp_dir / "weights-{epoch:02d}-step.hdf5"), save_weights_only=True, verbose=1, save_freq=100
+        )
+        cp_callback.opt_path = str(cp_dir / "opt-{epoch:02d}-step.pkl")
+        callbacks += [cp_callback]
 
     if not horovod_enabled:
         history_path = Path(outdir) / "history"

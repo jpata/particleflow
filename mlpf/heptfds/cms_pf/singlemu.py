@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singlemu dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -29,6 +29,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
         "1.5.1": "Remove outlier caps",
         "1.6.0": "Regenerate with ARRAY_RECORD",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_single_mu ~/tensorflow_datasets/
@@ -60,7 +61,7 @@ class CmsPfSingleMu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "SingleMuFlatLogPt_100MeVto2TeV_cfi"
+        sample_dir = "SingleMuFlatPt1To1000_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):

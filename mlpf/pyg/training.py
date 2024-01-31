@@ -317,9 +317,11 @@ def train_mlpf(
     """
 
     if (rank == 0) or (rank == "cpu"):
-        tensorboard_writer = SummaryWriter(f"{outdir}/runs/")
+        tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
+        tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
     else:
-        tensorboard_writer = None
+        tensorboard_writer_train = None
+        tensorboard_writer_valid = None
 
     t0_initial = time.time()
 
@@ -414,14 +416,14 @@ def train_mlpf(
 
         if (rank == 0) or (rank == "cpu"):
             for k, v in losses_t.items():
-                tensorboard_writer.add_scalar("epoch/train_loss_" + k, v, epoch)
+                tensorboard_writer_train.add_scalar("epoch/loss_" + k, v, epoch)
 
             for loss in losses_of_interest:
                 losses["train"][loss].append(losses_t[loss])
                 losses["valid"][loss].append(losses_v[loss])
 
             for k, v in losses_v.items():
-                tensorboard_writer.add_scalar("epoch/valid_loss_" + k, v, epoch)
+                tensorboard_writer_valid.add_scalar("epoch/loss_" + k, v, epoch)
 
             t1 = time.time()
 
@@ -464,8 +466,10 @@ def train_mlpf(
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
-            if tensorboard_writer:
-                tensorboard_writer.flush()
+            if tensorboard_writer_train:
+                tensorboard_writer_train.flush()
+            if tensorboard_writer_valid:
+                tensorboard_writer_valid.flush()
 
     if world_size > 1:
         dist.barrier()
@@ -499,11 +503,18 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
-
+        _logger.info("model_kwargs: {}".format(model_kwargs))
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+
+        for k in model.state_dict().keys():
+            shp0 = model.state_dict()[k].shape
+            shp1 = checkpoint["model_state_dict"][k].shape
+            if shp0 != shp1:
+                raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+
         testdir_name = "_" + Path(config["load"]).name
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")

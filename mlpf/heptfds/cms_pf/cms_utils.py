@@ -90,6 +90,19 @@ X_FEATURES = [
     "lambdaerror",
     "theta",
     "thetaerror",
+    "time",
+    "timeerror",
+    "etaerror1",
+    "etaerror2",
+    "etaerror3",
+    "etaerror4",
+    "phierror1",
+    "phierror2",
+    "phierror3",
+    "phierror4",
+    "sigma_x",
+    "sigma_y",
+    "sigma_z",
 ]
 
 Y_FEATURES = [

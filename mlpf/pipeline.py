@@ -686,7 +686,7 @@ def find_lr(config, outdir, figname, logscale):
     )
 
     with strategy.scope():
-        model, _, _ = model_scope(config, 1)
+        model, _, initial_epoch = model_scope(config, 1)
         max_steps = 200
         lr_finder = LRFinder(max_steps=max_steps)
         callbacks = [lr_finder]
@@ -773,20 +773,22 @@ def hypertune(config, outdir, ntrain, ntest, recreate, num_cpus):
     tuner = get_tuner(config["hypertune"], model_builder, outdir, recreate, strategy)
     tuner.search_space_summary()
 
+    from tensorflow.keras.callbacks import TensorBoard
+
     tuner.search(
         ds_train.tensorflow_dataset.repeat(),
         epochs=config["setup"]["num_epochs"],
         validation_data=ds_test.tensorflow_dataset.repeat(),
         steps_per_epoch=ds_train.num_steps(),
         validation_steps=ds_test.num_steps(),
-        callbacks=[],
+        callbacks=[TensorBoard(log_dir=outdir + "/logs")],
     )
     logging.info("Hyperparameter search complete.")
     shutil.copy(config_file_path, outdir + "/config.yaml")  # Copy the config file to the train dir for later reference
 
     tuner.results_summary()
     for trial in tuner.oracle.get_best_trials(num_trials=10):
-        logging.info(trial.hyperparameters.values, trial.score)
+        print(trial.hyperparameters.values, trial.score)
 
 
 #

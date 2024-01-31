@@ -10,14 +10,17 @@ from torch_geometric.data import Batch, Data
 
 from pyg.logger import _logger
 
+import numpy as np
+
 
 class TFDSDataSource:
-    def __init__(self, ds):
+    def __init__(self, ds, sort):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
+        self.sort = sort
         self.rep = self.ds.__repr__()
 
     def __getitem__(self, item):
@@ -27,6 +30,13 @@ class TFDSDataSource:
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         if len(item) == 1:
             ret = ret[0]
+
+        # sorting the elements in pT descending order for the Mamba-based model
+        if self.sort:
+            sortidx = np.argsort(ret["X"][:, 1])[::-1]
+            ret["X"] = ret["X"][sortidx]
+            ret["ycand"] = ret["ycand"][sortidx]
+            ret["ygen"] = ret["ygen"][sortidx]
 
         return ret
 
@@ -40,7 +50,7 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, num_samples=None):
+    def __init__(self, data_dir, name, split, num_samples=None, sort=False):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -53,7 +63,7 @@ class PFDataset:
 
         builder = tfds.builder(name, data_dir=data_dir)
 
-        self.ds = TFDSDataSource(builder.as_data_source(split=split))
+        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
 
         if num_samples:
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
@@ -185,7 +195,13 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
 
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", split, num_samples=config[f"n{split}"]).ds
+                ds = PFDataset(
+                    config["data_dir"],
+                    f"{sample}:{version}",
+                    split,
+                    num_samples=config[f"n{split}"],
+                    sort=config["sort_data"],
+                ).ds
 
                 if (rank == 0) or (rank == "cpu"):
                     _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")

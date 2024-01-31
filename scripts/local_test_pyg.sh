@@ -27,6 +27,11 @@ mkdir -p experiments
 
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
 
-python mlpf/pyg_pipeline.py --config parameters/pyg-workflow-test.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots
+#test gravnet
+python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type gravnet --pipeline
 
-python mlpf/pyg_pipeline.py --config parameters/pyg-workflow-test.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --nvalid 1 --gpus 0 --train --test --make-plots --conv-type gnn_lsh --export-onnx
+#test transformer
+python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type attention --pipeline
+
+#test GNN-LSH with export
+python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type gnn_lsh --export-onnx --pipeline

@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd_high_pt dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
@@ -29,6 +29,7 @@ class CmsPfQcdHighPt(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
         "1.5.1": "Remove outlier caps",
         "1.6.0": "Regenerate with ARRAY_RECORD",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \

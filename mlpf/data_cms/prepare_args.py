@@ -16,14 +16,16 @@ samples = [
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 701000, "genjob_nopu.sh", outdir + "/nopu"),
     ("MultiParticlePFGun50_cfi",                               800000, 810000, "genjob_nopu.sh", outdir + "/nopu"),
 
-    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 901000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1001000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1101000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleNeutronFlatPt0p7To1000_cfi",                      1200000,1201000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SinglePi0Pt1To1000_pythia8_cfi",                        1300000,1301000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SinglePiMinusFlatPt0p7To1000_cfi",                      1400000,1401000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleProtonMinusFlatPt0p7To1000_cfi",                  1500000,1501000, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleTauFlatPt1To1000_cfi",                            1600000,1601000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 910000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1010000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1110000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleNeutronFlatPt0p7To1000_cfi",                      1200000,1210000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SinglePi0Pt1To1000_pythia8_cfi",                        1300000,1310000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SinglePiMinusFlatPt0p7To1000_cfi",                      1400000,1410000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleProtonMinusFlatPt0p7To1000_cfi",                  1500000,1510000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleTauFlatPt1To1000_cfi",                            1600000,1610000, "genjob_nopu.sh", outdir + "/nopu"),
+    
+    ("VBF_TuneCP5_14TeV_pythia8_cfi",                         1700000,1705010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 ]
 
 if __name__ == "__main__":

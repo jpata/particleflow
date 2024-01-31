@@ -21,9 +21,10 @@ _CITATION = """
 class CmsPfSmsT1tttt(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "1.6.0": "Regenerate with ARRAY_RECORD",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \

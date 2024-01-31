@@ -6,6 +6,7 @@ import glob
 import os
 import sys
 import multiprocessing
+import tqdm
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -203,11 +204,11 @@ def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
     )
 
     # add all edges from genparticle to calohit
-    calohit_to_gen_weight = calohit_links["CalohitMCTruthLink"]["CalohitMCTruthLink.weight"][iev]
-    calohit_to_gen_calo_colid = calohit_links["CalohitMCTruthLink#0"]["CalohitMCTruthLink#0.collectionID"][iev]
-    calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1"]["CalohitMCTruthLink#1.collectionID"][iev]
-    calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0"]["CalohitMCTruthLink#0.index"][iev]
-    calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1"]["CalohitMCTruthLink#1.index"][iev]
+    calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
+    calohit_to_gen_calo_colid = calohit_links["CalohitMCTruthLink#0.collectionID"][iev]
+    calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1.collectionID"][iev]
+    calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
+    calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
     genparticle_to_hit_matrix_coo0 = []
     genparticle_to_hit_matrix_coo1 = []
     genparticle_to_hit_matrix_w = []
@@ -292,9 +293,9 @@ def gen_to_features(prop_data, iev):
 
 
 def genparticle_track_adj(sitrack_links, iev):
-    trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0"]["SiTracksMCTruthLink#0.index"][iev]
-    trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1"]["SiTracksMCTruthLink#1.index"][iev]
-    trk_to_gen_w = sitrack_links["SiTracksMCTruthLink"]["SiTracksMCTruthLink.weight"][iev]
+    trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
+    trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
+    trk_to_gen_w = sitrack_links["SiTracksMCTruthLink.weight"][iev]
 
     genparticle_to_track_matrix_coo0 = awkward.to_numpy(trk_to_gen_genidx)
     genparticle_to_track_matrix_coo1 = awkward.to_numpy(trk_to_gen_trkidx)
@@ -454,7 +455,7 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
 
     mask_visible = (gen_features["energy"] > 0.01) & gp_interacted_with_detector
-    print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
+    # print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
@@ -702,6 +703,7 @@ def process_one_file(fn, ofn):
         print("{} exists".format(ofn))
         return
 
+    print("loading {}".format(fn))
     fi = uproot.open(fn)
 
     arrs = fi["events"]
@@ -725,8 +727,24 @@ def process_one_file(fn, ofn):
             "MergedRecoParticles",
         ]
     )
-    calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
-    sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
+    calohit_links = arrs.arrays(
+        [
+            "CalohitMCTruthLink.weight",
+            "CalohitMCTruthLink#0.index",
+            "CalohitMCTruthLink#0.collectionID",
+            "CalohitMCTruthLink#1.index",
+            "CalohitMCTruthLink#1.collectionID",
+        ]
+    )
+    sitrack_links = arrs.arrays(
+        [
+            "SiTracksMCTruthLink.weight",
+            "SiTracksMCTruthLink#0.index",
+            "SiTracksMCTruthLink#0.collectionID",
+            "SiTracksMCTruthLink#1.index",
+            "SiTracksMCTruthLink#1.collectionID",
+        ]
+    )
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection
@@ -744,7 +762,7 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
-    for iev in range(arrs.num_entries):
+    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -835,7 +853,7 @@ def process_one_file(fn, ofn):
 
         sanitize(X_track)
         sanitize(X_cluster)
-        print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
+        # print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
         sanitize(ygen_track)
         sanitize(ygen_cluster)
         sanitize(ycand_track)
@@ -858,10 +876,10 @@ def process_one_file(fn, ofn):
 
 
 def process_sample(sample):
-    inp = "/local/joosep/clic_edm4hep_2023_02_27/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_05_09/"
+    inp = "/local/joosep/clic_edm4hep/"
+    outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
 
-    pool = multiprocessing.Pool(16)
+    pool = multiprocessing.Pool(4)
 
     inpath_samp = inp + sample
     outpath_samp = outp + sample
@@ -869,6 +887,9 @@ def process_sample(sample):
     if not os.path.isdir(outpath_samp):
         os.makedirs(outpath_samp)
 
+    # for inf in infiles:
+    #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
+    #    process_one_file(inf, of)
     args = []
     for inf in infiles:
         of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")

@@ -5,6 +5,7 @@ import glob
 import os
 import sys
 import multiprocessing
+import tqdm
 from scipy.sparse import coo_matrix
 
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
@@ -20,13 +21,14 @@ track_feature_order = [
     "p",
     "chi2",
     "ndf",
+    "dEdx",
+    "dEdxError",
     "radiusOfInnermostHit",
     "tanLambda",
     "D0",
     "omega",
     "Z0",
     "time",
-    "type",
 ]
 hit_feature_order = [
     "elemtype",
@@ -184,8 +186,24 @@ def process_one_file(fn, ofn):
             "MergedRecoParticles",
         ]
     )
-    calohit_links = arrs.arrays(["CalohitMCTruthLink", "CalohitMCTruthLink#0", "CalohitMCTruthLink#1"])
-    sitrack_links = arrs.arrays(["SiTracksMCTruthLink", "SiTracksMCTruthLink#0", "SiTracksMCTruthLink#1"])
+    calohit_links = arrs.arrays(
+        [
+            "CalohitMCTruthLink.weight",
+            "CalohitMCTruthLink#0.index",
+            "CalohitMCTruthLink#0.collectionID",
+            "CalohitMCTruthLink#1.index",
+            "CalohitMCTruthLink#1.collectionID",
+        ]
+    )
+    sitrack_links = arrs.arrays(
+        [
+            "SiTracksMCTruthLink.weight",
+            "SiTracksMCTruthLink#0.index",
+            "SiTracksMCTruthLink#0.collectionID",
+            "SiTracksMCTruthLink#1.index",
+            "SiTracksMCTruthLink#1.collectionID",
+        ]
+    )
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection
@@ -203,7 +221,7 @@ def process_one_file(fn, ofn):
     }
 
     ret = []
-    for iev in range(arrs.num_entries):
+    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -230,7 +248,7 @@ def process_one_file(fn, ofn):
         n_tracks = len(gpdata.track_features["type"])
         n_hits = len(gpdata.hit_features["type"])
         n_gps = len(gpdata.gen_features["PDG"])
-        print("hits={} tracks={} gps={}".format(n_hits, n_tracks, n_gps))
+        # print("hits={} tracks={} gps={}".format(n_hits, n_tracks, n_gps))
 
         assert len(gp_to_obj) == len(gpdata.gen_features["PDG"])
         assert gp_to_obj.shape[1] == 2

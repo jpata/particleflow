@@ -18,7 +18,7 @@ tfds build mlpf/heptfds/delphes_pf/delphes_ttbar_pf --download_dir data/ --manua
 tfds build mlpf/heptfds/delphes_pf/delphes_qcd_pf --download_dir data/ --manual_dir data/delphes_pf
 
 #Run a simple training on a few events
-python mlpf/pipeline.py train --config parameters/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
+python mlpf/pipeline.py train --config parameters/tensorflow/delphes.yaml --nepochs 1 --ntrain 5 --ntest 5 --customize pipeline_test
 
 #Check the weight files
 ls ./experiments/delphes_*/weights/

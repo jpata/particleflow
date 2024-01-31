@@ -23,7 +23,7 @@ PADDED_NUM_ELEM_SIZE = 256
 class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_singletau dataset."""
 
-    VERSION = tfds.core.Version("1.6.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
         "1.1.0": "Add muon type, fix electron GSF association",
         "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
@@ -31,6 +31,7 @@ class CmsPfSingleTau(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Without padding",
         "1.5.1": "Remove outlier caps",
         "1.6.0": "Regenerate with ARRAY_RECORD",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \
