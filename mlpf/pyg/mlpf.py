@@ -4,6 +4,8 @@ from torch_geometric.nn.conv import GravNetConv
 
 from .gnn_lsh import CombinedGraphLayer
 
+from torch.backends.cuda import sdp_kernel
+
 
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
@@ -21,8 +23,12 @@ class GravNetLayer(nn.Module):
         return x
 
 
+def next_power_of_2(x):
+    return 1 if x == 0 else 2 ** (x - 1).bit_length()
+
+
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1):
+    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, batch_first=True)
@@ -32,9 +38,27 @@ class SelfAttentionLayer(nn.Module):
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
         self.dropout = torch.nn.Dropout(dropout)
+        self.attention_type = attention_type
+        self.attn_params = {
+            "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
+            "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
+            "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
+        }
 
     def forward(self, x, mask):
-        x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
+        # explicitly call flash attention
+        with sdp_kernel(**self.attn_params[self.attention_type]):
+            n = x.shape[1]
+            # for flash attention, the sizes have to be power of two. here we pad the particle/PFElement dimension.
+            if self.attention_type == "flash":
+                n_pad = next_power_of_2(n)
+                pad_x = torch.nn.functional.pad(x, [0, 0, 0, n_pad - n, 0, 0])
+            else:
+                pad_x = x
+            mha_out = self.mha(pad_x, pad_x, pad_x, need_weights=False)[0]
+            mha_out = mha_out[:, :n, :]
+
+        x = self.norm0(x + mha_out)
         x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
         x = x * (~mask.unsqueeze(-1))
@@ -117,6 +141,7 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         conv_type="gravnet",
+        attention_type="flash",
         # gnn-lsh specific parameters
         bin_size=640,
         max_num_bins=200,
@@ -168,8 +193,12 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
-                    self.conv_reg.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
+                    self.conv_id.append(
+                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                    )
+                    self.conv_reg.append(
+                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                    )
             elif self.conv_type == "mamba":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()

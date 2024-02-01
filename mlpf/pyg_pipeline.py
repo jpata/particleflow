@@ -84,6 +84,7 @@ def main():
 
     # override some options for the pipeline test
     if args.pipeline:
+        config["model"]["attention"]["attention_type"] = "math"
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {

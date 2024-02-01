@@ -201,11 +201,12 @@ def train_and_valid(
     model,
     optimizer,
     data_loader,
-    is_train,
+    is_train=True,
     lr_schedule=None,
     comet_experiment=None,
     comet_step_freq=None,
     epoch=None,
+    dtype=torch.float32,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -241,20 +242,24 @@ def train_and_valid(
             conv_type = model.conv_type
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
-        if is_train:
-            ypred = model(batch.X, batchidx_or_mask)
-        else:
-            with torch.no_grad():
+
+        with torch.autocast(device_type="cuda", dtype=dtype):
+            if is_train:
                 ypred = model(batch.X, batchidx_or_mask)
+            else:
+                with torch.no_grad():
+                    ypred = model(batch.X, batchidx_or_mask)
+
         ypred = unpack_predictions(ypred)
 
-        if is_train:
-            loss = mlpf_loss(ygen, ypred)
-            for param in model.parameters():
-                param.grad = None
-        else:
-            with torch.no_grad():
+        with torch.autocast(device_type="cuda", dtype=dtype):
+            if is_train:
                 loss = mlpf_loss(ygen, ypred)
+                for param in model.parameters():
+                    param.grad = None
+            else:
+                with torch.no_grad():
+                    loss = mlpf_loss(ygen, ypred)
 
         if is_train:
             loss["Total"].backward()
@@ -301,6 +306,7 @@ def train_mlpf(
     num_epochs,
     patience,
     outdir,
+    dtype,
     start_epoch=1,
     lr_schedule=None,
     use_ray=False,
@@ -347,15 +353,37 @@ def train_mlpf(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
             ) as prof:
                 with record_function("model_train"):
-                    losses_t = train_and_valid(rank, world_size, model, optimizer, train_loader, True, lr_schedule)
+                    losses_t = train_and_valid(
+                        rank, world_size, model, optimizer, train_loader, is_train=True, lr_schedule=lr_schedule, dtype=dtype
+                    )
             prof.export_chrome_trace("trace.json")
         else:
             losses_t = train_and_valid(
-                rank, world_size, model, optimizer, train_loader, True, lr_schedule, comet_experiment, comet_step_freq, epoch
+                rank,
+                world_size,
+                model,
+                optimizer,
+                train_loader,
+                is_train=True,
+                lr_schedule=lr_schedule,
+                comet_experiment=comet_experiment,
+                comet_step_freq=comet_step_freq,
+                epoch=epoch,
+                dtype=dtype,
             )
 
         losses_v = train_and_valid(
-            rank, world_size, model, optimizer, valid_loader, False, None, comet_experiment, comet_step_freq, epoch
+            rank,
+            world_size,
+            model,
+            optimizer,
+            valid_loader,
+            is_train=False,
+            lr_schedule=None,
+            comet_experiment=comet_experiment,
+            comet_step_freq=comet_step_freq,
+            epoch=epoch,
+            dtype=dtype,
         )
 
         if comet_experiment:
@@ -541,6 +569,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
+            "attention_type": config["model"]["attention"]["attention_type"],
             **config["model"][config["conv_type"]],
         }
         model = MLPF(**model_kwargs)
@@ -603,6 +632,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
+            getattr(torch, config["dtype"]),
             start_epoch=start_epoch,
             lr_schedule=lr_schedule,
             use_ray=False,
