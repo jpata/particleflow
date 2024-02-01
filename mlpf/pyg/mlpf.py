@@ -76,15 +76,16 @@ def ffn(input_dim, output_dim, width, act, dropout):
         nn.Linear(width, output_dim),
     )
 
+
 class RegressionOutput(nn.Module):
     def __init__(self, mode, embed_dim, width, act, dropout):
         super(RegressionOutput, self).__init__()
         self.mode = mode
 
-        #single output
+        # single output
         if self.mode == "direct" or self.mode == "additive" or self.mode == "multiplicative":
             self.nn = ffn(embed_dim, 1, width, act, dropout)
-        #two outputs
+        # two outputs
         elif self.mode == "linear":
             self.nn = ffn(embed_dim, 2, width, act, dropout)
 
@@ -96,9 +97,10 @@ class RegressionOutput(nn.Module):
         elif self.mode == "additive":
             return orig_value + nn_out
         elif self.mode == "multiplicative":
-            return orig_value*nn_out
+            return orig_value * nn_out
         elif self.mode == "linear":
-            return orig_value*nn_out[..., 0:1] + nn_out[..., 1:2]
+            return orig_value * nn_out[..., 0:1] + nn_out[..., 1:2]
+
 
 class MLPF(nn.Module):
     def __init__(
@@ -128,11 +130,11 @@ class MLPF(nn.Module):
         d_state=16,
         d_conv=4,
         expand=2,
-        pt_mode = "linear",
-        eta_mode = "linear",
-        sin_phi_mode = "linear",
-        cos_phi_mode = "linear",
-        energy_mode = "linear",
+        pt_mode="linear",
+        eta_mode="linear",
+        sin_phi_mode="linear",
+        cos_phi_mode="linear",
+        energy_mode="linear",
     ):
         super(MLPF, self).__init__()
 
@@ -232,7 +234,7 @@ class MLPF(nn.Module):
                     embeddings_reg.append(out_padded)
 
         embedding_id = torch.cat([X_features] + embeddings_id, axis=-1)
-        preds_id = self.nn_id(embedding_id)    
+        preds_id = self.nn_id(embedding_id)
 
         # regression
         embedding_reg = torch.cat([X_features] + embeddings_reg + [preds_id], axis=-1)
@@ -243,7 +245,7 @@ class MLPF(nn.Module):
         # assert torch.all(input_[:, 1] >= 0.0)  # pt
         # assert torch.all(input_[:, 5] >= 0.0)  # energy
 
-        #The PFElement feature order in X_features defined in fcc/postprocessing.py
+        # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(embedding_reg, X_features[..., 1:2])
         preds_eta = self.nn_eta(embedding_reg, X_features[..., 2:3])
         preds_sin_phi = self.nn_sin_phi(embedding_reg, X_features[..., 3:4])
