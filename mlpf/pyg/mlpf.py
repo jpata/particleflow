@@ -76,6 +76,29 @@ def ffn(input_dim, output_dim, width, act, dropout):
         nn.Linear(width, output_dim),
     )
 
+class RegressionOutput(nn.Module):
+    def __init__(self, mode, embed_dim, width, act, dropout):
+        super(RegressionOutput, self).__init__()
+        self.mode = mode
+
+        #single output
+        if self.mode == "direct" or self.mode == "additive" or self.mode == "multiplicative":
+            self.nn = ffn(embed_dim, 1, width, act, dropout)
+        #two outputs
+        elif self.mode == "linear":
+            self.nn = ffn(embed_dim, 2, width, act, dropout)
+
+    def forward(self, x, orig_value):
+        nn_out = self.nn(x)
+
+        if self.mode == "direct":
+            return nn_out
+        elif self.mode == "additive":
+            return orig_value + nn_out
+        elif self.mode == "multiplicative":
+            return orig_value*nn_out
+        elif self.mode == "linear":
+            return orig_value*nn_out[..., 0:1] + nn_out[..., 1:2]
 
 class MLPF(nn.Module):
     def __init__(
@@ -105,6 +128,11 @@ class MLPF(nn.Module):
         d_state=16,
         d_conv=4,
         expand=2,
+        pt_mode = "linear",
+        eta_mode = "linear",
+        sin_phi_mode = "linear",
+        cos_phi_mode = "linear",
+        energy_mode = "linear",
     ):
         super(MLPF, self).__init__()
 
@@ -169,10 +197,12 @@ class MLPF(nn.Module):
         self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout)
 
         # elementwise DNN for node momentum regression
-        self.nn_pt = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
-        self.nn_eta = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
-        self.nn_phi = ffn(decoding_dim + num_classes, 4, width, self.act, dropout)
-        self.nn_energy = ffn(decoding_dim + num_classes, 2, width, self.act, dropout)
+        embed_dim = decoding_dim + num_classes
+        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout)
+        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout)
+        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
@@ -213,21 +243,13 @@ class MLPF(nn.Module):
         # assert torch.all(input_[:, 1] >= 0.0)  # pt
         # assert torch.all(input_[:, 5] >= 0.0)  # energy
 
-        # predict the 4-momentum values
-        pred_pt_corr = self.nn_pt(embedding_reg)
-        pred_energy_corr = self.nn_energy(embedding_reg)
-        pred_eta_corr = self.nn_eta(embedding_reg)
-        pred_phi_corr = self.nn_phi(embedding_reg)
-
-        #Compute output as y=ax + b, where x is the PFElement value and y is the predicted value.
-        #The NN predicts the slope a and bias b. 
         #The PFElement feature order in X_features defined in fcc/postprocessing.py
-        #  -> track_feature_order, cluster_feature_order
-        preds_pt = pred_pt_corr[..., 0:1]*X_features[..., 1:2] + pred_pt_corr[..., 1:2]
-        preds_eta = pred_eta_corr[..., 0:1]*X_features[..., 2:3] + pred_eta_corr[..., 1:2]
-        preds_phi = pred_phi_corr[..., 0:2]*X_features[..., 3:5] + pred_phi_corr[..., 2:4]
-        preds_energy = pred_energy_corr[..., 0:1]*X_features[..., 5:6] + pred_energy_corr[..., 1:2]
-        preds_momentum = torch.cat([preds_pt, preds_eta, preds_phi, preds_energy], axis=-1)
+        preds_pt = self.nn_pt(embedding_reg, X_features[..., 1:2])
+        preds_eta = self.nn_eta(embedding_reg, X_features[..., 2:3])
+        preds_sin_phi = self.nn_sin_phi(embedding_reg, X_features[..., 3:4])
+        preds_cos_phi = self.nn_cos_phi(embedding_reg, X_features[..., 4:5])
+        preds_energy = self.nn_energy(embedding_reg, X_features[..., 5:6])
+        preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
         pred_charge = self.nn_charge(embedding_reg)
 

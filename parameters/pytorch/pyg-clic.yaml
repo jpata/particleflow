@@ -22,6 +22,12 @@ comet_offline: False
 comet_step_freq: 10
 
 model:
+  pt_mode: linear
+  eta_mode: linear
+  sin_phi_mode: linear
+  cos_phi_mode: linear
+  energy_mode: linear
+  
   gnn_lsh:
     conv_type: gnn_lsh
     embedding_dim: 512

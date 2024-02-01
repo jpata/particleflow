@@ -536,6 +536,11 @@ def run(rank, world_size, config, args, outdir, logfile):
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
+            "pt_mode": config["model"]["pt_mode"],
+            "eta_mode": config["model"]["eta_mode"],
+            "sin_phi_mode": config["model"]["sin_phi_mode"],
+            "cos_phi_mode": config["model"]["cos_phi_mode"],
+            "energy_mode": config["model"]["energy_mode"],
             **config["model"][config["conv_type"]],
         }
         model = MLPF(**model_kwargs)
