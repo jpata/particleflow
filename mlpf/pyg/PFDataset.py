@@ -106,11 +106,10 @@ class PFDataLoader(torch.utils.data.DataLoader):
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_bin_size=640, pad_3d=True):
+    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_3d=True):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
         self.keys_to_get = keys_to_get
-        self.pad_bin_size = pad_bin_size
         self.pad_3d = pad_3d
 
     def __call__(self, inputs):

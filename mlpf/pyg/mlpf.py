@@ -238,6 +238,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
+    # @torch.compile
     def forward(self, X_features, batch_or_mask):
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:

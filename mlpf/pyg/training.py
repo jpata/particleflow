@@ -231,6 +231,8 @@ def train_and_valid(
             enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
         )
 
+    device_type = "cuda" if isinstance(rank, int) else "cpu"
+
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
@@ -243,7 +245,7 @@ def train_and_valid(
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
 
-        with torch.autocast(device_type=rank, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype):
             if is_train:
                 ypred = model(batch.X, batchidx_or_mask)
             else:
@@ -252,7 +254,7 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred)
 
-        with torch.autocast(device_type=rank, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype):
             if is_train:
                 loss = mlpf_loss(ygen, ypred)
                 for param in model.parameters():
@@ -692,7 +694,8 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
-                with torch.autocast(device_type=rank, dtype=dtype):
+                device_type = "cuda" if isinstance(rank, int) else "cpu"
+                with torch.autocast(device_type=device_type, dtype=dtype):
                     run_predictions(
                         world_size,
                         rank,
