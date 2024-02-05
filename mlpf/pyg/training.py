@@ -243,7 +243,7 @@ def train_and_valid(
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
 
-        with torch.autocast(device_type="cuda", dtype=dtype):
+        with torch.autocast(device_type=rank, dtype=dtype):
             if is_train:
                 ypred = model(batch.X, batchidx_or_mask)
             else:
@@ -252,7 +252,7 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred)
 
-        with torch.autocast(device_type="cuda", dtype=dtype):
+        with torch.autocast(device_type=rank, dtype=dtype):
             if is_train:
                 loss = mlpf_loss(ygen, ypred)
                 for param in model.parameters():
@@ -692,7 +692,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
-                with torch.autocast(device_type="cuda", dtype=dtype):
+                with torch.autocast(device_type=rank, dtype=dtype):
                     run_predictions(
                         world_size,
                         rank,
