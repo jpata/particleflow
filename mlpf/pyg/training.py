@@ -245,7 +245,7 @@ def train_and_valid(
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
 
-        with torch.autocast(device_type=device_type, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 ypred = model(batch.X, batchidx_or_mask)
             else:
@@ -254,7 +254,7 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred)
 
-        with torch.autocast(device_type=device_type, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ygen, ypred)
                 for param in model.parameters():
@@ -518,6 +518,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
+    _logger.info("using dtype={}".format(dtype))
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -695,7 +696,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
                 device_type = "cuda" if isinstance(rank, int) else "cpu"
-                with torch.autocast(device_type=device_type, dtype=dtype):
+                with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
                     run_predictions(
                         world_size,
                         rank,
@@ -749,6 +750,10 @@ def override_config(config, args):
         arg_value = getattr(args, arg)
         if arg_value is not None:
             config[arg] = arg_value
+
+    if not (args.attention_type is None):
+        config["model"]["attention"]["attention_type"] = args.attention_type
+
     return config
 
 
@@ -811,6 +816,7 @@ def train_ray_trial(config, args, outdir=None):
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
+
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)

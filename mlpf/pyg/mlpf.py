@@ -5,6 +5,7 @@ from torch_geometric.nn.conv import GravNetConv
 from .gnn_lsh import CombinedGraphLayer
 
 from torch.backends.cuda import sdp_kernel
+from pyg.logger import _logger
 
 
 class GravNetLayer(nn.Module):
@@ -39,6 +40,7 @@ class SelfAttentionLayer(nn.Module):
         )
         self.dropout = torch.nn.Dropout(dropout)
         self.attention_type = attention_type
+        _logger.info("using attention_type={}".format(attention_type))
         self.attn_params = {
             "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
             "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},

@@ -28,8 +28,8 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+      - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
 
   tf-unittests:
     runs-on: ubuntu-22.04
@@ -101,8 +101,8 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+      - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
       - run: PYTHONPATH=. python3 -m unittest tests/test_torch_and_tf.py
 
   pyg-pipeline:
@@ -115,6 +115,6 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+      - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
       - run: ./scripts/local_test_pyg.sh
