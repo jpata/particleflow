@@ -515,6 +515,8 @@ def run(rank, world_size, config, args, outdir, logfile):
     pad_3d = config["conv_type"] != "gravnet"
     use_cuda = rank != "cpu"
 
+    dtype = getattr(torch, config["dtype"])
+
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
@@ -632,7 +634,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
-            getattr(torch, config["dtype"]),
+            dtype,
             start_epoch=start_epoch,
             lr_schedule=lr_schedule,
             use_ray=False,
@@ -690,18 +692,19 @@ def run(rank, world_size, config, args, outdir, logfile):
                 else:
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
-                run_predictions(
-                    world_size,
-                    rank,
-                    model,
-                    test_loader,
-                    sample,
-                    outdir,
-                    jetdef,
-                    jet_ptcut=15.0,
-                    jet_match_dr=0.1,
-                    dir_name=testdir_name,
-                )
+                with torch.autocast(device_type="cuda", dtype=dtype):
+                    run_predictions(
+                        world_size,
+                        rank,
+                        model,
+                        test_loader,
+                        sample,
+                        outdir,
+                        jetdef,
+                        jet_ptcut=15.0,
+                        jet_match_dr=0.1,
+                        dir_name=testdir_name,
+                    )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:

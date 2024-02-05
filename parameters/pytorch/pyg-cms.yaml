@@ -20,7 +20,7 @@ checkpoint_freq:
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
-dtype: float32
+dtype: bfloat16
 
 model:
   pt_mode: linear
