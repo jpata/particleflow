@@ -29,7 +29,7 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
       - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
+      - run: pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
 
   tf-unittests:
     runs-on: ubuntu-22.04
@@ -102,7 +102,7 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
       - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
+      - run: pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
       - run: PYTHONPATH=. python3 -m unittest tests/test_torch_and_tf.py
 
   pyg-pipeline:
@@ -116,5 +116,5 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
       - run: pip3 install torch==2.2.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
+      - run: pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-2.2.0+cpu.html
       - run: ./scripts/local_test_pyg.sh
