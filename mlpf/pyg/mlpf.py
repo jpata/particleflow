@@ -5,6 +5,7 @@ from torch_geometric.nn.conv import GravNetConv
 from .gnn_lsh import CombinedGraphLayer
 
 from torch.backends.cuda import sdp_kernel
+from pyg.logger import _logger
 
 
 class GravNetLayer(nn.Module):
@@ -23,10 +24,6 @@ class GravNetLayer(nn.Module):
         return x
 
 
-def next_power_of_2(x):
-    return 1 if x == 0 else 2 ** (x - 1).bit_length()
-
-
 class SelfAttentionLayer(nn.Module):
     def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
         super(SelfAttentionLayer, self).__init__()
@@ -39,6 +36,7 @@ class SelfAttentionLayer(nn.Module):
         )
         self.dropout = torch.nn.Dropout(dropout)
         self.attention_type = attention_type
+        _logger.info("using attention_type={}".format(attention_type))
         self.attn_params = {
             "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
             "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
@@ -46,17 +44,9 @@ class SelfAttentionLayer(nn.Module):
         }
 
     def forward(self, x, mask):
-        # explicitly call flash attention
+        # explicitly call the desired attention mechanism
         with sdp_kernel(**self.attn_params[self.attention_type]):
-            n = x.shape[1]
-            # for flash attention, the sizes have to be power of two. here we pad the particle/PFElement dimension.
-            if self.attention_type == "flash":
-                n_pad = next_power_of_2(n)
-                pad_x = torch.nn.functional.pad(x, [0, 0, 0, n_pad - n, 0, 0])
-            else:
-                pad_x = x
-            mha_out = self.mha(pad_x, pad_x, pad_x, need_weights=False)[0]
-            mha_out = mha_out[:, :n, :]
+            mha_out = self.mha(x, x, x, need_weights=False)[0]
 
         x = self.norm0(x + mha_out)
         x = self.norm1(x + self.seq(x))

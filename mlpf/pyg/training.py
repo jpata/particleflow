@@ -245,7 +245,7 @@ def train_and_valid(
 
         batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
 
-        with torch.autocast(device_type=device_type, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 ypred = model(batch.X, batchidx_or_mask)
             else:
@@ -254,7 +254,7 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred)
 
-        with torch.autocast(device_type=device_type, dtype=dtype):
+        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ygen, ypred)
                 for param in model.parameters():
@@ -515,9 +515,12 @@ def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     pad_3d = config["conv_type"] != "gravnet"
+    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
+
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
+    _logger.info("using dtype={}".format(dtype))
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -540,6 +543,10 @@ def run(rank, world_size, config, args, outdir, logfile):
         with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
+
+        if config["conv_type"] == "attention":
+            model_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
+
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
@@ -620,6 +627,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config,
             use_cuda,
             pad_3d,
+            pad_power_of_two,
             use_ray=False,
         )
         steps_per_epoch = len(loaders["train"])
@@ -695,7 +703,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
                 device_type = "cuda" if isinstance(rank, int) else "cpu"
-                with torch.autocast(device_type=device_type, dtype=dtype):
+                with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
                     run_predictions(
                         world_size,
                         rank,
@@ -719,13 +727,15 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         if args.export_onnx:
             try:
-                dummy_features = torch.randn(1, 640, model_kwargs["input_dim"], device=rank)
-                dummy_mask = torch.zeros(1, 640, dtype=torch.bool, device=rank)
+                dummy_features = torch.randn(1, 8192, model_kwargs["input_dim"], device=rank)
+                dummy_mask = torch.zeros(1, 8192, dtype=torch.bool, device=rank)
+
+                # Torch ONNX export in the old way
                 torch.onnx.export(
                     model,
                     (dummy_features, dummy_mask),
                     "test.onnx",
-                    verbose=True,
+                    verbose=False,
                     input_names=["features", "mask"],
                     output_names=["id", "momentum", "charge"],
                     dynamic_axes={
@@ -736,6 +746,10 @@ def run(rank, world_size, config, args, outdir, logfile):
                         "charge": [0, 1],
                     },
                 )
+
+                # Torch ONNX export in the new way
+                # onnx_program = torch.onnx.dynamo_export(model, (dummy_features, dummy_mask))
+                # onnx_program.save("test.onnx")
             except Exception as e:
                 print("ONNX export failed: {}".format(e))
 
@@ -749,6 +763,10 @@ def override_config(config, args):
         arg_value = getattr(args, arg)
         if arg_value is not None:
             config[arg] = arg_value
+
+    if not (args.attention_type is None):
+        config["model"]["attention"]["attention_type"] = args.attention_type
+
     return config
 
 
@@ -796,6 +814,7 @@ def train_ray_trial(config, args, outdir=None):
         outdir = ray.train.get_context().get_trial_dir()
 
     pad_3d = config["conv_type"] != "gravnet"
+    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
@@ -811,6 +830,7 @@ def train_ray_trial(config, args, outdir=None):
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
+
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
@@ -825,7 +845,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, pad_power_of_two, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(
