@@ -1009,7 +1009,6 @@ def raytune(
         str(Path(cfg["raytune"]["local_dir"]) / name / "config.yaml"),
     )  # Copy the config file to the train dir for later reference
 
-    ray.tune.ray_trial_executor.DEFAULT_GET_TIMEOUT = 1 * 60 * 60  # Avoid timeout errors
     if not local:
         ray.init(address="auto")
 

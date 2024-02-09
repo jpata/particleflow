@@ -1,6 +1,7 @@
 import json
 import pickle as pkl
 
+import pandas as pd
 import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
@@ -277,3 +278,32 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule
+
+
+def count_parameters(model):
+    table = pd.DataFrame(columns=["Modules", "Trainable params", "Non-tranable params"])
+    trainable_params = 0
+    nontrainable_params = 0
+    for ii, (name, parameter) in enumerate(model.named_parameters()):
+        params = parameter.numel()
+        if not parameter.requires_grad:
+            table = pd.concat(
+                [
+                    table,
+                    pd.DataFrame(
+                        {"Modules": name, "Trainable Parameters": "-", "Non-tranable Parameters": params}, index=[ii]
+                    ),
+                ]
+            )
+            nontrainable_params += params
+        else:
+            table = pd.concat(
+                [
+                    table,
+                    pd.DataFrame(
+                        {"Modules": name, "Trainable Parameters": params, "Non-tranable Parameters": "-"}, index=[ii]
+                    ),
+                ]
+            )
+            trainable_params += params
+    return trainable_params, nontrainable_params, table
