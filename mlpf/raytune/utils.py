@@ -8,6 +8,7 @@ from ray.tune.schedulers.pb2 import PB2  # Population Based Bandits
 from ray.tune.search.bayesopt import BayesOptSearch
 from ray.tune.search.bohb import TuneBOHB
 from ray.tune.search.hyperopt import HyperOptSearch
+from ray.tune.search.nevergrad import NevergradSearch
 from ray.tune.search.skopt import SkOptSearch
 
 # from ray.tune.search.hebo import HEBOSearch # HEBO is not yet supported
@@ -58,6 +59,18 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
             convert_to_python=True,
+        )
+    if raytune_cfg["search_alg"] == "nevergrad":
+        print("INFO: Using bayesian optimization from nevergrad")
+        import nevergrad as ng
+
+        return NevergradSearch(
+            optimizer=ng.optimizers.BayesOptim(
+                pca=False,
+                init_budget=raytune_cfg["nevergrad"]["n_random_steps"],
+            ),
+            metric=raytune_cfg["default_metric"],
+            mode=raytune_cfg["default_mode"],
         )
     # HEBO is not yet supported
     # if (raytune_cfg["search_alg"] == "hebo") or (raytune_cfg["search_alg"] == "HEBO"):
