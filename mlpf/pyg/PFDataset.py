@@ -115,7 +115,7 @@ class Collater:
         self.exclude_keys = exclude_keys
         self.keys_to_get = keys_to_get
         self.pad_3d = pad_3d
-        self.pad_power_of_two = False
+        self.pad_power_of_two = pad_power_of_two
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
