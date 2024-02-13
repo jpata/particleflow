@@ -6,9 +6,9 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 50
+num_epochs: 10
 patience: 20
-lr: 0.001
+lr: 0.0005
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
@@ -20,6 +20,7 @@ checkpoint_freq:
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
+dtype: bfloat16
 
 model:
   pt_mode: linear
@@ -60,10 +61,11 @@ model:
     embedding_dim: 256
     width: 256
     num_convs: 3
-    dropout: 0.0
+    dropout: 0.3
     activation: "elu"
     # attention specific paramters
-    num_heads: 2
+    num_heads: 16
+    attention_type: flash
 
   mamba:
     conv_type: mamba

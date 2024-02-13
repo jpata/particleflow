@@ -71,6 +71,20 @@ parser.add_argument("--comet-offline", action="store_true", help="save comet log
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
 parser.add_argument("--experiments-dir", type=str, default=None, help="base directory within which trainings are stored")
 parser.add_argument("--pipeline", action="store_true", default=None, help="test is running in pipeline")
+parser.add_argument(
+    "--dtype",
+    type=str,
+    default=None,
+    help="data type for training",
+    choices=["float32", "float16", "bfloat16"],
+)
+parser.add_argument(
+    "--attention-type",
+    type=str,
+    default=None,
+    help="attention type for self-attention layer",
+    choices=["math", "efficient", "flash"],
+)
 
 
 def main():

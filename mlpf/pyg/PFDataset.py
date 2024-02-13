@@ -103,15 +103,19 @@ class PFDataLoader(torch.utils.data.DataLoader):
         )
 
 
+def next_power_of_2(x):
+    return 1 if x == 0 else 2 ** (x - 1).bit_length()
+
+
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_bin_size=640, pad_3d=True):
+    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_3d=True, pad_power_of_two=True):
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
         self.keys_to_get = keys_to_get
-        self.pad_bin_size = pad_bin_size
         self.pad_3d = pad_3d
+        self.pad_power_of_two = False
 
     def __call__(self, inputs):
         num_samples_in_batch = len(inputs)
@@ -129,7 +133,16 @@ class Collater:
         if not self.pad_3d:
             return ret
         else:
-            ret = {k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch) for k in elem_keys}
+            # pad to closest power of two
+            if self.pad_power_of_two:
+                sizes = [next_power_of_2(len(b.X)) for b in batch]
+                max_size = max(sizes)
+            else:
+                max_size = None
+            ret = {
+                k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch, max_num_nodes=max_size)
+                for k in elem_keys
+            }
 
             ret["mask"] = ret["X"][1]
 
@@ -185,7 +198,7 @@ class InterleavedIterator(object):
             return len_
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray):
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, pad_power_of_two, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
         loaders[split] = []
@@ -219,7 +232,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_
             loader = PFDataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d, pad_power_of_two=pad_power_of_two),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],

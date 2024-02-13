@@ -4,6 +4,9 @@ from torch_geometric.nn.conv import GravNetConv
 
 from .gnn_lsh import CombinedGraphLayer
 
+from torch.backends.cuda import sdp_kernel
+from pyg.logger import _logger
+
 
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
@@ -22,7 +25,7 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1):
+    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, batch_first=True)
@@ -32,9 +35,20 @@ class SelfAttentionLayer(nn.Module):
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
         self.dropout = torch.nn.Dropout(dropout)
+        self.attention_type = attention_type
+        _logger.info("using attention_type={}".format(attention_type))
+        self.attn_params = {
+            "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
+            "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
+            "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
+        }
 
     def forward(self, x, mask):
-        x = self.norm0(x + self.mha(x, x, x, key_padding_mask=mask, need_weights=False)[0])
+        # explicitly call the desired attention mechanism
+        with sdp_kernel(**self.attn_params[self.attention_type]):
+            mha_out = self.mha(x, x, x, need_weights=False)[0]
+
+        x = self.norm0(x + mha_out)
         x = self.norm1(x + self.seq(x))
         x = self.dropout(x)
         x = x * (~mask.unsqueeze(-1))
@@ -117,6 +131,7 @@ class MLPF(nn.Module):
         propagate_dimensions=32,
         space_dimensions=4,
         conv_type="gravnet",
+        attention_type="flash",
         # gnn-lsh specific parameters
         bin_size=640,
         max_num_bins=200,
@@ -168,8 +183,12 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
-                    self.conv_reg.append(SelfAttentionLayer(embedding_dim, num_heads, width, dropout))
+                    self.conv_id.append(
+                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                    )
+                    self.conv_reg.append(
+                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                    )
             elif self.conv_type == "mamba":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -209,6 +228,7 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
+    # @torch.compile
     def forward(self, X_features, batch_or_mask):
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:

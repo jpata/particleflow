@@ -7,7 +7,6 @@ import fastjet
 import mplhep
 import numpy as np
 import torch
-import torch_geometric
 import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
@@ -22,6 +21,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
+import torch_geometric
 from torch_geometric.data import Batch
 
 from .logger import _logger
