@@ -201,7 +201,8 @@ def train_and_valid(
     world_size,
     model,
     optimizer,
-    data_loader,
+    train_loader,
+    valid_loader,
     is_train=True,
     lr_schedule=None,
     comet_experiment=None,
@@ -221,8 +222,10 @@ def train_and_valid(
 
     if is_train:
         model.train()
+        data_loader = train_loader
     else:
         model.eval()
+        data_loader = valid_loader
 
     # only show progress bar on rank 0
     if (world_size > 1) and (rank != 0):
@@ -281,6 +284,16 @@ def train_and_valid(
                 step = (epoch - 1) * len(data_loader) + itrain
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
                 comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+
+        if is_train and itrain % val_freq == 0:
+            # run an extra validation run every val_freq training steps
+            intermediate_losses_v = train_and_valid(
+                rank, world_size, outdir, model, optimizer, train_loader, valid_loader, is_train=False, epoch=epoch, dtype=dtype
+            )
+            step = (epoch - 1) * len(data_loader) + itrain
+
+            if comet_experiment:
+                comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -357,16 +370,27 @@ def train_mlpf(
             ) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
-                        rank, world_size, model, optimizer, train_loader, is_train=True, lr_schedule=lr_schedule, dtype=dtype
+                        rank,
+                        world_size,
+                        outdir,
+                        model,
+                        optimizer,
+                        train_loader,
+                        valid_loader,
+                        is_train=True,
+                        lr_schedule=lr_schedule,
+                        dtype=dtype,
                     )
             prof.export_chrome_trace("trace.json")
         else:
             losses_t = train_and_valid(
                 rank,
                 world_size,
+                outdir,
                 model,
                 optimizer,
                 train_loader,
+                valid_loader,
                 is_train=True,
                 lr_schedule=lr_schedule,
                 comet_experiment=comet_experiment,
@@ -378,6 +402,7 @@ def train_mlpf(
         losses_v = train_and_valid(
             rank,
             world_size,
+            outdir,
             model,
             optimizer,
             valid_loader,
