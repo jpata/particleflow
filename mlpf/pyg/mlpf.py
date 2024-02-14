@@ -43,15 +43,21 @@ class SelfAttentionLayer(nn.Module):
             "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
         }
 
+        self.add0 = torch.ao.nn.quantized.FloatFunctional()
+        self.add1 = torch.ao.nn.quantized.FloatFunctional()
+        self.mul = torch.ao.nn.quantized.FloatFunctional()
+
     def forward(self, x, mask):
         # explicitly call the desired attention mechanism
         with sdp_kernel(**self.attn_params[self.attention_type]):
             mha_out = self.mha(x, x, x, need_weights=False)[0]
 
-        x = self.norm0(x + mha_out)
-        x = self.norm1(x + self.seq(x))
+        x = self.add0.add(x, mha_out)
+        x = self.norm0(x)
+        x = self.add1.add(x, self.seq(x))
+        x = self.norm1(x)
         x = self.dropout(x)
-        x = x * (~mask.unsqueeze(-1))
+        x = self.mul.mul(x, mask.unsqueeze(-1))
         return x
 
 
@@ -101,6 +107,8 @@ class RegressionOutput(nn.Module):
             self.nn = ffn(embed_dim, 1, width, act, dropout)
         # two outputs
         elif self.mode == "linear":
+            self.add = torch.ao.nn.quantized.FloatFunctional()
+            self.mul = torch.ao.nn.quantized.FloatFunctional()
             self.nn = ffn(embed_dim, 2, width, act, dropout)
 
     def forward(self, x, orig_value):
@@ -113,7 +121,7 @@ class RegressionOutput(nn.Module):
         elif self.mode == "multiplicative":
             return orig_value * nn_out
         elif self.mode == "linear":
-            return orig_value * nn_out[..., 0:1] + nn_out[..., 1:2]
+            return self.add.add(self.mul.mul(orig_value, nn_out[..., 0:1]), nn_out[..., 1:2])
 
 
 class MLPF(nn.Module):
@@ -228,8 +236,14 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
 
+        self.quant = torch.ao.quantization.QuantStub()
+        self.dequant1 = torch.ao.quantization.DeQuantStub()
+        self.dequant2 = torch.ao.quantization.DeQuantStub()
+        self.dequant3 = torch.ao.quantization.DeQuantStub()
+
     # @torch.compile
     def forward(self, X_features, batch_or_mask):
+        X_features = self.quant(X_features)
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             embedding = self.nn0(X_features)
@@ -246,18 +260,20 @@ class MLPF(nn.Module):
                 mask = batch_or_mask
                 for num, conv in enumerate(self.conv_id):
                     conv_input = embedding if num == 0 else embeddings_id[-1]
-                    out_padded = conv(conv_input, ~mask)
+                    out_padded = conv(conv_input, mask)
                     embeddings_id.append(out_padded)
                 for num, conv in enumerate(self.conv_reg):
                     conv_input = embedding if num == 0 else embeddings_reg[-1]
-                    out_padded = conv(conv_input, ~mask)
+                    out_padded = conv(conv_input, mask)
                     embeddings_reg.append(out_padded)
 
         embedding_id = torch.cat([X_features] + embeddings_id, axis=-1)
         preds_id = self.nn_id(embedding_id)
 
-        # regression
+        # regression input
         embedding_reg = torch.cat([X_features] + embeddings_reg + [preds_id], axis=-1)
+
+        preds_id = self.dequant1(preds_id)
 
         # do some sanity checks on the PFElement input data
         # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
@@ -272,7 +288,9 @@ class MLPF(nn.Module):
         preds_cos_phi = self.nn_cos_phi(embedding_reg, X_features[..., 4:5])
         preds_energy = self.nn_energy(embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
+        preds_momentum = self.dequant2(preds_momentum)
 
         pred_charge = self.nn_charge(embedding_reg)
+        pred_charge = self.dequant3(pred_charge)
 
         return preds_id, preds_momentum, pred_charge

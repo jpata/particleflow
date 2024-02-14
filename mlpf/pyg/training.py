@@ -208,6 +208,7 @@ def train_and_valid(
     comet_step_freq=None,
     epoch=None,
     dtype=torch.float32,
+    tensorboard_writer=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -234,6 +235,7 @@ def train_and_valid(
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
+    loss_accum = 0.0
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
@@ -266,6 +268,12 @@ def train_and_valid(
 
         if is_train:
             loss["Total"].backward()
+            loss_accum += loss["Total"].detach().cpu().item()
+            if itrain > 0 and itrain % 10 == 0:
+                print("loss", loss_accum)
+                if not (tensorboard_writer is None):
+                    tensorboard_writer.add_scalar("step/loss", loss_accum / 10.0, itrain)
+                    loss_accum = 0.0
             optimizer.step()
             if lr_schedule:
                 lr_schedule.step()
@@ -373,6 +381,7 @@ def train_mlpf(
                 comet_step_freq=comet_step_freq,
                 epoch=epoch,
                 dtype=dtype,
+                tensorboard_writer=tensorboard_writer_train,
             )
 
         losses_v = train_and_valid(
