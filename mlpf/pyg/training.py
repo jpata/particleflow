@@ -269,11 +269,6 @@ def train_and_valid(
         if is_train:
             loss["Total"].backward()
             loss_accum += loss["Total"].detach().cpu().item()
-            if itrain > 0 and itrain % 10 == 0:
-                print("loss", loss_accum)
-                if not (tensorboard_writer is None):
-                    tensorboard_writer.add_scalar("step/loss", loss_accum / 10.0, itrain)
-                    loss_accum = 0.0
             optimizer.step()
             if lr_schedule:
                 lr_schedule.step()
@@ -283,10 +278,13 @@ def train_and_valid(
                 epoch_loss[loss_] = 0.0
             epoch_loss[loss_] += loss[loss_].detach()
 
-        if comet_experiment and is_train:
-            if itrain % comet_step_freq == 0:
+        if is_train:
+            step = (epoch - 1) * len(data_loader) + itrain
+            if not (tensorboard_writer is None) and (itrain % 10 == 0):
+                tensorboard_writer.add_scalar("step/loss", loss_accum / 10.0, step)
+                loss_accum = 0.0
+            if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
-                step = (epoch - 1) * len(data_loader) + itrain
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
                 comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
