@@ -21,6 +21,7 @@ comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
 dtype: bfloat16
+val_freq:  # run an extra validation run every val_freq training steps
 
 model:
   pt_mode: linear
@@ -78,6 +79,10 @@ model:
     d_state: 32
     d_conv: 4
     expand: 2
+
+lr_schedule_config:
+  onecycle:
+    pct_start: 0.3
 
 raytune:
   local_dir: # Note: please specify an absolute path

@@ -10,6 +10,7 @@ import shutil
 from datetime import datetime
 import tqdm
 import yaml
+import csv
 
 import numpy as np
 
@@ -199,6 +200,7 @@ class FocalLoss(nn.Module):
 def train_and_valid(
     rank,
     world_size,
+    outdir,
     model,
     optimizer,
     train_loader,
@@ -208,6 +210,7 @@ def train_and_valid(
     comet_experiment=None,
     comet_step_freq=None,
     epoch=None,
+    val_freq=None,
     dtype=torch.float32,
 ):
     """
@@ -237,6 +240,7 @@ def train_and_valid(
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
+    val_freq_time_0 = time.time()
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
@@ -285,15 +289,56 @@ def train_and_valid(
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
                 comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
-        if is_train and itrain % val_freq == 0:
-            # run an extra validation run every val_freq training steps
-            intermediate_losses_v = train_and_valid(
-                rank, world_size, outdir, model, optimizer, train_loader, valid_loader, is_train=False, epoch=epoch, dtype=dtype
-            )
-            step = (epoch - 1) * len(data_loader) + itrain
+        if val_freq is not None and is_train:
+            if itrain != 0 and itrain % val_freq == 0 :
+                # time since last intermediate validation run
+                val_freq_time = torch.tensor(time.time() - val_freq_time_0, device=rank)
+                if world_size > 1:
+                    torch.distributed.all_reduce(val_freq_time)
+                # compute intermediate training loss
+                intermediate_losses_t = {key: epoch_loss[key] for key in epoch_loss}
+                for loss_ in epoch_loss:
+                    # sum up the losses from all workers and dicide by
+                    if world_size > 1:
+                        torch.distributed.all_reduce(intermediate_losses_t[loss_])
+                    intermediate_losses_t[loss_] = intermediate_losses_t[loss_].cpu().item() / itrain
 
-            if comet_experiment:
-                comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
+                # compute intermediate validation loss
+                intermediate_losses_v = train_and_valid(
+                    rank,
+                    world_size,
+                    outdir,
+                    model,
+                    optimizer,
+                    train_loader,
+                    valid_loader,
+                    is_train=False,
+                    epoch=epoch,
+                    dtype=dtype,
+                )
+                intermediate_metrics = dict(
+                    loss=intermediate_losses_t["Total"],
+                    reg_loss=intermediate_losses_t["Regression"],
+                    cls_loss=intermediate_losses_t["Classification"],
+                    charge_loss=intermediate_losses_t["Charge"],
+                    val_loss=intermediate_losses_v["Total"],
+                    val_reg_loss=intermediate_losses_v["Regression"],
+                    val_cls_loss=intermediate_losses_v["Classification"],
+                    val_charge_loss=intermediate_losses_v["Charge"],
+                    inside_epoch=epoch,
+                    step=(epoch - 1) * len(data_loader) + itrain,
+                    val_freq_time=val_freq_time.cpu().item(),
+                )
+                val_freq_log = os.path.join(outdir, "val_freq_log.csv")
+                if (rank == 0) or (rank == "cpu"):
+                    with open(val_freq_log, "a", newline="") as f:
+                        writer = csv.DictWriter(f, fieldnames=intermediate_metrics.keys())
+                        if os.stat(val_freq_log).st_size == 0:  # only write header if file is empty
+                            writer.writeheader()
+                        writer.writerow(intermediate_metrics)
+                if comet_experiment:
+                    comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
+                val_freq_time_0 = time.time()  # reset intermediate validation spacing timer
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -329,6 +374,7 @@ def train_mlpf(
     checkpoint_freq=None,
     comet_experiment=None,
     comet_step_freq=None,
+    val_freq=None,
 ):
     """
     Will run a full training by calling train().
@@ -375,10 +421,11 @@ def train_mlpf(
                         outdir,
                         model,
                         optimizer,
-                        train_loader,
-                        valid_loader,
+                        train_loader=train_loader,
+                        valid_loader=valid_loader,
                         is_train=True,
                         lr_schedule=lr_schedule,
+                        val_freq=val_freq,
                         dtype=dtype,
                     )
             prof.export_chrome_trace("trace.json")
@@ -389,13 +436,14 @@ def train_mlpf(
                 outdir,
                 model,
                 optimizer,
-                train_loader,
-                valid_loader,
+                train_loader=train_loader,
+                valid_loader=valid_loader,
                 is_train=True,
                 lr_schedule=lr_schedule,
                 comet_experiment=comet_experiment,
                 comet_step_freq=comet_step_freq,
                 epoch=epoch,
+                val_freq=val_freq,
                 dtype=dtype,
             )
 
@@ -405,7 +453,8 @@ def train_mlpf(
             outdir,
             model,
             optimizer,
-            valid_loader,
+            train_loader=train_loader,
+            valid_loader=valid_loader,
             is_train=False,
             lr_schedule=None,
             comet_experiment=comet_experiment,
@@ -688,6 +737,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             checkpoint_freq=config["checkpoint_freq"],
             comet_experiment=comet_experiment,
             comet_step_freq=config["comet_step_freq"],
+            val_freq=config["val_freq"],
         )
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
@@ -877,8 +927,13 @@ def train_ray_trial(config, args, outdir=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
+    print(table)
 
     if (rank == 0) or (rank == "cpu"):
+        with open(os.path.join(outdir, "num_params.csv"), "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["trainable_params", "nontrainable_params", "total_params"])
+            writer.writerow([trainable_params, nontrainable_params, trainable_params + nontrainable_params])
         _logger.info(model)
         _logger.info(f"Trainable parameters: {trainable_params}")
         _logger.info(f"Non-trainable parameters: {nontrainable_params}")
@@ -935,6 +990,7 @@ def train_ray_trial(config, args, outdir=None):
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
+
     train_mlpf(
         rank,
         world_size,
@@ -951,6 +1007,8 @@ def train_ray_trial(config, args, outdir=None):
         checkpoint_freq=config["checkpoint_freq"],
         comet_experiment=comet_experiment,
         comet_step_freq=config["comet_step_freq"],
+        dtype=getattr(torch, config["dtype"]),
+        val_freq=config["val_freq"],
     )
 
 
@@ -1145,10 +1203,6 @@ def run_hpo(config, args):
     result_df = result_grid.get_dataframe()
     print(result_df)
     print(result_df.columns)
-
-    print("Number of errored trials: {}".format(result_grid.num_errors))
-    print("Number of terminated (not errored) trials: {}".format(result_grid.num_terminated))
-    print("Ray Tune experiment path: {}".format(result_grid.experiment_path))
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
     logging.info(
