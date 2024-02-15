@@ -290,7 +290,7 @@ def train_and_valid(
                 comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
         if val_freq is not None and is_train:
-            if itrain != 0 and itrain % val_freq == 0 :
+            if itrain != 0 and itrain % val_freq == 0:
                 # time since last intermediate validation run
                 val_freq_time = torch.tensor(time.time() - val_freq_time_0, device=rank)
                 if world_size > 1:
@@ -989,7 +989,6 @@ def train_ray_trial(config, args, outdir=None):
                     )
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
-
 
     train_mlpf(
         rank,
