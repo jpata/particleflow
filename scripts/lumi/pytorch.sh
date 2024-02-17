@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=130G
-#SBATCH --gpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -15,7 +15,7 @@ cd /scratch/project_465000301/particleflow
 
 module load LUMI/22.08 partition/G
 
-export IMG=/scratch/project_465000301/pytorch-rocm.simg
+export IMG=/scratch/project_465000301/lumi-pytorch-rocm.simg
 export PYTHONPATH=hep_tfds
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
@@ -36,5 +36,5 @@ singularity exec --rocm \
   $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus $SLURM_GPUS_PER_TASK \
   --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
   --train \
-  --conv-type gnn_lsh \
-  --num-epochs 20 --gpu-batch-multiplier 4 --num-workers 1 --prefetch-factor 5 --checkpoint-freq 1
+  --conv-type attention \
+  --num-epochs 10 --gpu-batch-multiplier 6 --num-workers 1 --prefetch-factor 10 --checkpoint-freq 1 --ntrain 1000 --nvalid 1000 --ntest 1000

@@ -537,7 +537,6 @@ def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     pad_3d = config["conv_type"] != "gravnet"
-    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
 
     use_cuda = rank != "cpu"
 
@@ -661,7 +660,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             config,
             use_cuda,
             pad_3d,
-            pad_power_of_two,
             use_ray=False,
         )
         steps_per_epoch = len(loaders["train"])
@@ -853,7 +851,6 @@ def train_ray_trial(config, args, outdir=None):
         outdir = ray.train.get_context().get_trial_dir()
 
     pad_3d = config["conv_type"] != "gravnet"
-    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
@@ -887,7 +884,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, pad_power_of_two, use_ray=True)
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(

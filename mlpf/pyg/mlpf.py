@@ -7,7 +7,6 @@ from .gnn_lsh import CombinedGraphLayer
 from torch.backends.cuda import sdp_kernel
 from pyg.logger import _logger
 
-
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
         super(GravNetLayer, self).__init__()
@@ -27,16 +26,21 @@ class GravNetLayer(nn.Module):
 class SelfAttentionLayer(nn.Module):
     def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
         super(SelfAttentionLayer, self).__init__()
+        self.attention_type = attention_type
         self.act = nn.ELU
-        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
+        if self.attention_type == "flash_external":
+            from flash_attn.modules.mha import MHA
+            self.mha = MHA(embedding_dim, num_heads)
+        else:
+            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
         self.dropout = torch.nn.Dropout(dropout)
-        self.attention_type = attention_type
         _logger.info("using attention_type={}".format(attention_type))
+        #params for torch sdp_kernel
         self.attn_params = {
             "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
             "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
@@ -49,8 +53,11 @@ class SelfAttentionLayer(nn.Module):
 
     def forward(self, x, mask):
         # explicitly call the desired attention mechanism
-        with sdp_kernel(**self.attn_params[self.attention_type]):
-            mha_out = self.mha(x, x, x, need_weights=False)[0]
+        if self.attention_type == "flash_external":
+            mha_out = self.mha(x)
+        else:
+            with sdp_kernel(**self.attn_params[self.attention_type]):
+                mha_out = self.mha(x, x, x, need_weights=False)[0]
 
         x = self.add0.add(x, mha_out)
         x = self.norm0(x)
@@ -280,7 +287,7 @@ class MLPF(nn.Module):
         self.dequant2 = torch.ao.quantization.DeQuantStub()
         self.dequant3 = torch.ao.quantization.DeQuantStub()
 
-    @torch.compile
+    # @torch.compile
     def forward(self, X_features, batch_or_mask):
         X_features = self.quant(X_features)
         embeddings_id, embeddings_reg = [], []
