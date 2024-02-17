@@ -11,6 +11,7 @@ from torch_geometric.data import Batch, Data
 from pyg.logger import _logger
 
 import numpy as np
+import random
 
 
 class TFDSDataSource:
@@ -169,6 +170,7 @@ class InterleavedIterator(object):
                 if i < len(loader):
                     self.loader_ds_indices.append(iloader)
 
+        random.shuffle(self.loader_ds_indices)
         self.cur_index = 0
         self._len = None
 
@@ -179,6 +181,7 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
+            random.shuffle(self.loader_ds_indices)
             self.cur_index = 0  # reset the curser index
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
             raise StopIteration
@@ -238,6 +241,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, pad_
                 prefetch_factor=config["prefetch_factor"],
                 pin_memory=use_cuda,
                 pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                drop_last=True,
             )
 
             if use_ray:

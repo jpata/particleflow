@@ -70,6 +70,7 @@ def mlpf_loss(y, ypred):
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
+    pad_mode_3d = ypred["cls_id_onehot"].ndim > 2
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
@@ -81,8 +82,8 @@ def mlpf_loss(y, ypred):
     y["momentum"] = y["momentum"] * msk_true_particle
     y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
-    # pytorch expects (N, C, ...)
-    if ypred["cls_id_onehot"].ndim > 2:
+    # in case of the 3D-padded mode, pytorch expects (N, C, ...)
+    if pad_mode_3d:
         ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
         ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
@@ -90,6 +91,7 @@ def mlpf_loss(y, ypred):
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_charge = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
+    # average over all particles
     loss["Classification"] = loss_classification.sum() / npart
     loss["Regression"] = loss_regression.sum() / npart
     loss["Charge"] = loss_charge.sum() / npart
@@ -109,6 +111,7 @@ def mlpf_loss(y, ypred):
     loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
 
     # Keep track of loss components for each true particle type
+    # These are detached to keeping track of the gradient
     for icls in range(0, 7):
         loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
         loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
@@ -246,7 +249,14 @@ def train_and_valid(
         else:
             conv_type = model.conv_type
 
-        batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
+        if conv_type == "gravnet":
+            batchidx_or_mask = batch.batch
+            num_elems = len(batch.batch)
+            num_batch = len(torch.unique(batch.batch))
+        else:
+            batchidx_or_mask = batch.mask
+            num_elems = batch.X[batch.mask].shape[0]
+            num_batch = batch.X.shape[0]
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
@@ -280,8 +290,12 @@ def train_and_valid(
 
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
-            if not (tensorboard_writer is None) and (itrain % 10 == 0):
-                tensorboard_writer.add_scalar("step/loss", loss_accum / 10.0, step)
+            if not (tensorboard_writer is None):
+                tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
+                tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
+                tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                if itrain % 10 == 0:
+                    tensorboard_writer.flush()
                 loss_accum = 0.0
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
@@ -585,6 +599,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
+            "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],
             "eta_mode": config["model"]["eta_mode"],
             "sin_phi_mode": config["model"]["sin_phi_mode"],

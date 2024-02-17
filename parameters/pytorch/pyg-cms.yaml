@@ -23,11 +23,12 @@ comet_step_freq: 10
 dtype: bfloat16
 
 model:
-  pt_mode: linear
-  eta_mode: linear
-  sin_phi_mode: linear
-  cos_phi_mode: linear
-  energy_mode: linear
+  input_encoding: joint
+  pt_mode: linear-elemtype
+  eta_mode: linear-elemtype
+  sin_phi_mode: linear-elemtype
+  cos_phi_mode: linear-elemtype
+  energy_mode: linear-elemtype
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -61,8 +62,8 @@ model:
     embedding_dim: 256
     width: 256
     num_convs: 3
-    dropout: 0.3
-    activation: "elu"
+    dropout: 0.2
+    activation: "leakyrelu"
     # attention specific paramters
     num_heads: 16
     attention_type: flash
@@ -115,7 +116,7 @@ train_dataset:
         cms_pf_sms_t1tttt:
           version: 1.7.0
     gun:
-      batch_size: 20
+      batch_size: 50
       samples:
         cms_pf_single_electron:
           version: 1.7.0
@@ -134,7 +135,7 @@ train_dataset:
         cms_pf_single_proton:
           version: 1.7.0
     multiparticlegun:
-      batch_size: 4
+      batch_size: 10
       samples:
         cms_pf_multi_particle_gun:
           version: 1.7.0
@@ -157,7 +158,7 @@ valid_dataset:
         cms_pf_vbf:
           version: 1.7.0
     gun:
-      batch_size: 20
+      batch_size: 50
       samples:
         cms_pf_single_electron:
           version: 1.7.0
@@ -176,7 +177,7 @@ valid_dataset:
         cms_pf_single_proton:
           version: 1.7.0
     multiparticlegun:
-      batch_size: 4
+      batch_size: 10
       samples:
         cms_pf_multi_particle_gun:
           version: 1.7.0

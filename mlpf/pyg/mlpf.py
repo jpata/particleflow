@@ -28,7 +28,7 @@ class SelfAttentionLayer(nn.Module):
     def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
         super(SelfAttentionLayer, self).__init__()
         self.act = nn.ELU
-        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, batch_first=True)
+        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
@@ -98,9 +98,10 @@ def ffn(input_dim, output_dim, width, act, dropout):
 
 
 class RegressionOutput(nn.Module):
-    def __init__(self, mode, embed_dim, width, act, dropout):
+    def __init__(self, mode, embed_dim, width, act, dropout, elemtypes):
         super(RegressionOutput, self).__init__()
         self.mode = mode
+        self.elemtypes = elemtypes
 
         # single output
         if self.mode == "direct" or self.mode == "additive" or self.mode == "multiplicative":
@@ -110,18 +111,45 @@ class RegressionOutput(nn.Module):
             self.add = torch.ao.nn.quantized.FloatFunctional()
             self.mul = torch.ao.nn.quantized.FloatFunctional()
             self.nn = ffn(embed_dim, 2, width, act, dropout)
+        elif self.mode == "direct-elemtype":
+            self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
+        elif self.mode == "additive-elemtype":
+            self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
+        elif self.mode == "linear-elemtype":
+            self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
+            self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
-    def forward(self, x, orig_value):
-        nn_out = self.nn(x)
+    def forward(self, elems, x, orig_value):
 
         if self.mode == "direct":
+            nn_out = self.nn(x)
             return nn_out
         elif self.mode == "additive":
+            nn_out = self.nn(x)
             return orig_value + nn_out
         elif self.mode == "multiplicative":
+            nn_out = self.nn(x)
             return orig_value * nn_out
         elif self.mode == "linear":
+            nn_out = self.nn(x)
             return self.add.add(self.mul.mul(orig_value, nn_out[..., 0:1]), nn_out[..., 1:2])
+        elif self.mode == "direct-elemtype":
+            nn_out = self.nn(x)
+            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
+            res = torch.sum(elemtype_mask*nn_out, axis=-1, keepdims=True)
+            return res
+        elif self.mode == "additive-elemtype":
+            nn_out = self.nn(x)
+            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
+            correction = torch.sum(elemtype_mask*nn_out, axis=-1, keepdims=True)
+            return orig_value + correction
+        elif self.mode == "linear-elemtype":
+            nn_out1 = self.nn1(x)
+            nn_out2 = self.nn2(x)
+            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
+            a = torch.sum(elemtype_mask*nn_out1, axis=-1, keepdims=True)
+            b = torch.sum(elemtype_mask*nn_out2, axis=-1, keepdims=True)
+            return orig_value*a + b
 
 
 class MLPF(nn.Module):
@@ -153,11 +181,13 @@ class MLPF(nn.Module):
         d_state=16,
         d_conv=4,
         expand=2,
-        pt_mode="linear",
-        eta_mode="linear",
-        sin_phi_mode="linear",
-        cos_phi_mode="linear",
-        energy_mode="linear",
+        input_encoding="joint",
+        pt_mode="additive-elemtype",
+        eta_mode="additive-elemtype",
+        sin_phi_mode="additive-elemtype",
+        cos_phi_mode="additive-elemtype",
+        energy_mode="additive-elemtype",
+        elemtypes=[1,4,5,6,8,9,10,11],
     ):
         super(MLPF, self).__init__()
 
@@ -172,15 +202,24 @@ class MLPF(nn.Module):
         elif activation == "leakyrelu":
             self.act = nn.LeakyReLU
 
+        self.input_encoding = input_encoding
+
         self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
 
         self.bin_size = bin_size
+        self.elemtypes = elemtypes
 
         # embedding of the inputs
         if num_convs != 0:
-            self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
+            if self.input_encoding == "joint":    
+                self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
+            elif self.input_encoding == "split":    
+                self.nn0 = nn.ModuleList()
+                for ielem in range(len(self.elemtypes)):
+                    self.nn0.append(ffn(input_dim, embedding_dim, width, self.act, dropout))
+
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -227,11 +266,11 @@ class MLPF(nn.Module):
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim + num_classes
-        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout)
-        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout)
-        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout)
+        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout, self.elemtypes)
+        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout, self.elemtypes)
+        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout, self.elemtypes)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
@@ -241,12 +280,17 @@ class MLPF(nn.Module):
         self.dequant2 = torch.ao.quantization.DeQuantStub()
         self.dequant3 = torch.ao.quantization.DeQuantStub()
 
-    # @torch.compile
+    @torch.compile
     def forward(self, X_features, batch_or_mask):
         X_features = self.quant(X_features)
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
-            embedding = self.nn0(X_features)
+            if self.input_encoding == "joint":
+                embedding = self.nn0(X_features)
+            elif self.input_encoding == "split":
+                embedding = torch.stack([nn0(X_features) for nn0 in self.nn0], axis=-1)
+                elemtype_mask = torch.cat([X_features[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
+                embedding = torch.sum(embedding*elemtype_mask.unsqueeze(-2), axis=-1)
             if self.conv_type == "gravnet":
                 batch_idx = batch_or_mask
                 # perform a series of graph convolutions
@@ -282,11 +326,11 @@ class MLPF(nn.Module):
         # assert torch.all(input_[:, 5] >= 0.0)  # energy
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
-        preds_pt = self.nn_pt(embedding_reg, X_features[..., 1:2])
-        preds_eta = self.nn_eta(embedding_reg, X_features[..., 2:3])
-        preds_sin_phi = self.nn_sin_phi(embedding_reg, X_features[..., 3:4])
-        preds_cos_phi = self.nn_cos_phi(embedding_reg, X_features[..., 4:5])
-        preds_energy = self.nn_energy(embedding_reg, X_features[..., 5:6])
+        preds_pt = self.nn_pt(X_features, embedding_reg, X_features[..., 1:2])
+        preds_eta = self.nn_eta(X_features, embedding_reg, X_features[..., 2:3])
+        preds_sin_phi = self.nn_sin_phi(X_features, embedding_reg, X_features[..., 3:4])
+        preds_cos_phi = self.nn_cos_phi(X_features, embedding_reg, X_features[..., 4:5])
+        preds_energy = self.nn_energy(X_features, embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         preds_momentum = self.dequant2(preds_momentum)
 

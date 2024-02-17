@@ -14,7 +14,7 @@ MLPF_PATH=/home/joosep/particleflow/
 SAMPLE=$1
 SEED=$2
 
-WORKDIR=/scratch/local/joosep/$SAMPLE/$SEED
+WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
 #WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR
