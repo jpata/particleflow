@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=130G
-#SBATCH --gpus-per-task=1
+#SBATCH --gpus-per-task=8
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -36,5 +36,5 @@ singularity exec --rocm \
   $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus $SLURM_GPUS_PER_TASK \
   --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
   --train \
-  --conv-type attention \
-  --num-epochs 10 --gpu-batch-multiplier 6 --num-workers 1 --prefetch-factor 10 --checkpoint-freq 1 --ntrain 1000 --nvalid 1000 --ntest 1000
+  --conv-type attention --attention-type flash_external \
+  --num-epochs 10 --gpu-batch-multiplier 4 --num-workers 1 --prefetch-factor 10 --checkpoint-freq 1

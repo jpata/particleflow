@@ -83,7 +83,7 @@ parser.add_argument(
     type=str,
     default=None,
     help="attention type for self-attention layer",
-    choices=["math", "efficient", "flash"],
+    choices=["math", "efficient", "flash", "flash_external"],
 )
 
 
