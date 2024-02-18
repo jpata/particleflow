@@ -133,10 +133,7 @@ class Collater:
         if not self.pad_3d:
             return ret
         else:
-            ret = {
-                k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch)
-                for k in elem_keys
-            }
+            ret = {k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch) for k in elem_keys}
 
             ret["mask"] = ret["X"][1]
 

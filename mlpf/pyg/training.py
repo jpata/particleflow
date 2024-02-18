@@ -604,7 +604,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
-            "attention_type": config["model"]["attention"]["attention_type"],
             **config["model"][config["conv_type"]],
         }
         model = MLPF(**model_kwargs)
@@ -803,6 +802,10 @@ def override_config(config, args):
 
     if not (args.attention_type is None):
         config["model"]["attention"]["attention_type"] = args.attention_type
+
+    if not (args.num_convs is None):
+        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+            config["model"][model]["num_convs"] = args.num_convs
 
     return config
 

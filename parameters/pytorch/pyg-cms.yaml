@@ -35,7 +35,7 @@ model:
     embedding_dim: 512
     width: 512
     num_convs: 3
-    dropout: 0.1
+    dropout_ff: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
     bin_size: 640
@@ -50,7 +50,7 @@ model:
     embedding_dim: 512
     width: 512
     num_convs: 3
-    dropout: 0.0
+    dropout_ff: 0.1
     activation: "elu"
     # gravnet specific parameters
     k: 16
@@ -62,10 +62,14 @@ model:
     embedding_dim: 256
     width: 256
     num_convs: 3
-    dropout: 0.2
-    activation: "leakyrelu"
+    dropout_ff: 0.1
+    dropout_conv_id_mha: 0.1
+    dropout_conv_id_ff: 0.1
+    dropout_conv_reg_mha: 0.2
+    dropout_conv_reg_ff: 0.2
+    activation: "elu"
     # attention specific paramters
-    num_heads: 16
+    num_heads: 8
     attention_type: flash
 
   mamba:
@@ -73,7 +77,7 @@ model:
     embedding_dim: 1024
     width: 1024
     num_convs: 4
-    dropout: 0.1
+    dropout_ff: 0.0
     activation: "elu"
     # mamba specific paramters
     d_state: 32
@@ -115,25 +119,25 @@ train_dataset:
           version: 1.7.0
         cms_pf_sms_t1tttt:
           version: 1.7.0
-    gun:
-      batch_size: 50
-      samples:
-        cms_pf_single_electron:
-          version: 1.7.0
-        cms_pf_single_gamma:
-          version: 1.7.0
-        cms_pf_single_pi0:
-          version: 1.7.0
-        cms_pf_single_neutron:
-          version: 1.7.0
-        cms_pf_single_pi:
-          version: 1.7.0
-        cms_pf_single_tau:
-          version: 1.7.0
-        cms_pf_single_mu:
-          version: 1.7.0
-        cms_pf_single_proton:
-          version: 1.7.0
+#    gun:
+#      batch_size: 50
+#      samples:
+#        cms_pf_single_electron:
+#          version: 1.7.0
+#        cms_pf_single_gamma:
+#          version: 1.7.0
+#        cms_pf_single_pi0:
+#          version: 1.7.0
+#        cms_pf_single_neutron:
+#          version: 1.7.0
+#        cms_pf_single_pi:
+#          version: 1.7.0
+#        cms_pf_single_tau:
+#          version: 1.7.0
+#        cms_pf_single_mu:
+#          version: 1.7.0
+#        cms_pf_single_proton:
+#          version: 1.7.0
     multiparticlegun:
       batch_size: 10
       samples:

@@ -7,6 +7,7 @@ from .gnn_lsh import CombinedGraphLayer
 from torch.backends.cuda import sdp_kernel
 from pyg.logger import _logger
 
+
 class GravNetLayer(nn.Module):
     def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
         super(GravNetLayer, self).__init__()
@@ -24,23 +25,26 @@ class GravNetLayer(nn.Module):
 
 
 class SelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim=128, num_heads=2, width=128, dropout=0.1, attention_type="efficient"):
+    def __init__(
+        self, embedding_dim=128, num_heads=2, width=128, dropout_mha=0.1, dropout_ff=0.1, attention_type="efficient"
+    ):
         super(SelfAttentionLayer, self).__init__()
         self.attention_type = attention_type
         self.act = nn.ELU
         if self.attention_type == "flash_external":
             from flash_attn.modules.mha import MHA
-            self.mha = MHA(embedding_dim, num_heads)
+
+            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
         else:
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
+            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
-        self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
-        #params for torch sdp_kernel
+        # params for torch sdp_kernel
         self.attn_params = {
             "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
             "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
@@ -69,7 +73,7 @@ class SelfAttentionLayer(nn.Module):
 
 
 class MambaLayer(nn.Module):
-    def __init__(self, embedding_dim=128, width=128, dropout=0.1, d_state=16, d_conv=4, expand=2):
+    def __init__(self, embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
         super(MambaLayer, self).__init__()
         self.act = nn.ELU
         from mamba_ssm import Mamba
@@ -142,21 +146,21 @@ class RegressionOutput(nn.Module):
             return self.add.add(self.mul.mul(orig_value, nn_out[..., 0:1]), nn_out[..., 1:2])
         elif self.mode == "direct-elemtype":
             nn_out = self.nn(x)
-            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
-            res = torch.sum(elemtype_mask*nn_out, axis=-1, keepdims=True)
+            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            res = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return res
         elif self.mode == "additive-elemtype":
             nn_out = self.nn(x)
-            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
-            correction = torch.sum(elemtype_mask*nn_out, axis=-1, keepdims=True)
+            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            correction = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return orig_value + correction
         elif self.mode == "linear-elemtype":
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
-            elemtype_mask = torch.cat([elems[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
-            a = torch.sum(elemtype_mask*nn_out1, axis=-1, keepdims=True)
-            b = torch.sum(elemtype_mask*nn_out2, axis=-1, keepdims=True)
-            return orig_value*a + b
+            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            a = torch.sum(elemtype_mask * nn_out1, axis=-1, keepdims=True)
+            b = torch.sum(elemtype_mask * nn_out2, axis=-1, keepdims=True)
+            return orig_value * a + b
 
 
 class MLPF(nn.Module):
@@ -167,7 +171,11 @@ class MLPF(nn.Module):
         embedding_dim=128,
         width=128,
         num_convs=2,
-        dropout=0.0,
+        dropout_ff=0.0,
+        dropout_conv_reg_mha=0.0,
+        dropout_conv_reg_ff=0.0,
+        dropout_conv_id_mha=0.0,
+        dropout_conv_id_ff=0.0,
         activation="elu",
         # gravnet specific parameters
         k=32,
@@ -194,7 +202,7 @@ class MLPF(nn.Module):
         sin_phi_mode="additive-elemtype",
         cos_phi_mode="additive-elemtype",
         energy_mode="additive-elemtype",
-        elemtypes=[1,4,5,6,8,9,10,11],
+        elemtypes=[1, 4, 5, 6, 8, 9, 10, 11],
     ):
         super(MLPF, self).__init__()
 
@@ -211,7 +219,6 @@ class MLPF(nn.Module):
 
         self.input_encoding = input_encoding
 
-        self.dropout = dropout
         self.input_dim = input_dim
         self.num_convs = num_convs
 
@@ -220,35 +227,49 @@ class MLPF(nn.Module):
 
         # embedding of the inputs
         if num_convs != 0:
-            if self.input_encoding == "joint":    
-                self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout)
-            elif self.input_encoding == "split":    
+            if self.input_encoding == "joint":
+                self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout_ff)
+            elif self.input_encoding == "split":
                 self.nn0 = nn.ModuleList()
                 for ielem in range(len(self.elemtypes)):
-                    self.nn0.append(ffn(input_dim, embedding_dim, width, self.act, dropout))
+                    self.nn0.append(ffn(input_dim, embedding_dim, width, self.act, dropout_ff))
 
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
-                    self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout))
+                    self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout_ff))
+                    self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout_ff))
             elif self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
                     self.conv_id.append(
-                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                        SelfAttentionLayer(
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout_mha=dropout_conv_id_mha,
+                            dropout_ff=dropout_conv_id_ff,
+                            attention_type=attention_type,
+                        )
                     )
                     self.conv_reg.append(
-                        SelfAttentionLayer(embedding_dim, num_heads, width, dropout, attention_type=attention_type)
+                        SelfAttentionLayer(
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout_mha=dropout_conv_reg_mha,
+                            dropout_ff=dropout_conv_reg_ff,
+                            attention_type=attention_type,
+                        )
                     )
             elif self.conv_type == "mamba":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(embedding_dim, width, dropout, d_state, d_conv, expand))
-                    self.conv_reg.append(MambaLayer(embedding_dim, width, dropout, d_state, d_conv, expand))
+                    self.conv_id.append(MambaLayer(embedding_dim, width, d_state, d_conv, expand, dropout_ff))
+                    self.conv_reg.append(MambaLayer(embedding_dim, width, d_state, d_conv, expand, dropout_ff))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -260,7 +281,7 @@ class MLPF(nn.Module):
                         "distance_dim": distance_dim,
                         "layernorm": layernorm,
                         "num_node_messages": num_node_messages,
-                        "dropout": dropout,
+                        "dropout": dropout_ff,
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
@@ -269,18 +290,18 @@ class MLPF(nn.Module):
         decoding_dim = input_dim + num_convs * embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout)
+        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim + num_classes
-        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout, self.elemtypes)
-        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout, self.elemtypes)
-        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout, self.elemtypes)
+        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
+        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
+        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout)
+        self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout_ff)
 
         self.quant = torch.ao.quantization.QuantStub()
         self.dequant1 = torch.ao.quantization.DeQuantStub()
@@ -296,8 +317,8 @@ class MLPF(nn.Module):
                 embedding = self.nn0(X_features)
             elif self.input_encoding == "split":
                 embedding = torch.stack([nn0(X_features) for nn0 in self.nn0], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1]==elemtype for elemtype in self.elemtypes], axis=-1)
-                embedding = torch.sum(embedding*elemtype_mask.unsqueeze(-2), axis=-1)
+                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+                embedding = torch.sum(embedding * elemtype_mask.unsqueeze(-2), axis=-1)
             if self.conv_type == "gravnet":
                 batch_idx = batch_or_mask
                 # perform a series of graph convolutions
