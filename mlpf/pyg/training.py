@@ -199,12 +199,29 @@ class FocalLoss(nn.Module):
         return loss
 
 
+def configure_model_trainable(model, trainable, is_training):
+    if is_training:
+        if trainable != "all":
+            model.eval()
+            for param in model.parameters():
+                param.requires_grad = False
+
+            for layer in trainable:
+                layer = getattr(model, layer)
+                layer.train()
+                for param in layer.parameters():
+                    param.requires_grad = True
+    else:
+        model.eval()
+
+
 def train_and_valid(
     rank,
     world_size,
     model,
     optimizer,
     data_loader,
+    trainable,
     is_train=True,
     lr_schedule=None,
     comet_experiment=None,
@@ -223,10 +240,7 @@ def train_and_valid(
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {}
 
-    if is_train:
-        model.train()
-    else:
-        model.eval()
+    configure_model_trainable(model, trainable, is_train)
 
     # only show progress bar on rank 0
     if (world_size > 1) and (rank != 0):
@@ -329,7 +343,8 @@ def train_mlpf(
     num_epochs,
     patience,
     outdir,
-    dtype,
+    trainable="all",
+    dtype=torch.float32,
     start_epoch=1,
     lr_schedule=None,
     use_ray=False,
@@ -377,7 +392,15 @@ def train_mlpf(
             ) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
-                        rank, world_size, model, optimizer, train_loader, is_train=True, lr_schedule=lr_schedule, dtype=dtype
+                        rank,
+                        world_size,
+                        model,
+                        optimizer,
+                        train_loader,
+                        trainable,
+                        is_train=True,
+                        lr_schedule=lr_schedule,
+                        dtype=dtype,
                     )
             prof.export_chrome_trace("trace.json")
         else:
@@ -387,6 +410,7 @@ def train_mlpf(
                 model,
                 optimizer,
                 train_loader,
+                trainable,
                 is_train=True,
                 lr_schedule=lr_schedule,
                 comet_experiment=comet_experiment,
@@ -402,6 +426,7 @@ def train_mlpf(
             model,
             optimizer,
             valid_loader,
+            trainable,
             is_train=False,
             lr_schedule=None,
             comet_experiment=comet_experiment,
@@ -615,6 +640,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
+    configure_model_trainable(model, config["model"]["trainable"], True)
     trainable_params, nontrainable_params, table = count_parameters(model)
 
     if (rank == 0) or (rank == "cpu"):
@@ -675,7 +701,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
-            dtype,
+            trainable=config["model"]["trainable"],
+            dtype=dtype,
             start_epoch=start_epoch,
             lr_schedule=lr_schedule,
             use_ray=False,
@@ -942,6 +969,7 @@ def train_ray_trial(config, args, outdir=None):
         config["num_epochs"],
         config["patience"],
         outdir,
+        trainable=config["model"]["trainable"],
         start_epoch=start_epoch,
         lr_schedule=lr_schedule,
         use_ray=True,

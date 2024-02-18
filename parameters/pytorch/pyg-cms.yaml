@@ -23,6 +23,10 @@ comet_step_freq: 10
 dtype: bfloat16
 
 model:
+  trainable: all
+#    - nn_energy
+#    - nn_pt
+
   input_encoding: joint
   pt_mode: linear-elemtype
   eta_mode: linear-elemtype
@@ -63,7 +67,7 @@ model:
     width: 256
     num_convs: 3
     dropout_ff: 0.1
-    dropout_conv_id_mha: 0.1
+    dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.1
     dropout_conv_reg_mha: 0.2
     dropout_conv_reg_ff: 0.2
@@ -119,25 +123,25 @@ train_dataset:
           version: 1.7.0
         cms_pf_sms_t1tttt:
           version: 1.7.0
-#    gun:
-#      batch_size: 50
-#      samples:
-#        cms_pf_single_electron:
-#          version: 1.7.0
-#        cms_pf_single_gamma:
-#          version: 1.7.0
-#        cms_pf_single_pi0:
-#          version: 1.7.0
-#        cms_pf_single_neutron:
-#          version: 1.7.0
-#        cms_pf_single_pi:
-#          version: 1.7.0
-#        cms_pf_single_tau:
-#          version: 1.7.0
-#        cms_pf_single_mu:
-#          version: 1.7.0
-#        cms_pf_single_proton:
-#          version: 1.7.0
+    gun:
+      batch_size: 50
+      samples:
+        cms_pf_single_electron:
+          version: 1.7.0
+        cms_pf_single_gamma:
+          version: 1.7.0
+        cms_pf_single_pi0:
+          version: 1.7.0
+        cms_pf_single_neutron:
+          version: 1.7.0
+        cms_pf_single_pi:
+          version: 1.7.0
+        cms_pf_single_tau:
+          version: 1.7.0
+        cms_pf_single_mu:
+          version: 1.7.0
+        cms_pf_single_proton:
+          version: 1.7.0
     multiparticlegun:
       batch_size: 10
       samples:
