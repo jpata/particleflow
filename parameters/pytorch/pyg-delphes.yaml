@@ -44,6 +44,7 @@ model:
     layernorm: True
     num_node_messages: 2
     ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 2
 
   gravnet:
     conv_type: gravnet
