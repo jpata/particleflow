@@ -201,6 +201,7 @@ class FocalLoss(nn.Module):
 
 def configure_model_trainable(model, trainable, is_training):
     if is_training:
+        model.train()
         if trainable != "all":
             model.eval()
             for param in model.parameters():
