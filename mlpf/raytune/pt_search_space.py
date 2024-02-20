@@ -6,19 +6,19 @@ samp = grid_search
 # gnn scan
 search_space = {
     # dataset parameters
-    "ntrain": samp(list(range(1000, 21000, 1000))),
+    "ntrain": samp([500]),
     # "ntest": samp([10000]),
     "nvalid": samp([500]),
-    "num_epochs": samp([20]),
+    "num_epochs": samp([10]),
     # optimizer parameters
-    # "lr": samp([1e-4, 3e-4, 1e-3, 3e-3, 1e-2]),
+    "lr": samp([1e-4, 3e-4, 1e-3, 3e-3]),
     "lr_schedule": samp(["onecycle"]),
-    "pct_start": samp([0.1]),
+    "pct_start": samp([0.05]),
     # "gpu_batch_multiplier": samp([1, 4, 8, 16]),
     # "patience": samp([9999]),
     # model arch parameters
     # "activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
-    "conv_type": samp(["mamba"]),  # can be "gnn_lsh", "gravnet", "attention"
+    "conv_type": samp(["attention"]),  # can be "gnn_lsh", "gravnet", "attention"
     # "embedding_dim": samp([32, 64, 128, 252, 512, 1024]),
     # "width": samp([32, 64, 128, 256, 512, 1024]),
     # "num_convs": samp([1, 2, 3, 4, 5, 6]),
@@ -34,10 +34,15 @@ search_space = {
     # "layernorm": samp([True, False]),
     # "num_node_messages": samp([1, 2, 3, 4, 5]),
     # "ffn_dist_hidden_dim": samp([16, 32, 64, 128, 256]),
-    # mamba specific variables
-    "d_state": samp([16]),
-    "d_conv": samp([4]),
-    "expand": samp([2]),
+    # "ffn_dist_num_layers": samp([1, 2, 3, 4, 5, 6]),
+    # mamba specific parameters
+    # "d_state": samp([16]),
+    # "d_conv": samp([4]),
+    # "expand": samp([2]),
+    # "num_heads": samp([2, 4, 6, 8, 10, 12]),
+    # attention specifica parameters
+    "num_heads": samp([2, 4, 8, 16]),
+    # "attention_type": samp(["flash"]),  # flash, efficient, math
 }
 
 
