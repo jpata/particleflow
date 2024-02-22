@@ -26,9 +26,19 @@ class GravNetLayer(nn.Module):
 
 class SelfAttentionLayer(nn.Module):
     def __init__(
-        self, embedding_dim=128, num_heads=2, width=128, dropout_mha=0.1, dropout_ff=0.1, attention_type="efficient"
+        self,
+        embedding_dim=128,
+        num_heads=2,
+        width=128,
+        dropout_mha=0.1,
+        dropout_ff=0.1,
+        attention_type="efficient",
     ):
         super(SelfAttentionLayer, self).__init__()
+
+        # to enable manual override for ONNX export
+        self.enable_ctx_manager = True
+
         self.attention_type = attention_type
         self.act = nn.ELU
         if self.attention_type == "flash_external":
@@ -60,7 +70,10 @@ class SelfAttentionLayer(nn.Module):
         if self.attention_type == "flash_external":
             mha_out = self.mha(x)
         else:
-            with sdp_kernel(**self.attn_params[self.attention_type]):
+            if self.enable_ctx_manager:
+                with sdp_kernel(**self.attn_params[self.attention_type]):
+                    mha_out = self.mha(x, x, x, need_weights=False)[0]
+            else:
                 mha_out = self.mha(x, x, x, need_weights=False)[0]
 
         x = self.add0.add(x, mha_out)
@@ -191,7 +204,8 @@ class MLPF(nn.Module):
         num_node_messages=2,
         ffn_dist_hidden_dim=128,
         # self-attention specific parameters
-        num_heads=2,
+        num_heads=16,
+        head_dim=16,
         # mamba specific parameters
         d_state=16,
         d_conv=4,
@@ -202,7 +216,9 @@ class MLPF(nn.Module):
         sin_phi_mode="additive-elemtype",
         cos_phi_mode="additive-elemtype",
         energy_mode="additive-elemtype",
-        elemtypes=[1, 4, 5, 6, 8, 9, 10, 11],
+        elemtypes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
+        learned_representation_mode="last",
     ):
         super(MLPF, self).__init__()
 
@@ -217,6 +233,8 @@ class MLPF(nn.Module):
         elif activation == "leakyrelu":
             self.act = nn.LeakyReLU
 
+        self.learned_representation_mode = learned_representation_mode
+
         self.input_encoding = input_encoding
 
         self.input_dim = input_dim
@@ -224,16 +242,24 @@ class MLPF(nn.Module):
 
         self.bin_size = bin_size
         self.elemtypes = elemtypes
+        self.elemtypes_nonzero = elemtypes_nonzero
+
+        if self.conv_type == "attention":
+            embedding_dim = num_heads * head_dim
+            width = num_heads * head_dim
 
         # embedding of the inputs
         if num_convs != 0:
             if self.input_encoding == "joint":
-                self.nn0 = ffn(input_dim, embedding_dim, width, self.act, dropout_ff)
+                self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
+                self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
             elif self.input_encoding == "split":
-                self.nn0 = nn.ModuleList()
-                for ielem in range(len(self.elemtypes)):
-                    self.nn0.append(ffn(input_dim, embedding_dim, width, self.act, dropout_ff))
-
+                self.nn0_id = nn.ModuleList()
+                for ielem in range(len(self.elemtypes_nonzero)):
+                    self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+                self.nn0_reg = nn.ModuleList()
+                for ielem in range(len(self.elemtypes_nonzero)):
+                    self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
             if self.conv_type == "gravnet":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -243,6 +269,7 @@ class MLPF(nn.Module):
             elif self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
+
                 for i in range(num_convs):
                     self.conv_id.append(
                         SelfAttentionLayer(
@@ -287,21 +314,24 @@ class MLPF(nn.Module):
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
-        decoding_dim = input_dim + num_convs * embedding_dim
+        if self.learned_representation_mode == "concat":
+            decoding_dim = self.input_dim + num_convs * embedding_dim
+        elif self.learned_representation_mode == "last":
+            decoding_dim = self.input_dim + embedding_dim
 
         # DNN that acts on the node level to predict the PID
         self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim + num_classes
-        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
-        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
-        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes)
+        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
 
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        self.nn_charge = ffn(decoding_dim + num_classes, 3, width, self.act, dropout_ff)
+        # self.nn_charge = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
         self.quant = torch.ao.quantization.QuantStub()
         self.dequant1 = torch.ao.quantization.DeQuantStub()
@@ -310,59 +340,70 @@ class MLPF(nn.Module):
 
     # @torch.compile
     def forward(self, X_features, batch_or_mask):
-        X_features = self.quant(X_features)
+        X_type_onehot = torch.nn.functional.one_hot(X_features[..., 0].to(torch.long), len(self.elemtypes))
+        Xfeat_transformed = self.transform_batch(X_features)
+        Xfeat_normed = (Xfeat_transformed - self.Xfeat_means) / self.Xfeat_rmss
+        Xfeat_normed = torch.cat([X_type_onehot, Xfeat_normed], axis=-1)
+
+        Xfeat_normed = self.quant(Xfeat_normed)
+
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             if self.input_encoding == "joint":
-                embedding = self.nn0(X_features)
+                embedding_id = self.nn0_id(Xfeat_normed)
+                embedding_reg = self.nn0_reg(Xfeat_normed)
             elif self.input_encoding == "split":
-                embedding = torch.stack([nn0(X_features) for nn0 in self.nn0], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-                embedding = torch.sum(embedding * elemtype_mask.unsqueeze(-2), axis=-1)
+                embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
+                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+                embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
+
+                embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
+                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+                embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
             if self.conv_type == "gravnet":
                 batch_idx = batch_or_mask
                 # perform a series of graph convolutions
                 for num, conv in enumerate(self.conv_id):
-                    conv_input = embedding if num == 0 else embeddings_id[-1]
+                    conv_input = embedding_id if num == 0 else embeddings_id[-1]
                     embeddings_id.append(conv(conv_input, batch_idx))
                 for num, conv in enumerate(self.conv_reg):
-                    conv_input = embedding if num == 0 else embeddings_reg[-1]
+                    conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
                     embeddings_reg.append(conv(conv_input, batch_idx))
             else:
                 mask = batch_or_mask
                 for num, conv in enumerate(self.conv_id):
-                    conv_input = embedding if num == 0 else embeddings_id[-1]
+                    conv_input = embedding_id if num == 0 else embeddings_id[-1]
                     out_padded = conv(conv_input, mask)
                     embeddings_id.append(out_padded)
                 for num, conv in enumerate(self.conv_reg):
-                    conv_input = embedding if num == 0 else embeddings_reg[-1]
+                    conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
                     out_padded = conv(conv_input, mask)
                     embeddings_reg.append(out_padded)
 
-        embedding_id = torch.cat([X_features] + embeddings_id, axis=-1)
-        preds_id = self.nn_id(embedding_id)
-
-        # regression input
-        embedding_reg = torch.cat([X_features] + embeddings_reg + [preds_id], axis=-1)
-
+        if self.learned_representation_mode == "concat":
+            final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
+        elif self.learned_representation_mode == "last":
+            final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
+        preds_id = self.nn_id(final_embedding_id)
         preds_id = self.dequant1(preds_id)
 
-        # do some sanity checks on the PFElement input data
-        # assert torch.all(torch.abs(input_[:, 3]) <= 1.0)  # sin_phi
-        # assert torch.all(torch.abs(input_[:, 4]) <= 1.0)  # cos_phi
-        # assert torch.all(input_[:, 1] >= 0.0)  # pt
-        # assert torch.all(input_[:, 5] >= 0.0)  # energy
+        # pred_charge = self.nn_charge(final_embedding_id)
+        # pred_charge = self.dequant3(pred_charge)
+
+        # regression input
+        if self.learned_representation_mode == "concat":
+            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_id], axis=-1)
+        elif self.learned_representation_mode == "last":
+            final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_id], axis=-1)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
-        preds_pt = self.nn_pt(X_features, embedding_reg, X_features[..., 1:2])
-        preds_eta = self.nn_eta(X_features, embedding_reg, X_features[..., 2:3])
-        preds_sin_phi = self.nn_sin_phi(X_features, embedding_reg, X_features[..., 3:4])
-        preds_cos_phi = self.nn_cos_phi(X_features, embedding_reg, X_features[..., 4:5])
-        preds_energy = self.nn_energy(X_features, embedding_reg, X_features[..., 5:6])
+        preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
+        preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
+        preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
+        preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
+        preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         preds_momentum = self.dequant2(preds_momentum)
 
-        pred_charge = self.nn_charge(embedding_reg)
-        pred_charge = self.dequant3(pred_charge)
-
-        return preds_id, preds_momentum, pred_charge
+        return preds_id, preds_momentum

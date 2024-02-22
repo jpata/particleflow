@@ -8,7 +8,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 10
 patience: 20
-lr: 0.0005
+lr: 0.001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
@@ -24,10 +24,11 @@ dtype: bfloat16
 
 model:
   trainable: all
-#    - nn_energy
-#    - nn_pt
+    # - nn_energy
+    # - nn_pt
 
-  input_encoding: joint
+  learned_representation_mode: last #last, concat
+  input_encoding: joint #split, joint
   pt_mode: linear-elemtype
   eta_mode: linear-elemtype
   sin_phi_mode: linear-elemtype
@@ -63,16 +64,15 @@ model:
 
   attention:
     conv_type: attention
-    embedding_dim: 256
-    width: 256
     num_convs: 3
     dropout_ff: 0.1
-    dropout_conv_id_mha: 0.0
+    dropout_conv_id_mha: 0.1
     dropout_conv_id_ff: 0.1
-    dropout_conv_reg_mha: 0.2
-    dropout_conv_reg_ff: 0.2
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
     activation: "elu"
     # attention specific paramters
+    head_dim: 16
     num_heads: 16
     attention_type: flash
 

@@ -32,9 +32,12 @@ from pyg.utils import (
     save_checkpoint,
     CLASS_LABELS,
     X_FEATURES,
+    ELEM_TYPES,
+    ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
     count_parameters,
+    transform_batch,
 )
 
 
@@ -78,23 +81,24 @@ def mlpf_loss(y, ypred):
     npart = y["pt"].numel()
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
-    ypred["charge"] = ypred["charge"] * msk_true_particle
+    # ypred["charge"] = ypred["charge"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
-    y["charge"] = y["charge"] * msk_true_particle[..., 0]
+    # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
     # in case of the 3D-padded mode, pytorch expects (N, C, ...)
     if pad_mode_3d:
         ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-        ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+        # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
-    loss_charge = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
+    # loss_charge = 0.0*torch.nn.functional.cross_entropy(
+    #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
     # average over all particles
     loss["Classification"] = loss_classification.sum() / npart
     loss["Regression"] = loss_regression.sum() / npart
-    loss["Charge"] = loss_charge.sum() / npart
+    # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     if len(msk_true_particle.shape) == 3:
@@ -108,7 +112,7 @@ def mlpf_loss(y, ypred):
         loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
-    loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
+    loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
 
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
@@ -118,7 +122,7 @@ def mlpf_loss(y, ypred):
 
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
-    loss["Charge"] = loss["Charge"].detach()
+    # loss["Charge"] = loss["Charge"].detach()
 
     return loss
 
@@ -309,6 +313,7 @@ def train_and_valid(
                 tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
                 tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
                 tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
                 if itrain % 10 == 0:
                     tensorboard_writer.flush()
                 loss_accum = 0.0
@@ -383,6 +388,35 @@ def train_mlpf(
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
 
+    # Extract normalization parameters
+    from torch_runstats import Reduction, RunningStats
+
+    if (world_size > 1) and (rank != 0):
+        data_iter = enumerate(train_loader)
+    else:
+        data_iter = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Normalization loop on rank={rank}")
+
+    # FIXME: check how this would be treated in multi-GPU training!
+    rs_mean = RunningStats(
+        dim=(55,),
+        reduction=Reduction.MEAN,
+    )
+    rs_rms = RunningStats(
+        dim=(55,),
+        reduction=Reduction.RMS,
+    )
+    _logger.info("looping over training data for data normalization")
+    for _, batch in data_iter:
+        X = batch.X[batch.X[:, :, 0] != 0]
+        Xnorm = transform_batch(X)
+        rs_mean.accumulate_batch(Xnorm)
+        rs_rms.accumulate_batch(Xnorm)
+
+    model.Xfeat_means = rs_mean.current_result()[0].to(rank)
+    model.Xfeat_rmss = rs_rms.current_result()[0].to(rank)
+    model.Xfeat_rmss[model.Xfeat_rmss == 0] = 1
+    model.transform_batch = transform_batch
+
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
@@ -436,6 +470,7 @@ def train_mlpf(
             dtype=dtype,
         )
 
+        tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
             comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
@@ -471,11 +506,11 @@ def train_mlpf(
                 loss=losses_t["Total"],
                 reg_loss=losses_t["Regression"],
                 cls_loss=losses_t["Classification"],
-                charge_loss=losses_t["Charge"],
+                # charge_loss=losses_t["Charge"],
                 val_loss=losses_v["Total"],
                 val_reg_loss=losses_v["Regression"],
                 val_cls_loss=losses_v["Classification"],
-                val_charge_loss=losses_v["Charge"],
+                # val_charge_loss=losses_v["Charge"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
@@ -622,7 +657,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         testdir_name = "_bestweights"
 
         model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
+            "input_dim": len(X_FEATURES[config["dataset"]]) + len(ELEM_TYPES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
             "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],
@@ -630,6 +665,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
+            "elemtypes": ELEM_TYPES[config["dataset"]],
+            "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+            "learned_representation_mode": config["model"]["learned_representation_mode"],
             **config["model"][config["conv_type"]],
         }
         model = MLPF(**model_kwargs)
@@ -801,13 +839,13 @@ def run(rank, world_size, config, args, outdir, logfile):
                     "test.onnx",
                     verbose=False,
                     input_names=["features", "mask"],
-                    output_names=["id", "momentum", "charge"],
+                    output_names=["id", "momentum"],
                     dynamic_axes={
                         "features": {0: "num_batch", 1: "num_elements"},
                         "mask": [0, 1],
                         "id": [0, 1],
                         "momentum": [0, 1],
-                        "charge": [0, 1],
+                        # "charge": [0, 1],
                     },
                 )
 
@@ -1034,12 +1072,12 @@ def run_ray_training(config, args, outdir):
     _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")
     _logger.info("Final cls_loss: {}".format(result.metrics["cls_loss"]), color="bold")
     _logger.info("Final reg_loss: {}".format(result.metrics["reg_loss"]), color="bold")
-    _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
+    # _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
 
     _logger.info("Final val_loss: {}".format(result.metrics["val_loss"]), color="bold")
     _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
     _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
-    _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
+    # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
 
     # clean up ray cache
     tmp_ray_cache.cleanup()
