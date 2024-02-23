@@ -33,7 +33,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
         batch_pad = Batch(X=X_pad, mask=mask).to(rank)
         ypred = model(batch_pad.X, batch_pad.mask)
-        ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
+        ypred = ypred[0][mask], ypred[1][mask]
     else:
         _batch = batch.to(rank)
         ypred = model(_batch.X, _batch.batch)
