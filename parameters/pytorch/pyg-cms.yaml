@@ -8,7 +8,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 10
 patience: 20
-lr: 0.001
+lr: 0.0005
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
@@ -65,11 +65,11 @@ model:
   attention:
     conv_type: attention
     num_convs: 3
-    dropout_ff: 0.1
-    dropout_conv_id_mha: 0.1
-    dropout_conv_id_ff: 0.1
-    dropout_conv_reg_mha: 0.1
-    dropout_conv_reg_ff: 0.1
+    dropout_ff: 0.2
+    dropout_conv_id_mha: 0.2
+    dropout_conv_id_ff: 0.2
+    dropout_conv_reg_mha: 0.2
+    dropout_conv_reg_ff: 0.2
     activation: "elu"
     # attention specific paramters
     head_dim: 16

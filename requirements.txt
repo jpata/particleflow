@@ -34,6 +34,7 @@ setGPU
 tensorflow
 tensorflow-datasets
 tf2onnx
+torch_runstats
 tqdm
 uproot
 vector
