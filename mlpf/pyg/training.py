@@ -37,7 +37,6 @@ from pyg.utils import (
     save_HPs,
     get_lr_schedule,
     count_parameters,
-    transform_batch,
 )
 
 
@@ -388,35 +387,6 @@ def train_mlpf(
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
 
-    # Extract normalization parameters
-    from torch_runstats import Reduction, RunningStats
-
-    if (world_size > 1) and (rank != 0):
-        data_iter = enumerate(train_loader)
-    else:
-        data_iter = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Normalization loop on rank={rank}")
-
-    # FIXME: check how this would be treated in multi-GPU training!
-    rs_mean = RunningStats(
-        dim=(55,),
-        reduction=Reduction.MEAN,
-    )
-    rs_rms = RunningStats(
-        dim=(55,),
-        reduction=Reduction.RMS,
-    )
-    _logger.info("looping over training data for data normalization")
-    for _, batch in data_iter:
-        X = batch.X[batch.X[:, :, 0] != 0]
-        Xnorm = transform_batch(X)
-        rs_mean.accumulate_batch(Xnorm)
-        rs_rms.accumulate_batch(Xnorm)
-
-    model.Xfeat_means = rs_mean.current_result()[0].to(rank)
-    model.Xfeat_rmss = rs_rms.current_result()[0].to(rank)
-    model.Xfeat_rmss[model.Xfeat_rmss == 0] = 1
-    model.transform_batch = transform_batch
-
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
@@ -657,7 +627,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         testdir_name = "_bestweights"
 
         model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]) + len(ELEM_TYPES[config["dataset"]]),
+            "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
             "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],

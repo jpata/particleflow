@@ -322,13 +322,3 @@ def count_parameters(model):
             )
             trainable_params += params
     return trainable_params, nontrainable_params, table
-
-
-# Take the log of pT and energy
-def transform_batch(Xbatch):
-    Xbatch = Xbatch.clone()
-    Xbatch[..., 1] = torch.log(Xbatch[..., 1])
-    Xbatch[..., 5] = torch.log(Xbatch[..., 5])
-    Xbatch[torch.isnan(Xbatch)] = 0.0
-    Xbatch[torch.isinf(Xbatch)] = 0.0
-    return Xbatch

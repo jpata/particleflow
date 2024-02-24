@@ -22,6 +22,9 @@ comet_step_freq: 10
 dtype: float32
 
 model:
+  trainable: all
+  learned_representation_mode: last #last, concat
+  input_encoding: joint #split, joint
   pt_mode: linear
   eta_mode: linear
   sin_phi_mode: linear
@@ -57,13 +60,15 @@ model:
 
   attention:
     conv_type: attention
-    embedding_dim: 256
-    width: 256
-    num_convs: 3
-    dropout: 0.0
+    num_convs: 2
+    dropout_ff: 0.3
+    dropout_conv_id_mha: 0.3
+    dropout_conv_id_ff: 0.3
+    dropout_conv_reg_mha: 0.3
+    dropout_conv_reg_ff: 0.3
     activation: "elu"
-    # attention specific paramters
-    num_heads: 2
+    head_dim: 16
+    num_heads: 16
     attention_type: flash
 
   mamba:

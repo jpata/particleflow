@@ -340,12 +340,7 @@ class MLPF(nn.Module):
 
     # @torch.compile
     def forward(self, X_features, batch_or_mask):
-        X_type_onehot = torch.nn.functional.one_hot(X_features[..., 0].to(torch.long), len(self.elemtypes))
-        Xfeat_transformed = self.transform_batch(X_features)
-        Xfeat_normed = (Xfeat_transformed - self.Xfeat_means) / self.Xfeat_rmss
-        Xfeat_normed = torch.cat([X_type_onehot, Xfeat_normed], axis=-1)
-
-        Xfeat_normed = self.quant(Xfeat_normed)
+        Xfeat_normed = self.quant(X_features)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:

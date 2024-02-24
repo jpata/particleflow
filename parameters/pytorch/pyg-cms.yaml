@@ -28,7 +28,7 @@ model:
     # - nn_pt
 
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
+  input_encoding: split #split, joint
   pt_mode: linear-elemtype
   eta_mode: linear-elemtype
   sin_phi_mode: linear-elemtype
@@ -64,14 +64,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 3
-    dropout_ff: 0.2
-    dropout_conv_id_mha: 0.2
-    dropout_conv_id_ff: 0.2
-    dropout_conv_reg_mha: 0.2
-    dropout_conv_reg_ff: 0.2
+    num_convs: 2
+    dropout_ff: 0.3
+    dropout_conv_id_mha: 0.3
+    dropout_conv_id_ff: 0.3
+    dropout_conv_reg_mha: 0.3
+    dropout_conv_reg_ff: 0.3
     activation: "elu"
-    # attention specific paramters
     head_dim: 16
     num_heads: 16
     attention_type: flash
@@ -124,7 +123,7 @@ train_dataset:
         cms_pf_sms_t1tttt:
           version: 1.7.0
     gun:
-      batch_size: 50
+      batch_size: 20
       samples:
         cms_pf_single_electron:
           version: 1.7.0
@@ -143,7 +142,7 @@ train_dataset:
         cms_pf_single_proton:
           version: 1.7.0
     multiparticlegun:
-      batch_size: 10
+      batch_size: 4
       samples:
         cms_pf_multi_particle_gun:
           version: 1.7.0
@@ -166,7 +165,7 @@ valid_dataset:
         cms_pf_vbf:
           version: 1.7.0
     gun:
-      batch_size: 50
+      batch_size: 20
       samples:
         cms_pf_single_electron:
           version: 1.7.0
@@ -185,7 +184,7 @@ valid_dataset:
         cms_pf_single_proton:
           version: 1.7.0
     multiparticlegun:
-      batch_size: 10
+      batch_size: 4
       samples:
         cms_pf_multi_particle_gun:
           version: 1.7.0

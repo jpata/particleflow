@@ -14,6 +14,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 # CMD="singularity exec -B /media/joosep/data --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # CMS
+export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
 #$CMD mlpf/heptfds/cms_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ttbar.log &
 #$CMD mlpf/heptfds/cms_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd.log &
 #$CMD mlpf/heptfds/cms_pf/ztt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log &
@@ -28,8 +29,8 @@ export CMD="singularity exec -B /local -B /scratch/persistent --env PYTHONPATH=$
 #$CMD mlpf/heptfds/cms_pf/singlepi --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singlepi.log &
 #$CMD mlpf/heptfds/cms_pf/singleproton --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singleproton.log &
 #$CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singletau.log &
-#$CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
-# wait
+$CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
+wait
 
 # CLIC cluster-based
 # export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
