@@ -27,13 +27,13 @@ model:
     # - nn_energy
     # - nn_pt
 
-  learned_representation_mode: last #last, concat
-  input_encoding: split #split, joint
-  pt_mode: linear-elemtype
-  eta_mode: linear-elemtype
-  sin_phi_mode: linear-elemtype
-  cos_phi_mode: linear-elemtype
-  energy_mode: linear-elemtype
+  learned_representation_mode: concat #last, concat
+  input_encoding: joint #split, joint
+  pt_mode: linear
+  eta_mode: linear
+  sin_phi_mode: linear
+  cos_phi_mode: linear
+  energy_mode: linear
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -64,11 +64,11 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 2
+    num_convs: 3
     dropout_ff: 0.3
-    dropout_conv_id_mha: 0.3
+    dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.3
-    dropout_conv_reg_mha: 0.3
+    dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.3
     activation: "elu"
     head_dim: 16
