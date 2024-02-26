@@ -980,7 +980,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
 
 
 def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     pf_genjet_pt = yvals["jet_gen_to_cand_genpt"]
     mlpf_genjet_pt = yvals["jet_gen_to_pred_genpt"]
 
@@ -1038,7 +1037,6 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
         plt.title(labels["gen_jet_range"].format(lim_low, lim_hi))
         plt.yscale("log")
 
-    plt.tight_layout()
     save_img(
         "jet_response_binned.png",
         epoch,
@@ -1051,22 +1049,12 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     mlpf_vals = np.array(mlpf_vals)
 
     # Plot median and IQR as a function of gen pt
-    fig, axs = plt.subplots(2, 1, sharex=True)
-    plt.sca(axs[0])
-    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylim(0.75, 1.25)
-    plt.axhline(1.0, color="black", ls="--")
-    plt.ylabel("Response median")
-    plt.legend(title=title)
-
-    plt.sca(axs[1])
-    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
-    plt.ylabel("Response IQR")
+    plt.figure()
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.legend(loc=1, title=title, fontsize=30)
+    plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_jet"])
-
-    plt.tight_layout()
     save_img(
         "jet_response_med_iqr.png",
         epoch,
@@ -1076,7 +1064,6 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
 
 def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     genmet = yvals["gen_met"]
 
     pf_response = yvals["ratio_cand"]
@@ -1131,7 +1118,6 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
         plt.title(labels["gen_met_range"].format(lim_low, lim_hi))
         plt.yscale("log")
 
-    plt.tight_layout()
     save_img(
         "met_response_binned.png",
         epoch,
@@ -1144,27 +1130,12 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     mlpf_vals = np.array(mlpf_vals)
 
     # Plot median and IQR as a function of gen pt
-    fig, axs = plt.subplots(2, 1, sharex=True)
-    plt.sca(axs[0])
-    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylim(0.75, 1.25)
-    plt.axhline(1.0, color="black", ls="--")
-    plt.ylabel("Response median")
-    if title:
-        plt.title(title)
-    plt.legend()
-
-    plt.sca(axs[1])
-    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
-    plt.ylabel("Response IQR")
-    plt.legend()
-    if title:
-        plt.title(title)
+    plt.figure()
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.ylabel("Response IQR / median")
+    plt.legend(loc=1, title=title, fontsize=30)
     plt.xlabel(labels["gen_met"])
-
-    plt.tight_layout()
     save_img(
         "met_response_med_iqr.png",
         epoch,
@@ -1174,7 +1145,6 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
 
 
 def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-
     genmet = yvals["gen_mom"]
 
     pf_response = yvals["ratio_cand"]
@@ -1229,7 +1199,6 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
         plt.title(labels["gen_mom_range"].format(lim_low, lim_hi))
         plt.yscale("log")
 
-    plt.tight_layout()
     save_img(
         "mom_response_binned.png",
         epoch,
@@ -1242,22 +1211,12 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     mlpf_vals = np.array(mlpf_vals)
 
     # Plot median and IQR as a function of gen pt
-    fig, axs = plt.subplots(2, 1, sharex=True)
-    plt.sca(axs[0])
-    plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylim(0.75, 1.25)
-    plt.axhline(1.0, color="black", ls="--")
-    plt.ylabel("Response median")
-    plt.legend(title=title)
-
-    plt.sca(axs[1])
-    plt.plot(x_vals, pf_vals[:, 2] - pf_vals[:, 0], marker="o", label="PF")
-    plt.plot(x_vals, mlpf_vals[:, 2] - mlpf_vals[:, 0], marker="o", label="MLPF")
-    plt.ylabel("Response IQR")
+    plt.figure()
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
+    plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
+    plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_mom"])
-
-    plt.tight_layout()
+    plt.legend(loc=1, fontsize=30, title=title)
     save_img(
         "mom_response_med_iqr.png",
         epoch,
