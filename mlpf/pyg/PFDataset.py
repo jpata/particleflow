@@ -156,13 +156,13 @@ class InterleavedIterator(object):
 
         self.loader_ds_indices = []
 
-        #iterate loaders in order
+        # iterate loaders in order
         for iloader, loader in enumerate(data_loaders):
             for i in range(len(loader)):
                 self.loader_ds_indices.append(iloader)
-        
-        #iterate loaders interleaved
-        #for i in range(max_loader_size):
+
+        # iterate loaders interleaved
+        # for i in range(max_loader_size):
         #    for iloader, loader in enumerate(data_loaders):
         #        if i < len(loader):
         #            self.loader_ds_indices.append(iloader)
