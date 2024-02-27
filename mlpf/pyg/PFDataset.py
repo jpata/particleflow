@@ -155,12 +155,18 @@ class InterleavedIterator(object):
         max_loader_size = max([len(dl) for dl in data_loaders])
 
         self.loader_ds_indices = []
-        for i in range(max_loader_size):
-            for iloader, loader in enumerate(data_loaders):
-                if i < len(loader):
-                    self.loader_ds_indices.append(iloader)
 
-        random.shuffle(self.loader_ds_indices)
+        #iterate loaders in order
+        for iloader, loader in enumerate(data_loaders):
+            for i in range(len(loader)):
+                self.loader_ds_indices.append(iloader)
+        
+        #iterate loaders interleaved
+        #for i in range(max_loader_size):
+        #    for iloader, loader in enumerate(data_loaders):
+        #        if i < len(loader):
+        #            self.loader_ds_indices.append(iloader)
+
         self.cur_index = 0
         self._len = None
 
@@ -171,7 +177,6 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
-            random.shuffle(self.loader_ds_indices)
             self.cur_index = 0  # reset the curser index
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
             raise StopIteration
