@@ -136,7 +136,7 @@ class RegressionOutput(nn.Module):
             self.mul = torch.ao.nn.quantized.FloatFunctional()
             self.nn = ffn(embed_dim, 2, width, act, dropout)
         elif self.mode == "linear-elemtype":
-            #FIXME: add FloatFunctionals here
+            # FIXME: add FloatFunctionals here
             self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 

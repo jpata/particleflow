@@ -118,7 +118,7 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
-    loss["Total"] += 1e-3*loss["Sliced_Wasserstein_Loss"] + 1e-3*loss["MET"]
+    loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"] + 1e-3 * loss["MET"]
 
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
