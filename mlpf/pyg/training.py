@@ -66,18 +66,21 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred):
+def mlpf_loss(y, ypred, batchidx_or_mask):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
-    pad_mode_3d = ypred["cls_id_onehot"].ndim > 2
+    pad_mode_3d = len(batchidx_or_mask.shape) == 2
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    npart = y["pt"].numel()
+    if pad_mode_3d:
+        npart = torch.sum(batchidx_or_mask)
+    else:
+        npart = len(batchidx_or_mask)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     # ypred["charge"] = ypred["charge"] * msk_true_particle
@@ -101,8 +104,11 @@ def mlpf_loss(y, ypred):
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     if len(msk_true_particle.shape) == 3:
+        # pt * cos_phi
         px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_true_particle
+        # pt * sin_phi
         py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_true_particle
+        # sum across events
         pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
 
         px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
@@ -112,6 +118,7 @@ def mlpf_loss(y, ypred):
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
+    loss["Total"] += 1e-3*loss["Sliced_Wasserstein_Loss"] + 1e-3*loss["MET"]
 
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
@@ -122,7 +129,7 @@ def mlpf_loss(y, ypred):
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
     # loss["Charge"] = loss["Charge"].detach()
-
+    # print(loss["Total"].detach().item(), y["cls_id"].shape)
     return loss
 
 
@@ -287,12 +294,12 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred)
+                loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred)
+                    loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
 
         if is_train:
             loss["Total"].backward()

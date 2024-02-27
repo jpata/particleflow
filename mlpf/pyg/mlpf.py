@@ -135,11 +135,8 @@ class RegressionOutput(nn.Module):
             self.add = torch.ao.nn.quantized.FloatFunctional()
             self.mul = torch.ao.nn.quantized.FloatFunctional()
             self.nn = ffn(embed_dim, 2, width, act, dropout)
-        elif self.mode == "direct-elemtype":
-            self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
-        elif self.mode == "additive-elemtype":
-            self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
         elif self.mode == "linear-elemtype":
+            #FIXME: add FloatFunctionals here
             self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
@@ -157,16 +154,6 @@ class RegressionOutput(nn.Module):
         elif self.mode == "linear":
             nn_out = self.nn(x)
             return self.add.add(self.mul.mul(orig_value, nn_out[..., 0:1]), nn_out[..., 1:2])
-        elif self.mode == "direct-elemtype":
-            nn_out = self.nn(x)
-            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            res = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
-            return res
-        elif self.mode == "additive-elemtype":
-            nn_out = self.nn(x)
-            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            correction = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
-            return orig_value + correction
         elif self.mode == "linear-elemtype":
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
