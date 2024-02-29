@@ -78,9 +78,10 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
     if pad_mode_3d:
-        npart = torch.sum(batchidx_or_mask)
+        nelem = torch.sum(batchidx_or_mask)
     else:
-        npart = len(batchidx_or_mask)
+        nelem = len(batchidx_or_mask)
+    npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     # ypred["charge"] = ypred["charge"] * msk_true_particle
@@ -97,9 +98,14 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
     # loss_charge = 0.0*torch.nn.functional.cross_entropy(
     #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
-    # average over all particles
-    loss["Classification"] = loss_classification.sum() / npart
-    loss["Regression"] = loss_regression.sum() / npart
+    # average over all elements that were not padded
+    loss["Classification"] = loss_classification.sum() / nelem
+
+    # normalize loss with stddev to stabilize across batches with very different pt, E distributions
+    mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
+    reg_losses = loss_regression[y["cls_id"] != 0]
+    # average over all true particles
+    loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
     # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
@@ -118,7 +124,9 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
-    loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"] + 1e-3 * loss["MET"]
+
+    # FIXME: need to test the usefulness of this
+    # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"] + 1e-3 * loss["MET"]
 
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
@@ -129,7 +137,7 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
     # loss["Charge"] = loss["Charge"].detach()
-    # print(loss["Total"].detach().item(), y["cls_id"].shape)
+    # print(loss["Total"].detach().item(), y["cls_id"].shape, nelem, npart)
     return loss
 
 

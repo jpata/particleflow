@@ -11,7 +11,7 @@ singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-    --train --conv-type attention --num-epochs 10 --gpu-batch-multiplier 30 --num-workers 2 --prefetch-factor 20 --checkpoint-freq 1 --comet
+    --train --conv-type attention --num-epochs 10 --gpu-batch-multiplier 40 --num-workers 4 --prefetch-factor 50 --checkpoint-freq 1 --comet
 
 # singularity exec -B /scratch/persistent --nv \
 #     --env PYTHONPATH=hep_tfds \

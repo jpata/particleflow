@@ -11,7 +11,6 @@ from torch_geometric.data import Batch, Data
 from pyg.logger import _logger
 
 import numpy as np
-import random
 
 
 class TFDSDataSource:
@@ -156,16 +155,11 @@ class InterleavedIterator(object):
 
         self.loader_ds_indices = []
 
-        # iterate loaders in order
-        for iloader, loader in enumerate(data_loaders):
-            for i in range(len(loader)):
-                self.loader_ds_indices.append(iloader)
-
         # iterate loaders interleaved
-        # for i in range(max_loader_size):
-        #    for iloader, loader in enumerate(data_loaders):
-        #        if i < len(loader):
-        #            self.loader_ds_indices.append(iloader)
+        for i in range(max_loader_size):
+            for iloader, loader in enumerate(data_loaders):
+                if i < len(loader):
+                    self.loader_ds_indices.append(iloader)
 
         self.cur_index = 0
         self._len = None
