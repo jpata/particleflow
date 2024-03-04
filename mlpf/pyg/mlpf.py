@@ -61,10 +61,6 @@ class SelfAttentionLayer(nn.Module):
             "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
         }
 
-        self.add0 = torch.ao.nn.quantized.FloatFunctional()
-        self.add1 = torch.ao.nn.quantized.FloatFunctional()
-        self.mul = torch.ao.nn.quantized.FloatFunctional()
-
     def forward(self, x, mask):
         # explicitly call the desired attention mechanism
         if self.attention_type == "flash_external":
@@ -76,12 +72,12 @@ class SelfAttentionLayer(nn.Module):
             else:
                 mha_out = self.mha(x, x, x, need_weights=False)[0]
 
-        x = self.add0.add(x, mha_out)
+        x = x + mha_out
         x = self.norm0(x)
-        x = self.add1.add(x, self.seq(x))
+        x = x + self.seq(x)
         x = self.norm1(x)
         x = self.dropout(x)
-        x = self.mul.mul(x, mask.unsqueeze(-1))
+        x = x * mask.unsqueeze(-1)
         return x
 
 
@@ -132,11 +128,8 @@ class RegressionOutput(nn.Module):
             self.nn = ffn(embed_dim, 1, width, act, dropout)
         # two outputs
         elif self.mode == "linear":
-            self.add = torch.ao.nn.quantized.FloatFunctional()
-            self.mul = torch.ao.nn.quantized.FloatFunctional()
             self.nn = ffn(embed_dim, 2, width, act, dropout)
         elif self.mode == "linear-elemtype":
-            # FIXME: add FloatFunctionals here
             self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
@@ -153,7 +146,7 @@ class RegressionOutput(nn.Module):
             return orig_value * nn_out
         elif self.mode == "linear":
             nn_out = self.nn(x)
-            return self.add.add(self.mul.mul(orig_value, nn_out[..., 0:1]), nn_out[..., 1:2])
+            return orig_value * nn_out[..., 0:1] + nn_out[..., 1:2]
         elif self.mode == "linear-elemtype":
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
@@ -322,14 +315,9 @@ class MLPF(nn.Module):
         # elementwise DNN for node charge regression, classes (-1, 0, 1)
         # self.nn_charge = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
-        self.quant = torch.ao.quantization.QuantStub()
-        self.dequant1 = torch.ao.quantization.DeQuantStub()
-        self.dequant2 = torch.ao.quantization.DeQuantStub()
-        self.dequant3 = torch.ao.quantization.DeQuantStub()
-
     # @torch.compile
     def forward(self, X_features, batch_or_mask):
-        Xfeat_normed = self.quant(X_features)
+        Xfeat_normed = X_features
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
@@ -369,10 +357,8 @@ class MLPF(nn.Module):
         elif self.learned_representation_mode == "last":
             final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
         preds_id = self.nn_id(final_embedding_id)
-        preds_id = self.dequant1(preds_id)
 
         # pred_charge = self.nn_charge(final_embedding_id)
-        # pred_charge = self.dequant3(pred_charge)
 
         # regression input
         if self.learned_representation_mode == "concat":
@@ -388,6 +374,5 @@ class MLPF(nn.Module):
         preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
         preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
-        preds_momentum = self.dequant2(preds_momentum)
 
         return preds_id, preds_momentum

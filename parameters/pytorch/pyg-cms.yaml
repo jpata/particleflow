@@ -74,7 +74,7 @@ model:
     dropout_conv_reg_ff: 0.1
     activation: "elu"
     head_dim: 16
-    num_heads: 8
+    num_heads: 16
     attention_type: flash
 
   mamba:
