@@ -190,6 +190,7 @@ class MLPF(nn.Module):
         layernorm=True,
         num_node_messages=2,
         ffn_dist_hidden_dim=128,
+        ffn_dist_num_layers=2,
         # self-attention specific parameters
         num_heads=16,
         head_dim=16,
@@ -297,6 +298,7 @@ class MLPF(nn.Module):
                         "num_node_messages": num_node_messages,
                         "dropout": dropout_ff,
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
+                        "ffn_dist_num_layers": ffn_dist_num_layers,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))

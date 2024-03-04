@@ -287,6 +287,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             steps_per_epoch=steps_per_epoch,
             epochs=epochs,
             last_epoch=last_batch,
+            pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
         lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=1e-5)
@@ -296,7 +297,8 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
 
 
 def count_parameters(model):
-    table = pd.DataFrame(columns=["Modules", "Trainable params", "Non-tranable params"])
+    column_names = ["Modules", "Trainable parameters", "Non-tranable parameters"]
+    table = pd.DataFrame(columns=column_names)
     trainable_params = 0
     nontrainable_params = 0
     for ii, (name, parameter) in enumerate(model.named_parameters()):
@@ -305,9 +307,7 @@ def count_parameters(model):
             table = pd.concat(
                 [
                     table,
-                    pd.DataFrame(
-                        {"Modules": name, "Trainable Parameters": "-", "Non-tranable Parameters": params}, index=[ii]
-                    ),
+                    pd.DataFrame({column_names[0]: name, column_names[1]: 0, column_names[2]: params}, index=[ii]),
                 ]
             )
             nontrainable_params += params
@@ -315,9 +315,7 @@ def count_parameters(model):
             table = pd.concat(
                 [
                     table,
-                    pd.DataFrame(
-                        {"Modules": name, "Trainable Parameters": params, "Non-tranable Parameters": "-"}, index=[ii]
-                    ),
+                    pd.DataFrame({column_names[0]: name, column_names[1]: params, column_names[2]: 0}, index=[ii]),
                 ]
             )
             trainable_params += params

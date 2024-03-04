@@ -61,6 +61,7 @@ parser.add_argument("--export-onnx", action="store_true", default=None, help="ex
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=None, help="validation samples to use")
+parser.add_argument("--val-freq", type=int, default=None, help="run extra validation every val_freq training steps")
 parser.add_argument("--checkpoint-freq", type=int, default=None, help="epoch frequency for checkpointing")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
 parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
