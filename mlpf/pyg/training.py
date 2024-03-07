@@ -111,24 +111,26 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     if len(msk_true_particle.shape) == 3:
+        msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
         # pt * cos_phi
-        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_true_particle
+        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_pred_particle
         # pt * sin_phi
-        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_true_particle
+        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_pred_particle
         # sum across events
-        pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+        pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
         px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
         py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
-        true_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+        true_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
         loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
 
-    # FIXME: need to test the usefulness of this
-    # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"] + 1e-3 * loss["MET"]
-
+    # FIXME: need to test the usefulness of this when the MET and SWD losses are not detached
+    loss["Total"] += 1e-6 * loss["MET"]
+    # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"]
+    # print(loss["Total"], loss["MET"])
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
     for icls in range(0, 7):
