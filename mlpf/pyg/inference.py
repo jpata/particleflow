@@ -139,6 +139,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 def predict_one_batch_args(args):
     predict_one_batch(*args)
 
+
 @torch.no_grad()
 def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
@@ -158,10 +159,10 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     ti = time.time()
     pool = torch.multiprocessing.Pool(4)
     args = []
-    _logger.info(f"Preparing inference data")
+    _logger.info("Preparing inference data")
     for i, batch in iterator:
         args.append((conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample))
-    _logger.info(f"Running inference workers")
+    _logger.info("Running inference workers")
     pool.map(predict_one_batch_args, args)
     pool.close()
 
