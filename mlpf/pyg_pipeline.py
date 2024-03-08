@@ -90,6 +90,8 @@ parser.add_argument(
 
 
 def main():
+    #needed for multiprocessing inference
+    # import torch
     # torch.multiprocessing.set_start_method('spawn')
 
     args = parser.parse_args()

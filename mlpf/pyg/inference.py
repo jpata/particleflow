@@ -136,6 +136,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
 
 
+def predict_one_batch_args(args):
+    predict_one_batch(*args)
+
 @torch.no_grad()
 def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_match_dr=0.1, dir_name=""):
     """Runs inference on the given sample and stores the output as .parquet files."""
@@ -153,8 +156,14 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
         iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
 
     ti = time.time()
+    pool = torch.multiprocessing.Pool(4)
+    args = []
+    _logger.info(f"Preparing inference data")
     for i, batch in iterator:
-        predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
+        args.append((conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample))
+    _logger.info(f"Running inference workers")
+    pool.map(predict_one_batch_args, args)
+    pool.close()
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
