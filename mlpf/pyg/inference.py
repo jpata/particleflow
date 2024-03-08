@@ -157,14 +157,8 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
         iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
 
     ti = time.time()
-    pool = torch.multiprocessing.Pool(4)
-    args = []
-    _logger.info("Preparing inference data")
     for i, batch in iterator:
-        args.append((conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample))
-    _logger.info("Running inference workers")
-    pool.map(predict_one_batch_args, args)
-    pool.close()
+        predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 

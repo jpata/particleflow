@@ -90,10 +90,6 @@ parser.add_argument(
 
 
 def main():
-    # needed for multiprocessing inference
-    # import torch
-    # torch.multiprocessing.set_start_method('spawn')
-
     args = parser.parse_args()
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 

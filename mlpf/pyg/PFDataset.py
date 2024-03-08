@@ -103,10 +103,6 @@ class PFDataLoader(torch.utils.data.DataLoader):
         )
 
 
-def next_power_of_2(x):
-    return 1 if x == 0 else 2 ** (x - 1).bit_length()
-
-
 class Collater:
     """Based on the Collater found on torch_geometric docs we build our own."""
 
