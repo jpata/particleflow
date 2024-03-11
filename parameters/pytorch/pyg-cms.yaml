@@ -6,9 +6,9 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 10
+num_epochs: 20
 patience: 20
-lr: 0.0005
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: gnn_lsh
 ntrain:
@@ -72,7 +72,7 @@ model:
     dropout_conv_id_ff: 0.1
     dropout_conv_reg_mha: 0.1
     dropout_conv_reg_ff: 0.1
-    activation: "elu"
+    activation: "relu"
     head_dim: 16
     num_heads: 16
     attention_type: flash
@@ -151,7 +151,7 @@ train_dataset:
       batch_size: 4
       samples:
         cms_pf_multi_particle_gun:
-          version: 1.7.0
+          version: 1.7.1
 
 valid_dataset:
   cms:
@@ -193,7 +193,7 @@ valid_dataset:
       batch_size: 4
       samples:
         cms_pf_multi_particle_gun:
-          version: 1.7.0
+          version: 1.7.1
 
 
 test_dataset:

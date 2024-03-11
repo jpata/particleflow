@@ -23,10 +23,21 @@ class GravNetLayer(nn.Module):
         x = self.norm1(x + x_new)
         return x
 
+def get_activation(activation):
+    if activation == "elu":
+        act = nn.ELU
+    elif activation == "relu":
+        act = nn.ReLU
+    elif activation == "relu6":
+        act = nn.ReLU6
+    elif activation == "leakyrelu":
+        act = nn.LeakyReLU
+    return act
 
 class SelfAttentionLayer(nn.Module):
     def __init__(
         self,
+        activation="elu",
         embedding_dim=128,
         num_heads=2,
         width=128,
@@ -40,7 +51,7 @@ class SelfAttentionLayer(nn.Module):
         self.enable_ctx_manager = True
 
         self.attention_type = attention_type
-        self.act = nn.ELU
+        self.act = get_activation(activation)
         if self.attention_type == "flash_external":
             from flash_attn.modules.mha import MHA
 
@@ -82,9 +93,9 @@ class SelfAttentionLayer(nn.Module):
 
 
 class MambaLayer(nn.Module):
-    def __init__(self, embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
+    def __init__(self, activation="elu", embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
         super(MambaLayer, self).__init__()
-        self.act = nn.ELU
+        self.act = get_activation(activation)
         from mamba_ssm import Mamba
 
         self.mamba = Mamba(
@@ -205,14 +216,7 @@ class MLPF(nn.Module):
 
         self.conv_type = conv_type
 
-        if activation == "elu":
-            self.act = nn.ELU
-        elif activation == "relu":
-            self.act = nn.ReLU
-        elif activation == "relu6":
-            self.act = nn.ReLU6
-        elif activation == "leakyrelu":
-            self.act = nn.LeakyReLU
+        self.act = get_activation(activation)
 
         self.learned_representation_mode = learned_representation_mode
 
@@ -254,6 +258,7 @@ class MLPF(nn.Module):
                 for i in range(num_convs):
                     self.conv_id.append(
                         SelfAttentionLayer(
+                            activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
                             width=width,
@@ -264,6 +269,7 @@ class MLPF(nn.Module):
                     )
                     self.conv_reg.append(
                         SelfAttentionLayer(
+                            activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
                             width=width,
@@ -276,8 +282,8 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(embedding_dim, width, d_state, d_conv, expand, dropout_ff))
-                    self.conv_reg.append(MambaLayer(embedding_dim, width, d_state, d_conv, expand, dropout_ff))
+                    self.conv_id.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
+                    self.conv_reg.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
