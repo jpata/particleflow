@@ -23,6 +23,7 @@ class GravNetLayer(nn.Module):
         x = self.norm1(x + x_new)
         return x
 
+
 def get_activation(activation):
     if activation == "elu":
         act = nn.ELU
@@ -33,6 +34,7 @@ def get_activation(activation):
     elif activation == "leakyrelu":
         act = nn.LeakyReLU
     return act
+
 
 class SelfAttentionLayer(nn.Module):
     def __init__(
