@@ -99,6 +99,18 @@ def main():
 
     # override some options for the pipeline test
     if args.pipeline:
+        config["model"]["gnn_lsh"]["num_convs"] = 1
+        config["model"]["gnn_lsh"]["width"] = 64
+        config["model"]["gnn_lsh"]["embedding_dim"] = 64
+
+        config["model"]["gravnet"]["num_convs"] = 1
+        config["model"]["gravnet"]["width"] = 64
+        config["model"]["gravnet"]["embedding_dim"] = 64
+
+        config["model"]["attention"]["num_convs"] = 1
+        config["model"]["attention"]["num_heads"] = 8
+        config["model"]["attention"]["head_dim"] = 8
+
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
