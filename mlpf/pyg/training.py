@@ -127,10 +127,10 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
 
-    # FIXME: need to test the usefulness of this when the MET and SWD losses are not detached
-    loss["Total"] += 1e-6 * loss["MET"]
+    if pad_mode_3d:
+        loss["Total"] += 1e-6 * loss["MET"]
     # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"]
-    # print(loss["Total"], loss["MET"])
+
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
     for icls in range(0, 7):
@@ -823,66 +823,63 @@ def run(rank, world_size, config, args, outdir, logfile):
                 # the checkpoint is likely from a DDP run and we need to step up one dir less
                 outdir = str(Path(config["load"]).parent.parent)
 
-        for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-            for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
-                version = config["test_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+        for sample in args.test_datasets:
+            batch_size = config["gpu_batch_multiplier"]
+            version = config["test_dataset"][sample]["version"]
 
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
+            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
 
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(ds)
+            else:
+                sampler = torch.utils.data.RandomSampler(ds)
+
+            test_loader = PFDataLoader(
+                ds,
+                batch_size=batch_size,
+                collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                sampler=sampler,
+                num_workers=config["num_workers"],
+                prefetch_factor=config["prefetch_factor"],
+                pin_memory=use_cuda,
+                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            )
+
+            if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
                 if (rank == 0) or (rank == "cpu"):
-                    _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+                    os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
 
-                if world_size > 1:
-                    sampler = torch.utils.data.distributed.DistributedSampler(ds)
-                else:
-                    sampler = torch.utils.data.RandomSampler(ds)
+            _logger.info(f"Running predictions on {sample}")
+            torch.cuda.empty_cache()
 
-                test_loader = PFDataLoader(
-                    ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
-                    sampler=sampler,
-                    num_workers=config["num_workers"],
-                    prefetch_factor=config["prefetch_factor"],
-                    pin_memory=use_cuda,
-                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            if args.dataset == "clic":
+                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+            else:
+                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
+            device_type = "cuda" if isinstance(rank, int) else "cpu"
+            with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+                run_predictions(
+                    world_size,
+                    rank,
+                    model,
+                    test_loader,
+                    sample,
+                    outdir,
+                    jetdef,
+                    jet_ptcut=15.0,
+                    jet_match_dr=0.1,
+                    dir_name=testdir_name,
                 )
-
-                if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
-                    if (rank == 0) or (rank == "cpu"):
-                        os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
-
-                _logger.info(f"Running predictions on {sample}")
-                torch.cuda.empty_cache()
-
-                if args.dataset == "clic":
-                    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-                else:
-                    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-
-                device_type = "cuda" if isinstance(rank, int) else "cpu"
-                with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-                    run_predictions(
-                        world_size,
-                        rank,
-                        model,
-                        test_loader,
-                        sample,
-                        outdir,
-                        jetdef,
-                        jet_ptcut=15.0,
-                        jet_match_dr=0.1,
-                        dir_name=testdir_name,
-                    )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
-            for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
-                for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
-                    _logger.info(f"Plotting distributions for {sample}")
-
-                    make_plots(outdir, sample, config["dataset"], testdir_name)
+            for sample in args.test_datasets:
+                _logger.info(f"Plotting distributions for {sample}")
+                make_plots(outdir, sample, config["dataset"], testdir_name)
 
         if args.export_onnx:
             try:
@@ -929,6 +926,9 @@ def override_config(config, args):
     if not (args.num_convs is None):
         for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
+
+    if len(args.test_datasets) == 0:
+        args.test_datasets = config["test_dataset"]
 
     return config
 

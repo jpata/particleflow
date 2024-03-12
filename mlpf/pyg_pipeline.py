@@ -87,6 +87,7 @@ parser.add_argument(
     help="attention type for self-attention layer",
     choices=["math", "efficient", "flash", "flash_external"],
 )
+parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
 
 def main():
@@ -99,13 +100,14 @@ def main():
     # override some options for the pipeline test
     if args.pipeline:
         if config["dataset"] == "cms":
-            for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
+            for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
                     "physical": {
                         "batch_size": config[ds]["cms"]["physical"]["batch_size"],
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
+            config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
 
     # override loaded config with values from command line args
     config = override_config(config, args)
