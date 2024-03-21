@@ -35,6 +35,10 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+    outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
+    if os.path.isfile(outfile):
+        return
+
     if conv_type != "gravnet":
         X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
         batch_pad = Batch(X=X_pad, mask=mask).to(rank)
@@ -131,9 +135,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
                 "matched_jets": matched_jets,
             }
         ),
-        f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
+        outfile,
     )
-    _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
+    _logger.info(f"Saved predictions at {outfile}")
 
 
 def predict_one_batch_args(args):

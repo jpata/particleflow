@@ -28,7 +28,7 @@ model:
     # - nn_energy
     # - nn_pt
 
-  learned_representation_mode: concat #last, concat
+  learned_representation_mode: last #last, concat
   input_encoding: joint #split, joint
   pt_mode: linear
   eta_mode: linear
@@ -66,15 +66,15 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
-    dropout_ff: 0.1
-    dropout_conv_id_mha: 0.1
-    dropout_conv_id_ff: 0.1
-    dropout_conv_reg_mha: 0.1
-    dropout_conv_reg_ff: 0.1
+    num_convs: 3
+    dropout_ff: 0.0
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
     activation: "relu"
     head_dim: 16
-    num_heads: 32
+    num_heads: 16
     attention_type: flash
 
   mamba:

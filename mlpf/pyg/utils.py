@@ -276,7 +276,7 @@ def load_lr_schedule(lr_schedule, checkpoint):
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
-    # we step teh schedule every mini-batch so need to multiply by steps_per_epoch
+    # we step the schedule every mini-batch so need to multiply by steps_per_epoch
     last_batch = last_epoch * steps_per_epoch - 1 if last_epoch != -1 else -1
     if config["lr_schedule"] == "constant":
         lr_schedule = ConstantLR(opt, factor=1.0, total_iters=steps_per_epoch * epochs)
