@@ -6,6 +6,7 @@ Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 # comet needs to be imported before torch
@@ -14,8 +15,6 @@ from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 import yaml
 from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
-
-logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
@@ -90,8 +89,35 @@ parser.add_argument(
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
 
+def get_outdir(resume_training, load):
+    outdir = None
+    if not (resume_training is None):
+        outdir = resume_training
+    if not (load is None):
+        pload = Path(load)
+        if pload.name == "checkpoint.pth":
+            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
+            outdir = str(pload.parent.parent.parent)
+        elif pload.name == "best_weights.pth":
+            outdir = str(pload.parent)
+        else:
+            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            outdir = str(pload.parent.parent)
+    if not (outdir is None):
+        assert(os.path.isfile("{}/model_kwargs.pkl".format(outdir)))
+    return outdir
+
 def main():
     args = parser.parse_args()
+
+    if args.resume_training and not args.ray_train:
+        raise NotImplementedError(
+            "Resuming an interrupted training is only supported in our \
+                Ray Train-based training. Consider using `--load` instead, \
+                which starts a new training using model weights from a pre-trained checkpoint."
+        )
+
+    logging.basicConfig(level=logging.INFO)
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
@@ -127,13 +153,13 @@ def main():
     if args.hpo:
         run_hpo(config, args)
     else:
-        if args.resume_training:
-            outdir = args.resume_training
-        else:
+        outdir = get_outdir(args.resume_training, config["load"])
+        if outdir is None:
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
             )
+
         # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
         config_filename = "train-config.yaml" if args.train else "test-config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:
