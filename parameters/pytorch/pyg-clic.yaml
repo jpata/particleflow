@@ -137,17 +137,13 @@ valid_dataset:
           version: 1.5.0
 
 test_dataset:
-  clic:
-    physical:
-      batch_size: 1
-      samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+  clic_edm_qq_pf:
+    version: 1.5.0
+  clic_edm_ttbar_pf:
+    version: 1.5.0
+  clic_edm_ttbar_pu10_pf:
+    version: 1.5.0
+  clic_edm_ww_fullhad_pf:
+    version: 1.5.0
+  clic_edm_zh_tautau_pf:
+    version: 1.5.0
