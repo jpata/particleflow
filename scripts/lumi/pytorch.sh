@@ -13,10 +13,10 @@
 
 cd /scratch/project_465000301/particleflow
 
-module load LUMI/22.08 partition/G
+module load LUMI/23.03 partition/G
+module load PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209
 
-export IMG=/scratch/project_465000301/lumi-pytorch-rocm.simg
-export PYTHONPATH=hep_tfds
+export IMG=/users/patajoos/EasyBuild/SW/container/PyTorch/2.2.0-rocm-5.6.1-python-3.10-singularity-20240209/lumi-pytorch-rocm-5.6.1-python-3.10-pytorch-v2.2.0-dockerhash-f72ddd8ef883.sif
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
 export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
@@ -27,14 +27,7 @@ export ROCM_PATH=/opt/rocm
 #export MIOPEN_ENABLE_LOGGING_CMD=1
 #export MIOPEN_LOG_LEVEL=4
 
-env
-
-singularity exec --rocm \
+singularity exec \
   -B /scratch/project_465000301 \
   -B /tmp \
-  --env PYTHONPATH=hep_tfds \
-  $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus $SLURM_GPUS_PER_TASK \
-  --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
-  --train \
-  --conv-type attention --attention-type flash_external \
-  --num-epochs 10 --gpu-batch-multiplier 4 --num-workers 1 --prefetch-factor 10 --checkpoint-freq 1
+  $IMG ./runner.sh

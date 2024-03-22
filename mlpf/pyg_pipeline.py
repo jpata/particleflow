@@ -11,6 +11,9 @@ from pathlib import Path
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
+import torch
+import os
+
 import yaml
 from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
@@ -91,6 +94,37 @@ parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples
 
 
 def main():
+
+    # if "ROCM_VISIBLE_DEVICES" in os.environ:
+    if False:
+        from flash_attn import flash_attn_func
+    
+        sdpa = torch.nn.functional.scaled_dot_product_attention
+    
+        def sdpa_hijack(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
+            if query.shape[3] <= 128 and attn_mask is None:
+                hidden_states = flash_attn_func(
+                    q=query.transpose(1, 2),
+                    k=key.transpose(1, 2),
+                    v=value.transpose(1, 2),
+                    dropout_p=dropout_p,
+                    causal=is_causal,
+                    softmax_scale=scale,
+                ).transpose(1, 2)
+            else:
+                hidden_states = sdpa(
+                    query=query,
+                    key=key,
+                    value=value,
+                    attn_mask=attn_mask,
+                    dropout_p=dropout_p,
+                    is_causal=is_causal,
+                    scale=scale,
+                )
+            return hidden_states
+        torch.nn.functional.scaled_dot_product_attention = sdpa_hijack
+        print("Using ROCm Flash Attention")
+
     args = parser.parse_args()
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 

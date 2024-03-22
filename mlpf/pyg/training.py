@@ -334,18 +334,19 @@ def train_and_valid(
 
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
-            if not (tensorboard_writer is None):
-                tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
-                tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
-                tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
-                tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
-                if itrain % 10 == 0:
-                    tensorboard_writer.flush()
-                loss_accum = 0.0
-            if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
-                # this loss is not normalized to batch size
-                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
-                comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+            if (rank == 0) or (rank == "cpu"):
+                if not (tensorboard_writer is None):
+                    tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
+                    tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
+                    tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                    tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
+                    if itrain % 10 == 0:
+                        tensorboard_writer.flush()
+                    loss_accum = 0.0
+                if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
+                    # this loss is not normalized to batch size
+                    comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
+                    comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
         if val_freq is not None and is_train:
             if itrain != 0 and itrain % val_freq == 0:
@@ -526,14 +527,16 @@ def train_mlpf(
             dtype=dtype,
         )
 
-        tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
-        if comet_experiment:
-            comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
-            comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
-            comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
-            comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
+
+            tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
+            if comet_experiment:
+                comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
+                comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
+                comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
+                comet_experiment.log_epoch_end(epoch)
+
             extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]

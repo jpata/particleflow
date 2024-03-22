@@ -54,12 +54,7 @@ class SelfAttentionLayer(nn.Module):
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
-        if self.attention_type == "flash_external":
-            from flash_attn.modules.mha import MHA
-
-            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
-        else:
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
