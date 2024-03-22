@@ -104,8 +104,9 @@ def get_outdir(resume_training, load):
             # the checkpoint is likely from a DDP run and we need to step up one dir less
             outdir = str(pload.parent.parent)
     if not (outdir is None):
-        assert(os.path.isfile("{}/model_kwargs.pkl".format(outdir)))
+        assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
     return outdir
+
 
 def main():
     args = parser.parse_args()
