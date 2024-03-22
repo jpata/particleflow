@@ -128,11 +128,7 @@ valid_dataset:
           version: 1.7.0
 
 test_dataset:
-  clic_hits:
-    physical:
-      batch_size: 1
-      samples:
-        clic_edm_qq_hits_pf10k:
-          version: 1.7.0
-        clic_edm_ttbar_hits_pf10k:
-          version: 1.7.0
+  clic_edm_qq_hits_pf10k:
+    version: 1.7.0
+  clic_edm_ttbar_hits_pf10k:
+    version: 1.7.0

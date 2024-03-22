@@ -131,11 +131,7 @@ valid_dataset:
           version: 1.2.0
 
 test_dataset:
-  delphes:
-    physical:
-      batch_size: 10
-      samples:
-        delphes_ttbar_pf:
-          version: 1.2.0
-        delphes_qcd_pf:
-          version: 1.2.0
+  delphes_ttbar_pf:
+    version: 1.2.0
+  delphes_qcd_pf:
+    version: 1.2.0
