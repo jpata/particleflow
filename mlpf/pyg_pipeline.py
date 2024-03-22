@@ -95,8 +95,7 @@ parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples
 
 def main():
 
-    # if "ROCM_VISIBLE_DEVICES" in os.environ:
-    if False:
+    if True:
         from flash_attn import flash_attn_func
     
         sdpa = torch.nn.functional.scaled_dot_product_attention
