@@ -9,6 +9,21 @@ from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
+
+# All possible PFElement types
+ELEM_TYPES = {
+    "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    "delphes": [0, 1, 2],
+    "clic": [0, 1, 2],
+}
+
+# Some element types are defined, but do not exist in the dataset at all
+ELEM_TYPES_NONZERO = {
+    "cms": [1, 4, 5, 6, 8, 9, 10, 11],
+    "delphes": [1, 2],
+    "clic": [1, 2],
+}
+
 CLASS_LABELS = {
     "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
     "delphes": [0, 211, 130, 22, 11, 13],
@@ -178,7 +193,7 @@ def unpack_target(y):
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_id_onehot"], ret["momentum"], ret["charge"] = preds
+    ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
@@ -261,7 +276,7 @@ def load_lr_schedule(lr_schedule, checkpoint):
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
-    # we step teh schedule every mini-batch so need to multiply by steps_per_epoch
+    # we step the schedule every mini-batch so need to multiply by steps_per_epoch
     last_batch = last_epoch * steps_per_epoch - 1 if last_epoch != -1 else -1
     if config["lr_schedule"] == "constant":
         lr_schedule = ConstantLR(opt, factor=1.0, total_iters=steps_per_epoch * epochs)
@@ -275,7 +290,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch)
+        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=1e-5)
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule

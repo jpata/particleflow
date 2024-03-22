@@ -14,10 +14,16 @@ from plotting.plot_utils import (
     compute_met_and_ratio,
     format_dataset_name,
     load_eval_data,
+    plot_jets,
     plot_jet_ratio,
+    plot_jet_response_binned,
+    plot_jet_response_binned_eta,
+    plot_jet_response_binned_separate,
     plot_met,
     plot_met_ratio,
+    plot_met_response_binned,
     plot_num_elements,
+    plot_particle_multiplicity,
     plot_particles,
     plot_sum_energy,
 )
@@ -29,11 +35,15 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+    outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
+    if os.path.isfile(outfile):
+        return
+
     if conv_type != "gravnet":
         X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
         batch_pad = Batch(X=X_pad, mask=mask).to(rank)
         ypred = model(batch_pad.X, batch_pad.mask)
-        ypred = ypred[0][mask], ypred[1][mask], ypred[2][mask]
+        ypred = ypred[0][mask], ypred[1][mask]
     else:
         _batch = batch.to(rank)
         ypred = model(_batch.X, _batch.batch)
@@ -125,9 +135,13 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
                 "matched_jets": matched_jets,
             }
         ),
-        f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet",
+        outfile,
     )
-    _logger.info(f"Saved predictions at {outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet")
+    _logger.info(f"Saved predictions at {outfile}")
+
+
+def predict_one_batch_args(args):
+    predict_one_batch(*args)
 
 
 @torch.no_grad()
@@ -165,13 +179,61 @@ def make_plots(outpath, sample, dataset, dir_name=""):
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
-    plot_num_elements(X, cp_dir=plots_path, title=format_dataset_name(sample))
-    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=format_dataset_name(sample))
+    title = format_dataset_name(sample)
+    plot_num_elements(X, cp_dir=plots_path, title=title)
+    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
+    plot_particle_multiplicity(X, yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
 
-    plot_jet_ratio(yvals, cp_dir=plots_path, title=format_dataset_name(sample))
+    plot_jets(
+        yvals,
+        cp_dir=plots_path,
+        title=title,
+    )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        title=title,
+        bins=np.linspace(0, 5, 100),
+        logy=True,
+    )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        title=title,
+        bins=np.linspace(0.5, 1.5, 100),
+        logy=False,
+        file_modifier="_bins_0p5_1p5",
+    )
+    plot_jet_response_binned(yvals, cp_dir=plots_path, title=title)
+    plot_jet_response_binned_eta(yvals, cp_dir=plots_path, title=title)
+    plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
     met_data = compute_met_and_ratio(yvals)
-    plot_met(met_data, cp_dir=plots_path, title=format_dataset_name(sample))
-    plot_met_ratio(met_data, cp_dir=plots_path, title=format_dataset_name(sample))
+    plot_met(met_data, cp_dir=plots_path, title=title)
+    plot_met_ratio(met_data, cp_dir=plots_path, title=title)
+    plot_met_ratio(
+        met_data,
+        cp_dir=plots_path,
+        title=title,
+        bins=np.linspace(0, 20, 100),
+        logy=True,
+    )
+    plot_met_ratio(
+        met_data,
+        cp_dir=plots_path,
+        title=title,
+        bins=np.linspace(0, 2, 100),
+        logy=False,
+        file_modifier="_bins_0_2",
+    )
+    plot_met_ratio(
+        met_data,
+        cp_dir=plots_path,
+        title=title,
+        bins=np.linspace(0, 5, 100),
+        logy=False,
+        file_modifier="_bins_0_5",
+    )
+    plot_met_response_binned(met_data, cp_dir=plots_path, title=title)
 
     plot_particles(yvals, cp_dir=plots_path, title=format_dataset_name(sample))

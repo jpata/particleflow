@@ -55,6 +55,7 @@ parser.add_argument(
     help="which graph layer to use",
     choices=["gravnet", "attention", "gnn_lsh", "mamba"],
 )
+parser.add_argument("--num-convs", type=int, default=None, help="number of convlution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -84,13 +85,12 @@ parser.add_argument(
     type=str,
     default=None,
     help="attention type for self-attention layer",
-    choices=["math", "efficient", "flash"],
+    choices=["math", "efficient", "flash", "flash_external"],
 )
+parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
 
 def main():
-    # torch.multiprocessing.set_start_method('spawn')
-
     args = parser.parse_args()
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 
@@ -99,14 +99,27 @@ def main():
 
     # override some options for the pipeline test
     if args.pipeline:
+        config["model"]["gnn_lsh"]["num_convs"] = 1
+        config["model"]["gnn_lsh"]["width"] = 64
+        config["model"]["gnn_lsh"]["embedding_dim"] = 64
+
+        config["model"]["gravnet"]["num_convs"] = 1
+        config["model"]["gravnet"]["width"] = 64
+        config["model"]["gravnet"]["embedding_dim"] = 64
+
+        config["model"]["attention"]["num_convs"] = 1
+        config["model"]["attention"]["num_heads"] = 8
+        config["model"]["attention"]["head_dim"] = 8
+
         if config["dataset"] == "cms":
-            for ds in ["train_dataset", "test_dataset", "valid_dataset"]:
+            for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
                     "physical": {
                         "batch_size": config[ds]["cms"]["physical"]["batch_size"],
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
+            config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
 
     # override loaded config with values from command line args
     config = override_config(config, args)

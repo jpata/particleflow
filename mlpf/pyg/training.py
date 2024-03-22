@@ -33,6 +33,8 @@ from pyg.utils import (
     save_checkpoint,
     CLASS_LABELS,
     X_FEATURES,
+    ELEM_TYPES,
+    ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
     count_parameters,
@@ -65,59 +67,80 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred):
+def mlpf_loss(y, ypred, batchidx_or_mask):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
+    pad_mode_3d = len(batchidx_or_mask.shape) == 2
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    npart = y["pt"].numel()
+    if pad_mode_3d:
+        nelem = torch.sum(batchidx_or_mask)
+    else:
+        nelem = len(batchidx_or_mask)
+    npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
-    ypred["charge"] = ypred["charge"] * msk_true_particle
+    # ypred["charge"] = ypred["charge"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
-    y["charge"] = y["charge"] * msk_true_particle[..., 0]
+    # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
-    # pytorch expects (N, C, ...)
-    if ypred["cls_id_onehot"].ndim > 2:
+    # in case of the 3D-padded mode, pytorch expects (N, C, ...)
+    if pad_mode_3d:
         ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-        ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+        # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
-    loss_charge = torch.nn.functional.cross_entropy(ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
+    # loss_charge = 0.0*torch.nn.functional.cross_entropy(
+    #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
-    loss["Classification"] = loss_classification.sum() / npart
-    loss["Regression"] = loss_regression.sum() / npart
-    loss["Charge"] = loss_charge.sum() / npart
+    # average over all elements that were not padded
+    loss["Classification"] = loss_classification.sum() / nelem
+
+    # normalize loss with stddev to stabilize across batches with very different pt, E distributions
+    mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
+    reg_losses = loss_regression[y["cls_id"] != 0]
+    # average over all true particles
+    loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     if len(msk_true_particle.shape) == 3:
-        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_true_particle
-        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_true_particle
-        pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+        msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
+        # pt * cos_phi
+        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_pred_particle
+        # pt * sin_phi
+        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_pred_particle
+        # sum across events
+        pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
         px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
         py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
-        true_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+        true_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
         loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
-    loss["Total"] = loss["Classification"] + loss["Regression"] + loss["Charge"]
+    loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
+
+    # if pad_mode_3d:
+    #     loss["Total"] += 1e-6 * loss["MET"]
+    #     # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"]
 
     # Keep track of loss components for each true particle type
+    # These are detached to keeping track of the gradient
     for icls in range(0, 7):
         loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
         loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
 
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
-    loss["Charge"] = loss["Charge"].detach()
-
+    # loss["Charge"] = loss["Charge"].detach()
+    # print(loss["Total"].detach().item(), y["cls_id"].shape, nelem, npart)
     return loss
 
 
@@ -197,6 +220,23 @@ class FocalLoss(nn.Module):
         return loss
 
 
+def configure_model_trainable(model, trainable, is_training):
+    if is_training:
+        model.train()
+        if trainable != "all":
+            model.eval()
+            for param in model.parameters():
+                param.requires_grad = False
+
+            for layer in trainable:
+                layer = getattr(model, layer)
+                layer.train()
+                for param in layer.parameters():
+                    param.requires_grad = True
+    else:
+        model.eval()
+
+
 def train_and_valid(
     rank,
     world_size,
@@ -205,6 +245,7 @@ def train_and_valid(
     optimizer,
     train_loader,
     valid_loader,
+    trainable,
     is_train=True,
     lr_schedule=None,
     comet_experiment=None,
@@ -212,6 +253,7 @@ def train_and_valid(
     epoch=None,
     val_freq=None,
     dtype=torch.float32,
+    tensorboard_writer=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -223,11 +265,10 @@ def train_and_valid(
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {}
 
+    configure_model_trainable(model, trainable, is_train)
     if is_train:
-        model.train()
         data_loader = train_loader
     else:
-        model.eval()
         data_loader = valid_loader
 
     # only show progress bar on rank 0
@@ -240,6 +281,7 @@ def train_and_valid(
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
+    loss_accum = 0.0
     val_freq_time_0 = time.time()
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -251,7 +293,14 @@ def train_and_valid(
         else:
             conv_type = model.conv_type
 
-        batchidx_or_mask = batch.batch if conv_type == "gravnet" else batch.mask
+        if conv_type == "gravnet":
+            batchidx_or_mask = batch.batch
+            num_elems = len(batch.batch)
+            num_batch = len(torch.unique(batch.batch))
+        else:
+            batchidx_or_mask = batch.mask
+            num_elems = batch.X[batch.mask].shape[0]
+            num_batch = batch.X.shape[0]
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
@@ -264,15 +313,16 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred)
+                loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred)
+                    loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
 
         if is_train:
             loss["Total"].backward()
+            loss_accum += loss["Total"].detach().cpu().item()
             optimizer.step()
             if lr_schedule:
                 lr_schedule.step()
@@ -282,10 +332,18 @@ def train_and_valid(
                 epoch_loss[loss_] = 0.0
             epoch_loss[loss_] += loss[loss_].detach()
 
-        if comet_experiment and is_train:
-            if itrain % comet_step_freq == 0:
+        if is_train:
+            step = (epoch - 1) * len(data_loader) + itrain
+            if not (tensorboard_writer is None):
+                tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
+                tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
+                tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
+                if itrain % 10 == 0:
+                    tensorboard_writer.flush()
+                loss_accum = 0.0
+            if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
-                step = (epoch - 1) * len(data_loader) + itrain
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
                 comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
@@ -367,7 +425,8 @@ def train_mlpf(
     num_epochs,
     patience,
     outdir,
-    dtype,
+    trainable="all",
+    dtype=torch.float32,
     start_epoch=1,
     lr_schedule=None,
     use_ray=False,
@@ -423,6 +482,7 @@ def train_mlpf(
                         optimizer,
                         train_loader=train_loader,
                         valid_loader=valid_loader,
+                        trainable=trainable,
                         is_train=True,
                         lr_schedule=lr_schedule,
                         val_freq=val_freq,
@@ -438,6 +498,7 @@ def train_mlpf(
                 optimizer,
                 train_loader=train_loader,
                 valid_loader=valid_loader,
+                trainable=trainable,
                 is_train=True,
                 lr_schedule=lr_schedule,
                 comet_experiment=comet_experiment,
@@ -445,6 +506,7 @@ def train_mlpf(
                 epoch=epoch,
                 val_freq=val_freq,
                 dtype=dtype,
+                tensorboard_writer=tensorboard_writer_train,
             )
 
         losses_v = train_and_valid(
@@ -455,6 +517,7 @@ def train_mlpf(
             optimizer,
             train_loader=train_loader,
             valid_loader=valid_loader,
+            trainable=trainable,
             is_train=False,
             lr_schedule=None,
             comet_experiment=comet_experiment,
@@ -463,6 +526,7 @@ def train_mlpf(
             dtype=dtype,
         )
 
+        tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
             comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
@@ -498,11 +562,11 @@ def train_mlpf(
                 loss=losses_t["Total"],
                 reg_loss=losses_t["Regression"],
                 cls_loss=losses_t["Classification"],
-                charge_loss=losses_t["Charge"],
+                # charge_loss=losses_t["Charge"],
                 val_loss=losses_v["Total"],
                 val_reg_loss=losses_v["Regression"],
                 val_cls_loss=losses_v["Classification"],
-                val_charge_loss=losses_v["Charge"],
+                # val_charge_loss=losses_v["Charge"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
@@ -590,7 +654,6 @@ def run(rank, world_size, config, args, outdir, logfile):
     """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
 
     pad_3d = config["conv_type"] != "gravnet"
-    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
 
     use_cuda = rank != "cpu"
 
@@ -652,12 +715,15 @@ def run(rank, world_size, config, args, outdir, logfile):
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
+            "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],
             "eta_mode": config["model"]["eta_mode"],
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
-            "attention_type": config["model"]["attention"]["attention_type"],
+            "elemtypes": ELEM_TYPES[config["dataset"]],
+            "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+            "learned_representation_mode": config["model"]["learned_representation_mode"],
             **config["model"][config["conv_type"]],
         }
         model = MLPF(**model_kwargs)
@@ -669,6 +735,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
+    configure_model_trainable(model, config["model"]["trainable"], True)
     trainable_params, nontrainable_params, table = count_parameters(model)
 
     if (rank == 0) or (rank == "cpu"):
@@ -713,7 +780,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             config,
             use_cuda,
             pad_3d,
-            pad_power_of_two,
             use_ray=False,
         )
         steps_per_epoch = len(loaders["train"])
@@ -730,7 +796,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
-            dtype,
+            trainable=config["model"]["trainable"],
+            dtype=dtype,
             start_epoch=start_epoch,
             lr_schedule=lr_schedule,
             use_ray=False,
@@ -756,66 +823,63 @@ def run(rank, world_size, config, args, outdir, logfile):
                 # the checkpoint is likely from a DDP run and we need to step up one dir less
                 outdir = str(Path(config["load"]).parent.parent)
 
-        for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
-            batch_size = config["test_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-            for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
-                version = config["test_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+        for sample in args.test_datasets:
+            batch_size = config["gpu_batch_multiplier"]
+            version = config["test_dataset"][sample]["version"]
 
-                ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
+            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
 
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+
+            if world_size > 1:
+                sampler = torch.utils.data.distributed.DistributedSampler(ds)
+            else:
+                sampler = torch.utils.data.RandomSampler(ds)
+
+            test_loader = PFDataLoader(
+                ds,
+                batch_size=batch_size,
+                collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                sampler=sampler,
+                num_workers=config["num_workers"],
+                prefetch_factor=config["prefetch_factor"],
+                pin_memory=use_cuda,
+                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            )
+
+            if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
                 if (rank == 0) or (rank == "cpu"):
-                    _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+                    os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
 
-                if world_size > 1:
-                    sampler = torch.utils.data.distributed.DistributedSampler(ds)
-                else:
-                    sampler = torch.utils.data.RandomSampler(ds)
+            _logger.info(f"Running predictions on {sample}")
+            torch.cuda.empty_cache()
 
-                test_loader = PFDataLoader(
-                    ds,
-                    batch_size=batch_size,
-                    collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
-                    sampler=sampler,
-                    num_workers=config["num_workers"],
-                    prefetch_factor=config["prefetch_factor"],
-                    pin_memory=use_cuda,
-                    pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+            if args.dataset == "clic":
+                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+            else:
+                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
+            device_type = "cuda" if isinstance(rank, int) else "cpu"
+            with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+                run_predictions(
+                    world_size,
+                    rank,
+                    model,
+                    test_loader,
+                    sample,
+                    outdir,
+                    jetdef,
+                    jet_ptcut=15.0,
+                    jet_match_dr=0.1,
+                    dir_name=testdir_name,
                 )
-
-                if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
-                    if (rank == 0) or (rank == "cpu"):
-                        os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
-
-                _logger.info(f"Running predictions on {sample}")
-                torch.cuda.empty_cache()
-
-                if args.dataset == "clic":
-                    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-                else:
-                    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-
-                device_type = "cuda" if isinstance(rank, int) else "cpu"
-                with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-                    run_predictions(
-                        world_size,
-                        rank,
-                        model,
-                        test_loader,
-                        sample,
-                        outdir,
-                        jetdef,
-                        jet_ptcut=15.0,
-                        jet_match_dr=0.1,
-                        dir_name=testdir_name,
-                    )
 
     if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
-            for type_ in config["test_dataset"][config["dataset"]]:  # will be "physical", "gun"
-                for sample in config["test_dataset"][config["dataset"]][type_]["samples"]:
-                    _logger.info(f"Plotting distributions for {sample}")
-
-                    make_plots(outdir, sample, config["dataset"], testdir_name)
+            for sample in args.test_datasets:
+                _logger.info(f"Plotting distributions for {sample}")
+                make_plots(outdir, sample, config["dataset"], testdir_name)
 
         if args.export_onnx:
             try:
@@ -829,13 +893,13 @@ def run(rank, world_size, config, args, outdir, logfile):
                     "test.onnx",
                     verbose=False,
                     input_names=["features", "mask"],
-                    output_names=["id", "momentum", "charge"],
+                    output_names=["id", "momentum"],
                     dynamic_axes={
                         "features": {0: "num_batch", 1: "num_elements"},
                         "mask": [0, 1],
                         "id": [0, 1],
                         "momentum": [0, 1],
-                        "charge": [0, 1],
+                        # "charge": [0, 1],
                     },
                 )
 
@@ -858,6 +922,13 @@ def override_config(config, args):
 
     if not (args.attention_type is None):
         config["model"]["attention"]["attention_type"] = args.attention_type
+
+    if not (args.num_convs is None):
+        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+            config["model"][model]["num_convs"] = args.num_convs
+
+    if len(args.test_datasets) == 0:
+        args.test_datasets = config["test_dataset"]
 
     return config
 
@@ -906,7 +977,6 @@ def train_ray_trial(config, args, outdir=None):
         outdir = ray.train.get_context().get_trial_dir()
 
     pad_3d = config["conv_type"] != "gravnet"
-    pad_power_of_two = config["conv_type"] == "attention" and config["model"]["attention"]["attention_type"] == "flash"
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
@@ -945,7 +1015,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, pad_power_of_two, use_ray=True)
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(
@@ -1000,6 +1070,7 @@ def train_ray_trial(config, args, outdir=None):
         config["num_epochs"],
         config["patience"],
         outdir,
+        trainable=config["model"]["trainable"],
         start_epoch=start_epoch,
         lr_schedule=lr_schedule,
         use_ray=True,
@@ -1065,12 +1136,12 @@ def run_ray_training(config, args, outdir):
     _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")
     _logger.info("Final cls_loss: {}".format(result.metrics["cls_loss"]), color="bold")
     _logger.info("Final reg_loss: {}".format(result.metrics["reg_loss"]), color="bold")
-    _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
+    # _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
 
     _logger.info("Final val_loss: {}".format(result.metrics["val_loss"]), color="bold")
     _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
     _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
-    _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
+    # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
 
     # clean up ray cache
     tmp_ray_cache.cleanup()

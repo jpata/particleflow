@@ -4,7 +4,7 @@
 #SBATCH --mem-per-gpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2023-12-06
+IMG=/home/software/singularity/pytorch.simg:2024-03-11
 
 # singularity exec -B /scratch/persistent --nv \
 #     --env PYTHONPATH=hep_tfds \
@@ -31,8 +31,9 @@ IMG=/home/software/singularity/pytorch.simg:2023-12-06
 #     --train --test --make-plots --conv-type attention --num-epochs 20 --gpu-batch-multiplier 5 --num-workers 1 --prefetch-factor 10
 #
 #
-# singularity exec -B /scratch/persistent --nv \
-#     --env PYTHONPATH=hep_tfds \
-#     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
-#     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-#     --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --num-workers 1 --prefetch-factor 10 --load experiments/pyg-cms_20240204_183048_293390/sub1/best_weights.pth --ntest 1000
+singularity exec -B /scratch/persistent --nv \
+    --env PYTHONPATH=hep_tfds \
+    --env KERAS_BACKEND=torch \
+    $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 4 \
+    --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
+    --train --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --num-workers 1 --prefetch-factor 10 --ntest 1000 --attention-type efficient --dtype float32
