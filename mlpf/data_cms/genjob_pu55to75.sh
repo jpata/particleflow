@@ -24,15 +24,12 @@ PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
 N=20
 
-env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 cd $CMSSWDIR
 eval `scramv1 runtime -sh`
 which python
 which python3
-
-env
 
 cd $WORKDIR
 

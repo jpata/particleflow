@@ -66,7 +66,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 3
+    num_convs: 6
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
@@ -74,7 +74,7 @@ model:
     dropout_conv_reg_ff: 0.0
     activation: "relu"
     head_dim: 16
-    num_heads: 16
+    num_heads: 32
     attention_type: flash
 
   mamba:
@@ -119,39 +119,39 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.0
-        cms_pf_qcd:
-          version: 1.7.0
-        cms_pf_ztt:
-          version: 1.7.0
-        cms_pf_qcd_high_pt:
-          version: 1.7.0
-        cms_pf_sms_t1tttt:
-          version: 1.7.0
-    gun:
-      batch_size: 20
-      samples:
-        cms_pf_single_electron:
-          version: 1.7.0
-        cms_pf_single_gamma:
-          version: 1.7.0
-        cms_pf_single_pi0:
-          version: 1.7.0
-        cms_pf_single_neutron:
-          version: 1.7.0
-        cms_pf_single_pi:
-          version: 1.7.0
-        cms_pf_single_tau:
-          version: 1.7.0
-        cms_pf_single_mu:
-          version: 1.7.0
-        cms_pf_single_proton:
-          version: 1.7.0
-    multiparticlegun:
-      batch_size: 4
-      samples:
-        cms_pf_multi_particle_gun:
           version: 1.7.1
+#        cms_pf_qcd:
+#          version: 1.7.0
+#        cms_pf_ztt:
+#          version: 1.7.0
+#        cms_pf_qcd_high_pt:
+#          version: 1.7.0
+#        cms_pf_sms_t1tttt:
+#          version: 1.7.0
+#    gun:
+#      batch_size: 20
+#      samples:
+#        cms_pf_single_electron:
+#          version: 1.7.0
+#        cms_pf_single_gamma:
+#          version: 1.7.0
+#        cms_pf_single_pi0:
+#          version: 1.7.0
+#        cms_pf_single_neutron:
+#          version: 1.7.0
+#        cms_pf_single_pi:
+#          version: 1.7.0
+#        cms_pf_single_tau:
+#          version: 1.7.0
+#        cms_pf_single_mu:
+#          version: 1.7.0
+#        cms_pf_single_proton:
+#          version: 1.7.0
+#    multiparticlegun:
+#      batch_size: 4
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 1.7.1
 
 valid_dataset:
   cms:
@@ -159,45 +159,45 @@ valid_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.0
-        cms_pf_qcd:
-          version: 1.7.0
-        cms_pf_ztt:
-          version: 1.7.0
-        cms_pf_qcd_high_pt:
-          version: 1.7.0
-        cms_pf_sms_t1tttt:
-          version: 1.7.0
-        cms_pf_vbf:
-          version: 1.7.0
-    gun:
-      batch_size: 20
-      samples:
-        cms_pf_single_electron:
-          version: 1.7.0
-        cms_pf_single_gamma:
-          version: 1.7.0
-        cms_pf_single_pi0:
-          version: 1.7.0
-        cms_pf_single_neutron:
-          version: 1.7.0
-        cms_pf_single_pi:
-          version: 1.7.0
-        cms_pf_single_tau:
-          version: 1.7.0
-        cms_pf_single_mu:
-          version: 1.7.0
-        cms_pf_single_proton:
-          version: 1.7.0
-    multiparticlegun:
-      batch_size: 4
-      samples:
-        cms_pf_multi_particle_gun:
           version: 1.7.1
+#        cms_pf_qcd:
+#          version: 1.7.0
+#        cms_pf_ztt:
+#          version: 1.7.0
+#        cms_pf_qcd_high_pt:
+#          version: 1.7.0
+#        cms_pf_sms_t1tttt:
+#          version: 1.7.0
+#        cms_pf_vbf:
+#          version: 1.7.0
+#    gun:
+#      batch_size: 20
+#      samples:
+#        cms_pf_single_electron:
+#          version: 1.7.0
+#        cms_pf_single_gamma:
+#          version: 1.7.0
+#        cms_pf_single_pi0:
+#          version: 1.7.0
+#        cms_pf_single_neutron:
+#          version: 1.7.0
+#        cms_pf_single_pi:
+#          version: 1.7.0
+#        cms_pf_single_tau:
+#          version: 1.7.0
+#        cms_pf_single_mu:
+#          version: 1.7.0
+#        cms_pf_single_proton:
+#          version: 1.7.0
+#    multiparticlegun:
+#      batch_size: 4
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 1.7.1
 
 test_dataset:
   cms_pf_ttbar:
-    version: 1.7.0
+    version: 1.7.1
   cms_pf_qcd_high_pt:
     version: 1.7.0
   cms_pf_qcd:
