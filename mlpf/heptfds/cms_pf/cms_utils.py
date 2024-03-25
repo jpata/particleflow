@@ -152,18 +152,24 @@ def prepare_data_cms(fn, with_jet_idx=True):
             ygen["jet_idx"] = np.zeros(len(ygen["typ"]), dtype=np.float32)
             ycand["jet_idx"] = np.zeros(len(ycand["typ"]), dtype=np.float32)
 
-        Xelem_flat = ak.to_numpy(np.stack(
-            [Xelem[k] for k in X_FEATURES],
-            axis=-1,
-        ))
-        ygen_flat = ak.to_numpy(np.stack(
-            [ygen[k] for k in Y_FEATURES],
-            axis=-1,
-        ))
-        ycand_flat = ak.to_numpy(np.stack(
-            [ycand[k] for k in Y_FEATURES],
-            axis=-1,
-        ))
+        Xelem_flat = ak.to_numpy(
+            np.stack(
+                [Xelem[k] for k in X_FEATURES],
+                axis=-1,
+            )
+        )
+        ygen_flat = ak.to_numpy(
+            np.stack(
+                [ygen[k] for k in Y_FEATURES],
+                axis=-1,
+            )
+        )
+        ycand_flat = ak.to_numpy(
+            np.stack(
+                [ycand[k] for k in Y_FEATURES],
+                axis=-1,
+            )
+        )
 
         X = Xelem_flat
         ycand = ycand_flat
