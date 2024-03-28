@@ -468,7 +468,7 @@ def train_mlpf(
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
-        # training step
+        # training step, edit here to profile a specific epoch
         if epoch == -1:
             with profile(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
@@ -524,9 +524,9 @@ def train_mlpf(
             comet_step_freq=comet_step_freq,
             epoch=epoch,
             dtype=dtype,
+            tensorboard_writer=tensorboard_writer_valid,
         )
 
-        tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
             comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
@@ -534,6 +534,7 @@ def train_mlpf(
             comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
+            tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
             extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
@@ -614,28 +615,6 @@ def train_mlpf(
                 color="bold",
             )
 
-            # for loss in losses_of_interest:
-            #     fig, ax = plt.subplots()
-
-            #     ax.plot(
-            #         range(len(losses["train"][loss])),
-            #         losses["train"][loss],
-            #         label="training",
-            #     )
-            #     ax.plot(
-            #         range(len(losses["valid"][loss])),
-            #         losses["valid"][loss],
-            #         label=f"validation ({best_val_loss:.3f})",
-            #     )
-
-            #     ax.set_xlabel("Epochs")
-            #     ax.set_ylabel(f"{loss} Loss")
-            #     ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
-            #     ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
-            #     plt.tight_layout()
-            #     plt.savefig(f"{outdir}/mlpf_loss_{loss}.pdf")
-            #     plt.close()
-
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
@@ -651,7 +630,8 @@ def train_mlpf(
 
 
 def run(rank, world_size, config, args, outdir, logfile):
-    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", filename=logfile)
 
     pad_3d = config["conv_type"] != "gravnet"
 
@@ -665,22 +645,10 @@ def run(rank, world_size, config, args, outdir, logfile):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", filename=logfile)
-
     start_epoch = 1
 
     if config["load"]:  # load a pre-trained model
-        if Path(config["load"]).name == "checkpoint.pth":
-            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
-            loaddir = str(Path(config["load"]).parent.parent.parent)
-            testdir_name = "_" + Path(config["load"]).parent.stem
-        else:
-            # the checkpoint is likely from a DDP run and we need to step up one dir less
-            loaddir = str(Path(config["load"]).parent.parent)
-            testdir_name = "_" + Path(config["load"]).stem
-
-        with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
+        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
@@ -691,6 +659,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+        start_epoch = checkpoint["extra_state"]["epoch"]
 
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
@@ -698,20 +667,11 @@ def run(rank, world_size, config, args, outdir, logfile):
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
-        testdir_name = "_" + Path(config["load"]).name
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-    elif args.resume_training:
-        raise NotImplementedError(
-            "Resuming an interrupted training is only supported in our \
-                Ray Train-based training. Consider using `--load` instead, \
-                which starts a new training using model weights from a pre-trained checkpoint."
-        )
     else:  # instantiate a new model in the outdir created
-        testdir_name = "_bestweights"
-
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
@@ -811,17 +771,10 @@ def run(rank, world_size, config, args, outdir, logfile):
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
     if args.test:
-        if config["load"] is None:
-            # if we don't load, we must have a newly trained model
-            assert args.train, "Please train a model before testing, or load a model with --load"
-            assert outdir is not None, "Error: no outdir to evaluate model from"
+        if not (config["load"] is None):
+            testdir_name = "_" + Path(config["load"]).stem
         else:
-            if Path(config["load"]).name == "checkpoint.pth":
-                # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
-                outdir = str(Path(config["load"]).parent.parent.parent)
-            else:
-                # the checkpoint is likely from a DDP run and we need to step up one dir less
-                outdir = str(Path(config["load"]).parent.parent)
+            testdir_name = "_bestweights"
 
         for sample in args.test_datasets:
             batch_size = config["gpu_batch_multiplier"]
@@ -934,13 +887,12 @@ def override_config(config, args):
 
 
 def device_agnostic_run(config, args, world_size, outdir):
+
     if args.train:
         logfile = f"{outdir}/train.log"
-        _configLogger("mlpf", filename=logfile)
     else:
-        outdir = str(Path(args.load).parent.parent)
         logfile = f"{outdir}/test.log"
-        _configLogger("mlpf", filename=logfile)
+    _configLogger("mlpf", filename=logfile)
 
     if config["gpus"]:
         assert (
