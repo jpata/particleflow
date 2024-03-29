@@ -454,12 +454,12 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
 
     mask_visible = (
-        (gen_features["generatorStatus"]==1) & 
-        (gen_features["PDG"]!=12) & 
-        (gen_features["PDG"]!=14) & 
-        (gen_features["PDG"]!=16) & 
-        (gen_features["energy"]>0.01) &
-        gp_interacted_with_detector
+        (gen_features["generatorStatus"] == 1)
+        & (gen_features["PDG"] != 12)
+        & (gen_features["PDG"] != 14)
+        & (gen_features["PDG"] != 16)
+        & (gen_features["energy"] > 0.01)
+        & gp_interacted_with_detector
     )
 
     print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
