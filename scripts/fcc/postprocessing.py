@@ -876,10 +876,10 @@ def process_one_file(fn, ofn):
 
 
 def process_sample(sample):
-    inp = "/local/joosep/clic_edm4hep/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
+    inp = "/local/joosep/clic_edm4hep/2023/"
+    outp = "/local/joosep/mlpf/clic_edm4hep_2024_03_27_allptcls/"
 
-    pool = multiprocessing.Pool(4)
+    pool = multiprocessing.Pool(8)
 
     inpath_samp = inp + sample
     outpath_samp = outp + sample
@@ -891,6 +891,7 @@ def process_sample(sample):
     #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
     #    process_one_file(inf, of)
     args = []
+    print("processing {} files".format(len(infiles)))
     for inf in infiles:
         of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
         args.append((inf, of))
@@ -898,6 +899,7 @@ def process_sample(sample):
 
 
 if __name__ == "__main__":
+    print("running postprocessing.py", sys.argv[1:])
     if len(sys.argv) == 2:
         process_sample(sys.argv[1])
     else:
