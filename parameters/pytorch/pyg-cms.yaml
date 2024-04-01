@@ -120,10 +120,10 @@ train_dataset:
       samples:
         cms_pf_ttbar:
           version: 1.7.1
-#        cms_pf_qcd:
-#          version: 1.7.0
-#        cms_pf_ztt:
-#          version: 1.7.0
+        cms_pf_qcd:
+          version: 1.7.1
+        cms_pf_ztt:
+          version: 1.7.1
 #        cms_pf_qcd_high_pt:
 #          version: 1.7.0
 #        cms_pf_sms_t1tttt:
@@ -160,10 +160,10 @@ valid_dataset:
       samples:
         cms_pf_ttbar:
           version: 1.7.1
-#        cms_pf_qcd:
-#          version: 1.7.0
-#        cms_pf_ztt:
-#          version: 1.7.0
+        cms_pf_qcd:
+          version: 1.7.1
+        cms_pf_ztt:
+          version: 1.7.1
 #        cms_pf_qcd_high_pt:
 #          version: 1.7.0
 #        cms_pf_sms_t1tttt:
