@@ -29,6 +29,7 @@ from plotting.plot_utils import (
 )
 import torch_geometric
 from torch_geometric.data import Batch
+from torch_geometric.utils import scatter
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
@@ -120,11 +121,11 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
-    awkvals = {
-        "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-        "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ycand.keys()} for b in np.unique(batch_ids)]),
-        "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ypred.keys()} for b in np.unique(batch_ids)]),
-    }
+    awkvals = {}
+    for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:
+        awk_arr = awkward.Array({k: flat_arr[k].contiguous() for k in flat_arr.keys()})
+        counts = scatter(torch.ones_like(batch.batch), batch.batch).contiguous().cpu()
+        awkvals[typ] = awkward.unflatten(awk_arr, counts)
 
     awkward.to_parquet(
         awkward.Array(
