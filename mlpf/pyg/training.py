@@ -770,12 +770,12 @@ def run(rank, world_size, config, args, outdir, logfile):
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
-    if args.test:
-        if not (config["load"] is None):
-            testdir_name = "_" + Path(config["load"]).stem
-        else:
-            testdir_name = "_bestweights"
+    if not (config["load"] is None):
+        testdir_name = "_" + Path(config["load"]).stem
+    else:
+        testdir_name = "_bestweights"
 
+    if args.test:
         for sample in args.test_datasets:
             batch_size = config["gpu_batch_multiplier"]
             version = config["test_dataset"][sample]["version"]
@@ -797,8 +797,8 @@ def run(rank, world_size, config, args, outdir, logfile):
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
-                pin_memory=use_cuda,
-                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                # pin_memory=use_cuda,
+                # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
             )
 
             if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):

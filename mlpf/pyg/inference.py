@@ -49,9 +49,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         _batch = batch.to(rank)
         ypred = model(_batch.X, _batch.batch)
 
-    ygen = unpack_target(batch.ygen)
-    ycand = unpack_target(batch.ycand)
-    ypred = unpack_predictions(ypred)
+    ygen = unpack_target(batch.ygen.to(torch.float32))
+    ycand = unpack_target(batch.ycand.to(torch.float32))
+    ypred = unpack_predictions(ypred.to(torch.float32))
 
     for k, v in ygen.items():
         ygen[k] = v.detach().cpu()
@@ -123,8 +123,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     awkvals = {}
     for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:
-        awk_arr = awkward.Array({k: flat_arr[k].contiguous() for k in flat_arr.keys()})
-        counts = scatter(torch.ones_like(batch.batch), batch.batch).contiguous().cpu()
+        awk_arr = awkward.Array({k: flat_arr[k].contiguous().numpy() for k in flat_arr.keys()})
+        counts = scatter(torch.ones_like(batch.batch), batch.batch).contiguous().cpu().numpy()
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
 
     awkward.to_parquet(
@@ -183,7 +183,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     title = format_dataset_name(sample)
     plot_num_elements(X, cp_dir=plots_path, title=title)
     plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
-    plot_particle_multiplicity(X, yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
+    # plot_particle_multiplicity(X, yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
 
     plot_jets(
         yvals,

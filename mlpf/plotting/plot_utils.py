@@ -718,7 +718,7 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
 
 
 def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-    cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
+    cls_ids = np.unique(awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64))
 
     for cls_id in cls_ids:
         if cls_id == 0:
@@ -834,7 +834,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
 
 
 def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
-    cls_ids = np.unique(awkward.flatten(yvals["gen_cls_id"]))
+    cls_ids = np.unique(awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64))
 
     for cls_id in cls_ids:
         if cls_id == 0:
