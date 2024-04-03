@@ -109,6 +109,8 @@ def get_outdir(resume_training, load):
 
 
 def main():
+    # import matplotlib.pyplot as plt
+    # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
 
     if args.resume_training and not args.ray_train:
