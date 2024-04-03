@@ -23,7 +23,6 @@ from plotting.plot_utils import (
     plot_met_ratio,
     plot_met_response_binned,
     plot_num_elements,
-    plot_particle_multiplicity,
     plot_particles,
     plot_sum_energy,
 )
