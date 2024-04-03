@@ -437,8 +437,8 @@ def compute_3dmomentum_and_ratio(yvals):
 def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
     if cp_dir:
         image_path = str(cp_dir / outfile)
-        plt.savefig(image_path, dpi=100)
-        plt.savefig(image_path.replace(".png", ".pdf"))
+        plt.savefig(image_path, dpi=100, bbox_inches="tight")
+        plt.savefig(image_path.replace(".png", ".pdf"), bbox_inches="tight")
         plt.clf()
         if comet_experiment:
             comet_experiment.log_image(image_path, step=epoch - 1)
