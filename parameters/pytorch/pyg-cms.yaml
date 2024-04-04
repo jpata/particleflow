@@ -4,7 +4,7 @@ dataset: cms
 sort_data: yes
 data_dir:
 gpus: 1
-gpu_batch_multiplier: 20
+gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
