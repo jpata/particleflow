@@ -102,24 +102,18 @@ def get_class_names(sample_name):
     elif sample_name.startswith("delphes_"):
         return CLASS_NAMES_CLIC
     else:
-        raise Exception("Unknown dataset name: {}".format(dataset_name))
+        raise Exception("Unknown sample name: {}".format(sample_name))
+
 
 EVALUATION_DATASET_NAMES = {
     "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
-    "cms_pf_qcd_high_pt": r"CMS high-$p_T$ QCD+PU events",
-    "cms_pf_ttbar": r"CMS $\mathrm{t}\overline{\mathrm{t}}$+PU events",
-    "cms_pf_single_neutron": r"CMS single neutron particle gun events",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
-
-    "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
-
     "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
@@ -209,11 +203,9 @@ def get_fake(df, pid):
     return v0 / len(df), np.sqrt(v0) / len(df)
 
 
-def experiment_label(ax,
-    experiment="CMS",
-    tag1="Simulation Preliminary",
-    tag2="Run 3 (14 TeV)",
-    x0=0.01, x1=0.15, x2=0.98, y=1.01):
+def experiment_label(
+    ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x0=0.01, x1=0.15, x2=0.98, y=1.01
+):
     plt.figtext(
         x0,
         y,
@@ -244,11 +236,14 @@ def experiment_label(ax,
         transform=ax.transAxes,
     )
 
+
 def cms_label(ax):
     return experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)")
 
+
 def clic_label(ax):
     return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation Preliminary", tag2="ee (380 GeV)")
+
 
 def delphes_label(ax):
     return experiment_label(ax, experiment="Delphes-CMS", tag1="Simulation Preliminary", tag2="pp (14 TeV)")
@@ -259,6 +254,7 @@ EXPERIMENT_LABELS = {
     "delphes": delphes_label,
     "clic": clic_label,
 }
+
 
 def sample_label(ax, sample, additional_text="", x=0.03, y=0.97):
     text = EVALUATION_DATASET_NAMES[sample]
@@ -449,8 +445,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
     b = np.logspace(1, 3, 100)
 
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
@@ -461,8 +455,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
     )
 
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
@@ -473,14 +465,12 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
     )
 
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
         histtype="step",
         lw=2,
-        #label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
+        # label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="Truth",
     )
 
@@ -509,36 +499,29 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         comet_experiment=comet_experiment,
     )
 
-
     plt.figure()
     b = np.linspace(0, 1000, 100)
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
         histtype="step",
         lw=2,
-        #label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
+        # label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="PF",
     )
 
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
         histtype="step",
         lw=2,
-        #label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
+        # label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="MLPF",
     )
 
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
-    p = med_iqr(pt)
-    n = len(pt)
     plt.hist(
         pt,
         bins=b,
@@ -570,9 +553,18 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         comet_experiment=comet_experiment,
     )
 
+
 def plot_jet_ratio(
-    yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False,
-    dataset=None, sample=None
+    yvals,
+    epoch=None,
+    cp_dir=None,
+    comet_experiment=None,
+    title=None,
+    bins=None,
+    file_modifier="",
+    logy=False,
+    dataset=None,
+    sample=None,
 ):
     plt.figure()
     ax = plt.axes()
@@ -581,8 +573,6 @@ def plot_jet_ratio(
         bins = np.linspace(0, 5, 100)
 
     p = med_iqr(yvals["jet_ratio_cand"])
-    n_matched = len(yvals["jet_ratio_cand"])
-    n_jets = len(awkward.flatten(yvals["jets_cand_pt"]))
     plt.hist(
         yvals["jet_ratio_cand"],
         bins=bins,
@@ -591,7 +581,6 @@ def plot_jet_ratio(
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(yvals["jet_ratio_pred"])
-    n_matched = len(yvals["jet_ratio_pred"])
     plt.hist(
         yvals["jet_ratio_pred"],
         bins=bins,
@@ -645,7 +634,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
 
     plt.figure()
     b = np.logspace(minval, maxval, 100)
-    p = med_iqr(met_ratio["cand_met"])
     plt.hist(
         met_ratio["cand_met"],
         bins=b,
@@ -654,7 +642,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
         # label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="PF",
     )
-    p = med_iqr(met_ratio["pred_met"])
     plt.hist(
         met_ratio["pred_met"],
         bins=b,
@@ -663,7 +650,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
         # label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="MLPF",
     )
-    p = med_iqr(met_ratio["gen_met"])
     plt.hist(
         met_ratio["gen_met"],
         bins=b,
@@ -689,33 +675,26 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
 
     save_img("met_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-
     b = np.linspace(0, 300, 100)
-    p = med_iqr(met_ratio["cand_met"])
     plt.hist(
         met_ratio["cand_met"],
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="PF",
     )
-    p = med_iqr(met_ratio["pred_met"])
     plt.hist(
         met_ratio["pred_met"],
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="MLPF",
     )
-    p = med_iqr(met_ratio["gen_met"])
     plt.hist(
         met_ratio["gen_met"],
         bins=b,
         histtype="step",
         lw=2,
-        # label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="Truth",
     )
     plt.xlabel(labels["met"])
@@ -734,8 +713,16 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
 
 
 def plot_met_ratio(
-    met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False,
-    sample=None, dataset=None
+    met_ratio,
+    epoch=None,
+    cp_dir=None,
+    comet_experiment=None,
+    title=None,
+    bins=None,
+    file_modifier="",
+    logy=False,
+    sample=None,
+    dataset=None,
 ):
     plt.figure()
     ax = plt.axes()
@@ -1044,31 +1031,25 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     b = np.logspace(-1, 4, 100)
     plt.figure()
     ax = plt.gca()
-    p = med_iqr(cand_pt)
     plt.hist(
         cand_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="PF",
     )
-    p = med_iqr(pred_pt)
     plt.hist(
         pred_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="MLPF",
     )
-    p = med_iqr(gen_pt)
     plt.hist(
         gen_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="Truth",
     )
     plt.xscale("log")
@@ -1092,31 +1073,25 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     b = np.linspace(0, 200, 100)
     plt.figure()
     ax = plt.gca()
-    p = med_iqr(cand_pt)
     plt.hist(
         cand_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="PF",
     )
-    p = med_iqr(pred_pt)
     plt.hist(
         pred_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="MLPF",
     )
-    p = med_iqr(gen_pt)
     plt.hist(
         gen_pt,
         bins=b,
         histtype="step",
         lw=2,
-        # label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="Truth",
     )
     plt.yscale("log")
@@ -1136,7 +1111,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         comet_experiment=comet_experiment,
     )
 
-
     msk_cand = yvals["cand_cls_id"] != 0
     cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_eta"][msk_cand], axis=1))
 
@@ -1149,7 +1123,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     b = np.linspace(-8, 8, 100)
     plt.figure()
     ax = plt.gca()
-    p = med_iqr(cand_pt)
     plt.hist(
         cand_pt,
         bins=b,
@@ -1157,7 +1130,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         lw=2,
         label="PF",
     )
-    p = med_iqr(pred_pt)
     plt.hist(
         pred_pt,
         bins=b,
@@ -1165,7 +1137,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         lw=2,
         label="MLPF",
     )
-    p = med_iqr(gen_pt)
     plt.hist(
         gen_pt,
         bins=b,
@@ -1404,7 +1375,9 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     )
 
 
-def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
+def plot_jet_response_binned_eta(
+    yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None
+):
     pf_genjet_eta = yvals["jet_gen_to_cand_geneta"]
     mlpf_genjet_eta = yvals["jet_gen_to_pred_geneta"]
 

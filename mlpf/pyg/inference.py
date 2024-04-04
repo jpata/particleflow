@@ -12,13 +12,11 @@ import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
     compute_met_and_ratio,
-    format_dataset_name,
     load_eval_data,
     plot_jets,
     plot_jet_ratio,
     plot_jet_response_binned,
     plot_jet_response_binned_eta,
-    plot_jet_response_binned_separate,
     plot_met,
     plot_met_ratio,
     plot_met_response_binned,
@@ -181,9 +179,8 @@ def make_plots(outpath, sample, dataset, dir_name=""):
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
-    # plot_num_elements(X, cp_dir=plots_path, title=title)
-    # plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
-    # plot_particle_multiplicity(X, yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
+    plot_num_elements(X, cp_dir=plots_path)
+    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path)
 
     plot_jets(
         yvals,
@@ -208,40 +205,14 @@ def make_plots(outpath, sample, dataset, dir_name=""):
         dataset=dataset,
         sample=sample,
     )
-    plot_jet_response_binned(
-        yvals,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample
-    )
-    plot_jet_response_binned_eta(
-        yvals,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample
-    )
+    plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     # plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
     met_data = compute_met_and_ratio(yvals)
-    plot_met(
-        met_data,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample
-    )
-    plot_met_ratio(
-        met_data,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample)
-    plot_met_ratio(
-        met_data,
-        cp_dir=plots_path,
-        bins=np.linspace(0, 20, 100),
-        logy=True,
-        dataset=dataset,
-        sample=sample
-    )
+    plot_met(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_met_ratio(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_met_ratio(met_data, cp_dir=plots_path, bins=np.linspace(0, 20, 100), logy=True, dataset=dataset, sample=sample)
     plot_met_ratio(
         met_data,
         cp_dir=plots_path,
@@ -249,7 +220,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
         logy=False,
         file_modifier="_bins_0_2",
         dataset=dataset,
-        sample=sample
+        sample=sample,
     )
     plot_met_ratio(
         met_data,
@@ -258,17 +229,8 @@ def make_plots(outpath, sample, dataset, dir_name=""):
         logy=False,
         file_modifier="_bins_0_5",
         dataset=dataset,
-        sample=sample
+        sample=sample,
     )
-    plot_met_response_binned(
-        met_data,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample)
+    plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
 
-    plot_particles(
-        yvals,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample
-    )
+    plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
