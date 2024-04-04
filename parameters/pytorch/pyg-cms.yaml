@@ -4,9 +4,9 @@ dataset: cms
 sort_data: yes
 data_dir:
 gpus: 1
-gpu_batch_multiplier: 1
+gpu_batch_multiplier: 20
 load:
-num_epochs: 20
+num_epochs: 100
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
@@ -14,9 +14,9 @@ conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
-num_workers: 0
-prefetch_factor:
-checkpoint_freq:
+num_workers: 4
+prefetch_factor: 50
+checkpoint_freq: 1
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
@@ -120,38 +120,6 @@ train_dataset:
       samples:
         cms_pf_ttbar:
           version: 1.7.1
-        cms_pf_qcd:
-          version: 1.7.1
-        cms_pf_ztt:
-          version: 1.7.1
-#        cms_pf_qcd_high_pt:
-#          version: 1.7.0
-#        cms_pf_sms_t1tttt:
-#          version: 1.7.0
-#    gun:
-#      batch_size: 20
-#      samples:
-#        cms_pf_single_electron:
-#          version: 1.7.0
-#        cms_pf_single_gamma:
-#          version: 1.7.0
-#        cms_pf_single_pi0:
-#          version: 1.7.0
-#        cms_pf_single_neutron:
-#          version: 1.7.0
-#        cms_pf_single_pi:
-#          version: 1.7.0
-#        cms_pf_single_tau:
-#          version: 1.7.0
-#        cms_pf_single_mu:
-#          version: 1.7.0
-#        cms_pf_single_proton:
-#          version: 1.7.0
-#    multiparticlegun:
-#      batch_size: 4
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 1.7.1
 
 valid_dataset:
   cms:
@@ -160,40 +128,6 @@ valid_dataset:
       samples:
         cms_pf_ttbar:
           version: 1.7.1
-        cms_pf_qcd:
-          version: 1.7.1
-        cms_pf_ztt:
-          version: 1.7.1
-#        cms_pf_qcd_high_pt:
-#          version: 1.7.0
-#        cms_pf_sms_t1tttt:
-#          version: 1.7.0
-#        cms_pf_vbf:
-#          version: 1.7.0
-#    gun:
-#      batch_size: 20
-#      samples:
-#        cms_pf_single_electron:
-#          version: 1.7.0
-#        cms_pf_single_gamma:
-#          version: 1.7.0
-#        cms_pf_single_pi0:
-#          version: 1.7.0
-#        cms_pf_single_neutron:
-#          version: 1.7.0
-#        cms_pf_single_pi:
-#          version: 1.7.0
-#        cms_pf_single_tau:
-#          version: 1.7.0
-#        cms_pf_single_mu:
-#          version: 1.7.0
-#        cms_pf_single_proton:
-#          version: 1.7.0
-#    multiparticlegun:
-#      batch_size: 4
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 1.7.1
 
 test_dataset:
   cms_pf_ttbar:
