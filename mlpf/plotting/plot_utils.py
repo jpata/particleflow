@@ -204,7 +204,7 @@ def get_fake(df, pid):
 
 
 def experiment_label(
-    ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x0=0.01, x1=0.15, x2=0.98, y=1.01
+    ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x0=0.01, x1=0.17, x2=0.98, y=1.01
 ):
     plt.figtext(
         x0,
@@ -238,15 +238,15 @@ def experiment_label(
 
 
 def cms_label(ax):
-    return experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)")
+    return experiment_label(ax, experiment="CMS", tag1="Simulation (Private Work)", tag2="Run 3 (14 TeV)", x1=0.13)
 
 
 def clic_label(ax):
-    return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation Preliminary", tag2="ee (380 GeV)")
+    return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation", tag2="ee (380 GeV)", x1=0.35)
 
 
 def delphes_label(ax):
-    return experiment_label(ax, experiment="Delphes-CMS", tag1="Simulation Preliminary", tag2="pp (14 TeV)")
+    return experiment_label(ax, experiment="Delphes-CMS", tag1="Simulation", tag2="pp (14 TeV)", x1=0.30)
 
 
 EXPERIMENT_LABELS = {
@@ -450,7 +450,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="PF",
     )
 
@@ -460,7 +459,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="MLPF",
     )
 
@@ -470,7 +468,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="Truth",
     )
 
@@ -507,7 +504,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="PF",
     )
 
@@ -517,7 +513,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="MLPF",
     )
 
@@ -527,7 +522,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         bins=b,
         histtype="step",
         lw=2,
-        # label="Gen $(M={:.2f}, IQR={:.2f}, N={})$".format(p[0], p[1], n),
         label="Truth",
     )
 
@@ -586,7 +580,7 @@ def plot_jet_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="MLPF $(M={:.2f}\pm{:.2f})$".format(p[0], p[1]),
+        label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
     plt.xlabel(labels["reco_gen_jet_ratio"])
     plt.ylabel("Matched jets / bin")
@@ -639,7 +633,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
         bins=b,
         histtype="step",
         lw=2,
-        # label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="PF",
     )
     plt.hist(
@@ -647,7 +640,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
         bins=b,
         histtype="step",
         lw=2,
-        # label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="MLPF",
     )
     plt.hist(
@@ -655,7 +647,6 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
         bins=b,
         histtype="step",
         lw=2,
-        # label="Truth $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
         label="Truth",
     )
     plt.xlabel(labels["met"])
@@ -735,7 +726,7 @@ def plot_met_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
+        label="PF $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(met_ratio["ratio_pred"])
     plt.hist(
@@ -743,7 +734,7 @@ def plot_met_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
+        label="MLPF $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
     plt.xlabel(labels["reco_gen_met_ratio"])
     plt.ylabel("Events / bin")
@@ -783,7 +774,7 @@ def plot_3dmomentum_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="PF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
+        label="PF $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(mom_ratio["ratio_pred"])
     plt.hist(
@@ -791,7 +782,7 @@ def plot_3dmomentum_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="MLPF $(M={:.2f}, IQR={:.2f})$".format(p[0], p[1]),
+        label="MLPF $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
     plt.xlabel(labels["reco_gen_mom_ratio"])
     plt.ylabel("Events / bin")
