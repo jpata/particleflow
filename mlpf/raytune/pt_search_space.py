@@ -6,19 +6,20 @@ samp = grid_search
 # gnn scan
 search_space = {
     # dataset parameters
-    "ntrain": samp([500]),
+    "ntrain": samp([2**x for x in range(19, 9, -1)]),
+    # "ntrain": samp([1024, 2048, 262144, 524288, 1048576]),
     # "ntest": samp([10000]),
-    "nvalid": samp([500]),
+    "nvalid": samp([100000]),
     "num_epochs": samp([10]),
     # optimizer parameters
-    "lr": samp([1e-4, 3e-4, 1e-3, 3e-3]),
+    "lr": samp([3e-3]),
     "lr_schedule": samp(["onecycle"]),
     "pct_start": samp([0.05]),
     # "gpu_batch_multiplier": samp([1, 4, 8, 16]),
     # "patience": samp([9999]),
     # model arch parameters
     # "activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
-    "conv_type": samp(["attention"]),  # can be "gnn_lsh", "gravnet", "attention"
+    "conv_type": samp(["gnn_lsh"]),  # can be "gnn_lsh", "gravnet", "attention"
     # "embedding_dim": samp([32, 64, 128, 252, 512, 1024]),
     # "width": samp([32, 64, 128, 256, 512, 1024]),
     # "num_convs": samp([1, 2, 3, 4, 5, 6]),
@@ -41,7 +42,7 @@ search_space = {
     # "expand": samp([2]),
     # "num_heads": samp([2, 4, 6, 8, 10, 12]),
     # attention specifica parameters
-    "num_heads": samp([2, 4, 8, 16]),
+    # "num_heads": samp([2, 4, 8, 16]),
     # "attention_type": samp(["flash"]),  # flash, efficient, math
 }
 
@@ -55,6 +56,10 @@ def set_hps_from_search_space(search_space, config):
     if "conv_type" in search_space.keys():
         conv_type = search_space["conv_type"]
         config["conv_type"] = conv_type
+        if conv_type == "attention":
+            config["dtype"] = "bfloat16"
+        else:
+            config["dtype"] = "float32"
 
         common_varaible_names = ["embedding_dim", "width", "num_convs", "activation"]
         if conv_type == "gnn_lsh" or conv_type == "gravnet" or conv_type == "attention":

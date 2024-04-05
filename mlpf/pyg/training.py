@@ -11,6 +11,7 @@ from datetime import datetime
 import tqdm
 import yaml
 import csv
+import json
 
 import numpy as np
 
@@ -397,7 +398,7 @@ def train_mlpf(
 
     t0_initial = time.time()
 
-    losses_of_interest = ["Total", "Classification", "Regression"]
+    losses_of_interest = ["Total", "Classification", "Regression", "Charge", "Sliced_Wasserstein_Loss", "MET"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
@@ -574,6 +575,14 @@ def train_mlpf(
 
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
+
+            # save separate json files with stats for each epoch, this is robust to crashed-then-resumed trainings
+            history_path = Path(outdir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            with open("{}/epoch_{}.json".format(str(history_path), epoch), "w") as fi:
+                stats = {"train": losses_t, "valid": losses_v}
+                stats["epoch_time"] = t1 - t0
+                json.dump(stats, fi)
 
             if tensorboard_writer_train:
                 tensorboard_writer_train.flush()
@@ -853,11 +862,23 @@ def override_config(config, args):
     """override config with values from argparse Namespace"""
     for arg in vars(args):
         arg_value = getattr(args, arg)
-        if arg_value is not None:
+        if arg_value is not None and arg in config.keys():
             config[arg] = arg_value
 
     if not (args.attention_type is None):
         config["model"]["attention"]["attention_type"] = args.attention_type
+
+    if not (args.num_convs is None):
+        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+            config["model"][model]["num_convs"] = args.num_convs
+
+    if not (args.width is None):
+        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+            config["model"][model]["width"] = args.width
+
+    if not (args.embedding_dim is None):
+        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+            config["model"][model]["embedding_dim"] = args.embedding_dim
 
     return config
 
@@ -1162,7 +1183,7 @@ def run_hpo(config, args):
     if tune.Tuner.can_restore(str(expdir)):
         # resume unfinished HPO run
         tuner = tune.Tuner.restore(
-            str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True
+            str(expdir), trainable=trainer, resume_errored=True, restart_errored=True, resume_unfinished=True
         )
     else:
         # start new HPO run

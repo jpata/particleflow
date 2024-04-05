@@ -55,6 +55,9 @@ parser.add_argument(
     help="which graph layer to use",
     choices=["gravnet", "attention", "gnn_lsh", "mamba"],
 )
+parser.add_argument("--num-convs", type=int, default=None, help="number of convlution (GNN, attention, Mamba) layers")
+parser.add_argument("--width", type=int, default=None, help="width parameter of the NN model")
+parser.add_argument("--embedding-dim", type=int, default=None, help="embedding dimension of the NN model")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
