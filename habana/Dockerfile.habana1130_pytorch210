@@ -11,9 +11,9 @@ RUN pip install sporco
 RUN pip install Ninja
 RUN pip install ml-collections
 RUN pip install keras-core
-RUN pip pip install keras-cv
-RUN pip pip install tensorflow-datasets
-RUN pip pip install packaging ninja
+RUN pip install keras-cv
+RUN pip install tensorflow-datasets
+RUN pip install packaging ninja
 # RUN MAX_JOBS=4 pip install flash-attn --no-build-isolation
 RUN pip install triton
 RUN pip install hls4ml[profiling]
