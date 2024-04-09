@@ -1,7 +1,12 @@
 FROM vault.habana.ai/gaudi-docker/1.13.0/ubuntu22.04/habanalabs/pytorch-installer-2.1.0:latest
 LABEL maintainer="Javier Duarte <jduarte@ucsd.edu>"
 
-RUN pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
+RUN apt-get update && \
+    apt-get install -qq -y graphviz graphviz-dev
+    
+COPY requirements_base.txt .
+RUN pip install -r requirements_base.txt
+RUN pip install --verbose torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
 RUN pip install transformers datasets
 RUN pip install onnx onnxruntime onnxscript
 RUN pip install torch_runstats
@@ -19,6 +24,6 @@ RUN pip install triton
 RUN pip install hls4ml[profiling]
 RUN pip install open3d-cpu
 RUN pip install ray[default] ray[train] ray[tune]
-RUN pip install causal-conv1d
-RUN pip install mamba-ssm
+# RUN pip install causal-conv1d
+# RUN pip install mamba-ssm
 RUN pip install comet_ml
