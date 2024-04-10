@@ -37,40 +37,34 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     if os.path.isfile(outfile):
         return
 
-    if conv_type != "gravnet":
-        X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
-        batch_pad = Batch(X=X_pad, mask=mask).to(rank)
-        ypred = model(batch_pad.X, batch_pad.mask)
-        ypred = ypred[0][mask], ypred[1][mask]
-    else:
-        _batch = batch.to(rank)
-        ypred = model(_batch.X, _batch.batch)
+    batch = batch.to(rank)
+    ypred = model(batch.X, batch.mask)
 
+    #convert all outputs to float32
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
     ygen = unpack_target(batch.ygen.to(torch.float32))
     ycand = unpack_target(batch.ycand.to(torch.float32))
     ypred = unpack_predictions(ypred)
 
+    X = batch.X[batch.mask].cpu().contiguous().numpy()
     for k, v in ygen.items():
-        ygen[k] = v.detach().cpu()
+        ygen[k] = v[batch.mask].detach().cpu().contiguous().numpy()
     for k, v in ycand.items():
-        ycand[k] = v.detach().cpu()
+        ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
     for k, v in ypred.items():
-        ypred[k] = v.detach().cpu()
+        ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
 
     # loop over the batch to disentangle the events
-    batch_ids = batch.batch.cpu().numpy()
-
     jets_coll = {}
 
-    cs = np.unique(batch_ids, return_counts=True)[1]
-    Xs = awkward.unflatten(awkward.from_numpy(batch.X.numpy()), cs)
+    counts = torch.sum(batch.mask, axis=1).cpu().numpy()
+    Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     for typ, ydata in zip(["gen", "cand"], [ygen, ycand]):
-        clsid = awkward.unflatten(ydata["cls_id"], cs)
+        clsid = awkward.unflatten(ydata["cls_id"], counts)
         msk = clsid != 0
-        p4 = awkward.unflatten(ydata["p4"], cs)
+        p4 = awkward.unflatten(ydata["p4"], counts)
         vec = vector.awk(
             awkward.zip(
                 {
@@ -85,7 +79,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
 
     # in case of no predicted particles in the batch
-    if torch.sum(ypred["cls_id"] != 0) == 0:
+    if np.sum(ypred["cls_id"] != 0) == 0:
         vec = vector.awk(
             awkward.zip(
                 {
@@ -97,9 +91,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             )
         )
     else:
-        clsid = awkward.unflatten(ypred["cls_id"], cs)
+        clsid = awkward.unflatten(ypred["cls_id"], counts)
         msk = clsid != 0
-        p4 = awkward.unflatten(ypred["p4"], cs)
+        p4 = awkward.unflatten(ypred["p4"], counts)
 
         vec = vector.awk(
             awkward.zip(
@@ -122,8 +116,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     awkvals = {}
     for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:
-        awk_arr = awkward.Array({k: flat_arr[k].contiguous().numpy() for k in flat_arr.keys()})
-        counts = scatter(torch.ones_like(batch.batch), batch.batch).contiguous().cpu().numpy()
+        awk_arr = awkward.Array({k: flat_arr[k] for k in flat_arr.keys()})
+        counts = torch.sum(batch.mask, axis=1).cpu().numpy()
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
 
     awkward.to_parquet(

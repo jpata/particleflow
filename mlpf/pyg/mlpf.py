@@ -1,27 +1,10 @@
 import torch
 import torch.nn as nn
-from torch_geometric.nn.conv import GravNetConv
 
 from .gnn_lsh import CombinedGraphLayer
 
 from torch.backends.cuda import sdp_kernel
 from pyg.logger import _logger
-
-
-class GravNetLayer(nn.Module):
-    def __init__(self, embedding_dim, space_dimensions, propagate_dimensions, k, dropout):
-        super(GravNetLayer, self).__init__()
-        self.conv1 = GravNetConv(
-            embedding_dim, embedding_dim, space_dimensions=space_dimensions, propagate_dimensions=propagate_dimensions, k=k
-        )
-        self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.dropout = torch.nn.Dropout(dropout)
-
-    def forward(self, x, batch_index):
-        x_new = self.conv1(x, batch_index)
-        x_new = self.dropout(x_new)
-        x = self.norm1(x + x_new)
-        return x
 
 
 def get_activation(activation):
@@ -178,41 +161,38 @@ class MLPF(nn.Module):
         width=128,
         num_convs=2,
         dropout_ff=0.0,
-        dropout_conv_reg_mha=0.0,
-        dropout_conv_reg_ff=0.0,
-        dropout_conv_id_mha=0.0,
-        dropout_conv_id_ff=0.0,
         activation="elu",
-        # gravnet specific parameters
-        k=32,
-        propagate_dimensions=32,
-        space_dimensions=4,
-        conv_type="gravnet",
-        attention_type="flash",
-        # gnn-lsh specific parameters
-        bin_size=640,
-        max_num_bins=200,
-        distance_dim=128,
         layernorm=True,
-        num_node_messages=2,
-        ffn_dist_hidden_dim=128,
-        ffn_dist_num_layers=2,
-        # self-attention specific parameters
-        num_heads=16,
-        head_dim=16,
-        # mamba specific parameters
-        d_state=16,
-        d_conv=4,
-        expand=2,
+        conv_type="attention",
         input_encoding="joint",
         pt_mode="additive-elemtype",
         eta_mode="additive-elemtype",
         sin_phi_mode="additive-elemtype",
         cos_phi_mode="additive-elemtype",
         energy_mode="additive-elemtype",
-        elemtypes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        #element types which actually exist in the dataset
         elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
+        #should the conv layer outputs be concatted (concat) or take the last (last)
         learned_representation_mode="last",
+        # gnn-lsh specific parameters
+        bin_size=640,
+        max_num_bins=200,
+        distance_dim=128,
+        num_node_messages=2,
+        ffn_dist_hidden_dim=128,
+        ffn_dist_num_layers=2,
+        # self-attention specific parameters
+        num_heads=16,
+        head_dim=16,
+        attention_type="flash",
+        dropout_conv_reg_mha=0.0,
+        dropout_conv_reg_ff=0.0,
+        dropout_conv_id_mha=0.0,
+        dropout_conv_id_ff=0.0,
+        # mamba specific parameters
+        d_state=16,
+        d_conv=4,
+        expand=2,
     ):
         super(MLPF, self).__init__()
 
@@ -247,13 +227,8 @@ class MLPF(nn.Module):
                 self.nn0_reg = nn.ModuleList()
                 for ielem in range(len(self.elemtypes_nonzero)):
                     self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-            if self.conv_type == "gravnet":
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                for i in range(num_convs):
-                    self.conv_id.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout_ff))
-                    self.conv_reg.append(GravNetLayer(embedding_dim, space_dimensions, propagate_dimensions, k, dropout_ff))
-            elif self.conv_type == "attention":
+
+            if self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
 
@@ -324,7 +299,7 @@ class MLPF(nn.Module):
         # self.nn_charge = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
     # @torch.compile
-    def forward(self, X_features, batch_or_mask):
+    def forward(self, X_features, mask):
         Xfeat_normed = X_features
 
         embeddings_id, embeddings_reg = [], []
@@ -340,25 +315,15 @@ class MLPF(nn.Module):
                 embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
                 elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
                 embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
-            if self.conv_type == "gravnet":
-                batch_idx = batch_or_mask
-                # perform a series of graph convolutions
-                for num, conv in enumerate(self.conv_id):
-                    conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                    embeddings_id.append(conv(conv_input, batch_idx))
-                for num, conv in enumerate(self.conv_reg):
-                    conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                    embeddings_reg.append(conv(conv_input, batch_idx))
-            else:
-                mask = batch_or_mask
-                for num, conv in enumerate(self.conv_id):
-                    conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                    out_padded = conv(conv_input, mask)
-                    embeddings_id.append(out_padded)
-                for num, conv in enumerate(self.conv_reg):
-                    conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                    out_padded = conv(conv_input, mask)
-                    embeddings_reg.append(out_padded)
+
+            for num, conv in enumerate(self.conv_id):
+                conv_input = embedding_id if num == 0 else embeddings_id[-1]
+                out_padded = conv(conv_input, mask)
+                embeddings_id.append(out_padded)
+            for num, conv in enumerate(self.conv_reg):
+                conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
+                out_padded = conv(conv_input, mask)
+                embeddings_reg.append(out_padded)
 
         if self.learned_representation_mode == "concat":
             final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
