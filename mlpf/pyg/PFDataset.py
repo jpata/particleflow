@@ -1,10 +1,8 @@
 from types import SimpleNamespace
-from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
-from torch import Tensor
 
 from pyg.logger import _logger
 
@@ -75,8 +73,8 @@ class PFBatch:
         self.X = X
         self.ygen = ygen
         self.ycand = ycand
-        self.mask = X[:, :, 0]!=0
-    
+        self.mask = X[:, :, 0] != 0
+
     def to(self, device, **kwargs):
         attrs = {}
         for attr in ["X", "ygen", "ycand"]:
@@ -86,19 +84,17 @@ class PFBatch:
         return PFBatch(**attrs)
 
 
+# pads items with variable lengths (seq_len1, seq_len2, ...) to [batch, max(seq_len), ...]
 class Collater:
     def __init__(self, keys_to_get, **kwargs):
         super(Collater, self).__init__(**kwargs)
         self.keys_to_get = keys_to_get
 
     def __call__(self, inputs):
-        num_samples_in_batch = len(inputs)
-
         ret = {}
         for key_to_get in self.keys_to_get:
             ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
-                [torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs],
-                batch_first=True
+                [torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True
             )
 
         return PFBatch(**ret)

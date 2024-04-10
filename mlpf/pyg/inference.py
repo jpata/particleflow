@@ -24,9 +24,6 @@ from plotting.plot_utils import (
     plot_particles,
     plot_sum_energy,
 )
-import torch_geometric
-from torch_geometric.data import Batch
-from torch_geometric.utils import scatter
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
@@ -40,7 +37,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     batch = batch.to(rank)
     ypred = model(batch.X, batch.mask)
 
-    #convert all outputs to float32
+    # convert all outputs to float32
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
     ygen = unpack_target(batch.ygen.to(torch.float32))

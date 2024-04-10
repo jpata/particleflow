@@ -170,9 +170,9 @@ class MLPF(nn.Module):
         sin_phi_mode="additive-elemtype",
         cos_phi_mode="additive-elemtype",
         energy_mode="additive-elemtype",
-        #element types which actually exist in the dataset
+        # element types which actually exist in the dataset
         elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
-        #should the conv layer outputs be concatted (concat) or take the last (last)
+        # should the conv layer outputs be concatted (concat) or take the last (last)
         learned_representation_mode="last",
         # gnn-lsh specific parameters
         bin_size=640,
@@ -208,7 +208,6 @@ class MLPF(nn.Module):
         self.num_convs = num_convs
 
         self.bin_size = bin_size
-        self.elemtypes = elemtypes
         self.elemtypes_nonzero = elemtypes_nonzero
 
         if self.conv_type == "attention":
