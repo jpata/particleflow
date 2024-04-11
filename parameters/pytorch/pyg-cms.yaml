@@ -14,7 +14,7 @@ conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
-num_workers:
+num_workers: 0
 prefetch_factor:
 checkpoint_freq: 1
 comet_name: particleflow-pt
