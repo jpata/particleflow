@@ -7,6 +7,17 @@ MLPF focuses on developing full event reconstruction based on computationally sc
   <img src="images/schematic.png" alt="High-level overview" width="600"/>
 </p>
 
+## MLPF on open datasets
+
+<p float="left">
+  <img src="images/commphys_featured_image.png" alt="PF reconstruction" width="300"/>
+</p>
+
+  - paper: https://doi.org/10.1038/s42005-024-01599-5
+  - code: https://doi.org/10.5281/zenodo.10893930
+  - dataset: https://doi.org/10.5281/zenodo.8409592 
+  - results: https://doi.org/10.5281/zenodo.10567397
+
 ## MLPF development in CMS
 
 <p float="left">
