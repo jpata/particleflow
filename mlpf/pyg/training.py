@@ -67,7 +67,7 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batchidx_or_mask):
+def mlpf_loss(y, ypred, mask):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
@@ -77,7 +77,7 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    nelem = torch.sum(batchidx_or_mask)
+    nelem = torch.sum(mask)
     npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
@@ -279,37 +279,26 @@ def train_and_valid(
 
         ygen = unpack_target(batch.ygen)
 
-        if world_size > 1:
-            conv_type = model.module.conv_type
-        else:
-            conv_type = model.conv_type
-
-        if conv_type == "gravnet":
-            batchidx_or_mask = batch.batch
-            num_elems = len(batch.batch)
-            num_batch = len(torch.unique(batch.batch))
-        else:
-            batchidx_or_mask = batch.mask
-            num_elems = batch.X[batch.mask].shape[0]
-            num_batch = batch.X.shape[0]
+        num_elems = batch.X[batch.mask].shape[0]
+        num_batch = batch.X.shape[0]
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred = model(batch.X, batchidx_or_mask)
+                ypred = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    ypred = model(batch.X, batchidx_or_mask)
+                    ypred = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                loss = mlpf_loss(ygen, ypred, batch.mask)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                    loss = mlpf_loss(ygen, ypred, batch.mask)
 
         if is_train:
             loss["Total"].backward()
@@ -865,7 +854,7 @@ def override_config(config, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+        for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     if len(args.test_datasets) == 0:
