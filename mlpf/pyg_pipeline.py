@@ -52,7 +52,7 @@ parser.add_argument(
     type=str,
     default=None,
     help="which graph layer to use",
-    choices=["gravnet", "attention", "gnn_lsh", "mamba"],
+    choices=["attention", "gnn_lsh", "mamba"],
 )
 parser.add_argument("--num-convs", type=int, default=None, help="number of convlution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
@@ -131,10 +131,6 @@ def main():
         config["model"]["gnn_lsh"]["num_convs"] = 1
         config["model"]["gnn_lsh"]["width"] = 64
         config["model"]["gnn_lsh"]["embedding_dim"] = 64
-
-        config["model"]["gravnet"]["num_convs"] = 1
-        config["model"]["gravnet"]["width"] = 64
-        config["model"]["gravnet"]["embedding_dim"] = 64
 
         config["model"]["attention"]["num_convs"] = 1
         config["model"]["attention"]["num_heads"] = 8
