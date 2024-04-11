@@ -15,7 +15,7 @@ MLPF focuses on developing full event reconstruction based on computationally sc
 
   - paper: https://doi.org/10.1038/s42005-024-01599-5
   - code: https://doi.org/10.5281/zenodo.10893930
-  - dataset: https://doi.org/10.5281/zenodo.8409592 
+  - dataset: https://doi.org/10.5281/zenodo.8409592
   - results: https://doi.org/10.5281/zenodo.10567397
 
 ## MLPF development in CMS
