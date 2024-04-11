@@ -1,12 +1,8 @@
 from types import SimpleNamespace
-from typing import List, Optional
 
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
-import torch_geometric
-from torch import Tensor
-from torch_geometric.data import Batch, Data
 
 from pyg.logger import _logger
 
@@ -72,72 +68,36 @@ class PFDataset:
         return len(self.ds)
 
 
-class PFDataLoader(torch.utils.data.DataLoader):
-    """
-    Copied from https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/loader/dataloader.html#DataLoader
-    because we need to implement our own Collater class to load the tensorflow_datasets (see below).
-    """
+class PFBatch:
+    def __init__(self, X=None, ygen=None, ycand=None):
+        self.X = X
+        self.ygen = ygen
+        self.ycand = ycand
+        self.mask = X[:, :, 0] != 0
 
-    def __init__(
-        self,
-        dataset: PFDataset,
-        batch_size: int = 1,
-        shuffle: bool = False,
-        follow_batch: Optional[List[str]] = None,
-        exclude_keys: Optional[List[str]] = None,
-        **kwargs,
-    ):
-        # Remove for PyTorch Lightning:
-        collate_fn = kwargs.pop("collate_fn", None)
-
-        # Save for PyTorch Lightning < 1.6:
-        self.follow_batch = follow_batch
-        self.exclude_keys = exclude_keys
-
-        super().__init__(
-            dataset,
-            batch_size,
-            shuffle,
-            collate_fn=collate_fn,
-            **kwargs,
-        )
+    def to(self, device, **kwargs):
+        attrs = {}
+        for attr in ["X", "ygen", "ycand"]:
+            this_attr = getattr(self, attr)
+            if not (this_attr is None):
+                attrs[attr] = this_attr.to(device, **kwargs)
+        return PFBatch(**attrs)
 
 
+# pads items with variable lengths (seq_len1, seq_len2, ...) to [batch, max(seq_len), ...]
 class Collater:
-    """Based on the Collater found on torch_geometric docs we build our own."""
-
-    def __init__(self, keys_to_get, follow_batch=None, exclude_keys=None, pad_3d=True):
-        self.follow_batch = follow_batch
-        self.exclude_keys = exclude_keys
+    def __init__(self, keys_to_get, **kwargs):
+        super(Collater, self).__init__(**kwargs)
         self.keys_to_get = keys_to_get
-        self.pad_3d = pad_3d
 
     def __call__(self, inputs):
-        num_samples_in_batch = len(inputs)
-        elem_keys = self.keys_to_get
+        ret = {}
+        for key_to_get in self.keys_to_get:
+            ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
+                [torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True
+            )
 
-        batch = []
-        for ev in range(num_samples_in_batch):
-            batch.append(Data())
-            for elem_key in elem_keys:
-                batch[ev][elem_key] = Tensor(inputs[ev][elem_key])
-            batch[ev]["batch"] = torch.tensor([ev] * len(inputs[ev][elem_key]))
-
-        ret = Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
-
-        if not self.pad_3d:
-            return ret
-        else:
-            ret = {k: torch_geometric.utils.to_dense_batch(getattr(ret, k), ret.batch) for k in elem_keys}
-
-            ret["mask"] = ret["X"][1]
-
-            # remove the mask from each element
-            for k in elem_keys:
-                ret[k] = ret[k][0]
-
-            ret = Batch(**ret)
-        return ret
+        return PFBatch(**ret)
 
 
 class InterleavedIterator(object):
@@ -186,7 +146,7 @@ class InterleavedIterator(object):
             return len_
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray):
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
         loaders[split] = []
@@ -217,10 +177,10 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
-            loader = PFDataLoader(
+            loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen"], pad_3d=pad_3d),
+                collate_fn=Collater(["X", "ygen"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
