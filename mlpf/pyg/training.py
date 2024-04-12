@@ -918,7 +918,6 @@ def train_ray_trial(config, args, outdir=None):
         "sin_phi_mode": config["model"]["sin_phi_mode"],
         "cos_phi_mode": config["model"]["cos_phi_mode"],
         "energy_mode": config["model"]["energy_mode"],
-        "elemtypes": ELEM_TYPES[config["dataset"]],
         "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
         "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
