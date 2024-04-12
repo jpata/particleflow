@@ -938,6 +938,15 @@ def train_ray_trial(config, args, outdir=None):
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes": ELEM_TYPES[config["dataset"]],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
@@ -1052,10 +1061,11 @@ def run_ray_training(config, args, outdir):
 
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
-    num_workers = args.gpus
+    use_gpu = args.gpus > 0
+    num_workers = args.gpus if use_gpu else 1
     scaling_config = ray.train.ScalingConfig(
         num_workers=num_workers,
-        use_gpu=True,
+        use_gpu=use_gpu,
         resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": 1},  # -1 to avoid blocking
     )
     storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
