@@ -905,7 +905,7 @@ def train_ray_trial(config, args, outdir=None):
 
     use_cuda = args.gpus > 0
 
-    rank = ray.train.get_context().get_local_rank()
+    rank = ray.train.get_context().get_local_rank() if use_cuda else "cpu"
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
