@@ -903,7 +903,7 @@ def train_ray_trial(config, args, outdir=None):
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
 
-    use_cuda = True
+    use_cuda = args.gpus > 0
 
     rank = ray.train.get_context().get_local_rank()
     world_rank = ray.train.get_context().get_world_rank()
