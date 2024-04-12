@@ -33,7 +33,6 @@ from pyg.utils import (
     save_checkpoint,
     CLASS_LABELS,
     X_FEATURES,
-    ELEM_TYPES,
     ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
@@ -44,7 +43,7 @@ from pyg.utils import (
 import fastjet
 from pyg.inference import make_plots, run_predictions
 from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataLoader, PFDataset, get_interleaved_dataloaders
+from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
 
 # Ignore divide by 0 errors
@@ -67,21 +66,17 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batchidx_or_mask):
+def mlpf_loss(y, ypred, mask):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
     """
-    pad_mode_3d = len(batchidx_or_mask.shape) == 2
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    if pad_mode_3d:
-        nelem = torch.sum(batchidx_or_mask)
-    else:
-        nelem = len(batchidx_or_mask)
+    nelem = torch.sum(mask)
     npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
@@ -90,9 +85,8 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
     # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
     # in case of the 3D-padded mode, pytorch expects (N, C, ...)
-    if pad_mode_3d:
-        ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-        # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+    ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+    # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
@@ -126,10 +120,6 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
         loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
     loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
-
-    # if pad_mode_3d:
-    #     loss["Total"] += 1e-6 * loss["MET"]
-    #     # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"]
 
     # Keep track of loss components for each true particle type
     # These are detached to keeping track of the gradient
@@ -288,37 +278,26 @@ def train_and_valid(
 
         ygen = unpack_target(batch.ygen)
 
-        if world_size > 1:
-            conv_type = model.module.conv_type
-        else:
-            conv_type = model.conv_type
-
-        if conv_type == "gravnet":
-            batchidx_or_mask = batch.batch
-            num_elems = len(batch.batch)
-            num_batch = len(torch.unique(batch.batch))
-        else:
-            batchidx_or_mask = batch.mask
-            num_elems = batch.X[batch.mask].shape[0]
-            num_batch = batch.X.shape[0]
+        num_elems = batch.X[batch.mask].shape[0]
+        num_batch = batch.X.shape[0]
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred = model(batch.X, batchidx_or_mask)
+                ypred = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    ypred = model(batch.X, batchidx_or_mask)
+                    ypred = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                loss = mlpf_loss(ygen, ypred, batch.mask)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                    loss = mlpf_loss(ygen, ypred, batch.mask)
 
         if is_train:
             loss["Total"].backward()
@@ -633,8 +612,6 @@ def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
         _configLogger("mlpf", filename=logfile)
 
-    pad_3d = config["conv_type"] != "gravnet"
-
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
@@ -681,7 +658,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
-            "elemtypes": ELEM_TYPES[config["dataset"]],
             "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
             "learned_representation_mode": config["model"]["learned_representation_mode"],
             **config["model"][config["conv_type"]],
@@ -739,7 +715,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             rank,
             config,
             use_cuda,
-            pad_3d,
             use_ray=False,
         )
         steps_per_epoch = len(loaders["train"])
@@ -790,10 +765,10 @@ def run(rank, world_size, config, args, outdir, logfile):
             else:
                 sampler = torch.utils.data.RandomSampler(ds)
 
-            test_loader = PFDataLoader(
+            test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                collate_fn=Collater(["X", "ygen", "ycand"]),  # in inference, use sparse dataset
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -877,7 +852,7 @@ def override_config(config, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+        for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     if len(args.test_datasets) == 0:
@@ -928,7 +903,6 @@ def train_ray_trial(config, args, outdir=None):
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
 
-    pad_3d = config["conv_type"] != "gravnet"
     use_cuda = True
 
     rank = ray.train.get_context().get_local_rank()
@@ -976,7 +950,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(

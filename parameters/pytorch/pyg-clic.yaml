@@ -49,18 +49,6 @@ model:
     ffn_dist_hidden_dim: 128
     ffn_dist_num_layers: 2
 
-  gravnet:
-    conv_type: gravnet
-    embedding_dim: 512
-    width: 512
-    num_convs: 3
-    dropout: 0.0
-    activation: "elu"
-    # gravnet specific parameters
-    k: 16
-    propagate_dimensions: 32
-    space_dimensions: 4
-
   attention:
     conv_type: attention
     num_convs: 2

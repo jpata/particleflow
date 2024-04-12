@@ -1019,7 +1019,7 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     msk_gen = yvals["gen_cls_id"] != 0
     gen_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_gen], axis=1))
 
-    b = np.logspace(-1, 4, 100)
+    b = np.logspace(-2, 4, 100)
     plt.figure()
     ax = plt.gca()
     plt.hist(
