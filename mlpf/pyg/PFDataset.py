@@ -189,11 +189,12 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 drop_last=True,
             )
 
-            if use_ray:
-                import ray
+            # This doesn't seem to be needed anymore. 2024.04.17
+            # if use_ray:
+            #     import ray
 
-                # prepare loader for distributed training, adds distributed sampler
-                loader = ray.train.torch.prepare_data_loader(loader)
+            #     # prepare loader for distributed training, adds distributed sampler
+            #     loader = ray.train.torch.prepare_data_loader(loader)
 
             loaders[split].append(loader)
 
