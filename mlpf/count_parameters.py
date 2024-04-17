@@ -56,18 +56,18 @@ for nconvs, width in nconvs_width_list:
     override_config(config, args)
 
     model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
-            "num_classes": len(CLASS_LABELS[config["dataset"]]),
-            "input_encoding": config["model"]["input_encoding"],
-            "pt_mode": config["model"]["pt_mode"],
-            "eta_mode": config["model"]["eta_mode"],
-            "sin_phi_mode": config["model"]["sin_phi_mode"],
-            "cos_phi_mode": config["model"]["cos_phi_mode"],
-            "energy_mode": config["model"]["energy_mode"],
-            "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-            "learned_representation_mode": config["model"]["learned_representation_mode"],
-            **config["model"][config["conv_type"]],
-        }
+        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
+        **config["model"][config["conv_type"]],
+    }
     model = MLPF(**model_kwargs)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
