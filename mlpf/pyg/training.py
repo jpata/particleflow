@@ -11,6 +11,7 @@ from datetime import datetime
 import tqdm
 import yaml
 import csv
+import json
 
 import numpy as np
 
@@ -596,6 +597,14 @@ def train_mlpf(
 
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
+
+            # save separate json files with stats for each epoch, this is robust to crashed-then-resumed trainings
+            history_path = Path(outdir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            with open("{}/epoch_{}.json".format(str(history_path), epoch), "w") as fi:
+                stats = {"train": losses_t, "valid": losses_v}
+                stats["epoch_time"] = t1 - t0
+                json.dump(stats, fi)
 
             if tensorboard_writer_train:
                 tensorboard_writer_train.flush()
