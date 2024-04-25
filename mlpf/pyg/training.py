@@ -11,6 +11,7 @@ from datetime import datetime
 import tqdm
 import yaml
 import csv
+import json
 
 import numpy as np
 
@@ -597,6 +598,14 @@ def train_mlpf(
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
+            # save separate json files with stats for each epoch, this is robust to crashed-then-resumed trainings
+            history_path = Path(outdir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            with open("{}/epoch_{}.json".format(str(history_path), epoch), "w") as fi:
+                stats = {"train": losses_t, "valid": losses_v}
+                stats["epoch_time"] = t1 - t0
+                json.dump(stats, fi)
+
             if tensorboard_writer_train:
                 tensorboard_writer_train.flush()
             if tensorboard_writer_valid:
@@ -903,15 +912,23 @@ def train_ray_trial(config, args, outdir=None):
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
 
-    use_cuda = True
+    use_cuda = args.gpus > 0
 
-    rank = ray.train.get_context().get_local_rank()
+    rank = ray.train.get_context().get_local_rank() if use_cuda else "cpu"
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
@@ -1026,11 +1043,12 @@ def run_ray_training(config, args, outdir):
 
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
-    num_workers = args.gpus
+    use_gpu = args.gpus > 0
+    num_workers = args.gpus if use_gpu else 1
     scaling_config = ray.train.ScalingConfig(
         num_workers=num_workers,
-        use_gpu=True,
-        resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": 1},  # -1 to avoid blocking
+        use_gpu=use_gpu,
+        resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": int(use_gpu)},  # -1 to avoid blocking
     )
     storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
     run_config = ray.train.RunConfig(
