@@ -74,16 +74,29 @@ def train_and_valid(
     if use_latentX:  # must set forward hooks to retrieve the intermediate latent representations
         latent_reps = {}
 
-        def get_latent_reps(name):
+        def get_activations(name):
             def hook(mlpf, input, output):
-                latent_reps[name] = output.detach()
+                latent_reps[name] = output  # note: with gradients set to True unless --freeze-backbone is True
 
             return hook
 
-        mlpf.conv_reg[0].dropout.register_forward_hook(get_latent_reps("conv_reg0"))
-        mlpf.conv_reg[1].dropout.register_forward_hook(get_latent_reps("conv_reg1"))
-        mlpf.conv_reg[2].dropout.register_forward_hook(get_latent_reps("conv_reg2"))
-        mlpf.nn_id.register_forward_hook(get_latent_reps("nn_id"))
+        mlpf.conv_reg[2].dropout.register_forward_hook(get_activations("conv_reg2"))
+        mlpf.nn_id.register_forward_hook(get_activations("nn_id"))
+
+        def get_latent_reps(batch, latent_reps):
+            for layer in latent_reps:
+                if "conv" in layer:
+                    latent_reps[layer] *= batch.mask.unsqueeze(-1)
+
+            latentX = torch.cat(
+                [
+                    batch.X.to(rank),
+                    latent_reps["conv_reg2"],
+                    latent_reps["nn_id"],
+                ],
+                axis=-1,
+            )
+            return latentX
 
     for itrain, batch in iterator:
 
@@ -95,6 +108,9 @@ def train_and_valid(
             with torch.no_grad():
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
+
+                for k, v in latent_reps.items():
+                    latent_reps[k] = v.detach()
         else:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                 ymlpf = mlpf(batch.X, batch.mask)
@@ -106,31 +122,18 @@ def train_and_valid(
         pred_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
 
         if use_latentX:  # use the latent representations
-            for layer in latent_reps:
-                if "conv" in layer:
-                    latent_reps[layer] *= batch.mask.unsqueeze(-1)
-
-            X = torch.cat(
-                [
-                    batch.X,  # 17
-                    # latent_reps["conv_reg0"],  # 256
-                    # latent_reps["conv_reg1"],  # 256
-                    latent_reps["conv_reg2"],  # 256
-                    latent_reps["nn_id"],  # 6
-                ],
-                axis=-1,
-            )
+            X = get_latent_reps(batch, latent_reps)
 
         else:  # use the MLPF cands
             p4_masked = ymlpf["momentum"] * msk_ymlpf.unsqueeze(-1)
             X = torch.cat([p4_masked, ymlpf["cls_id_onehot"]], axis=-1)
-            # X = torch.cat([p4_masked, ymlpf["cls_id_onehot"], ymlpf["charge"]], axis=-1)
-            # X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"], ymlpf["charge"]], axis=-1)
 
+        ###############################
         if freeze_backbone:
-            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF model is not frozen."
+            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF backbone is not frozen."
         else:
-            assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF model is frozen."
+            assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF backbone is frozen."
+        ###############################
 
         if is_train:
             wx, wy = deepmet(X)
