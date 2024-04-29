@@ -74,29 +74,14 @@ def train_and_valid(
     if use_latentX:  # must set forward hooks to retrieve the intermediate latent representations
         latent_reps = {}
 
-        def get_activations(name):
+        def get_latent_reps(name):
             def hook(mlpf, input, output):
                 latent_reps[name] = output  # note: with gradients set to True unless --freeze-backbone is True
 
             return hook
 
-        mlpf.conv_reg[2].dropout.register_forward_hook(get_activations("conv_reg2"))
-        mlpf.nn_id.register_forward_hook(get_activations("nn_id"))
-
-        def get_latent_reps(batch, latent_reps):
-            for layer in latent_reps:
-                if "conv" in layer:
-                    latent_reps[layer] *= batch.mask.unsqueeze(-1)
-
-            latentX = torch.cat(
-                [
-                    batch.X.to(rank),
-                    latent_reps["conv_reg2"],
-                    latent_reps["nn_id"],
-                ],
-                axis=-1,
-            )
-            return latentX
+        mlpf.conv_reg[2].dropout.register_forward_hook(get_latent_reps("conv_reg2"))
+        mlpf.nn_id.register_forward_hook(get_latent_reps("nn_id"))
 
     for itrain, batch in iterator:
 
@@ -122,7 +107,18 @@ def train_and_valid(
         pred_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
 
         if use_latentX:  # use the latent representations
-            X = get_latent_reps(batch, latent_reps)
+            for layer in latent_reps:
+                if "conv" in layer:
+                    latent_reps[layer] *= batch.mask.unsqueeze(-1)
+
+            X = torch.cat(
+                [
+                    batch.X,  # 17
+                    latent_reps["conv_reg2"],  # 256
+                    latent_reps["nn_id"],  # 6
+                ],
+                axis=-1,
+            )
 
         else:  # use the MLPF cands
             p4_masked = ymlpf["momentum"] * msk_ymlpf.unsqueeze(-1)
