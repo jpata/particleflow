@@ -94,8 +94,8 @@ def train_and_valid(
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
 
-                for k, v in latent_reps.items():
-                    latent_reps[k] = v.detach()
+                # for k, v in latent_reps.items():
+                #     latent_reps[k] = v.detach()
         else:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                 ymlpf = mlpf(batch.X, batch.mask)
