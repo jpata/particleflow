@@ -93,9 +93,6 @@ def train_and_valid(
             with torch.no_grad():
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
-
-            for layer in latent_reps:
-                latent_reps[layer] = latent_reps[layer].detach()
         else:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                 ymlpf = mlpf(batch.X, batch.mask)
@@ -107,7 +104,11 @@ def train_and_valid(
         pred_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
 
         if use_latentX:  # use the latent representations
+
             for layer in latent_reps:
+                if freeze_backbone:
+                    latent_reps[layer] = latent_reps[layer].detach()
+
                 if "conv" in layer:
                     latent_reps[layer] *= batch.mask.unsqueeze(-1)
 
