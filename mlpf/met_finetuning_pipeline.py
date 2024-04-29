@@ -108,7 +108,7 @@ def ffn(input_dim, output_dim, width, act, dropout):
 class DeepMET(nn.Module):
     def __init__(
         self,
-        input_dim=9,
+        input_dim=11,
         output_dim=2,
         width=256,
         dropout=0,
@@ -200,7 +200,7 @@ def main():
     if args.use_latentX:  # the dimension (791) will be the same as the input to one of the regression MLPs
         deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
     else:
-        deepmet_input_dim = 9
+        deepmet_input_dim = 11
 
     # define the deepmet model
     deepmet = DeepMET(input_dim=deepmet_input_dim).to(torch.device(rank))
