@@ -210,7 +210,6 @@ def main():
             rank,
             config,
             use_cuda=rank != "cpu",
-            pad_3d=True,
             use_ray=False,
         )
 
