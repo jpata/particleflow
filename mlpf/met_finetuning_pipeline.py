@@ -91,7 +91,14 @@ parser.add_argument(
     "--freeze-backbone",
     action="store_true",
     default=None,
-    help="if True will freeze the MLPF backbone during the downstream training",
+    help="if True will freeze the MLPF backbone before the downstream training",
+)
+
+parser.add_argument(
+    "--reinitialize-backbone",
+    action="store_true",
+    default=None,
+    help="if True will reinitialize the MLPF backbone before the downstream training",
 )
 
 
@@ -178,10 +185,9 @@ def main():
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
 
-    # load the pre-trained mlpf model
     _configLogger("mlpf", filename=logfile)
 
-    _logger.info("Will load a pre-trained MLPF model", color="orange")
+    _logger.info("Initializing an MLPF backbone model", color="orange")
 
     with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
         mlpf_kwargs = pkl.load(f)
@@ -190,17 +196,19 @@ def main():
     mlpf_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
 
     mlpf = MLPF(**mlpf_kwargs).to(torch.device(rank))
-    checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-    mlpf = load_checkpoint(checkpoint, mlpf)
+    if not args.reinitialize_backbone:
+        _logger.info("Loading the weights from a checkpoint", color="orange")
+        checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+        mlpf = load_checkpoint(checkpoint, mlpf)
+
     mlpf.eval()
-
     _logger.info(mlpf)
 
-    if args.use_latentX:  # the dimension (791) will be the same as the input to one of the regression MLPs
+    if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
         deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
     else:
-        deepmet_input_dim = 11
+        deepmet_input_dim = 5 + 6  # p4 + PID
 
     # define the deepmet model
     deepmet = DeepMET(input_dim=deepmet_input_dim).to(torch.device(rank))
