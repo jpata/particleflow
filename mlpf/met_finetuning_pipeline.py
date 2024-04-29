@@ -108,7 +108,7 @@ def ffn(input_dim, output_dim, width, act, dropout):
 class DeepMET(nn.Module):
     def __init__(
         self,
-        input_dim=14,
+        input_dim=9,
         output_dim=2,
         width=256,
         dropout=0,
@@ -123,7 +123,7 @@ class DeepMET(nn.Module):
 
             LOSS = Huber(true_met_x, pred_met_x) + Huber(true_met_y, pred_met_y)
 
-        Note: default `input_dim` is 14 which stands for "clf_nodes (6) + charge_nodes (3) + regression_nodes (5)"
+        Note: default `input_dim` is 9 which stands for "clf_nodes (6) + regression_nodes (5)"
         """
 
         self.act = nn.ELU
@@ -200,7 +200,7 @@ def main():
     if args.use_latentX:  # the dimension (791) will be the same as the input to one of the regression MLPs
         deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
     else:
-        deepmet_input_dim = 14
+        deepmet_input_dim = 9
 
     # define the deepmet model
     deepmet = DeepMET(input_dim=deepmet_input_dim).to(torch.device(rank))
