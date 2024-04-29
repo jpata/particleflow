@@ -233,5 +233,5 @@ def main():
 if __name__ == "__main__":
 
     # e.g.
-    # noqa: python mlpf/met_finetuning_pipeline.py --dataset clic --data-dir tensorflow_datasets --config parameters/pytorch/pyg-clic-ttbar-qq.yaml --gpus 1 --prefix MLPF_test1 --num-epochs 10 --train --load /pfvol/experiments/MLPF_clic_backbone_pyg-clic_20240429_101112_971749/best_weights.pth --gpu-batch-multiplier 100 --num-workers 2 --prefetch-factor 2 --checkpoint-freq 1 --lr 1e-4 --use-latentX
+    # noqa: python mlpf/met_finetuning_pipeline.py --dataset clic --data-dir tensorflow_datasets --config parameters/pytorch/pyg-clic-ttbar.yaml --gpus 1 --prefix MLPF_test1 --num-epochs 10 --train --load /pfvol/experiments/MLPF_clic_backbone_pyg-clic_20240429_101112_971749/best_weights.pth --gpu-batch-multiplier 100 --num-workers 2 --prefetch-factor 2 --checkpoint-freq 1 --lr 1e-4 --use-latentX
     main()
