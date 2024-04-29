@@ -108,8 +108,8 @@ def train_and_valid(
             X = torch.cat(
                 [
                     batch.X,  # 17
-                    latent_reps["conv_reg0"],  # 256
-                    latent_reps["conv_reg1"],  # 256
+                    # latent_reps["conv_reg0"],  # 256
+                    # latent_reps["conv_reg1"],  # 256
                     latent_reps["conv_reg2"],  # 256
                     latent_reps["nn_id"],  # 6
                 ],
