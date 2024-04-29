@@ -39,6 +39,7 @@ def train_and_valid(
     rank,
     deepmet,
     mlpf,
+    freeze_backbone,
     use_latentX,
     optimizer,
     train_loader,
@@ -90,10 +91,14 @@ def train_and_valid(
         ygen = unpack_target(batch.ygen)
 
         # run the MLPF model in inference mode to get the MLPF cands / latent representations
-        for i in range(5):
+        if freeze_backbone:
             with torch.no_grad():
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
+        else:
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+                ymlpf = mlpf(batch.X, batch.mask)
+
         ymlpf = unpack_predictions(ymlpf)
 
         msk_ymlpf = ymlpf["cls_id"] != 0
@@ -121,7 +126,10 @@ def train_and_valid(
             X = torch.cat([p4_masked, ymlpf["cls_id_onehot"], ymlpf["charge"]], axis=-1)
             # X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"], ymlpf["charge"]], axis=-1)
 
-        assert X.requires_grad is False, "The MLPF model must be frozen."
+        if freeze_backbone:
+            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF model is not frozen."
+        else:
+            assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF model is frozen."
 
         if is_train:
             wx, wy = deepmet(X)
@@ -184,6 +192,7 @@ def train_mlpf(
     rank,
     deepmet,
     mlpf,
+    freeze_backbone,
     use_latentX,
     optimizer,
     train_loader,
@@ -228,6 +237,7 @@ def train_mlpf(
             rank,
             deepmet,
             mlpf,
+            freeze_backbone,
             use_latentX,
             optimizer,
             train_loader=train_loader,
@@ -241,6 +251,7 @@ def train_mlpf(
             rank,
             deepmet,
             mlpf,
+            freeze_backbone,
             use_latentX,
             optimizer,
             train_loader=train_loader,

@@ -87,6 +87,13 @@ parser.add_argument(
     "--use-latentX", action="store_true", default=None, help="if True will use the latent representations of MLPF"
 )
 
+parser.add_argument(
+    "--freeze-backbone",
+    action="store_true",
+    default=None,
+    help="if True will freeze the MLPF backbone during the downstream training",
+)
+
 
 def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
@@ -217,6 +224,7 @@ def main():
             rank,
             deepmet,
             mlpf,
+            args.freeze_backbone,
             args.use_latentX,
             optimizer,
             loaders["train"],
