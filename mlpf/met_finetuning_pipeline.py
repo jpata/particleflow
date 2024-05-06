@@ -1,7 +1,7 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
+Developing a finetuning script of MLPF on a downstream task of MET regression.
 
-Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
+Authors: Farouk Mokhtar
 """
 
 import argparse
@@ -82,7 +82,7 @@ parser.add_argument(
     choices=["math", "efficient", "flash", "flash_external"],
 )
 
-
+# finetuning args
 parser.add_argument(
     "--use-latentX", action="store_true", default=None, help="if True will use the latent representations of MLPF"
 )
