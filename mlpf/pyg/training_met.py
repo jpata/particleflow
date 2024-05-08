@@ -42,6 +42,7 @@ def train_and_valid(
     freeze_backbone,
     use_latentX,
     optimizer,
+    optimizer_backbone,
     train_loader,
     valid_loader,
     trainable,
@@ -151,13 +152,25 @@ def train_and_valid(
         true_met_y = torch.sum(gen_py, axis=1)
 
         if is_train:
+
             loss["MET"] = torch.nn.functional.huber_loss(true_met_x, pred_met_x) + torch.nn.functional.huber_loss(
                 true_met_y, pred_met_y
             )
-            for param in deepmet.parameters():
-                param.grad = None
-            loss["MET"].backward()
-            optimizer.step()
+
+            if freeze_backbone:
+                for param in deepmet.parameters():
+                    param.grad = None
+                loss["MET"].backward()
+                optimizer.step()
+            else:
+                for param in deepmet.parameters():
+                    param.grad = None
+                for param in mlpf.parameters():
+                    param.grad = None
+                loss["MET"].backward()
+                optimizer.step()
+                optimizer_backbone.step()
+
         else:
             with torch.no_grad():
                 loss["MET"] = torch.nn.functional.huber_loss(true_met_x, pred_met_x) + torch.nn.functional.huber_loss(
@@ -197,6 +210,7 @@ def train_mlpf(
     freeze_backbone,
     use_latentX,
     optimizer,
+    optimizer_backbone,
     train_loader,
     valid_loader,
     num_epochs,
@@ -242,6 +256,7 @@ def train_mlpf(
             freeze_backbone,
             use_latentX,
             optimizer,
+            optimizer_backbone,
             train_loader=train_loader,
             valid_loader=valid_loader,
             trainable=trainable,
@@ -256,6 +271,7 @@ def train_mlpf(
             freeze_backbone,
             use_latentX,
             optimizer,
+            optimizer_backbone,
             train_loader=train_loader,
             valid_loader=valid_loader,
             trainable=trainable,

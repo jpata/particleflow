@@ -205,6 +205,8 @@ def main():
     mlpf.eval()
     _logger.info(mlpf)
 
+    optimizer_backbone = None if args.freeze_backbone else torch.optim.AdamW(mlpf.parameters(), lr=args.lr / 10)
+
     if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
         deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
     else:
@@ -235,6 +237,7 @@ def main():
             args.freeze_backbone,
             args.use_latentX,
             optimizer,
+            optimizer_backbone,
             loaders["train"],
             loaders["valid"],
             config["num_epochs"],
