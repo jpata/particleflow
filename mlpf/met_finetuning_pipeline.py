@@ -205,8 +205,6 @@ def main():
     mlpf.eval()
     _logger.info(mlpf)
 
-    optimizer_backbone = None if args.freeze_backbone else torch.optim.AdamW(mlpf.parameters(), lr=args.lr / 10)
-
     if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
         deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
     else:
@@ -214,8 +212,13 @@ def main():
 
     # define the deepmet model
     deepmet = DeepMET(input_dim=deepmet_input_dim).to(torch.device(rank))
-    optimizer = torch.optim.AdamW(deepmet.parameters(), lr=args.lr)
     _logger.info(deepmet)
+
+    optimizer = (
+        torch.optim.AdamW(deepmet.parameters(), lr=args.lr)
+        if args.freeze_backbone
+        else torch.optim.AdamW(list(deepmet.parameters()) + list(mlpf.parameters()), lr=args.lr)
+    )
 
     if args.train:
         save_HPs(args, deepmet, mlpf_kwargs, outdir)  # save model_kwargs and hyperparameters
@@ -237,7 +240,6 @@ def main():
             args.freeze_backbone,
             args.use_latentX,
             optimizer,
-            optimizer_backbone,
             loaders["train"],
             loaders["valid"],
             config["num_epochs"],
