@@ -202,7 +202,6 @@ def main():
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
         mlpf = load_checkpoint(checkpoint, mlpf)
 
-    mlpf.eval()
     _logger.info(mlpf)
 
     if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)

@@ -56,6 +56,10 @@ def train_and_valid(
     _logger.info(f"Initiating epoch #{epoch} {train_or_valid} run on device rank={rank}", color="red")
 
     configure_model_trainable(deepmet, trainable, is_train)
+    if freeze_backbone:
+        configure_model_trainable(mlpf, trainable, "valid")
+    else:
+        configure_model_trainable(mlpf, trainable, is_train)
 
     if is_train:
         data_loader = train_loader
