@@ -23,9 +23,9 @@ set -x
 
 # source /cvmfs/cms.cern.ch/cmsset_default.sh
 # source /cvmfs/grid.cern.ch/c7ui-test/etc/profile.d/setup-c7-ui-example.sh
-# 
+#
 # cd $CMSSW_BASE
-# 
+#
 # eval `scramv1 runtime -sh`
 
 CONDITIONS=auto:phase1_2021_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=

@@ -34,7 +34,7 @@ md5sum src/RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
 ## Running MLPF in CMSSW
 MLPF is integrated in CMSSW reconstruction and can be run either using simple but slow matrix workflows, or using the faster but more elaborate PF validation.
- 
+
 ### Matrix workflows
 
 Matrix workflows allow to run MLPF directly out of the box, rerunning the full reconstruction chain.
@@ -67,7 +67,7 @@ Check the outputs
 
 The particle flow candidates can be found in `step3.root`:
 ```
-vector<reco::PFCandidate>             "particleFlow"              ""                "RECO"    
+vector<reco::PFCandidate>             "particleFlow"              ""                "RECO"
 ```
 
 ### PF validation
@@ -86,11 +86,10 @@ Now, the PF validation workflows can be run using the scripts in
 ```
 cd particleflow
 
-#the number 1 signifies the row index (filename) in the input file to process 
+#the number 1 signifies the row index (filename) in the input file to process
 ./scripts/cmssw/validation_job.sh mlpf $CMSSW_BASE/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt QCD_PU 1
 ./scripts/cmssw/validation_job.sh pf $CMSSW_BASE/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt QCD_PU 1
 ```
 
 ## Generating MLPF training samples
 TODO (not generally needed).
-
