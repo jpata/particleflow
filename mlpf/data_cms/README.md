@@ -27,6 +27,9 @@ scram b -j4
 #download the MLPF model
 mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf/
 wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O src/RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
+
+# must be b786aa6de49b51f703c87533a66326d6
+md5sum src/RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 ```
 
 ## Running MLPF in CMSSW
