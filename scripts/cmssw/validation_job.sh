@@ -17,8 +17,10 @@ WORKDIR=$CMSSW_BASE/work_$SAMPLE_$JOBTYPE_$NJOB
 #OUTDIR=/home/joosep/particleflow/data
 #WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
 
-# set -e
-# set -v
+#abort on error, print all commands
+set -e
+set -x
+
 # source /cvmfs/cms.cern.ch/cmsset_default.sh
 # source /cvmfs/grid.cern.ch/c7ui-test/etc/profile.d/setup-c7-ui-example.sh
 # 
@@ -28,11 +30,6 @@ WORKDIR=$CMSSW_BASE/work_$SAMPLE_$JOBTYPE_$NJOB
 
 CONDITIONS=auto:phase1_2021_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
-if [ "$FILENAME" != "*.root" ]
-    echo "bad filename" $FILENAME
-    exit 1
-fi
-
 NTHREADS=1
 
 mkdir -p $WORKDIR
