@@ -44,12 +44,3 @@ sbatch mlpf/tallinn/validate_cms.sh 43
 sbatch mlpf/tallinn/validate_cms.sh 44
 sbatch mlpf/tallinn/validate_cms.sh 45
 sbatch mlpf/tallinn/validate_cms.sh 46
-
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 1
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 2
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 3
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 4
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 5
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 6
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 7
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 8
