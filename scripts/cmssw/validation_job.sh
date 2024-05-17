@@ -11,7 +11,7 @@ NJOB=$4
 
 #change this as needed
 OUTDIR=$CMSSW_BASE/out/
-WORKDIR=$CMSSW_BASE/work_$SAMPLE_$JOBTYPE_$NJOB
+WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 #for T2_EE_Estonia
 #OUTDIR=/home/joosep/particleflow/data
@@ -50,7 +50,7 @@ elif [ $JOBTYPE == "pf" ]; then
 fi
 ls *.root
 
-mkdir -p $OUTDIR/$SAMPLE_$JOBTYPE
-cp step3_inMINIAODSIM.root $OUTDIR/$SAMPLE_$JOBTYPE/step3_MINI_${NJOB}.root
+mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
+cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 
 rm -Rf $WORKDIR
