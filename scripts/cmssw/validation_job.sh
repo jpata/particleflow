@@ -9,24 +9,17 @@ INPUT_FILELIST=$2
 SAMPLE=$3
 NJOB=$4
 
-#change this as needed
+#change this as needed, need enough space for outputs
 OUTDIR=$CMSSW_BASE/out/
-WORKDIR=$CMSSW_BASE/work_$SAMPLE_$JOBTYPE_$NJOB
+WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
-#for T2_EE_Estonia
-#OUTDIR=/home/joosep/particleflow/data
-#WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
+#when running at T2_EE_Estonia
+# OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
+# WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
 set -e
 set -x
-
-# source /cvmfs/cms.cern.ch/cmsset_default.sh
-# source /cvmfs/grid.cern.ch/c7ui-test/etc/profile.d/setup-c7-ui-example.sh
-#
-# cd $CMSSW_BASE
-#
-# eval `scramv1 runtime -sh`
 
 CONDITIONS=auto:phase1_2021_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
@@ -50,7 +43,7 @@ elif [ $JOBTYPE == "pf" ]; then
 fi
 ls *.root
 
-mkdir -p $OUTDIR/$SAMPLE_$JOBTYPE
-cp step3_inMINIAODSIM.root $OUTDIR/$SAMPLE_$JOBTYPE/step3_MINI_${NJOB}.root
+mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
+cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 
 rm -Rf $WORKDIR
