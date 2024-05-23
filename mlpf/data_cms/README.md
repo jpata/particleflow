@@ -84,10 +84,16 @@ cd particleflow
 ```
 
 The output will be in `$CMSSW_BASE/out/QCD_PU_mlpf` and `$CMSSW_BASE/out/QCD_PU_pf`.
-Now the MINIAOD output can be analyzed with the DQM scripts:
 
+Now the MINIAOD output can be analyzed with the DQM and PF validation scripts:
 ```
-./scripts/cmssw/run_dqm.sh
+./scripts/cmssw/run_dqm.sh $CMSSW_BASE/out
 ```
+
+The outputs will be in:
+```
+ls plots
+```
+
 ## Generating MLPF training samples
 TODO.
