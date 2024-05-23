@@ -1,3 +1,17 @@
+## Validation data
+
+### ACAT 2022
+The MLPF CMSSW results presented at ACAT can be reproduced using the MINIAOD samples from
+```
+gfal-copy -r root://xrootd.hep.kbfi.ee:1094//store/user/jpata/mlpf/results/acat2022 ./
+```
+See below for the steps to reproduce these samples.
+
+The resulting plots can be found at:
+```
+https://jpata.web.cern.ch/jpata/mlpf/results/acat2022_20221004_model40M_revalidation20240523/
+```
+
 ## Code setup
 
 The following should work on lxplus.
@@ -11,7 +25,7 @@ cmssw-el7
 
 export SCRAM_ARCH=slc7_amd64_gcc10
 cmsrel CMSSW_12_3_0_pre6
-cd CMSSW_12_3_0_pre6
+cd CMSSW_12_3_0_pre6/src
 cmsenv
 git cms-init
 
@@ -19,17 +33,17 @@ git cms-init
 git-cms-merge-topic jpata:pfanalysis_caloparticle
 
 #check out the version from the 2022 release
-git checkout 547a0fce7251bfaa6e855aef068f5a45c2d321ec
+git checkout mlpf_acat2022
 
 #compile
 scram b -j4
 
 #download the MLPF model
 mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf/
-wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O src/RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
+wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
 # must be b786aa6de49b51f703c87533a66326d6
-md5sum src/RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
+md5sum RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 ```
 
 ## Running MLPF in CMSSW
@@ -74,22 +88,30 @@ vector<reco::PFCandidate>             "particleFlow"              ""            
 To test MLPF on higher statistics, it's not practical to redo full reconstruction before the particle flow step.
 We can follow a similar logic as the PF validation, where only the relevant PF sequences are rerun.
 
-First, the dataset filenames need to be cached:
-```
-cd src/Validation/RecoParticleFlow/test
-python3.9 datasets.py
-cat tmp/das_cache/QCD_PU.txt
-```
-
-Note: as of May 2024, the dataset `QCD_PU` is only on tape, so the following does not work.
-Now, the PF validation workflows can be run using the scripts in
+#### MINIAOD with PF and MLPF
+The PF validation workflows can be run using the scripts in
 ```
 cd particleflow
 
 #the number 1 signifies the row index (filename) in the input file to process
-./scripts/cmssw/validation_job.sh mlpf $CMSSW_BASE/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt QCD_PU 1
-./scripts/cmssw/validation_job.sh pf $CMSSW_BASE/src/Validation/RecoParticleFlow/test/tmp/das_cache/QCD_PU.txt QCD_PU 1
+./scripts/cmssw/validation_job.sh mlpf scripts/cmssw/qcd_pu.txt QCD_PU 1
+./scripts/cmssw/validation_job.sh pf scripts/cmssw/qcd_pu.txt QCD_PU 1
+```
+Note: the input dataset is only stored on `T2_EE_Estonia`, therefore depending on grid accessibility, it might be slow to access.
+
+The MINIAOD output will be in `$CMSSW_BASE/out/QCD_PU_mlpf` and `$CMSSW_BASE/out/QCD_PU_pf`.
+
+#### DQM plots
+Now the MINIAOD output can be analyzed with the DQM and PF validation scripts:
+```
+./scripts/cmssw/run_dqm.sh $CMSSW_BASE/out
 ```
 
+The outputs will be in:
+```
+ls plots
+```
+and can be displayed in a web browser.
+
 ## Generating MLPF training samples
-TODO (not generally needed).
+TODO.
