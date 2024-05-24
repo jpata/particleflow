@@ -20,15 +20,16 @@ The following should work on lxplus.
 voms-proxy-init -voms cms -valid 192:00
 voms-proxy-info
 
-#Initialize SLC7
+#Initialize EL8
 cmssw-el8
 
-export SCRAM_ARCH=slc7_amd64_gcc10
+export SCRAM_ARCH=el8_amd64_gcc12
 cmsrel CMSSW_14_1_0_pre3
 cd CMSSW_14_1_0_pre3/src
 cmsenv
 git cms-init
 
+#set the directories we want to check out
 echo "/Configuration/Generator/" >> .git/info/sparse-checkout
 echo "/IOMC/ParticleGuns/" >>  .git/info/sparse-checkout
 echo "/RecoParticleFlow/PFProducer/" >> .git/info/sparse-checkout
@@ -36,13 +37,13 @@ echo "/Validation/RecoParticleFlow/" >> .git/info/sparse-checkout
 
 #checkout the MLPF code
 git remote add jpata https://github.com/jpata/cmssw.git
-git fetch jpata pfanalysis_caloparticle_CMSSW_14_1_0_pre3
-git checkout pfanalysis_caloparticle_CMSSW_14_1_0_pre3
+git fetch jpata pfanalysis_caloparticle_CMSSW_14_1_0_pre3_acat2022
+git checkout pfanalysis_caloparticle_CMSSW_14_1_0_pre3_acat2022
 
 #compile
 scram b -j4
 
-#download the MLPF model
+#download the 2022 MLPF model
 mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
 wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
