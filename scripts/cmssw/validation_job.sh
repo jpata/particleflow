@@ -1,9 +1,10 @@
 #!/bin/bash
-export JOBTYPE=$1
-export INPUT_FILELIST=$2
-export SAMPLE=$3
-export NJOB=$4
+JOBTYPE=$1
+INPUT_FILELIST=$2
+SAMPLE=$3
+NJOB=$4
 
+PREVDIR=`pwd`
 #change this as needed, need enough space for outputs
 # OUTDIR=$CMSSW_BASE/out/
 # WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
@@ -12,6 +13,8 @@ export NJOB=$4
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_14_1_0_pre3
 eval `scram runtime -sh`
+cd $PREVDIR
+
 export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
@@ -19,12 +22,14 @@ export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 set -e
 set -x
 
-export CONDITIONS=auto:phase1_2023_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
-export FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
-export NTHREADS=1
+CONDITIONS=auto:phase1_2023_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
+FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
+NTHREADS=1
 
 mkdir -p $WORKDIR
 cd $WORKDIR
+
+env
 
 if [ $JOBTYPE == "mlpf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
