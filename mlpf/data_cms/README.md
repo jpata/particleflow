@@ -21,25 +21,29 @@ voms-proxy-init -voms cms -valid 192:00
 voms-proxy-info
 
 #Initialize SLC7
-cmssw-el7
+cmssw-el8
 
 export SCRAM_ARCH=slc7_amd64_gcc10
-cmsrel CMSSW_12_3_0_pre6
-cd CMSSW_12_3_0_pre6/src
+cmsrel CMSSW_14_1_0_pre3
+cd CMSSW_14_1_0_pre3/src
 cmsenv
 git cms-init
 
-#checkout the MLPF code
-git-cms-merge-topic jpata:pfanalysis_caloparticle
+echo "/Configuration/Generator/" >> .git/info/sparse-checkout
+echo "/IOMC/ParticleGuns/" >>  .git/info/sparse-checkout
+echo "/RecoParticleFlow/PFProducer/" >> .git/info/sparse-checkout
+echo "/Validation/RecoParticleFlow/" >> .git/info/sparse-checkout
 
-#check out the version from the 2022 release
-git checkout mlpf_acat2022
+#checkout the MLPF code
+git remote add jpata https://github.com/jpata/cmssw.git
+git fetch jpata pfanalysis_caloparticle_CMSSW_14_1_0_pre3
+git checkout pfanalysis_caloparticle_CMSSW_14_1_0_pre3
 
 #compile
 scram b -j4
 
 #download the MLPF model
-mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf/
+mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
 wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
 # must be b786aa6de49b51f703c87533a66326d6
