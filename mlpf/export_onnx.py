@@ -454,28 +454,9 @@ class QuantizeableMultiheadAttention(nn.MultiheadAttention):
         q = self.dequant_q(q)
         k = self.dequant_k(k)
         v = self.dequant_v(v)
-        attn_output_weights = torch.bmm(q, k.transpose(1, 2))
-        assert list(attn_output_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
-        if attn_mask is not None:
-            if attn_mask.dtype == torch.bool:
-                attn_output_weights.masked_fill_(attn_mask, float('-inf'))
-            else:
-                attn_output_weights += attn_mask
+        attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
 
-        if key_padding_mask is not None:
-            attn_output_weights = attn_output_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_output_weights = attn_output_weights.masked_fill(
-                key_padding_mask.unsqueeze(1).unsqueeze(2),
-                float('-inf'),
-            )
-            attn_output_weights = attn_output_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_output_weights = nnF.softmax(
-            attn_output_weights, dim=-1)
-        attn_output_weights = nnF.dropout(attn_output_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_output_weights, v)
         assert list(attn_output.size()) == [bsz * self.num_heads, tgt_len, head_dim]
         if self.batch_first:
             attn_output = attn_output.view(bsz, tgt_len, self.embed_dim)
@@ -734,7 +715,7 @@ out = model_fp32(dummy_features)
 print(out)
 
 torch.backends.quantized.engine = 'qnnpack'
-model_fp32.qconfig = torch.ao.quantization.get_default_qconfig("qnnpack")
+model_fp32.qconfig = torch.ao.quantization.get_default_qconfig("x86")
 # custom_module_config = {
 #         "float_to_observed_custom_module_class": {torch.nn.MultiheadAttention: QuantizeableMultiheadAttention},
 #         "observed_to_quantized_custom_module_class": {QuantizeableMultiheadAttention: QuantizedMultiheadAttention},
