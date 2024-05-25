@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument("--num-features", type=int, default=55)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-threads", type=int, default=1)
+    parser.add_argument("--input-dtype", type=str, default="float32")
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument("--model", type=str, default="test.onnx")
     args = parser.parse_args()
@@ -88,11 +89,12 @@ if __name__ == "__main__":
         for i in range(10):
 
             # allocate array in system memory
-            X = np.array(np.random.randn(batch_size, num_elems, num_features), np.float32)
+            X = np.array(np.random.randn(batch_size, num_elems, num_features), getattr(np, args.input_dtype))
 
             # transfer data to GPU, run model, transfer data back
             t0 = time.time()
-            pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "l_mask_": X[..., 0]==0})
+            # pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "l_mask_": X[..., 0]==0})
+            pred_onx = onnx_sess.run(None, {"X_features": X})
             t1 = time.time()
             dt = (t1 - t0) / batch_size
             times.append(dt)

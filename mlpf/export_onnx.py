@@ -762,6 +762,21 @@ torch.onnx.export(
 )
 
 torch.onnx.export(
+    model_fp32.half(),
+    dummy_features.half(),
+    "test_fp16.onnx",
+    verbose=False,
+    input_names=["X_features", ],
+    output_names=["id", "momentum"],
+    dynamic_axes={
+        "X_features": {0: "num_batch", 1: "num_elements"},
+        "id": {0: "num_batch", 1: "num_elements"},
+        "momentum": {0: "num_batch", 1: "num_elements"},
+        # "charge": [0, 1],
+    },
+)
+
+torch.onnx.export(
     model_int8,
     dummy_features,
     "test_int8.onnx",
