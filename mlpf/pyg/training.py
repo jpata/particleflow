@@ -819,32 +819,19 @@ def run(rank, world_size, config, args, outdir, logfile):
                 make_plots(outdir, sample, config["dataset"], testdir_name)
 
         if args.export_onnx:
-            try:
-                dummy_features = torch.randn(1, 8192, model_kwargs["input_dim"], device=rank)
-                dummy_mask = torch.zeros(1, 8192, dtype=torch.bool, device=rank)
+            model.enable_ctx_manager = False
+            dummy_features = torch.randn(2, 97, model_kwargs["input_dim"])
+            dummy_mask = torch.zeros(2, 97, dtype=torch.bool)
 
-                # Torch ONNX export in the old way
-                torch.onnx.export(
-                    model,
-                    (dummy_features, dummy_mask),
-                    "test.onnx",
-                    verbose=False,
-                    input_names=["features", "mask"],
-                    output_names=["id", "momentum"],
-                    dynamic_axes={
-                        "features": {0: "num_batch", 1: "num_elements"},
-                        "mask": [0, 1],
-                        "id": [0, 1],
-                        "momentum": [0, 1],
-                        # "charge": [0, 1],
-                    },
-                )
-
-                # Torch ONNX export in the new way
-                # onnx_program = torch.onnx.dynamo_export(model, (dummy_features, dummy_mask))
-                # onnx_program.save("test.onnx")
-            except Exception as e:
-                print("ONNX export failed: {}".format(e))
+            # Torch ONNX export in the new dynamo way
+            # from torch._dynamo import config
+            # config.capture_scalar_outputs = False
+            export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
+            onnx_program = torch.onnx.dynamo_export(
+                model, dummy_features, dummy_mask,
+                export_options=export_options,
+            )
+            onnx_program.save("test.onnx")
 
     if world_size > 1:
         dist.destroy_process_group()

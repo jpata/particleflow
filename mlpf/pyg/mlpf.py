@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
 
-from .gnn_lsh import CombinedGraphLayer
-
-from torch.backends.cuda import sdp_kernel
 from pyg.logger import _logger
 
 
@@ -37,69 +34,22 @@ class SelfAttentionLayer(nn.Module):
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
-        if self.attention_type == "flash_external":
-            from flash_attn.modules.mha import MHA
-
-            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
-        else:
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(
             nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
         )
         self.dropout = torch.nn.Dropout(dropout_ff)
-        _logger.info("using attention_type={}".format(attention_type))
-        # params for torch sdp_kernel
-        self.attn_params = {
-            "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
-            "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
-            "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
-        }
 
     def forward(self, x, mask):
-        # explicitly call the desired attention mechanism
-        if self.attention_type == "flash_external":
-            mha_out = self.mha(x)
-        else:
-            if self.enable_ctx_manager:
-                with sdp_kernel(**self.attn_params[self.attention_type]):
-                    mha_out = self.mha(x, x, x, need_weights=False)[0]
-            else:
-                mha_out = self.mha(x, x, x, need_weights=False)[0]
-
+        mha_out = self.mha(x, x, x, need_weights=False)[0]
         x = x + mha_out
         x = self.norm0(x)
         x = x + self.seq(x)
         x = self.norm1(x)
         x = self.dropout(x)
         x = x * mask.unsqueeze(-1)
-        return x
-
-
-class MambaLayer(nn.Module):
-    def __init__(self, activation="elu", embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
-        super(MambaLayer, self).__init__()
-        self.act = get_activation(activation)
-        from mamba_ssm import Mamba
-
-        self.mamba = Mamba(
-            d_model=embedding_dim,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-        self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(
-            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
-        )
-        self.dropout = torch.nn.Dropout(dropout)
-
-    def forward(self, x, mask):
-        x = self.mamba(x)
-        x = self.norm0(x + self.seq(x))
-        x = self.dropout(x)
-        x = x * (~mask.unsqueeze(-1))
         return x
 
 
@@ -210,9 +160,8 @@ class MLPF(nn.Module):
         self.bin_size = bin_size
         self.elemtypes_nonzero = elemtypes_nonzero
 
-        if self.conv_type == "attention":
-            embedding_dim = num_heads * head_dim
-            width = num_heads * head_dim
+        embedding_dim = num_heads * head_dim
+        width = num_heads * head_dim
 
         # embedding of the inputs
         if num_convs != 0:
@@ -227,56 +176,32 @@ class MLPF(nn.Module):
                 for ielem in range(len(self.elemtypes_nonzero)):
                     self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
 
-            if self.conv_type == "attention":
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
+            self.conv_id = nn.ModuleList()
+            self.conv_reg = nn.ModuleList()
 
-                for i in range(num_convs):
-                    self.conv_id.append(
-                        SelfAttentionLayer(
-                            activation=activation,
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout_mha=dropout_conv_id_mha,
-                            dropout_ff=dropout_conv_id_ff,
-                            attention_type=attention_type,
-                        )
+            for i in range(num_convs):
+                self.conv_id.append(
+                    SelfAttentionLayer(
+                        activation=activation,
+                        embedding_dim=embedding_dim,
+                        num_heads=num_heads,
+                        width=width,
+                        dropout_mha=dropout_conv_id_mha,
+                        dropout_ff=dropout_conv_id_ff,
+                        attention_type=attention_type,
                     )
-                    self.conv_reg.append(
-                        SelfAttentionLayer(
-                            activation=activation,
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout_mha=dropout_conv_reg_mha,
-                            dropout_ff=dropout_conv_reg_ff,
-                            attention_type=attention_type,
-                        )
+                )
+                self.conv_reg.append(
+                    SelfAttentionLayer(
+                        activation=activation,
+                        embedding_dim=embedding_dim,
+                        num_heads=num_heads,
+                        width=width,
+                        dropout_mha=dropout_conv_reg_mha,
+                        dropout_ff=dropout_conv_reg_ff,
+                        attention_type=attention_type,
                     )
-            elif self.conv_type == "mamba":
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
-                    self.conv_reg.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
-            elif self.conv_type == "gnn_lsh":
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                for i in range(num_convs):
-                    gnn_conf = {
-                        "inout_dim": embedding_dim,
-                        "bin_size": self.bin_size,
-                        "max_num_bins": max_num_bins,
-                        "distance_dim": distance_dim,
-                        "layernorm": layernorm,
-                        "num_node_messages": num_node_messages,
-                        "dropout": dropout_ff,
-                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
-                        "ffn_dist_num_layers": ffn_dist_num_layers,
-                    }
-                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
-                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+                )
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.input_dim + num_convs * embedding_dim
