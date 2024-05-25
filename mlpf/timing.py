@@ -1,4 +1,3 @@
-import sys
 import time
 
 import numpy as np
@@ -9,15 +8,22 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bin-size", type=int, default=128)
+    parser.add_argument("--bin-size", type=int, default=512)
     parser.add_argument("--num-features", type=int, default=55)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-threads", type=int, default=1)
     parser.add_argument("--input-dtype", type=str, default="float32")
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument("--model", type=str, default="test.onnx")
+    parser.add_argument(
+        "--execution-provider",
+        type=str,
+        default="CPUExecutionProvider",
+        choices=["CPUExecutionProvider", "CUDAExecutionProvider", "OpenVINOExecutionProvider"],
+    )
     args = parser.parse_args()
     return args
+
 
 def get_mem_cpu_mb():
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1000
@@ -25,6 +31,7 @@ def get_mem_cpu_mb():
 
 def get_mem_gpu_mb():
     import pynvml
+
     mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
     return mem.used / 1000 / 1000
 
@@ -40,14 +47,16 @@ if __name__ == "__main__":
     # for GPU testing, you need to
     # pip install only onnxruntime_gpu, not onnxruntime!
     args = parse_args()
-    
+
     bin_size = args.bin_size
     num_features = args.num_features
     use_gpu = args.use_gpu
     batch_size = args.batch_size
     num_threads = args.num_threads
-    
+
     if use_gpu:
+        import pynvml
+
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
@@ -57,10 +66,7 @@ if __name__ == "__main__":
         )
     )
 
-    if use_gpu:
-        EP_list = ["CUDAExecutionProvider"]
-    else:
-        EP_list = ["CPUExecutionProvider"]
+    EP_list = [args.execution_provider]
 
     time.sleep(5)
 
@@ -80,7 +86,7 @@ if __name__ == "__main__":
     mem_onnx = get_mem_mb(use_gpu)
     print("mem_onnx", mem_onnx)
 
-    for bin_mul in range(1,41):
+    for bin_mul in range(1, 11):
         num_elems = bin_size * bin_mul
         times = []
         mem_used = []
