@@ -32,7 +32,7 @@ class Model(torch.nn.Module):
 model = Model()
 model.eval()
 
-# (B*num_heads, N, head_dim)
+# (B, num_heads, N, head_dim)
 query_states = torch.randn(1, 32, 256, 64)
 key_states = torch.randn(1, 32, 256, 64)
 value_states = torch.randn(1, 32, 256, 64)

@@ -4,7 +4,11 @@ from torch import Tensor
 import onnxscript
 from onnxscript.function_libs.torch_lib.tensor_typing import TFloat
 from onnxscript.onnx_opset import opset17 as op
-# from onnxscript import BFLOAT16, BOOL, DOUBLE, FLOAT, FLOAT16, INT64
+from onnxscript import BFLOAT16, BOOL, DOUBLE, FLOAT, FLOAT16, INT64
+
+opset_version = 17
+custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
+msft_op = onnxscript.values.Opset("com.microsoft", 1)
 
 def get_activation(activation):
     if activation == "elu":
@@ -46,10 +50,19 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             batch_first=batch_first,
             **factory_kwargs
         )
-        self.linear_Q = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
-        self.linear_K = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
-        self.linear_V = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.head_dim = embed_dim//num_heads
+        self.in_proj_weight = nn.Parameter(torch.empty((3 * embed_dim, embed_dim), **factory_kwargs), requires_grad=False)
+        self.in_proj_bias = nn.Parameter(torch.empty(3 * embed_dim, **factory_kwargs), requires_grad=False)
+
+        self.query_weight = self.in_proj_weight[:self.embed_dim]
+        self.key_weight = self.in_proj_weight[self.embed_dim:2*self.embed_dim]
+        self.value_weight = self.in_proj_weight[2*self.embed_dim:]
+        self.query_bias = self.in_proj_bias[:self.embed_dim]
+        self.key_bias = self.in_proj_bias[self.embed_dim:2*self.embed_dim]
+        self.value_bias = self.in_proj_bias[2*self.embed_dim:]
+
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.onnx_export = False
 
     def _get_name(self):
         return 'SimpleMultiheadAttention'
@@ -61,19 +74,33 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 need_weights: bool = False) -> Tensor:
 
         bsz, tgt_len, embed_dim_to_check = query.size()
-        assert self.embed_dim == embed_dim_to_check
-        assert self.embed_dim == key.size()[-1]
-        assert self.embed_dim == value.size()[-1]
-        head_dim = self.embed_dim // self.num_heads
+        # assert self.embed_dim == embed_dim_to_check
+        # assert self.embed_dim == key.size()[-1]
+        # assert self.embed_dim == value.size()[-1]
 
-        q = self.linear_Q(query)
-        k = self.linear_K(key)
-        v = self.linear_V(value)
+        q = query @ self.query_weight + self.query_bias
+        k = key @ self.key_weight + self.key_bias
+        v = value @ self.value_weight + self.value_bias
+
+        #for torch internal scaled_dot_product_attention,
+        #the embed_dim must be unpacked as follows to num_heads, head_dim
+        #for com.microsoft.MultiheadAttention in onnx, this is not needed
+        if not self.onnx_export:
+            q = torch.reshape(q, [bsz, tgt_len, self.num_heads, self.head_dim])
+            q = torch.permute(q, [0,2,1,3])
+            k = torch.reshape(k, [bsz, tgt_len, self.num_heads, self.head_dim])
+            k = torch.permute(k, [0,2,1,3])
+            v = torch.reshape(v, [bsz, tgt_len, self.num_heads, self.head_dim])
+            v = torch.permute(v, [0,2,1,3])
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             q, k, v, dropout_p=self.dropout)
 
-        assert list(attn_output.size()) == [bsz, tgt_len, self.num_heads * head_dim]
+        if not self.onnx_export:
+            attn_output = torch.permute(attn_output, [0,2,1,3])
+            attn_output = torch.reshape(attn_output, [bsz, tgt_len, self.num_heads*self.head_dim])
+        # assert list(attn_output.size()) == [bsz, tgt_len, self.num_heads * self.head_dim]
+
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None
@@ -260,15 +287,12 @@ model_kwargs = {
 model_fp32 = MLPF(**model_kwargs)
 model_fp32.eval()
 
-# model_state = torch.load("experiments/pyg-cms_20240430_094836_751206/checkpoints/checkpoint-25-17.631161.pth", map_location=torch.device('cpu'))
-# model_fp32.load_state_dict(model_state["model_state_dict"])
+model_state = torch.load("experiments/pyg-cms_20240430_094836_751206/checkpoints/checkpoint-25-17.631161.pth", map_location=torch.device('cpu'))
+model_fp32.load_state_dict(model_state["model_state_dict"])
 
+#(batch, seq, feat)
 dummy_features = torch.randn(1, 256, 55).float()
-out = model_fp32(dummy_features)
-
-opset_version = 17
-custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
-msft_op = onnxscript.values.Opset("com.microsoft", 1)
+pred = model_fp32(dummy_features)
 
 @onnxscript.script(custom_opset)
 def SDPA(
@@ -276,59 +300,29 @@ def SDPA(
     key: TFloat,
     value: TFloat,
 ) -> TFloat:
+
+    #unlike pytorch scaled_dot_product_attention,
+    #the input here is (bsz, seq_len, num_head*head_dim)
     output, _, _ = msft_op.MultiHeadAttention(
         query,
         key,
         value,
         num_heads=32)
+
     return output
-
-# manual scaled dot product attention
-# @onnxscript.script(custom_opset)
-# def SDPA(
-#     query: TFloat,
-#     key: TFloat,
-#     value: TFloat,
-# ):
-#     # Swap the last two axes of key
-#     key_shape = op.Shape(key)
-#     key_last_dim = key_shape[-1:]
-#     key_second_last_dim = key_shape[-2:-1]
-#     key_first_dims = key_shape[:-2]
-#     # Contract the dimensions that are not the last two so we can transpose
-#     # with a static permutation.
-#     key_squeezed_shape = op.Concat(
-#         op.Constant(value_ints=[-1]), key_second_last_dim, key_last_dim, axis=0
-#     )
-#     key_squeezed = op.Reshape(key, key_squeezed_shape)
-#     key_squeezed_transposed = op.Transpose(key_squeezed, perm=[0, 2, 1])
-#     key_transposed_shape = op.Concat(key_first_dims, key_last_dim, key_second_last_dim, axis=0)
-#     key_transposed = op.Reshape(key_squeezed_transposed, key_transposed_shape)
-
-#     # https://github.com/pytorch/pytorch/blob/12da0c70378b5be9135c6fda62a9863bce4a4818/aten/src/ATen/native/transformers/attention.cpp#L653
-#     # Scale q, k before matmul for stability see https://tinyurl.com/sudb9s96 for math
-#     # query_scaled = op.Mul(query, op.Sqrt(scale))
-#     # key_transposed_scaled = op.Mul(key_transposed, op.Sqrt(scale))
-#     attn_weight = op.Softmax(
-#         op.MatMul(query, key_transposed),
-#         axis=-1,
-#     )
-#     # attn_weight, _ = op.Dropout(attn_weight, dropout_p)
-#     return op.MatMul(attn_weight, value)
 
 # setType API provides shape/type to ONNX shape/type inference
 def custom_scaled_dot_product_attention(g, query: TFloat, key: TFloat, value: TFloat, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
     return g.onnxscript_op(SDPA, query, key, value).setType(query.type())
 
-# Register custom symbolic function
-# There are three opset version needed to be aligned
-# This is (2) the opset version in registry
 torch.onnx.register_custom_op_symbolic(
     symbolic_name="aten::scaled_dot_product_attention",
     symbolic_fn=custom_scaled_dot_product_attention,
     opset_version=opset_version,
 )
 
+for conv in model_fp32.conv_id + model_fp32.conv_reg:
+    conv.mha.onnx_export = True
 torch.onnx.export(
     model_fp32,
     dummy_features,
@@ -345,11 +339,30 @@ torch.onnx.export(
     },
 )
 
+import onnxruntime as rt
+sess_options = rt.SessionOptions()
+onnx_sess = rt.InferenceSession("test_fp32.onnx", sess_options, providers=["CPUExecutionProvider"])
+pred_onnx = onnx_sess.run(None, {"Xfeat_normed": dummy_features.numpy()})
+torch.testing.assert_close(
+    pred[0], torch.tensor(pred_onnx[0]), rtol=1e-3, atol=1e-3
+)
+print("fp32 closes")
+
 import onnx
 from onnxconverter_common import float16
 model = onnx.load("test_fp32.onnx")
 model_fp16 = float16.convert_float_to_float16(model)
 onnx.save(model_fp16, "test_fp16.onnx")
+
+sess_options = rt.SessionOptions()
+onnx_sess = rt.InferenceSession("test_fp16.onnx", sess_options, providers=["CPUExecutionProvider"])
+pred_onnx = onnx_sess.run(None, {"Xfeat_normed": float16.convert_np_to_float16(dummy_features.numpy())})
+torch.testing.assert_close(
+    pred[0], torch.tensor(pred_onnx[0]).float(), rtol=0.1, atol=0.1
+)
+print("fp16 closes")
+
+# import pdb;pdb.set_trace()
 
 # dynamo does not aten::scaled_dot_product_attention, so our op replacement doesn't work 
 # export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
