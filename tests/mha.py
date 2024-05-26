@@ -112,7 +112,7 @@ def mha_onnx_model(query_states, key_states, value_states, mask):
     # key_states = op.Reshape(op.Transpose(key_states, perm=[1,0,2]), shape=[32,1024,64])
     # value_states = op.Reshape(op.Transpose(value_states, perm=[1,0,2]), shape=[32,1024,64])
 
-    # 1, 32, 256, 64 -> 1, 256, 32, 64 -> 1,4096,2048
+    # 1, 32, 256, 64 -> 1, 256, 32, 64 -> 1,256,2048
     query_states = op.Reshape(op.Transpose(query_states, perm=[0,2,1,3]), shape=[1,256,2048])
     key_states = op.Reshape(op.Transpose(key_states, perm=[0,2,1,3]), shape=[1,256,2048])
     value_states = op.Reshape(op.Transpose(value_states, perm=[0,2,1,3]), shape=[1,256,2048])
