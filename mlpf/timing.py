@@ -85,13 +85,16 @@ if __name__ == "__main__":
     mem_onnx = get_mem_mb(use_gpu)
     print("mem_onnx", mem_onnx)
 
-    for bin_mul in [10, 20, 30, 40]:
+    for bin_mul in [
+        10,
+        20,
+    ]:
         num_elems = bin_size * bin_mul
         times = []
         mem_used = []
 
         # average over 100 events
-        for i in range(10):
+        for i in range(100):
 
             # allocate array in system memory
             X = np.array(np.random.randn(batch_size, num_elems, num_features), getattr(np, args.input_dtype))

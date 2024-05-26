@@ -13,8 +13,9 @@ $CMD_GPU --model $MODELS/test_fp16.onnx --num-threads 1 --input-dtype float16 | 
 
 CMD_CPU="singularity exec $IMG python3.10 mlpf/timing.py --execution-provider CPUExecutionProvider"
 $CMD_CPU --model $MODELS/test_fp32.onnx --num-threads 1 | tee timing/cpu_fp32.txt
+$CMD_CPU --model $MODELS/test_fp16.onnx --num-threads 1  --input-dtype float16| tee timing/cpu_fp16.txt
 
-CMD_CPU="singularity exec  --env PYTHONPATH=/opt/onnxruntime-openvino/lib/python3.10/site-packages $IMG python3.10 mlpf/timing.py --execution-provider OpenVINOExecutionProvider"
-$CMD_CPU --model $MODELS/test_fp32.onnx --num-threads 1 | tee timing/openvino_fp32.txt
+# CMD_CPU="singularity exec  --env PYTHONPATH=/opt/onnxruntime-openvino/lib/python3.10/site-packages $IMG python3.10 mlpf/timing.py --execution-provider OpenVINOExecutionProvider"
+# $CMD_CPU --model $MODELS/test_fp32.onnx --num-threads 1 | tee timing/openvino_fp32.txt
 
 # CMD_GPU="singularity exec --nv --env CUDA_VISIBLE_DEVICES=0 --env LD_LIBRARY_PATH=/home/joosep/particleflow/onnxruntime/build/Linux/Debug/ --env PYTHONPATH=/home/joosep/particleflow/onnxruntime/build/Linux/Debug/ $IMG python3.10 mlpf/timing.py --execution-provider CUDAExecutionProvider"
