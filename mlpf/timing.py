@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     bin_size = args.bin_size
     num_features = args.num_features
-    use_gpu = args.use_gpu
+    use_gpu = args.execution_provider == "CUDAExecutionProvider"
     batch_size = args.batch_size
     num_threads = args.num_threads
 
@@ -81,12 +81,11 @@ if __name__ == "__main__":
     sess_options.add_session_config_entry("session.intra_op.allow_spinning", "1")
 
     onnx_sess = rt.InferenceSession(args.model, sess_options, providers=EP_list)
-    time.sleep(5)
 
     mem_onnx = get_mem_mb(use_gpu)
     print("mem_onnx", mem_onnx)
 
-    for bin_mul in range(1, 11):
+    for bin_mul in [10, 20, 30, 40]:
         num_elems = bin_size * bin_mul
         times = []
         mem_used = []
