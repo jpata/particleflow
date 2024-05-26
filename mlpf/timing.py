@@ -8,7 +8,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bin-size", type=int, default=512)
+    parser.add_argument("--bin-size", type=int, default=256)
     parser.add_argument("--num-features", type=int, default=55)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-threads", type=int, default=1)
@@ -100,7 +100,7 @@ if __name__ == "__main__":
             # transfer data to GPU, run model, transfer data back
             t0 = time.time()
             # pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "l_mask_": X[..., 0]==0})
-            pred_onx = onnx_sess.run(None, {"X_features": X})
+            pred_onx = onnx_sess.run(None, {"Xfeat_normed": X})
             t1 = time.time()
             dt = (t1 - t0) / batch_size
             times.append(dt)

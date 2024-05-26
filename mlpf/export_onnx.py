@@ -334,13 +334,6 @@ class QuantizeableMultiheadAttention(nn.MultiheadAttention):
                       attn_mask: Optional[Tensor] = None,
                       average_attn_weights: bool = True,
                       is_causal: bool = False) -> Tuple[Tensor, Optional[Tensor]]:
-        # This version will not deal with the static key/value pairs.
-        # Keeping it here for future changes.
-        #
-        # TODO: This method has some duplicate lines with the
-        # `torch.nn.functional.multi_head_attention`. Will need to refactor.
-        static_k = None
-        static_v = None
 
         if attn_mask is not None and is_causal:
             raise AssertionError("Only allow causal mask or attn_mask")
@@ -348,127 +341,37 @@ class QuantizeableMultiheadAttention(nn.MultiheadAttention):
         if is_causal:
             raise AssertionError("causal mask not supported by AO MHA module")
 
-        if self.batch_first:
-            query, key, value = (x.transpose(0, 1) for x in (query, key, value))
+        #(bsz, tgt_len, feat) -> (tgt_len, bsz, feat)
+        query, key, value = (x.transpose(0, 1) for x in (query, key, value))
 
         tgt_len, bsz, embed_dim_to_check = query.size()
         assert self.embed_dim == embed_dim_to_check
-        # allow MHA to have different sizes for the feature dimension
-        assert key.size(0) == value.size(0) and key.size(1) == value.size(1)
-
         head_dim = self.embed_dim // self.num_heads
-        assert head_dim * self.num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        scaling = float(head_dim) ** -0.5
 
         q = self.linear_Q(query)
         k = self.linear_K(key)
         v = self.linear_V(value)
 
-        #JP fix here: disabled this
-        # q = self.q_scaling_product.mul_scalar(q, scaling)
-
-        if attn_mask is not None:
-            if attn_mask.dtype == torch.uint8:
-                warnings.warn("Byte tensor for attn_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead.")
-                attn_mask = attn_mask.to(torch.bool)
-            assert attn_mask.is_floating_point() or attn_mask.dtype == torch.bool, \
-                f'Only float and bool types are supported for attn_mask, not {attn_mask.dtype}'
-
-            if attn_mask.dim() == 2:
-                attn_mask = attn_mask.unsqueeze(0)
-                if list(attn_mask.size()) != [1, query.size(0), key.size(0)]:
-                    raise RuntimeError('The size of the 2D attn_mask is not correct.')
-            elif attn_mask.dim() == 3:
-                if list(attn_mask.size()) != [bsz * self.num_heads, query.size(0), key.size(0)]:
-                    raise RuntimeError('The size of the 3D attn_mask is not correct.')
-            else:
-                raise RuntimeError(f"attn_mask's dimension {attn_mask.dim()} is not supported")
-            # attn_mask's dim is 3 now.
-
-        # convert ByteTensor key_padding_mask to bool
-        if key_padding_mask is not None and key_padding_mask.dtype == torch.uint8:
-            warnings.warn("Byte tensor for key_padding_mask in nn.MultiheadAttention is deprecated. Use bool tensor instead.")
-            key_padding_mask = key_padding_mask.to(torch.bool)
-        if self.bias_k is not None and self.bias_v is not None:
-            if static_k is None and static_v is None:
-
-                # Explicitly assert that bias_k and bias_v are not None
-                # in a way that TorchScript can understand.
-                bias_k = self.bias_k
-                assert bias_k is not None
-                bias_v = self.bias_v
-                assert bias_v is not None
-
-                k = torch.cat([k, bias_k.repeat(1, bsz, 1)])
-                v = torch.cat([v, bias_v.repeat(1, bsz, 1)])
-                if attn_mask is not None:
-                    attn_mask = nnF.pad(attn_mask, (0, 1))
-                if key_padding_mask is not None:
-                    key_padding_mask = nnF.pad(key_padding_mask, (0, 1))
-            else:
-                assert static_k is None, "bias cannot be added to static key."
-                assert static_v is None, "bias cannot be added to static value."
-        else:
-            assert self.bias_k is None
-            assert self.bias_v is None
-
-        q = q.contiguous().view(tgt_len, bsz * self.num_heads, head_dim).transpose(0, 1)
-        if k is not None:
-            k = k.contiguous().view(-1, bsz * self.num_heads, head_dim).transpose(0, 1)
-        if v is not None:
-            v = v.contiguous().view(-1, bsz * self.num_heads, head_dim).transpose(0, 1)
-
-        if static_k is not None:
-            assert static_k.size(0) == bsz * self.num_heads
-            assert static_k.size(2) == head_dim
-            k = static_k
-
-        if static_v is not None:
-            assert static_v.size(0) == bsz * self.num_heads
-            assert static_v.size(2) == head_dim
-            v = static_v
-
-        src_len = k.size(1)
-
-        if key_padding_mask is not None:
-            assert key_padding_mask.size(0) == bsz
-            assert key_padding_mask.size(1) == src_len
-
-        if self.add_zero_attn:
-            src_len += 1
-            k_zeros = torch.zeros((k.size(0), 1) + k.size()[2:])
-            if k.is_quantized:
-                k_zeros = torch.quantize_per_tensor(k_zeros, k.q_scale(), k.q_zero_point(), k.dtype)
-            k = torch.cat([k, k_zeros], dim=1)
-            v_zeros = torch.zeros((v.size(0), 1) + k.size()[2:])
-            if v.is_quantized:
-                v_zeros = torch.quantize_per_tensor(v_zeros, v.q_scale(), v.q_zero_point(), v.dtype)
-            v = torch.cat([v, v_zeros], dim=1)
-
-            if attn_mask is not None:
-                attn_mask = nnF.pad(attn_mask, (0, 1))
-            if key_padding_mask is not None:
-                key_padding_mask = nnF.pad(key_padding_mask, (0, 1))
+        q = q.contiguous().view(tgt_len, bsz * self.num_heads, head_dim)
+        k = k.contiguous().view(tgt_len, bsz * self.num_heads, head_dim)
+        v = v.contiguous().view(tgt_len, bsz * self.num_heads, head_dim)
 
         # Leaving the quantized zone here
         q = self.dequant_q(q)
         k = self.dequant_k(k)
         v = self.dequant_v(v)
 
+        print(q.shape, k.shape, v.shape)
+        #(bsz*num_heads, tgt_len, head_dim)
         attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
 
-        assert list(attn_output.size()) == [bsz * self.num_heads, tgt_len, head_dim]
-        if self.batch_first:
-            attn_output = attn_output.view(bsz, tgt_len, self.embed_dim)
-        else:
-            attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, self.embed_dim)
+        assert list(attn_output.size()) == [tgt_len, bsz * self.num_heads, head_dim]
+        attn_output = attn_output.view(bsz, tgt_len, self.embed_dim)
 
         # Reentering the quantized zone
         attn_output = self.quant_attn_output(attn_output)
-        # for the type: ignore[has-type], see https://github.com/pytorch/pytorch/issues/58969
-        attn_output = self.out_proj(attn_output)  # type: ignore[has-type]
+        attn_output = self.out_proj(attn_output)
 
-        #JP fix: removed need_weights part from here, return attn_output instead of tuple
         return attn_output
 
 class QuantizedMultiheadAttention(QuantizeableMultiheadAttention):
@@ -645,13 +548,13 @@ class MLPF(nn.Module):
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
 
-        self.quant = QuantizeFeaturesStub(self.input_dim + 12)
-        self.dequant_id = torch.ao.quantization.DeQuantStub()
+        # self.quant = QuantizeFeaturesStub(self.input_dim + 12)
+        # self.dequant_id = torch.ao.quantization.DeQuantStub()
 
     # @torch.compile
     def forward(self, X_features):
         Xfeat_normed = X_features
-        Xfeat_normed = self.quant(Xfeat_normed)
+        # Xfeat_normed = self.quant(Xfeat_normed)
 
         embeddings_id, embeddings_reg = [], []
         embedding_id = self.nn0_id(Xfeat_normed)
@@ -680,7 +583,7 @@ class MLPF(nn.Module):
         preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        preds_id = self.dequant_id(preds_id)
+        # preds_id = self.dequant_id(preds_id)
         return preds_id, preds_momentum
 
 model_kwargs = {
@@ -699,7 +602,7 @@ model_kwargs = {
     "dropout_conv_reg_mha": 0.0,
     "dropout_conv_reg_ff": 0.0,
     "activation": "relu",
-    "head_dim": 16,
+    "head_dim": 64,
     "num_heads": 32,
 }
 
@@ -710,68 +613,154 @@ model_fp32.eval()
 # model_state = torch.load("experiments/pyg-cms_20240430_094836_751206/checkpoints/checkpoint-25-17.631161.pth", map_location=torch.device('cpu'))
 # model_fp32.load_state_dict(model_state["model_state_dict"])
 
-dummy_features = torch.randn(3, 67, 55).float()
+dummy_features = torch.randn(1, 256, 55).float()
 out = model_fp32(dummy_features)
 print(out)
 
-torch.backends.quantized.engine = 'qnnpack'
-model_fp32.qconfig = torch.ao.quantization.get_default_qconfig("x86")
-# custom_module_config = {
-#         "float_to_observed_custom_module_class": {torch.nn.MultiheadAttention: QuantizeableMultiheadAttention},
-#         "observed_to_quantized_custom_module_class": {QuantizeableMultiheadAttention: QuantizedMultiheadAttention},
-# }
+# torch.backends.quantized.engine = 'qnnpack'
+# model_fp32.qconfig = torch.ao.quantization.get_default_qconfig("qnnpack")
 
-model_fp32_prepared = torch.ao.quantization.prepare(model_fp32)
-model_fp32_prepared(dummy_features)
-model_int8 = torch.ao.quantization.convert(model_fp32_prepared)
-out = model_int8(dummy_features)
-print(out)
+# model_fp32_prepared = torch.ao.quantization.prepare(model_fp32)
+# model_fp32_prepared(dummy_features)
+# model_int8 = torch.ao.quantization.convert(model_fp32_prepared)
+# out = model_int8(dummy_features)
+# print(out)
+
+import onnxscript
+from onnxscript.function_libs.torch_lib.tensor_typing import (
+    IntType,
+    TFloat,
+    TFloatOrBFloat16,
+    TFloatOrUInt8,
+    TReal,
+    TTensor,
+)
+# from onnxscript.function_libs.torch_aten.registration import torch_op
+
+#https://pytorch.org/docs/stable/onnx_torchscript.html#onnx-script-functions
+from onnxscript.onnx_opset import opset17 as op
+from onnxscript import BFLOAT16, BOOL, DOUBLE, FLOAT, FLOAT16, INT64
+opset_version = 17
+custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
+msft_op = onnxscript.values.Opset("com.microsoft", 1)
+
+@onnxscript.script(custom_opset)
+def SDPA(
+    query: TFloat,
+    key: TFloat,
+    value: TFloat,
+) -> TFloat:
+    output, _, _ = msft_op.MultiHeadAttention(
+        query,
+        key,
+        value,
+        num_heads=32)
+    return output
+
+# @onnxscript.script(custom_opset)
+# def SDPA(
+#     query: TFloat,
+#     key: TFloat,
+#     value: TFloat,
+# ):
+#     # Swap the last two axes of key
+#     key_shape = op.Shape(key)
+#     key_last_dim = key_shape[-1:]
+#     key_second_last_dim = key_shape[-2:-1]
+#     key_first_dims = key_shape[:-2]
+#     # Contract the dimensions that are not the last two so we can transpose
+#     # with a static permutation.
+#     key_squeezed_shape = op.Concat(
+#         op.Constant(value_ints=[-1]), key_second_last_dim, key_last_dim, axis=0
+#     )
+#     key_squeezed = op.Reshape(key, key_squeezed_shape)
+#     key_squeezed_transposed = op.Transpose(key_squeezed, perm=[0, 2, 1])
+#     key_transposed_shape = op.Concat(key_first_dims, key_last_dim, key_second_last_dim, axis=0)
+#     key_transposed = op.Reshape(key_squeezed_transposed, key_transposed_shape)
+
+#     # https://github.com/pytorch/pytorch/blob/12da0c70378b5be9135c6fda62a9863bce4a4818/aten/src/ATen/native/transformers/attention.cpp#L653
+#     # Scale q, k before matmul for stability see https://tinyurl.com/sudb9s96 for math
+#     # query_scaled = op.Mul(query, op.Sqrt(scale))
+#     # key_transposed_scaled = op.Mul(key_transposed, op.Sqrt(scale))
+#     attn_weight = op.Softmax(
+#         op.MatMul(query, key_transposed),
+#         axis=-1,
+#     )
+#     # attn_weight, _ = op.Dropout(attn_weight, dropout_p)
+#     return op.MatMul(attn_weight, value)
+
+# setType API provides shape/type to ONNX shape/type inference
+def custom_scaled_dot_product_attention(g, query: TFloat, key: TFloat, value: TFloat, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
+    return g.onnxscript_op(SDPA, query, key, value) #(bsz*num_heads, seq_len, head_dim)
+
+# Register custom symbolic function
+# There are three opset version needed to be aligned
+# This is (2) the opset version in registry
+torch.onnx.register_custom_op_symbolic(
+    symbolic_name="aten::scaled_dot_product_attention",
+    symbolic_fn=custom_scaled_dot_product_attention,
+    opset_version=opset_version,
+)
 
 torch.onnx.export(
     model_fp32,
     dummy_features,
     "test_fp32.onnx",
+    opset_version=opset_version,
     verbose=False,
-    input_names=["X_features", ],
+    input_names=["Xfeat_normed", ],
     output_names=["id", "momentum"],
     dynamic_axes={
-        "X_features": {0: "num_batch", 1: "num_elements"},
+        "Xfeat_normed": {0: "num_batch", 1: "num_elements"},
         "id": {0: "num_batch", 1: "num_elements"},
         "momentum": {0: "num_batch", 1: "num_elements"},
         # "charge": [0, 1],
     },
 )
 
-torch.onnx.export(
-    model_fp32.half(),
-    dummy_features.half(),
-    "test_fp16.onnx",
-    verbose=False,
-    input_names=["X_features", ],
-    output_names=["id", "momentum"],
-    dynamic_axes={
-        "X_features": {0: "num_batch", 1: "num_elements"},
-        "id": {0: "num_batch", 1: "num_elements"},
-        "momentum": {0: "num_batch", 1: "num_elements"},
-        # "charge": [0, 1],
-    },
-)
 
-torch.onnx.export(
-    model_int8,
-    dummy_features,
-    "test_int8.onnx",
-    verbose=False,
-    input_names=["X_features", ],
-    output_names=["id", "momentum"],
-    dynamic_axes={
-        "X_features": {0: "num_batch", 1: "num_elements"},
-        "id": {0: "num_batch", 1: "num_elements"},
-        "momentum": {0: "num_batch", 1: "num_elements"},
-        # "charge": [0, 1],
-    },
-)
+import onnx
+from onnxconverter_common import float16
+model = onnx.load("test_fp32.onnx")
+model_fp16 = float16.convert_float_to_float16(model)
+onnx.save(model_fp16, "test_fp16.onnx")
+
+# torch.onnx.export(
+#     model_fp32.half(),
+#     dummy_features.half(),
+#     "test_fp16.onnx",
+#     opset_version=opset_version,
+#     verbose=False,
+#     input_names=["Xfeat_normed", ],
+#     output_names=["id", "momentum"],
+#     dynamic_axes={
+#         "Xfeat_normed": {0: "num_batch", 1: "num_elements"},
+#         "id": {0: "num_batch", 1: "num_elements"},
+#         "momentum": {0: "num_batch", 1: "num_elements"},
+#         # "charge": [0, 1],
+#     },
+# )
+
+# torch.onnx.export(
+#     model_int8,
+#     dummy_features,
+#     "test_int8.onnx",
+#     opset_version=opset_version,
+#     verbose=False,
+#     input_names=["Xfeat_normed", ],
+#     output_names=["id", "momentum"],
+#     dynamic_axes={
+#         "Xfeat_normed": {0: "num_batch", 1: "num_elements"},
+#         "id": {0: "num_batch", 1: "num_elements"},
+#         "momentum": {0: "num_batch", 1: "num_elements"},
+#         # "charge": [0, 1],
+#     },
+# )
 
 # export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
-# onnx_program = torch.onnx.dynamo_export(model_int8, dummy_features, dummy_mask, export_options=export_options)
-# onnx_program.save("test_int8.onnx")
+# onnx_program = torch.onnx.dynamo_export(torch.compile(model_fp32), dummy_features, export_options=export_options)
+# onnx_program.save("test_fp32_dynamo.onnx")
+
+# export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
+# onnx_program = torch.onnx.dynamo_export(torch.compile(model_fp32.half()), dummy_features, export_options=export_options)
+# onnx_program.save("test_fp16_dynamo.onnx")
