@@ -13,10 +13,9 @@ dtype_map = {
     numpy.dtype("bool"): onnx.TensorProto.BOOL,
 }
 
+
 class Model(torch.nn.Module):
-    def forward(
-        self, query_states, key_states, value_states, mask
-    ):
+    def forward(self, query_states, key_states, value_states, mask):
         query_states = query_states
         key_states = key_states
         value_states = value_states
@@ -78,7 +77,7 @@ ort_inputs = {
     "mask": attention_mask_ort,
 }
 
-print(f"Benchmarking PT sdpa and ORT MultiHeadAttention...")
+print("Benchmarking PT sdpa and ORT MultiHeadAttention...")
 
 
 def run_pt():
@@ -96,9 +95,7 @@ def run_pt():
 
 total_time = run_pt()
 
-print(
-    f"PT eager:"
-)
+print("PT eager:")
 print(f"Total time: {total_time:.2f}s")
 
 
@@ -113,9 +110,9 @@ def mha_onnx_model(query_states, key_states, value_states, mask):
     # value_states = op.Reshape(op.Transpose(value_states, perm=[1,0,2]), shape=[32,1024,64])
 
     # 1, 32, 256, 64 -> 1, 256, 32, 64 -> 1,256,2048
-    query_states = op.Reshape(op.Transpose(query_states, perm=[0,2,1,3]), shape=[1,256,2048])
-    key_states = op.Reshape(op.Transpose(key_states, perm=[0,2,1,3]), shape=[1,256,2048])
-    value_states = op.Reshape(op.Transpose(value_states, perm=[0,2,1,3]), shape=[1,256,2048])
+    query_states = op.Reshape(op.Transpose(query_states, perm=[0, 2, 1, 3]), shape=[1, 256, 2048])
+    key_states = op.Reshape(op.Transpose(key_states, perm=[0, 2, 1, 3]), shape=[1, 256, 2048])
+    value_states = op.Reshape(op.Transpose(value_states, perm=[0, 2, 1, 3]), shape=[1, 256, 2048])
     output, _, _ = msft_op.MultiHeadAttention(
         query_states,
         key_states,
@@ -123,13 +120,11 @@ def mha_onnx_model(query_states, key_states, value_states, mask):
         num_heads=32,
     )
     output = op.Reshape(output, shape=[1, 256, 32, 64])
-    output = op.Transpose(output, perm=[0,2,1,3])
+    output = op.Transpose(output, perm=[0, 2, 1, 3])
     return output
 
 
-def unfused_onnx_model(
-    query_states, key_states, value_states, mask
-):
+def unfused_onnx_model(query_states, key_states, value_states, mask):
 
     scale = op.Constant(value_float=sqrt_head_dim)
 
@@ -142,10 +137,7 @@ def unfused_onnx_model(
 
 def serialize_model(model_func, model_name, ort_inputs):
     model_path = f"{model_dir}/{model_name}"
-    model_proto = onnxscript.script(
-        onnxscript.opset13, default_opset=onnxscript.opset13
-    )(model_func).to_model_proto()
-
+    model_proto = onnxscript.script(onnxscript.opset13, default_opset=onnxscript.opset13)(model_func).to_model_proto()
 
     for i, value in enumerate(ort_inputs.values()):
         model_proto.graph.input[i].type.CopyFrom(
@@ -193,9 +185,7 @@ def run_ort(model_func, model_name, ort_inputs):
     ort_outputs = sess.run(None, ort_inputs)
 
     # Parity
-    torch.testing.assert_close(
-        torch_out, torch.tensor(ort_outputs[0]), rtol=1e-3, atol=1e-3
-    )
+    torch.testing.assert_close(torch_out, torch.tensor(ort_outputs[0]), rtol=1e-3, atol=1e-3)
 
     serialize_inputs_outputs(model_dir, ort_inputs, ort_outputs)
 
@@ -209,9 +199,7 @@ def run_ort(model_func, model_name, ort_inputs):
         sess.run(None, ort_inputs)
         total_time += time.perf_counter() - start_time
 
-    print(
-        f"ORT {model_name}"
-    )
+    print(f"ORT {model_name}")
     print(f"Total time: {total_time:.2f}s")
 
 
