@@ -297,7 +297,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
 
 
 def count_parameters(model):
-    column_names = ["Modules", "Trainable parameters", "Non-tranable parameters"]
+    column_names = ["Modules", "Trainable parameters", "Non-trainable parameters"]
     table = pd.DataFrame(columns=column_names)
     trainable_params = 0
     nontrainable_params = 0

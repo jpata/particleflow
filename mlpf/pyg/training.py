@@ -812,39 +812,11 @@ def run(rank, world_size, config, args, outdir, logfile):
                     dir_name=testdir_name,
                 )
 
-    if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
+    if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name)
-
-        if args.export_onnx:
-            try:
-                dummy_features = torch.randn(1, 8192, model_kwargs["input_dim"], device=rank)
-                dummy_mask = torch.zeros(1, 8192, dtype=torch.bool, device=rank)
-
-                # Torch ONNX export in the old way
-                torch.onnx.export(
-                    model,
-                    (dummy_features, dummy_mask),
-                    "test.onnx",
-                    verbose=False,
-                    input_names=["features", "mask"],
-                    output_names=["id", "momentum"],
-                    dynamic_axes={
-                        "features": {0: "num_batch", 1: "num_elements"},
-                        "mask": [0, 1],
-                        "id": [0, 1],
-                        "momentum": [0, 1],
-                        # "charge": [0, 1],
-                    },
-                )
-
-                # Torch ONNX export in the new way
-                # onnx_program = torch.onnx.dynamo_export(model, (dummy_features, dummy_mask))
-                # onnx_program.save("test.onnx")
-            except Exception as e:
-                print("ONNX export failed: {}".format(e))
 
     if world_size > 1:
         dist.destroy_process_group()
