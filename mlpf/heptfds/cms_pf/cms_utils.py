@@ -37,7 +37,8 @@ CLASS_NAMES_CMS = [
     "mu",
 ]
 CLASS_NAMES_LONG_CMS = [
-    "none" "charged hadron",
+    "none",
+    "charged hadron",
     "neutral hadron",
     "hfem",
     "hfhad",
