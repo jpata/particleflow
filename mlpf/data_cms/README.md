@@ -1,15 +1,15 @@
 ## Validation data
 
-### ACAT 2022
-The MLPF CMSSW results presented at ACAT can be reproduced using the MINIAOD samples from
 ```
-gfal-copy -r root://xrootd.hep.kbfi.ee:1094//store/user/jpata/mlpf/results/acat2022 ./
+gfal-copy -r root://xrootd.hep.kbfi.ee:1094//store/user/jpata/mlpf/results/ ./
 ```
+
 See below for the steps to reproduce these samples.
 
 The resulting plots can be found at:
 ```
 https://jpata.web.cern.ch/jpata/mlpf/results/acat2022_20221004_model40M_revalidation20240523/
+https://jpata.web.cern.ch/jpata/mlpf/results/acat2022_20221004_model40M_revalidation_CMSSW14_20240527/
 ```
 
 ## Code setup
@@ -20,30 +20,35 @@ The following should work on lxplus.
 voms-proxy-init -voms cms -valid 192:00
 voms-proxy-info
 
-#Initialize SLC7
-cmssw-el7
+#Initialize EL8
+cmssw-el8
 
-export SCRAM_ARCH=slc7_amd64_gcc10
-cmsrel CMSSW_12_3_0_pre6
-cd CMSSW_12_3_0_pre6/src
+export SCRAM_ARCH=el8_amd64_gcc12
+cmsrel CMSSW_14_1_0_pre3
+cd CMSSW_14_1_0_pre3/src
 cmsenv
 git cms-init
 
-#checkout the MLPF code
-git-cms-merge-topic jpata:pfanalysis_caloparticle
+#set the directories we want to check out
+echo "/Configuration/Generator/" >> .git/info/sparse-checkout
+echo "/IOMC/ParticleGuns/" >>  .git/info/sparse-checkout
+echo "/RecoParticleFlow/PFProducer/" >> .git/info/sparse-checkout
+echo "/Validation/RecoParticleFlow/" >> .git/info/sparse-checkout
 
-#check out the version from the 2022 release
-git checkout mlpf_acat2022
+#checkout the CMSSW code
+git remote add jpata https://github.com/jpata/cmssw.git
+git fetch -a jpata
+git checkout pfanalysis_caloparticle_CMSSW_14_1_0_pre3_acat2022
 
 #compile
 scram b -j4
 
-#download the MLPF model
-mkdir -p src/RecoParticleFlow/PFProducer/data/mlpf/
-wget https://huggingface.co/jpata/particleflow/resolve/main/cms/acat2022_20221004_model40M/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
+#download the latest MLPF model
+mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
+wget https://huggingface.co/jpata/particleflow/blob/main/cms/2024_05_16_attn_model21M/onnx/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
 
-# must be b786aa6de49b51f703c87533a66326d6
-md5sum RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
+# must be 57d334c9a5eaa9eb5f1c2708e0fbc5e0
+md5sum RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
 ```
 
 ## Running MLPF in CMSSW
@@ -97,7 +102,6 @@ cd particleflow
 ./scripts/cmssw/validation_job.sh mlpf scripts/cmssw/qcd_pu.txt QCD_PU 1
 ./scripts/cmssw/validation_job.sh pf scripts/cmssw/qcd_pu.txt QCD_PU 1
 ```
-Note: the input dataset is only stored on `T2_EE_Estonia`, therefore depending on grid accessibility, it might be slow to access.
 
 The MINIAOD output will be in `$CMSSW_BASE/out/QCD_PU_mlpf` and `$CMSSW_BASE/out/QCD_PU_pf`.
 
