@@ -95,10 +95,10 @@ def train_and_valid(
         # run the MLPF model in inference mode to get the MLPF cands / latent representations
         if freeze_backbone:
             with torch.no_grad():
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+                with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
         else:
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=True):
                 ymlpf = mlpf(batch.X, batch.mask)
 
         ymlpf = unpack_predictions(ymlpf)
