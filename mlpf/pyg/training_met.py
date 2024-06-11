@@ -93,7 +93,7 @@ def train_and_valid(
         ygen = unpack_target(batch.ygen)
 
         # run the MLPF model in inference mode to get the MLPF cands / latent representations
-        for i in range(10):
+        for i in range(5):
             if freeze_backbone:
                 with torch.no_grad():
                     with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
