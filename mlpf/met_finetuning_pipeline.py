@@ -232,6 +232,9 @@ def main():
             use_ray=False,
         )
 
+        dtype = getattr(torch, config["dtype"])
+        _logger.info(f"using dtype={dtype}")
+
         train_mlpf(
             rank,
             deepmet,
@@ -245,6 +248,7 @@ def main():
             config["patience"],
             outdir,
             trainable=config["model"]["trainable"],
+            dtype=dtype,
             checkpoint_freq=config["checkpoint_freq"],
         )
 

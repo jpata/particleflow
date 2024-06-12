@@ -47,6 +47,7 @@ def train_and_valid(
     trainable,
     is_train=True,
     epoch=None,
+    dtype=torch.float32,
 ):
     """
     Performs training over a given epoch. Will run a validation step every val_freq.
@@ -95,10 +96,10 @@ def train_and_valid(
         # run the MLPF model in inference mode to get the MLPF cands / latent representations
         if freeze_backbone:
             with torch.no_grad():
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+                with torch.autocast(device_type="cuda", dtype=dtype, enabled=True):
                     ymlpf = mlpf(batch.X, batch.mask)
         else:
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=True):
+            with torch.autocast(device_type="cuda", dtype=dtype, enabled=True):
                 ymlpf = mlpf(batch.X, batch.mask)
 
         ymlpf = unpack_predictions(ymlpf)
@@ -214,6 +215,7 @@ def train_mlpf(
     patience,
     outdir,
     trainable="all",
+    dtype=torch.float32,
     checkpoint_freq=None,
 ):
     """
@@ -258,6 +260,7 @@ def train_mlpf(
             trainable=trainable,
             is_train=True,
             epoch=epoch,
+            dtype=dtype,
         )
 
         losses_v = train_and_valid(
@@ -272,6 +275,7 @@ def train_mlpf(
             trainable=trainable,
             is_train=False,
             epoch=epoch,
+            dtype=dtype,
         )
 
         extra_state = {"epoch": epoch}
