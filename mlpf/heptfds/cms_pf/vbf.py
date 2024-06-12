@@ -21,9 +21,10 @@ _CITATION = """
 class CmsPfVbf(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.7.0")
+    VERSION = tfds.core.Version("1.7.1")
     RELEASE_NOTES = {
         "1.7.0": "Add cluster shape vars",
+        "1.7.1": "Increase stats to 400k events",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_vbf ~/tensorflow_datasets/
