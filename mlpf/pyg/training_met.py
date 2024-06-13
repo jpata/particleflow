@@ -326,9 +326,9 @@ def train_mlpf(
             if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
                 checkpoint_dir = Path(outdir) / "checkpoints"
                 checkpoint_dir.mkdir(exist_ok=True)
-                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_mlpf.pth".format(checkpoint_dir, epoch, losses_v["Total"])
+                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_mlpf.pth".format(checkpoint_dir, epoch, losses_v["MET"])
                 save_checkpoint(checkpoint_path, mlpf, optimizer, extra_state)
-                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_deepmet.pth".format(checkpoint_dir, epoch, losses_v["Total"])
+                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_deepmet.pth".format(checkpoint_dir, epoch, losses_v["MET"])
                 save_checkpoint(checkpoint_path, deepmet, optimizer, extra_state)
 
         if stale_epochs > patience:
@@ -361,7 +361,7 @@ def train_mlpf(
                 color="bold",
             )
 
-            with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
+            with open(f"{outdir}/met_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
 
             if tensorboard_writer_train:
