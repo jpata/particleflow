@@ -140,10 +140,10 @@ def train_and_valid(
 
         ###############################
         # sanity check
-        if freeze_backbone:
-            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF backbone is not frozen."
-        else:
+        if is_train and not freeze_backbone:
             assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF backbone is frozen."
+        else:
+            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF backbone is not frozen."
         ###############################
 
         # ----------------------- Run finetuning -----------------------
