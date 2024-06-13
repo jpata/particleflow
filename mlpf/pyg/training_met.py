@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import tqdm
 from pyg.logger import _logger
 from pyg.utils import (
@@ -37,6 +38,7 @@ def configure_model_trainable(model, trainable, is_training):
 
 def train_and_valid(
     rank,
+    world_size,
     deepmet,
     mlpf,
     freeze_backbone,
@@ -50,17 +52,16 @@ def train_and_valid(
     dtype=torch.float32,
 ):
     """
-    Performs training over a given epoch. Will run a validation step every val_freq.
+    Performs training over a given epoch.
     """
 
     train_or_valid = "train" if is_train else "valid"
     _logger.info(f"Initiating epoch #{epoch} {train_or_valid} run on device rank={rank}", color="red")
 
+    configure_model_trainable(mlpf, trainable, False if freeze_backbone else is_train)
     configure_model_trainable(deepmet, trainable, is_train)
-    if freeze_backbone:
-        configure_model_trainable(mlpf, trainable, "valid")
-    else:
-        configure_model_trainable(mlpf, trainable, is_train)
+
+    epoch_loss = {}  # this one will keep accumulating `train_loss` and then return the average
 
     if is_train:
         data_loader = train_loader
@@ -68,11 +69,14 @@ def train_and_valid(
         data_loader = valid_loader
 
     # only show progress bar on rank 0
-    iterator = tqdm.tqdm(
-        enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
-    )
+    if (world_size > 1) and (rank != 0):
+        iterator = enumerate(data_loader)
+    else:
+        iterator = tqdm.tqdm(
+            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
+        )
 
-    epoch_loss = {}  # this one will keep accumulating `train_loss` and then return the average
+    device_type = "cuda" if isinstance(rank, int) else "cpu"
 
     loss = {}  # this one is redefined every iteration
 
@@ -85,22 +89,26 @@ def train_and_valid(
 
             return hook
 
-        mlpf.conv_reg[2].dropout.register_forward_hook(get_latent_reps("conv_reg2"))
-        mlpf.nn_id.register_forward_hook(get_latent_reps("nn_id"))
+        if isinstance(mlpf, torch.nn.parallel.distributed.DistributedDataParallel):
+            mlpf.module.conv_reg[2].dropout.register_forward_hook(get_latent_reps("conv_reg2"))
+            mlpf.module.nn_id.register_forward_hook(get_latent_reps("nn_id"))
+        else:
+            mlpf.conv_reg[2].dropout.register_forward_hook(get_latent_reps("conv_reg2"))
+            mlpf.nn_id.register_forward_hook(get_latent_reps("nn_id"))
 
     for itrain, batch in iterator:
 
         batch = batch.to(rank, non_blocking=True)
         ygen = unpack_target(batch.ygen)
 
-        # run the MLPF model in inference mode to get the MLPF cands / latent representations
-        if freeze_backbone:
-            with torch.no_grad():
-                with torch.autocast(device_type="cuda", dtype=dtype, enabled=True):
-                    ymlpf = mlpf(batch.X, batch.mask)
-        else:
-            with torch.autocast(device_type="cuda", dtype=dtype, enabled=True):
+        # ----------------------- Run backbone inference -----------------------
+
+        with torch.autocast(device_type="cuda", dtype=dtype, enabled=device_type == "cuda"):
+            if is_train and not freeze_backbone:
                 ymlpf = mlpf(batch.X, batch.mask)
+            else:
+                with torch.no_grad():
+                    ymlpf = mlpf(batch.X, batch.mask)
 
         ymlpf = unpack_predictions(ymlpf)
 
@@ -109,7 +117,6 @@ def train_and_valid(
         pred_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
 
         if use_latentX:  # use the latent representations
-
             for layer in latent_reps:
                 if freeze_backbone:
                     latent_reps[layer] = latent_reps[layer].detach()
@@ -132,11 +139,14 @@ def train_and_valid(
         X = X * msk_ymlpf.unsqueeze(-1)  # run DeepMET on actual particles (i.e. ignore the Nulls)
 
         ###############################
+        # sanity check
         if freeze_backbone:
             assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF backbone is not frozen."
         else:
             assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF backbone is frozen."
         ###############################
+
+        # ----------------------- Run finetuning -----------------------
 
         if is_train:
             wx, wy = deepmet(X)
@@ -196,14 +206,26 @@ def train_and_valid(
                 epoch_loss[loss_] = 0.0
             epoch_loss[loss_] += loss[loss_].detach()
 
+    num_data = torch.tensor(len(data_loader), device=rank)
+    # sum up the number of steps from all workers
+    if world_size > 1:
+        torch.distributed.all_reduce(num_data)
+
     for loss_ in epoch_loss:
-        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / len(data_loader)
+        # sum up the losses from all workers
+        if world_size > 1:
+            torch.distributed.all_reduce(epoch_loss[loss_])
+        epoch_loss[loss_] = epoch_loss[loss_].cpu().item() / num_data.cpu().item()
+
+    if world_size > 1:
+        dist.barrier()
 
     return epoch_loss
 
 
 def train_mlpf(
     rank,
+    world_size,
     deepmet,
     mlpf,
     freeze_backbone,
@@ -229,9 +251,12 @@ def train_mlpf(
         patience: number of stale epochs before stopping the training
         outdir: path to store the model weights and training plots
     """
-
-    tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
-    tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
+    if (rank == 0) or (rank == "cpu"):
+        tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
+        tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
+    else:
+        tensorboard_writer_train = None
+        tensorboard_writer_valid = None
 
     t0_initial = time.time()
 
@@ -250,6 +275,7 @@ def train_mlpf(
 
         losses_t = train_and_valid(
             rank,
+            world_size,
             deepmet,
             mlpf,
             freeze_backbone,
@@ -265,6 +291,7 @@ def train_mlpf(
 
         losses_v = train_and_valid(
             rank,
+            world_size,
             deepmet,
             mlpf,
             freeze_backbone,
@@ -278,60 +305,72 @@ def train_mlpf(
             dtype=dtype,
         )
 
-        extra_state = {"epoch": epoch}
-        if losses_v["MET"] < best_val_loss:
-            best_val_loss = losses_v["MET"]
-            stale_epochs = 0
-            torch.save(
-                {"model_state_dict": get_model_state_dict(deepmet), "optimizer_state_dict": optimizer.state_dict()},
-                f"{outdir}/best_weights.pth",
-            )
-            save_checkpoint(f"{outdir}/best_weights.pth", deepmet, optimizer, extra_state)
-        else:
-            stale_epochs += 1
+        if (rank == 0) or (rank == "cpu"):
+            extra_state = {"epoch": epoch}
+            if losses_v["MET"] < best_val_loss:
+                best_val_loss = losses_v["MET"]
+                stale_epochs = 0
+                torch.save(
+                    {
+                        "mlpf_state_dict": get_model_state_dict(mlpf),
+                        "deepmet_state_dict": get_model_state_dict(deepmet),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                    },
+                    f"{outdir}/best_weights.pth",
+                )
+                save_checkpoint(f"{outdir}/best_weights_mlpf.pth", mlpf, optimizer, extra_state)
+                save_checkpoint(f"{outdir}/best_weights_deepmet.pth", deepmet, optimizer, extra_state)
+            else:
+                stale_epochs += 1
 
-        if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
-            checkpoint_dir = Path(outdir) / "checkpoints"
-            checkpoint_dir.mkdir(exist_ok=True)
-            checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}.pth".format(checkpoint_dir, epoch, losses_v["MET"])
-            save_checkpoint(checkpoint_path, deepmet, optimizer, extra_state)
+            if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
+                checkpoint_dir = Path(outdir) / "checkpoints"
+                checkpoint_dir.mkdir(exist_ok=True)
+                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_mlpf.pth".format(checkpoint_dir, epoch, losses_v["Total"])
+                save_checkpoint(checkpoint_path, mlpf, optimizer, extra_state)
+                checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_deepmet.pth".format(checkpoint_dir, epoch, losses_v["Total"])
+                save_checkpoint(checkpoint_path, deepmet, optimizer, extra_state)
 
         if stale_epochs > patience:
             break
 
-        for loss in losses_of_interest:
-            losses["train"][loss].append(losses_t[loss])
-            losses["valid"][loss].append(losses_v[loss])
+        if (rank == 0) or (rank == "cpu"):
+            for k, v in losses_t.items():
+                tensorboard_writer_train.add_scalar("epoch/loss_" + k, v, epoch)
 
-        for k, v in losses_t.items():
-            tensorboard_writer_train.add_scalar("epoch/loss_" + k, v, epoch)
+            for loss in losses_of_interest:
+                losses["train"][loss].append(losses_t[loss])
+                losses["valid"][loss].append(losses_v[loss])
 
-        for k, v in losses_v.items():
-            tensorboard_writer_valid.add_scalar("epoch/loss_" + k, v, epoch)
+            for k, v in losses_v.items():
+                tensorboard_writer_valid.add_scalar("epoch/loss_" + k, v, epoch)
 
-        t1 = time.time()
+            t1 = time.time()
 
-        epochs_remaining = num_epochs - epoch
-        time_per_epoch = (t1 - t0_initial) / epoch
-        eta = epochs_remaining * time_per_epoch / 60
+            epochs_remaining = num_epochs - epoch
+            time_per_epoch = (t1 - t0_initial) / epoch
+            eta = epochs_remaining * time_per_epoch / 60
 
-        _logger.info(
-            f"Rank {rank}: epoch={epoch} / {num_epochs} "
-            + f"train_loss={losses_t['MET']:.4f} "
-            + f"valid_loss={losses_v['MET']:.4f} "
-            + f"stale={stale_epochs} "
-            + f"time={round((t1-t0)/60, 2)}m "
-            + f"eta={round(eta, 1)}m",
-            color="bold",
-        )
+            _logger.info(
+                f"Rank {rank}: epoch={epoch} / {num_epochs} "
+                + f"train_loss={losses_t['MET']:.4f} "
+                + f"valid_loss={losses_v['MET']:.4f} "
+                + f"stale={stale_epochs} "
+                + f"time={round((t1-t0)/60, 2)}m "
+                + f"eta={round(eta, 1)}m",
+                color="bold",
+            )
 
-        with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
-            pkl.dump(losses, f)
+            with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
+                pkl.dump(losses, f)
 
-        if tensorboard_writer_train:
-            tensorboard_writer_train.flush()
-        if tensorboard_writer_valid:
-            tensorboard_writer_valid.flush()
+            if tensorboard_writer_train:
+                tensorboard_writer_train.flush()
+            if tensorboard_writer_valid:
+                tensorboard_writer_valid.flush()
+
+    if world_size > 1:
+        dist.barrier()
 
     _logger.info(f"Done with training. Total training time on device {rank} is {round((time.time() - t0_initial)/60,3)}min")
 

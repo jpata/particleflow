@@ -6,17 +6,20 @@ Authors: Farouk Mokhtar
 
 import argparse
 import logging
+import os
 import pickle as pkl
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 import torch.nn as nn
 import yaml
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.PFDataset import get_interleaved_dataloaders
-from pyg.training_met import override_config, train_mlpf
-from pyg.utils import load_checkpoint, save_HPs
+from pyg.training_met import configure_model_trainable, override_config, train_mlpf
+from pyg.utils import count_parameters, load_checkpoint, save_HPs
 from utils import create_experiment_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -147,6 +150,8 @@ class DeepMET(nn.Module):
 def main():
     args = parser.parse_args()
 
+    world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
+
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
         config = yaml.safe_load(stream)
 
@@ -156,14 +161,15 @@ def main():
     assert config["load"], "Must pass an MLPF model to --load"
 
     if "best_weights" in Path(config["load"]).name:
-        loaddir = str(Path(config["load"]).parent)
+        backbone_dir = str(Path(config["load"]).parent)
     else:
         # the checkpoint is provided directly
-        loaddir = str(Path(config["load"]).parent.parent)
+        backbone_dir = str(Path(config["load"]).parent.parent)
 
+    # outdir is the directory of the finetuned model
     outdir = create_experiment_dir(
         prefix=(args.prefix or "") + "_",
-        experiments_dir=loaddir,
+        experiments_dir=backbone_dir,
     )
 
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
@@ -175,68 +181,145 @@ def main():
     _configLogger("mlpf", filename=logfile)
 
     if config["gpus"]:
-        assert torch.cuda.device_count() > 0, "--No gpu available"
+        assert (
+            world_size <= torch.cuda.device_count()
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
 
         torch.cuda.empty_cache()
+        if world_size > 1:
+            _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
+            for rank in range(world_size):
+                _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
-        rank = 0
-        _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            mp.spawn(
+                run,
+                args=(world_size, config, args, backbone_dir, outdir, logfile),
+                nprocs=world_size,
+                join=True,
+            )
+        elif world_size == 1:
+            rank = 0
+            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            run(rank, world_size, config, args, backbone_dir, outdir, logfile)
+
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
+        run(rank, world_size, config, args, backbone_dir, outdir, logfile)
 
-    _configLogger("mlpf", filename=logfile)
 
-    _logger.info("Initializing an MLPF backbone model", color="orange")
+def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
 
-    with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", filename=logfile)
+
+    use_cuda = rank != "cpu"
+
+    dtype = getattr(torch, config["dtype"])
+    _logger.info("using dtype={}".format(dtype))
+
+    if world_size > 1:
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+
+    # ----------------------- Backbone model -----------------------
+
+    with open(f"{backbone_dir}/model_kwargs.pkl", "rb") as f:
         mlpf_kwargs = pkl.load(f)
-    _logger.info("mlpf_kwargs: {}".format(mlpf_kwargs))
 
-    mlpf_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
+    if config["conv_type"] == "attention":
+        mlpf_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
 
     mlpf = MLPF(**mlpf_kwargs).to(torch.device(rank))
 
     if not args.reinitialize_backbone:
-        _logger.info("Loading the weights from a checkpoint", color="orange")
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+
+        for k in mlpf.state_dict().keys():
+            shp0 = mlpf.state_dict()[k].shape
+            shp1 = checkpoint["model_state_dict"][k].shape
+            if shp0 != shp1:
+                raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+
+        if (rank == 0) or (rank == "cpu"):
+            _logger.info("mlpf_kwargs: {}".format(mlpf_kwargs))
+            _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+
         mlpf = load_checkpoint(checkpoint, mlpf)
 
-    _logger.info(mlpf)
+    mlpf.to(rank)
+
+    if world_size > 1:
+        mlpf = torch.nn.SyncBatchNorm.convert_sync_batchnorm(mlpf)
+        mlpf = torch.nn.parallel.DistributedDataParallel(mlpf, device_ids=[rank])
+
+    configure_model_trainable(mlpf, [] if args.freeze_backbone else "all", True)
+    trainable_params, nontrainable_params, table = count_parameters(mlpf)
+
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(mlpf)
+        _logger.info(f"Backbone Trainable parameters: {trainable_params}")
+        _logger.info(f"Backbone Non-trainable parameters: {nontrainable_params}")
+        _logger.info(f"Backbone Total parameters: {trainable_params + nontrainable_params}")
+        _logger.info(table.to_string(index=False))
+
+    configure_model_trainable(mlpf, "all", True)
+    trainable_params, nontrainable_params, table = count_parameters(mlpf)
+
+    # ----------------------- Finetuned model -----------------------
 
     if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
-        deepmet_input_dim = mlpf.nn_pt.nn[0].in_features
+
+        deepmet_input_dim = (
+            mlpf.module.nn_pt.nn[0].in_features
+            if isinstance(mlpf, torch.nn.parallel.distributed.DistributedDataParallel)
+            else mlpf.nn_pt.nn[0].in_features
+        )
     else:
         deepmet_input_dim = 5 + 6  # p4 + PID
 
-    # define the deepmet model
-    deepmet = DeepMET(input_dim=deepmet_input_dim).to(torch.device(rank))
-    _logger.info(deepmet)
-
+    deepmet = DeepMET(input_dim=deepmet_input_dim)
     optimizer = (
         torch.optim.AdamW(deepmet.parameters(), lr=args.lr)
         if args.freeze_backbone
         else torch.optim.AdamW(list(deepmet.parameters()) + list(mlpf.parameters()), lr=args.lr)
     )
+    deepmet.to(rank)
+
+    if world_size > 1:
+        deepmet = torch.nn.SyncBatchNorm.convert_sync_batchnorm(deepmet)
+        deepmet = torch.nn.parallel.DistributedDataParallel(deepmet, device_ids=[rank])
+
+    configure_model_trainable(deepmet, "all", True)
+    trainable_params, nontrainable_params, table = count_parameters(deepmet)
+
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(deepmet)
+        _logger.info(f"DeepMET Trainable parameters: {trainable_params}")
+        _logger.info(f"DeepMET Non-trainable parameters: {nontrainable_params}")
+        _logger.info(f"DeepMET Total parameters: {trainable_params + nontrainable_params}")
+        _logger.info(table.to_string(index=False))
+
+    # ----------------------- Training -----------------------
 
     if args.train:
-        save_HPs(args, deepmet, mlpf_kwargs, outdir)  # save model_kwargs and hyperparameters
-        _logger.info("Creating experiment dir {}".format(outdir))
-        _logger.info(f"Model directory {outdir}", color="bold")
+        if (rank == 0) or (rank == "cpu"):
+            save_HPs(args, deepmet, mlpf_kwargs, outdir)  # save model_kwargs and hyperparameters
+            _logger.info("Creating experiment dir {}".format(outdir))
+            _logger.info(f"Model directory {outdir}", color="bold")
 
         loaders = get_interleaved_dataloaders(
-            1,
+            world_size,
             rank,
             config,
-            use_cuda=rank != "cpu",
+            use_cuda,
             use_ray=False,
         )
 
-        dtype = getattr(torch, config["dtype"])
-        _logger.info(f"using dtype={dtype}")
-
         train_mlpf(
             rank,
+            world_size,
             deepmet,
             mlpf,
             args.freeze_backbone,
@@ -247,7 +330,7 @@ def main():
             config["num_epochs"],
             config["patience"],
             outdir,
-            trainable=config["model"]["trainable"],
+            trainable="all",
             dtype=dtype,
             checkpoint_freq=config["checkpoint_freq"],
         )
@@ -256,5 +339,5 @@ def main():
 if __name__ == "__main__":
 
     # e.g.
-    # noqa: python mlpf/met_finetuning_pipeline.py --dataset clic --data-dir tensorflow_datasets --config parameters/pytorch/pyg-clic-ttbar.yaml --gpus 1 --prefix MLPF_test1 --num-epochs 10 --train --load /pfvol/experiments/MLPF_clic_backbone_pyg-clic_20240429_101112_971749/best_weights.pth --gpu-batch-multiplier 100 --num-workers 2 --prefetch-factor 2 --checkpoint-freq 1 --lr 1e-4 --use-latentX
+    # noqa: python mlpf/met_finetuning_pipeline.py --dataset clic --data-dir tensorflow_datasets --config parameters/pytorch/pyg-clic-ttbar.yaml  --gpus 2 --num-epochs 200 --patience 30 --lr 1e-4 --train --load /pfvol/experiments/MLPF_clic_backbone_pyg-clic_20240429_101112_971749/best_weights.pth --checkpoint-freq 1 --num-workers 2 --prefetch-factor 2 --prefix mlpf --use-latentX  --conv-type attention --attention-type math --dtype float32 --gpu-batch-multiplier 20
     main()
