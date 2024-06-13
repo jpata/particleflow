@@ -19,6 +19,13 @@ MLPF focuses on developing full event reconstruction based on computationally sc
   - results: https://doi.org/10.5281/zenodo.10567397
   - weights: https://huggingface.co/jpata/particleflow/tree/main/clic/clusters/v1.6
 
+### Open datasets:
+The following datasets are available to reproduce the studies. They include full Geant4 simulation and reconstruction based on the CLIC detector. We have no affiliation with the CLIC collaboration, therefore these datasets are to be used only for computational studies and come with no warranty.
+
+- MLPF-CLIC, raw data: https://zenodo.org/records/8260741 or https://www.coe-raise.eu/od-pfr
+- MLPF-CLIC, processed for ML, tracks and clusters: https://zenodo.org/records/8409592
+- MLPF-CLIC, processed for ML, tracks and hits: https://zenodo.org/records/8414225
+
 ## MLPF development in CMS
 
 <p float="left">

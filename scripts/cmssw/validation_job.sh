@@ -15,9 +15,9 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 # cd /scratch/persistent/joosep/CMSSW_14_1_0_pre3
 # eval `scram runtime -sh`
 # cd $PREVDIR
-#
-# export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
-# export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
+
+export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
+export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
 set -e
@@ -34,20 +34,25 @@ env
 
 if [ $JOBTYPE == "mlpf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
-        -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT,VALIDATION:@standardValidation+@miniAODValidation,DQM:@standardDQM+@ExtraHLT+@miniAODDQM+@nanoAODDQM \
-	--datatier RECOSIM,MINIAODSIM,DQMIO --nThreads 1 -n -1 --era $ERA \
-	--eventcontent RECOSIM,MINIAODSIM,DQM --geometry=$GEOM \
+        -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
+	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
-        -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT,VALIDATION:@standardValidation+@miniAODValidation,DQM:@standardDQM+@ExtraHLT+@miniAODDQM+@nanoAODDQM \
-	--datatier RECOSIM,MINIAODSIM,DQMIO --nThreads 1 -n -1 --era $ERA \
-	--eventcontent RECOSIM,MINIAODSIM,DQM --geometry=$GEOM \
+        -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
+	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root
 fi
 ls *.root
 
 mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
+
+#convert CMSSW EDM to pkl for easy plotting
+python3 $PREVDIR/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3.pkl
+
 cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+cp step3.pkl $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 
 rm -Rf $WORKDIR
