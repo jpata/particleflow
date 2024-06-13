@@ -3,7 +3,7 @@
 # Tallinn
 export MANUAL_DIR=/local/joosep/mlpf/cms/v3
 export DATA_DIR=/local/joosep/mlpf/cms/v3/tensorflow_datasets
-export IMG=/home/software/singularity/pytorch.simg:2024-03-11
+export IMG=/home/software/singularity/pytorch.simg:2024-05-21
 export PYTHONPATH=mlpf
 export KERAS_BACKEND=tensorflow
 export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
@@ -15,7 +15,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
 # CMD="singularity exec -B /media/joosep/data --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # CMS
-# export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
+export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
 # $CMD mlpf/heptfds/cms_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ttbar.log &
 # $CMD mlpf/heptfds/cms_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd.log &
 # $CMD mlpf/heptfds/cms_pf/ztt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log &

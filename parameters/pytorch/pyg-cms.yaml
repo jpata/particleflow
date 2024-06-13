@@ -112,6 +112,13 @@ train_dataset:
           version: 1.7.1
         cms_pf_ztt:
           version: 1.7.1
+        cms_pf_vbf:
+          version: 1.7.1
+    gun:
+      batch_size: 5
+      samples:
+        cms_pf_multi_particle_gun:
+          version: 1.7.1
 
 valid_dataset:
   cms:

@@ -93,6 +93,16 @@ vector<reco::PFCandidate>             "particleFlow"              ""            
 To test MLPF on higher statistics, it's not practical to redo full reconstruction before the particle flow step.
 We can follow a similar logic as the PF validation, where only the relevant PF sequences are rerun.
 
+We use the following datasets for this:
+```
+/RelValQCD_FlatPt_15_3000HS_14/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+/RelValTTbar_14TeV/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+/RelValQQToHToTauTau_14TeV/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+/RelValSingleEFlatPt2To100/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+/RelValSingleGammaFlatPt8To150/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+/RelValSinglePiFlatPt0p7To10/CMSSW_14_1_0_pre3-PU_140X_mcRun3_2024_realistic_v8_STD_2024_PU-v2/GEN-SIM-DIGI-RAW
+```
+
 #### MINIAOD with PF and MLPF
 The PF validation workflows can be run using the scripts in
 ```
@@ -104,18 +114,6 @@ cd particleflow
 ```
 
 The MINIAOD output will be in `$CMSSW_BASE/out/QCD_PU_mlpf` and `$CMSSW_BASE/out/QCD_PU_pf`.
-
-#### DQM plots
-Now the MINIAOD output can be analyzed with the DQM and PF validation scripts:
-```
-./scripts/cmssw/run_dqm.sh $CMSSW_BASE/out
-```
-
-The outputs will be in:
-```
-ls plots
-```
-and can be displayed in a web browser.
 
 ## Generating MLPF training samples
 TODO.
