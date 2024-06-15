@@ -335,6 +335,9 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
             checkpoint_freq=config["checkpoint_freq"],
         )
 
+    if world_size > 1:
+        dist.destroy_process_group()
+
 
 if __name__ == "__main__":
 
