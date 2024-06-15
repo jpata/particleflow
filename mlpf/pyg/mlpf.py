@@ -16,6 +16,8 @@ def get_activation(activation):
         act = nn.ReLU6
     elif activation == "leakyrelu":
         act = nn.LeakyReLU
+    elif activation == "gelu":
+        act = nn.GELU
     return act
 
 
@@ -45,9 +47,7 @@ class SelfAttentionLayer(nn.Module):
             self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(
-            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
-        )
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
@@ -90,9 +90,7 @@ class MambaLayer(nn.Module):
             expand=expand,
         )
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(
-            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
-        )
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):

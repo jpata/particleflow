@@ -14,7 +14,7 @@ samples = [
     ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     ("VBF_TuneCP5_14TeV_pythia8_cfi",                         1700000,1720010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 701000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 710000, "genjob_nopu.sh", outdir + "/nopu"),
     ("MultiParticlePFGun50_cfi",                               800000, 850000, "genjob_nopu.sh", outdir + "/nopu"),
 
     ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 910000, "genjob_nopu.sh", outdir + "/nopu"),

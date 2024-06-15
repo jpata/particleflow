@@ -7,16 +7,16 @@ NJOB=$4
 PREVDIR=`pwd`
 
 #change this as needed, need enough space for outputs
-OUTDIR=$CMSSW_BASE/out/
-WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
+# OUTDIR=$CMSSW_BASE/out/
+# WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
-# source /cvmfs/cms.cern.ch/cmsset_default.sh
-# cd /scratch/persistent/joosep/CMSSW_14_1_0_pre3
-# eval `scram runtime -sh`
-# cd $PREVDIR
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+cd /scratch/persistent/joosep/CMSSW_14_1_0_pre3
+eval `scram runtime -sh`
+cd $PREVDIR
 
-export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
+export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}_86694a5/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -52,6 +52,7 @@ mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
 #convert CMSSW EDM to pkl for easy plotting
 python3 $PREVDIR/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3.pkl
 
+cp step3_inRECOSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
 cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 cp step3.pkl $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 

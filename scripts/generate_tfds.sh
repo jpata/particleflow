@@ -31,7 +31,8 @@ export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
 # $CMD mlpf/heptfds/cms_pf/singleproton --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singleproton.log &
 # $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singletau.log &
 # $CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
-# wait
+$CMD mlpf/heptfds/cms_pf/ttbar_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_ttbar_nopu.log &
+wait
 
 # CLIC cluster-based
 # export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
