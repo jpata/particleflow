@@ -136,7 +136,7 @@ def train_and_valid(
         else:  # use the MLPF cands
             X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"]], axis=-1)
 
-        # X = X * msk_ymlpf.unsqueeze(-1)  # run DeepMET on actual particles (i.e. ignore the Nulls)
+        X = X * msk_ymlpf.unsqueeze(-1)  # run DeepMET on actual particles (i.e. ignore the Nulls)
 
         ###############################
         # sanity check
