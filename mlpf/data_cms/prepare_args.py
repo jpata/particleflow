@@ -16,7 +16,6 @@ samples = [
 
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 710000, "genjob_nopu.sh", outdir + "/nopu"),
     ("MultiParticlePFGun50_cfi",                               800000, 850000, "genjob_nopu.sh", outdir + "/nopu"),
-
     ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 910000, "genjob_nopu.sh", outdir + "/nopu"),
     ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1010000, "genjob_nopu.sh", outdir + "/nopu"),
     ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1110000, "genjob_nopu.sh", outdir + "/nopu"),
