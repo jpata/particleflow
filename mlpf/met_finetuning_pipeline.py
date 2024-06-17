@@ -111,9 +111,6 @@ def ffn(input_dim, output_dim, width, act, dropout):
         act(),
         torch.nn.LayerNorm(width),
         nn.Dropout(dropout),
-        act(),
-        torch.nn.LayerNorm(width),
-        nn.Dropout(dropout),
         nn.Linear(width, output_dim),
     )
 
