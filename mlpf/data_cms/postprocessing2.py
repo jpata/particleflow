@@ -69,7 +69,7 @@ elem_branches = [
     "phierror4",
 ]
 
-target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e"]
+target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "ispu"]
 
 
 def map_pdgid_to_candid(pdgid, charge):
@@ -169,63 +169,67 @@ def draw_event(g):
     return fig
 
 
+def compute_gen_met(g):
+    genpart = [elem for elem in g.nodes if (elem[0] == "tp" or elem[0] == "sc")]
+    px = np.sum([g.nodes[elem]["pt"]*np.cos(g.nodes[elem]["phi"]) for elem in genpart])
+    py = np.sum([g.nodes[elem]["pt"]*np.sin(g.nodes[elem]["phi"]) for elem in genpart])
+    met = np.sqrt(px**2 + py**2)
+    return met
+    
 def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
-    photons = [elem for elem in g.nodes if g.nodes[elem]["typ"] == pid and (elem[0] == "tp" or elem[0] == "sc")]
-    phot_eta = [g.nodes[node]["eta"] for node in photons]
-    phot_phi = [g.nodes[node]["phi"] for node in photons]
-    merge_pairs = []
+    print("merging closeby pid={}, met={:.2f}".format(pid, compute_gen_met(g)))
 
-    pairs_0, pairs_1 = deltar_pairs(phot_eta, phot_phi, deltar_cut)
-    merge_pairs = [(photons[p0], photons[p1]) for p0, p1 in zip(pairs_0, pairs_1)]
+    #run maximum 10 iterations
+    for it in range(10):
+        particles_to_merge = [elem for elem in g.nodes if g.nodes[elem]["typ"] == pid and (elem[0] == "tp" or elem[0] == "sc")]
+        part_eta = [g.nodes[node]["eta"] for node in particles_to_merge]
+        part_phi = [g.nodes[node]["phi"] for node in particles_to_merge]
 
-    for pair in merge_pairs:
-        if pair[0] in g.nodes and pair[1] in g.nodes:
-            lv = vector.obj(pt=0, eta=0, phi=0, E=0)
-            for gp in pair:
-                lv += vector.obj(
-                    pt=g.nodes[gp]["pt"],
-                    eta=g.nodes[gp]["eta"],
-                    phi=g.nodes[gp]["phi"],
-                    E=g.nodes[gp]["e"],
-                )
+        #find pairs that are close by in deltaR
+        #note that if there are >2 particles close by to each other, only the closest 2 get merged
+        merge_pairs = []
+        pairs_0, pairs_1 = deltar_pairs(part_eta, part_phi, deltar_cut)
 
-            g.nodes[pair[0]]["pt"] = lv.pt
-            g.nodes[pair[0]]["eta"] = lv.eta
-            g.nodes[pair[0]]["phi"] = lv.phi
-            g.nodes[pair[0]]["e"] = lv.energy
+        #no closeby particles, break
+        if len(pairs_0) == 0:
+            break
+        merge_pairs = [(particles_to_merge[p0], particles_to_merge[p1]) for p0, p1 in zip(pairs_0, pairs_1)]
 
-            # add edge weights from the deleted photon to the remaining photon
-            for suc in g.successors(pair[1]):
-                if (pair[0], suc) in g.edges:
-                    g.edges[(pair[0], suc)]["weight"] += g.edges[(pair[1], suc)]["weight"]
-            g.remove_nodes_from([pair[1]])
+        print("merging {} pairs".format(len(merge_pairs)))
+        for pair in merge_pairs:
+            if pair[0] in g.nodes and pair[1] in g.nodes:
+                lv = vector.obj(pt=0, eta=0, phi=0, E=0)
+                sum_pu = 0.0
+                sum_tot = 0.0
+                for gp in pair:
+                    lv += vector.obj(
+                        pt=g.nodes[gp]["pt"],
+                        eta=g.nodes[gp]["eta"],
+                        phi=g.nodes[gp]["phi"],
+                        E=g.nodes[gp]["e"],
+                    )
+                    sum_pu += g.nodes[gp]["ispu"] * g.nodes[gp]["e"]
+                    sum_tot += g.nodes[gp]["e"]
+
+                #now update the remaining particle properties
+                g.nodes[pair[0]]["pt"] = lv.pt
+                g.nodes[pair[0]]["eta"] = lv.eta
+                g.nodes[pair[0]]["phi"] = lv.phi
+                g.nodes[pair[0]]["e"] = lv.energy
+                g.nodes[pair[0]]["ispu"] = sum_pu/sum_tot
+
+                # add edge weights from the deleted particle to the remaining particle
+                for suc in g.successors(pair[1]):
+                    if (pair[0], suc) in g.edges:
+                        g.edges[(pair[0], suc)]["weight"] += g.edges[(pair[1], suc)]["weight"]
+                g.remove_nodes_from([pair[1]])
+    print("done merging, met={:.2f}".format(compute_gen_met(g)))
 
 
 def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     g = g.copy()
 
-    # remove genparticles that deposit less than a fraction of their energy
-    nodes_to_remove = []
-    for node in g.nodes:
-        if node[0] == "sc" or node[0] == "tp":
-            sw = 0.0
-            for edge in g.edges(node):
-                sw += g.edges[edge]["weight"]
-            if sw / g.nodes[node]["e"] < node_energy_threshold:
-                nodes_to_remove += [node]
-    g.remove_nodes_from(nodes_to_remove)
-
-    # for each element, remove the incoming edge where the caloparticle deposited less than a threshold of it's energy
-    edges_to_remove = []
-    for node in g.nodes:
-        if node[0] == "elem":
-            # remove edges that don't contribute above a threshold
-            ew = [((gen, node), g.edges[gen, node]["weight"]) for gen in g.predecessors(node)]
-            ew = sorted(ew, key=lambda x: x[1], reverse=True)
-            for edge, weight in ew:
-                if weight / g.nodes[edge[0]]["e"] < edge_energy_threshold:
-                    edges_to_remove += [edge]
-    g.remove_edges_from(edges_to_remove)
+    print("start cleanup, met={:.2f}".format(compute_gen_met(g)))
 
     # remove calopart/trackingpart not linked to any elements
     # as these are not reconstructable in principle
@@ -236,6 +240,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
             if deg == 0:
                 nodes_to_remove += [node]
     g.remove_nodes_from(nodes_to_remove)
+    print("unlinked cleanup, met={:.2f}".format(compute_gen_met(g)))
 
     # For each truth particle, compute the energy in tracks or calorimeter clusters
     for node in g.nodes:
@@ -344,6 +349,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     merge_closeby_particles(g, 1)
     merge_closeby_particles(g, 2)
 
+    print("cleanup done, met={:.2f}".format(compute_gen_met(g)))
     return g
 
 
@@ -476,30 +482,11 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
         lv = vector.obj(x=0, y=0, z=0, t=0)
         if len(genparticles) > 0:
 
-            # print(
-            #     "elem type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(
-            #         g.nodes[elem]["typ"],
-            #         g.nodes[elem]["e"],
-            #         g.nodes[elem]["eta"],
-            #         g.nodes[elem]["phi"],
-            #         g.nodes[elem]["charge"],
-            #     )
-            # )
-            # for gp in genparticles:
-            #     print(
-            #         "  gp type={} E={:.2f} eta={:.2f} phi={:.2f} q={} w={:.2f}".format(
-            #             g.nodes[gp]["typ"],
-            #             g.nodes[gp]["e"],
-            #             g.nodes[gp]["eta"],
-            #             g.nodes[gp]["phi"],
-            #             g.nodes[gp]["charge"],
-            #             g.edges[(gp, elem)]["weight"],
-            #         )
-            #     )
-
             pid = g.nodes[genparticles[0]]["typ"]
             charge = g.nodes[genparticles[0]]["charge"]
 
+            sum_pu = 0.0
+            sum_tot = 0.0
             for gp in genparticles:
                 lv += vector.obj(
                     pt=g.nodes[gp]["pt"],
@@ -507,6 +494,8 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                     phi=g.nodes[gp]["phi"],
                     e=g.nodes[gp]["e"],
                 )
+                sum_pu += g.nodes[gp]["ispu"] * g.nodes[gp]["e"]
+                sum_tot += g.nodes[gp]["e"]
 
             # remap PID in case of HCAL cluster to neutral
             if elem_type == 5 and (pid == 22 or pid == 11):
@@ -536,12 +525,17 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                 "px": lv.x,
                 "py": lv.y,
                 "pz": lv.z,
+                "ispu": sum_pu/sum_tot,
                 "charge": charge if pid in [211, 11, 13] else 0,
             }
             # print("  mlpf: type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(pid, lv.t, lv.eta, lv.phi, gp["charge"]))
 
             for j in range(len(target_branches)):
                 ygen[target_branches[j]][ielem] = gp[target_branches[j]]
+    px = np.sum(ygen["pt"]*ygen["cos_phi"])
+    py = np.sum(ygen["pt"]*ygen["sin_phi"])
+    met = np.sqrt(px**2 + py**2)
+    print("normalized, met={:.2f}".format(met))
 
     return Xelem, ycand, ygen
 
@@ -713,7 +707,7 @@ def make_graph(ev, iev):
             e=trackingparticle_e[iobj],
             eta=trackingparticle_eta[iobj],
             phi=trackingparticle_phi[iobj],
-            ispu=trackingparticle_ev[iobj] != 0,
+            ispu=float(trackingparticle_ev[iobj] != 0),
         )
     for iobj in range(len(caloparticle_pid)):
         g.add_node(
@@ -724,7 +718,7 @@ def make_graph(ev, iev):
             e=caloparticle_e[iobj],
             eta=caloparticle_eta[iobj],
             phi=caloparticle_phi[iobj],
-            ispu=caloparticle_ev[iobj] != 0,
+            ispu=float(caloparticle_ev[iobj] != 0),
         )
 
     for iobj in range(len(pfcandidate_pdgid)):
@@ -737,6 +731,7 @@ def make_graph(ev, iev):
             sin_phi=np.sin(pfcandidate_phi[iobj]),
             cos_phi=np.cos(pfcandidate_phi[iobj]),
             charge=get_charge(pfcandidate_pdgid[iobj]),
+            ispu=0.0,
         )
 
     trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
@@ -762,6 +757,8 @@ def make_graph(ev, iev):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("sc", sc), ("elem", elem), weight=c)
 
+    print("make_graph init, met={:.2f}".format(compute_gen_met(g)))
+
     # merge caloparticles and trackingparticles that refer to the same particle
     nodes_to_remove = []
     for idx_sc, idx_tp in enumerate(caloparticle_idx_trackingparticle):
@@ -775,6 +772,8 @@ def make_graph(ev, iev):
             g.nodes[("tp", idx_tp)]["idx_sc"] = idx_sc
             nodes_to_remove += [("sc", idx_sc)]
     g.remove_nodes_from(nodes_to_remove)
+
+    print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
 
     element_to_candidate_first = ev["element_to_candidate.first"][iev]
     element_to_candidate_second = ev["element_to_candidate.second"][iev]
@@ -814,7 +813,7 @@ def process(args):
     all_data = []
     ev = tt.arrays(library="np")
     for iev in tqdm.tqdm(events_to_process):
-
+        print("processing iev={}, met={:.2f}".format(iev, ev["genmet_pt"][iev][0]))
         g = make_graph(ev, iev)
         g = cleanup_graph(g)
 
@@ -834,12 +833,24 @@ def process(args):
         feats = ["typ", "pt", "eta", "phi", "e"]
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
+        genjet_pt = ev["genjet_pt"][iev]
+        genjet_eta = ev["genjet_eta"][iev]
+        genjet_phi = ev["genjet_phi"][iev]
+        genjet_mass = ev["genjet_mass"][iev]
+        genjet = np.stack([genjet_pt, genjet_eta, genjet_phi, genjet_mass], axis=-1)
+
+        genmet_pt = ev["genmet_pt"][iev]
+        genmet_phi = ev["genmet_phi"][iev]
+        genmet = np.stack([genmet_pt, genmet_phi], axis=-1)
+
         if args.save_normalized_table:
             data = {
                 "Xelem": Xelem,
                 "ycand": ycand,
                 "ygen": ygen,
                 "pythia": arr_ptcls_pythia,
+                "genjet": genjet,
+                "genmet": genmet,
             }
 
         if args.save_full_graph:
