@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import os
 
-outdir = "/local/joosep/mlpf/cms/v3"
+outdir = "/local/joosep/mlpf/cms/v3_1"
 
 samples = [
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100100, "genjob_pu55to75.sh", outdir + "/pu55to75"),

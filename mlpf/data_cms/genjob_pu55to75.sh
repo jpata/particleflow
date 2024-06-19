@@ -6,7 +6,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3/pu55to75/
+OUTDIR=/local/joosep/mlpf/cms/v3_1/pu55to75/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -22,7 +22,7 @@ mkdir -p $OUTDIR
 PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
-N=20
+N=50
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
@@ -78,8 +78,8 @@ bzip2 -z pfntuple_${SEED}.pkl
 cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
 #copy ROOT outputs
-cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
-cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
+#cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+#cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
 rm -Rf $WORKDIR

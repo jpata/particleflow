@@ -6,7 +6,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3/nopu/
+OUTDIR=/local/joosep/mlpf/cms/v3_1/nopu/
 CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -22,7 +22,7 @@ mkdir -p $OUTDIR
 PILEUP=NoPileUp
 PILEUP_INPUT=
 
-N=100
+N=200
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -80,8 +80,8 @@ bzip2 -z pfntuple_${SEED}.pkl
 cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
 #copy ROOT outputs
-cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
-cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
+#cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+#cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
 rm -Rf $WORKDIR
