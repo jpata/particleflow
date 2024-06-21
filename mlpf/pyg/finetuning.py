@@ -41,8 +41,8 @@ def train_and_valid(
     world_size,
     deepmet,
     mlpf,
-    freeze_backbone,
-    use_latentX,
+    backbone_mode,
+    downstream_input,
     optimizer,
     train_loader,
     valid_loader,
@@ -58,7 +58,7 @@ def train_and_valid(
     train_or_valid = "train" if is_train else "valid"
     _logger.info(f"Initiating epoch #{epoch} {train_or_valid} run on device rank={rank}", color="red")
 
-    configure_model_trainable(mlpf, trainable, False if freeze_backbone else is_train)
+    configure_model_trainable(mlpf, trainable, False if backbone_mode == "freeze" else is_train)
     configure_model_trainable(deepmet, trainable, is_train)
 
     epoch_loss = {}  # this one will keep accumulating `train_loss` and then return the average
@@ -80,7 +80,7 @@ def train_and_valid(
 
     loss = {}  # this one is redefined every iteration
 
-    if use_latentX:  # must set forward hooks to retrieve the intermediate latent representations
+    if downstream_input == "latents":  # must set forward hooks to retrieve the intermediate latent representations
         latent_reps = {}
 
         def get_latent_reps(name):
@@ -99,51 +99,68 @@ def train_and_valid(
     for itrain, batch in iterator:
 
         batch = batch.to(rank, non_blocking=True)
+
         ygen = unpack_target(batch.ygen)
+        ycand = unpack_target(batch.ycand)
 
         # ----------------------- Run backbone inference -----------------------
 
-        with torch.autocast(device_type="cuda", dtype=dtype, enabled=device_type == "cuda"):
-            if is_train and not freeze_backbone:
-                ymlpf = mlpf(batch.X, batch.mask)
-            else:
-                with torch.no_grad():
+        if downstream_input == "pfcands":  # no need to use the backbone
+
+            msk_ycand = ycand["cls_id"] != 0
+            reco_px = (ycand["pt"] * ycand["cos_phi"]) * msk_ycand
+            reco_py = (ycand["pt"] * ycand["sin_phi"]) * msk_ycand
+
+            X = torch.cat([ycand["momentum"], ycand["cls_id_onehot"]], axis=-1)
+            X = X * msk_ycand.unsqueeze(-1)  # run downstream on actual particles (i.e. ignore the Nulls)
+
+        else:
+            with torch.autocast(device_type="cuda", dtype=dtype, enabled=device_type == "cuda"):
+                if is_train and not backbone_mode == "freeze":
                     ymlpf = mlpf(batch.X, batch.mask)
+                else:
+                    with torch.no_grad():
+                        ymlpf = mlpf(batch.X, batch.mask)
 
-        ymlpf = unpack_predictions(ymlpf)
+            ymlpf = unpack_predictions(ymlpf)
 
-        msk_ymlpf = ymlpf["cls_id"] != 0
-        pred_px = (ymlpf["pt"] * ymlpf["cos_phi"]) * msk_ymlpf
-        pred_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
+            msk_ymlpf = ymlpf["cls_id"] != 0
+            reco_px = (ymlpf["pt"] * ymlpf["cos_phi"]) * msk_ymlpf
+            reco_py = (ymlpf["pt"] * ymlpf["sin_phi"]) * msk_ymlpf
 
-        if use_latentX:  # use the latent representations
-            for layer in latent_reps:
-                if freeze_backbone:
-                    latent_reps[layer] = latent_reps[layer].detach()
+            if downstream_input == "latents":  # use the latent representations
+                for layer in latent_reps:
+                    if backbone_mode == "freeze":
+                        latent_reps[layer] = latent_reps[layer].detach()
 
-                if "conv" in layer:
-                    latent_reps[layer] *= batch.mask.unsqueeze(-1)
+                    if "conv" in layer:
+                        latent_reps[layer] *= batch.mask.unsqueeze(-1)
 
-            X = torch.cat(
-                [
-                    batch.X,  # 17
-                    latent_reps["conv_reg2"],  # 256
-                    latent_reps["nn_id"],  # 6
-                ],
-                axis=-1,
-            )
+                X = torch.cat(
+                    [
+                        batch.X,  # 17
+                        latent_reps["conv_reg2"],  # 256
+                        latent_reps["nn_id"],  # 6
+                    ],
+                    axis=-1,
+                )
 
-        else:  # use the MLPF cands
-            X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"]], axis=-1)
+            elif downstream_input == "mlpfcands":  # use the MLPF cands
+                X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"]], axis=-1)
 
-        X = X * msk_ymlpf.unsqueeze(-1)  # run DeepMET on actual particles (i.e. ignore the Nulls)
+            else:
+                raise Exception(
+                    "Must choose one of the following choices for --downstream-input: ['pfcands', 'mlpfcands', 'latents]"
+                )
+
+            X = X * msk_ymlpf.unsqueeze(-1)  # run downstream on actual particles (i.e. ignore the Nulls)
 
         ###############################
         # sanity check
-        if is_train and not freeze_backbone:
-            assert X.requires_grad is True, "--freeze-backbone is not provided but the MLPF backbone is frozen."
+        if is_train and not backbone_mode == "freeze":
+            assert X.requires_grad is True, "--backbone_mode is not 'freeze' but the MLPF backbone is frozen."
         else:
-            assert X.requires_grad is False, "--freeze-backbone is provided but the MLPF backbone is not frozen."
+            assert X.requires_grad is False, "--backbone_mode is 'freeze' but the MLPF backbone is not frozen."
         ###############################
 
         # ----------------------- Run finetuning -----------------------
@@ -154,10 +171,10 @@ def train_and_valid(
             with torch.no_grad():
                 wx, wy = deepmet(X)
 
-        pred_met_x = torch.sum(wx * pred_px, axis=1)
-        pred_met_y = torch.sum(wy * pred_py, axis=1)
+        pred_met_x = torch.sum(wx * reco_px, axis=1)
+        pred_met_y = torch.sum(wy * reco_py, axis=1)
 
-        # genMET to compute the loss
+        # Gen(MET) to compute the loss
         msk_gen = ygen["cls_id"] != 0
         gen_px = (ygen["pt"] * ygen["cos_phi"]) * msk_gen
         gen_py = (ygen["pt"] * ygen["sin_phi"]) * msk_gen
@@ -166,16 +183,14 @@ def train_and_valid(
         true_met_y = torch.sum(gen_py, axis=1)
 
         if is_train:
-
             loss["MET"] = torch.nn.functional.huber_loss(true_met_x, pred_met_x) + torch.nn.functional.huber_loss(
                 true_met_y, pred_met_y
             )
             for param in deepmet.parameters():
                 param.grad = None
 
-            if not freeze_backbone:
-                for param in mlpf.parameters():
-                    param.grad = None
+            for param in mlpf.parameters():
+                param.grad = None
 
             loss["MET"].backward()
             optimizer.step()
@@ -186,13 +201,13 @@ def train_and_valid(
                     true_met_y, pred_met_y
                 )
 
-        # monitor the MLPF (and PF) MET loss
+        # monitor the MLPF and PF MET loss
         with torch.no_grad():
-            loss["MET_mlpf"] = torch.nn.functional.huber_loss(
-                true_met_x, torch.sum(pred_px, axis=1)
-            ) + torch.nn.functional.huber_loss(true_met_y, torch.sum(pred_py, axis=1))
+            if --downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
+                loss["MET_mlpf"] = torch.nn.functional.huber_loss(
+                    true_met_x, torch.sum(reco_px, axis=1)
+                ) + torch.nn.functional.huber_loss(true_met_y, torch.sum(reco_py, axis=1))
 
-            ycand = unpack_target(batch.ycand)
             msk_ycand = ycand["cls_id"] != 0
             cand_px = (ycand["pt"] * ycand["cos_phi"]) * msk_ycand
             cand_py = (ycand["pt"] * ycand["sin_phi"]) * msk_ycand
@@ -207,6 +222,7 @@ def train_and_valid(
             epoch_loss[loss_] += loss[loss_].detach()
 
     num_data = torch.tensor(len(data_loader), device=rank)
+
     # sum up the number of steps from all workers
     if world_size > 1:
         torch.distributed.all_reduce(num_data)
@@ -223,13 +239,13 @@ def train_and_valid(
     return epoch_loss
 
 
-def train_mlpf(
+def finetune_mlpf(
     rank,
     world_size,
     deepmet,
     mlpf,
-    freeze_backbone,
-    use_latentX,
+    backbone_mode,
+    downstream_input,
     optimizer,
     train_loader,
     valid_loader,
@@ -278,8 +294,8 @@ def train_mlpf(
             world_size,
             deepmet,
             mlpf,
-            freeze_backbone,
-            use_latentX,
+            backbone_mode,
+            downstream_input,
             optimizer,
             train_loader=train_loader,
             valid_loader=valid_loader,
@@ -294,8 +310,8 @@ def train_mlpf(
             world_size,
             deepmet,
             mlpf,
-            freeze_backbone,
-            use_latentX,
+            backbone_mode,
+            downstream_input,
             optimizer,
             train_loader=train_loader,
             valid_loader=valid_loader,

@@ -18,9 +18,14 @@ import yaml
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.PFDataset import get_interleaved_dataloaders
-from pyg.training_met import configure_model_trainable, override_config, train_mlpf
 from pyg.utils import count_parameters, load_checkpoint, save_HPs
 from utils import create_experiment_dir
+
+from mlpf.pyg.finetuning import (
+    configure_model_trainable,
+    finetune_mlpf,
+    override_config,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -87,14 +92,19 @@ parser.add_argument(
 
 # finetuning args
 parser.add_argument(
-    "--use-latentX", action="store_true", default=None, help="if True will use the latent representations of MLPF"
+    "--downstream-input",
+    type=str,
+    default="futures",
+    choices=["pfcands", "mlpfcands", "latents"],
+    help="input to the downstream",
 )
 
 parser.add_argument(
-    "--freeze-backbone",
-    action="store_true",
-    default=None,
-    help="if True will freeze the MLPF backbone before the downstream training",
+    "--backbone-mode",
+    type=str,
+    default="futures",
+    choices=["freeze", "float"],
+    help="if freeze: will freeze the MLPF backbone before the downstream training, else float",
 )
 
 parser.add_argument(
@@ -254,7 +264,7 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
         mlpf = torch.nn.SyncBatchNorm.convert_sync_batchnorm(mlpf)
         mlpf = torch.nn.parallel.DistributedDataParallel(mlpf, device_ids=[rank])
 
-    configure_model_trainable(mlpf, [] if args.freeze_backbone else "all", True)
+    configure_model_trainable(mlpf, [] if args.backbone_mode == "freeze" else "all", True)
     trainable_params, nontrainable_params, table = count_parameters(mlpf)
 
     if (rank == 0) or (rank == "cpu"):
@@ -269,7 +279,9 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
 
     # ----------------------- Finetuned model -----------------------
 
-    if args.use_latentX:  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
+    if (
+        args.downstream_input == "latents"
+    ):  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
 
         deepmet_input_dim = (
             mlpf.module.nn_pt.nn[0].in_features
@@ -282,7 +294,7 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
     deepmet = DeepMET(input_dim=deepmet_input_dim)
     optimizer = (
         torch.optim.AdamW(deepmet.parameters(), lr=args.lr)
-        if args.freeze_backbone
+        if args.backbone_mode == "freeze"
         else torch.optim.AdamW(list(deepmet.parameters()) + list(mlpf.parameters()), lr=args.lr)
     )
     deepmet.to(rank)
@@ -317,13 +329,13 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
             use_ray=False,
         )
 
-        train_mlpf(
+        finetune_mlpf(
             rank,
             world_size,
             deepmet,
             mlpf,
-            args.freeze_backbone,
-            args.use_latentX,
+            args.args.backbone_mode,
+            args.downstream_input,
             optimizer,
             loaders["train"],
             loaders["valid"],
