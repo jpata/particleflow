@@ -15,17 +15,12 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
 import yaml
+from pyg.finetuning import configure_model_trainable, finetune_mlpf, override_config
 from pyg.logger import _configLogger, _logger
 from pyg.mlpf import MLPF
 from pyg.PFDataset import get_interleaved_dataloaders
 from pyg.utils import count_parameters, load_checkpoint, save_HPs
 from utils import create_experiment_dir
-
-from mlpf.pyg.finetuning import (
-    configure_model_trainable,
-    finetune_mlpf,
-    override_config,
-)
 
 logging.basicConfig(level=logging.INFO)
 
