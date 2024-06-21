@@ -274,17 +274,21 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
 
     # ----------------------- Finetuned model -----------------------
 
-    if (
-        args.downstream_input == "latents"
-    ):  # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
-
+    if args.downstream_input == "latents":
+        # the dimension will be the same as the input to one of the regression MLPs (e.g. pt)
         deepmet_input_dim = (
             mlpf.module.nn_pt.nn[0].in_features
             if isinstance(mlpf, torch.nn.parallel.distributed.DistributedDataParallel)
             else mlpf.nn_pt.nn[0].in_features
         )
+    elif args.downstream_input == "mlpfcands":
+        deepmet_input_dim = 5 + 6  # p4 + 6 PID probabilities
+    elif args.downstream_input == "pfcands":
+        deepmet_input_dim = 5 + 1  # p4 + PID
     else:
-        deepmet_input_dim = 5 + 6  # p4 + PID
+        raise Exception(
+            "Must choose one of the following choices for --downstream-input: ['pfcands', 'mlpfcands', 'latents]"
+        )
 
     deepmet = DeepMET(input_dim=deepmet_input_dim)
     optimizer = (

@@ -111,7 +111,7 @@ def train_and_valid(
             reco_px = (ycand["pt"] * ycand["cos_phi"]) * msk_ycand
             reco_py = (ycand["pt"] * ycand["sin_phi"]) * msk_ycand
 
-            X = torch.cat([ycand["momentum"], ycand["cls_id_onehot"]], axis=-1)
+            X = torch.cat([ycand["momentum"], ycand["cls_id"]], axis=-1)
             X = X * msk_ycand.unsqueeze(-1)  # run downstream on actual particles (i.e. ignore the Nulls)
 
         else:
@@ -147,11 +147,6 @@ def train_and_valid(
 
             elif downstream_input == "mlpfcands":  # use the MLPF cands
                 X = torch.cat([ymlpf["momentum"], ymlpf["cls_id_onehot"]], axis=-1)
-
-            else:
-                raise Exception(
-                    "Must choose one of the following choices for --downstream-input: ['pfcands', 'mlpfcands', 'latents]"
-                )
 
             X = X * msk_ymlpf.unsqueeze(-1)  # run downstream on actual particles (i.e. ignore the Nulls)
 
