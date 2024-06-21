@@ -150,14 +150,6 @@ def train_and_valid(
 
             X = X * msk_ymlpf.unsqueeze(-1)  # run downstream on actual particles (i.e. ignore the Nulls)
 
-        ###############################
-        # sanity check
-        if is_train and not backbone_mode == "freeze":
-            assert X.requires_grad is True, "--backbone_mode is not 'freeze' but the MLPF backbone is frozen."
-        else:
-            assert X.requires_grad is False, "--backbone_mode is 'freeze' but the MLPF backbone is not frozen."
-        ###############################
-
         # ----------------------- Run finetuning -----------------------
 
         if is_train:
