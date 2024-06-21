@@ -97,7 +97,6 @@ parser.add_argument(
 parser.add_argument(
     "--backbone-mode",
     type=str,
-    required=True,
     choices=["freeze", "float"],
     help="if freeze: will freeze the MLPF backbone before the downstream training, else float",
 )
