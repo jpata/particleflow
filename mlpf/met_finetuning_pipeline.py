@@ -94,7 +94,7 @@ parser.add_argument(
 parser.add_argument(
     "--downstream-input",
     type=str,
-    default="futures",
+    required=True,
     choices=["pfcands", "mlpfcands", "latents"],
     help="input to the downstream",
 )
@@ -102,7 +102,7 @@ parser.add_argument(
 parser.add_argument(
     "--backbone-mode",
     type=str,
-    default="futures",
+    required=True,
     choices=["freeze", "float"],
     help="if freeze: will freeze the MLPF backbone before the downstream training, else float",
 )
