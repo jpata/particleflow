@@ -263,11 +263,12 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
     trainable_params, nontrainable_params, table = count_parameters(mlpf)
 
     if (rank == 0) or (rank == "cpu"):
-        _logger.info(mlpf)
-        _logger.info(f"Backbone Trainable parameters: {trainable_params}")
-        _logger.info(f"Backbone Non-trainable parameters: {nontrainable_params}")
-        _logger.info(f"Backbone Total parameters: {trainable_params + nontrainable_params}")
-        _logger.info(table.to_string(index=False))
+        if args.downstream_input != "pfcands":
+            _logger.info(mlpf)
+            _logger.info(f"Backbone Trainable parameters: {trainable_params}")
+            _logger.info(f"Backbone Non-trainable parameters: {nontrainable_params}")
+            _logger.info(f"Backbone Total parameters: {trainable_params + nontrainable_params}")
+            _logger.info(table.to_string(index=False))
 
     configure_model_trainable(mlpf, "all", True)
     trainable_params, nontrainable_params, table = count_parameters(mlpf)

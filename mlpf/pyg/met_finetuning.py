@@ -198,7 +198,7 @@ def train_and_valid(
 
         # monitor the MLPF and PF MET loss
         with torch.no_grad():
-            if --downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
+            if downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
                 loss["MET_mlpf"] = torch.nn.functional.huber_loss(
                     true_met_x, torch.sum(reco_px, axis=1)
                 ) + torch.nn.functional.huber_loss(true_met_y, torch.sum(reco_py, axis=1))
