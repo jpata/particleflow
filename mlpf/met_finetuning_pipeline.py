@@ -329,7 +329,7 @@ def run(rank, world_size, config, args, backbone_dir, outdir, logfile):
             world_size,
             deepmet,
             mlpf,
-            args.args.backbone_mode,
+            args.backbone_mode,
             args.downstream_input,
             optimizer,
             loaders["train"],
