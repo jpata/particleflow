@@ -271,7 +271,9 @@ def finetune_mlpf(
 
     t0_initial = time.time()
 
-    losses_of_interest = ["MET", "MET_mlpf", "MET_PF"]
+    losses_of_interest = ["MET", "MET_PF"]
+    if downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
+        losses_of_interest += ["MET_mlpf"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
