@@ -6,8 +6,8 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_1/pu55to75/
-CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
+OUTDIR=/local/joosep/mlpf/cms/v3_2/pu55to75/
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
