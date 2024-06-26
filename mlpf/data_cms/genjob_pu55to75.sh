@@ -24,6 +24,7 @@ PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
 N=50
 
+env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 cd $CMSSWDIR
@@ -31,15 +32,17 @@ eval `scramv1 runtime -sh`
 which python
 which python3
 
+env
+
 cd $WORKDIR
 
 #Generate the MC
 cmsDriver.py $SAMPLE \
-  --conditions auto:phase1_2021_realistic \
+  --conditions auto:phase1_2023_realistic \
   -n $N \
-  --era Run3 \
+  --era Run3_2023 \
   --eventcontent FEVTDEBUGHLT \
-  -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
+  -s GEN,SIM,DIGI:pdigi_valid,L1,DIGI2RAW,HLT:@relval2023 \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
@@ -51,8 +54,8 @@ cmsDriver.py $SAMPLE \
 
 #Run the reco sequences
 cmsDriver.py step3 \
-  --conditions auto:phase1_2021_realistic \
-  --era Run3 \
+  --conditions auto:phase1_2023_realistic \
+  --era Run3_2023 \
   -n -1 \
   --eventcontent FEVTDEBUGHLT \
   --runUnscheduled \

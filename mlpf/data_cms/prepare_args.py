@@ -6,8 +6,8 @@ import os
 outdir = "/local/joosep/mlpf/cms/v3_2"
 
 samples = [
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 701000, "genjob_nopu.sh", outdir + "/nopu"),
+#    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           701000, 705000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 120010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 220010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 320010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
