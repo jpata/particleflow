@@ -6,8 +6,8 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_1/nopu/
-CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
+OUTDIR=/local/joosep/mlpf/cms/v3_2/nopu/
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -38,11 +38,11 @@ cd $WORKDIR
 
 #Generate the MC
 cmsDriver.py $SAMPLE \
-  --conditions auto:phase1_2021_realistic \
+  --conditions auto:phase1_2023_realistic \
   -n $N \
-  --era Run3 \
+  --era Run3_2023 \
   --eventcontent FEVTDEBUGHLT \
-  -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
+  -s GEN,SIM,DIGI:pdigi_valid,L1,DIGI2RAW,HLT:@relval2023 \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
@@ -53,8 +53,8 @@ cmsDriver.py $SAMPLE \
 
 #Run the reco sequences
 cmsDriver.py step3 \
-  --conditions auto:phase1_2021_realistic \
-  --era Run3 \
+  --conditions auto:phase1_2023_realistic \
+  --era Run3_2023 \
   -n -1 \
   --eventcontent FEVTDEBUGHLT \
   --runUnscheduled \

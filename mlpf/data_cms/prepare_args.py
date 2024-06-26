@@ -3,11 +3,11 @@ from __future__ import print_function
 
 import os
 
-outdir = "/local/joosep/mlpf/cms/v3_1"
+outdir = "/local/joosep/mlpf/cms/v3_2"
 
 samples = [
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100100, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 700100, "genjob_nopu.sh", outdir + "/nopu"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 701000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 120010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 220010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 320010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
@@ -30,12 +30,12 @@ samples = [
 
 if __name__ == "__main__":
 
-    for s, seed0, seed1, script, this_outdir in samples:
-        os.makedirs(this_outdir + "/" + s + "/raw", exist_ok=True)
-        os.makedirs(this_outdir + "/" + s + "/root", exist_ok=True)
+    for samp, seed0, seed1, script, this_outdir in samples:
+        os.makedirs(this_outdir + "/" + samp + "/raw", exist_ok=True)
+        os.makedirs(this_outdir + "/" + samp + "/root", exist_ok=True)
 
         for seed in range(seed0, seed1):
-            p = this_outdir + "/" + s + "/raw/pfntuple_{}.pkl.bz2".format(seed)
+            p = this_outdir + "/" + samp + "/raw/pfntuple_{}.pkl.bz2".format(seed)
             #if not os.path.isfile(p):
             if True:
-                print("sbatch {} {} {}".format(script, s, seed))
+                print(f"sbatch scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")
