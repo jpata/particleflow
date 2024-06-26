@@ -113,18 +113,21 @@ Y_FEATURES = [
     "sin_phi",
     "cos_phi",
     "e",
-    "jet_idx",
+    "ispu",
 ]
 
 
-def prepare_data_cms(fn, with_jet_idx=True):
+def prepare_data_cms(fn, with_jet_idx=False):
     Xs = []
     ygens = []
     ycands = []
+    genmets = []
+    genjets = []
 
     # prepare jet definition and min jet pt for clustering gen jets
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-    min_jet_pt = 5.0  # GeV
+    if with_jet_idx:
+        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+        min_jet_pt = 5.0  # GeV
 
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
@@ -135,6 +138,8 @@ def prepare_data_cms(fn, with_jet_idx=True):
         Xelem = event["Xelem"]
         ygen = event["ygen"]
         ycand = event["ycand"]
+        genmet = event["genmet"][0][0]
+        genjet = event["genjet"]
 
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
@@ -176,49 +181,13 @@ def prepare_data_cms(fn, with_jet_idx=True):
         ycand = ycand_flat
         ygen = ygen_flat
 
-        if with_jet_idx:
-            # prepare gen candidates for clustering
-            cls_id = ygen[..., 0]
-            valid = cls_id != 0
-            # save mapping of index after masking -> index before masking as numpy array
-            # inspired from:
-            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-            cumsum = np.cumsum(valid) - 1
-            _, index_mapping = np.unique(cumsum, return_index=True)
-
-            pt = ygen[valid, Y_FEATURES.index("pt")]
-            eta = ygen[valid, Y_FEATURES.index("eta")]
-            phi = np.arctan2(
-                ygen[valid, Y_FEATURES.index("sin_phi")],
-                ygen[valid, Y_FEATURES.index("cos_phi")],
-            )
-            e = ygen[valid, Y_FEATURES.index("e")]
-            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
-
-            # cluster jets, sort jet indices in descending order by pt
-            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
-            # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
-
-            # add index information to ygen and ycand
-            # index jets in descending order by pt starting from 1:
-            # 0 is null (unclustered),
-            # 1 is 1st highest-pt jet,
-            # 2 is 2nd highest-pt jet, ...
-            for jet_idx in sorted_jet_idx:
-                jet_constituents = [
-                    index_mapping[idx] for idx in constituent_idx[jet_idx]
-                ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
-
         Xs.append(X)
         ygens.append(ygen)
         ycands.append(ycand)
+        genmets.append(genmet)
+        genjets.append(genjet)
 
-    return Xs, ygens, ycands
+    return Xs, ygens, ycands, genmets, genjets
 
 
 def split_sample(path, test_frac=0.8):
@@ -240,15 +209,13 @@ def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands = prepare_data_cms(str(fi))
+        Xs, ygens, ycands, genmets, genjets = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
             x = Xs[ii]
             yg = ygens[ii]
             yc = ycands[ii]
+            gm = genmets[ii]
+            gj = genjets[ii]
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {
-                "X": x,
-                "ygen": yg,
-                "ycand": yc,
-            }
+            yield str(fi) + "_" + str(ii), {"X": x, "ygen": yg, "ycand": yc, "genmet": gm, "genjet": gj}

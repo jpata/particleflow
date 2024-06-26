@@ -260,9 +260,7 @@ def get_checkpoint_history_callback(outdir, config, dataset, comet_experiment, h
             write_graph=False,
             write_images=False,
             update_freq="batch",
-            profile_batch=config["callbacks"]["tensorboard"]["profile_batch"]
-            if "profile_batch" in config["callbacks"]["tensorboard"].keys()
-            else 0,
+            profile_batch=config["callbacks"]["tensorboard"]["profile_batch"] if "profile_batch" in config["callbacks"]["tensorboard"].keys() else 0,
             dump_history=config["callbacks"]["tensorboard"]["dump_history"],
         )
         # Change the class name of CustomTensorBoard TensorBoard to make keras_tuner recognise it

@@ -9,6 +9,7 @@ import numpy as np
 import tqdm
 import uproot
 import vector
+import awkward
 
 matplotlib.use("Agg")
 
@@ -171,26 +172,27 @@ def draw_event(g):
 
 def compute_gen_met(g):
     genpart = [elem for elem in g.nodes if (elem[0] == "tp" or elem[0] == "sc")]
-    px = np.sum([g.nodes[elem]["pt"]*np.cos(g.nodes[elem]["phi"]) for elem in genpart])
-    py = np.sum([g.nodes[elem]["pt"]*np.sin(g.nodes[elem]["phi"]) for elem in genpart])
+    px = np.sum([g.nodes[elem]["pt"] * np.cos(g.nodes[elem]["phi"]) for elem in genpart])
+    py = np.sum([g.nodes[elem]["pt"] * np.sin(g.nodes[elem]["phi"]) for elem in genpart])
     met = np.sqrt(px**2 + py**2)
     return met
-    
+
+
 def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
     print("merging closeby pid={}, met={:.2f}".format(pid, compute_gen_met(g)))
 
-    #run maximum 10 iterations
+    # run maximum 10 iterations
     for it in range(10):
         particles_to_merge = [elem for elem in g.nodes if g.nodes[elem]["typ"] == pid and (elem[0] == "tp" or elem[0] == "sc")]
         part_eta = [g.nodes[node]["eta"] for node in particles_to_merge]
         part_phi = [g.nodes[node]["phi"] for node in particles_to_merge]
 
-        #find pairs that are close by in deltaR
-        #note that if there are >2 particles close by to each other, only the closest 2 get merged
+        # find pairs that are close by in deltaR
+        # note that if there are >2 particles close by to each other, only the closest 2 get merged
         merge_pairs = []
         pairs_0, pairs_1 = deltar_pairs(part_eta, part_phi, deltar_cut)
 
-        #no closeby particles, break
+        # no closeby particles, break
         if len(pairs_0) == 0:
             break
         merge_pairs = [(particles_to_merge[p0], particles_to_merge[p1]) for p0, p1 in zip(pairs_0, pairs_1)]
@@ -211,12 +213,12 @@ def merge_closeby_particles(g, pid=22, deltar_cut=0.001):
                     sum_pu += g.nodes[gp]["ispu"] * g.nodes[gp]["e"]
                     sum_tot += g.nodes[gp]["e"]
 
-                #now update the remaining particle properties
+                # now update the remaining particle properties
                 g.nodes[pair[0]]["pt"] = lv.pt
                 g.nodes[pair[0]]["eta"] = lv.eta
                 g.nodes[pair[0]]["phi"] = lv.phi
                 g.nodes[pair[0]]["e"] = lv.energy
-                g.nodes[pair[0]]["ispu"] = sum_pu/sum_tot
+                g.nodes[pair[0]]["ispu"] = sum_pu / sum_tot
 
                 # add edge weights from the deleted particle to the remaining particle
                 for suc in g.successors(pair[1]):
@@ -315,12 +317,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
                 g.nodes[node]["charge"] = 0
 
             # if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate
-            if (
-                (g.nodes[node]["E_track"] == 0)
-                and (g.nodes[node]["E_calo"] == 0)
-                and (g.nodes[node]["E_other"] == 0)
-                and g.nodes[node]["E_hf"] > 0
-            ):
+            if (g.nodes[node]["E_track"] == 0) and (g.nodes[node]["E_calo"] == 0) and (g.nodes[node]["E_other"] == 0) and g.nodes[node]["E_hf"] > 0:
                 if g.nodes[node]["E_hfhad"] > g.nodes[node]["E_hfem"]:
                     g.nodes[node]["typ"] = 1
                     g.nodes[node]["charge"] = 0
@@ -525,15 +522,15 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
                 "px": lv.x,
                 "py": lv.y,
                 "pz": lv.z,
-                "ispu": sum_pu/sum_tot,
+                "ispu": sum_pu / sum_tot,
                 "charge": charge if pid in [211, 11, 13] else 0,
             }
             # print("  mlpf: type={} E={:.2f} eta={:.2f} phi={:.2f} q={}".format(pid, lv.t, lv.eta, lv.phi, gp["charge"]))
 
             for j in range(len(target_branches)):
                 ygen[target_branches[j]][ielem] = gp[target_branches[j]]
-    px = np.sum(ygen["pt"]*ygen["cos_phi"])
-    py = np.sum(ygen["pt"]*ygen["sin_phi"])
+    px = np.sum(ygen["pt"] * ygen["cos_phi"])
+    py = np.sum(ygen["pt"] * ygen["sin_phi"])
     met = np.sqrt(px**2 + py**2)
     print("normalized, met={:.2f}".format(met))
 
@@ -628,9 +625,12 @@ def make_graph(ev, iev):
     gen_eta = ev["gen_eta"][iev]
     gen_phi = ev["gen_phi"][iev]
     gen_status = ev["gen_status"][iev]
+    gen_daughters = ev["gen_daughters"][iev]
 
     g = nx.DiGraph()
     for iobj in range(len(element_type)):
+
+        #PF input features
         g.add_node(
             ("elem", iobj),
             typ=element_type[iobj],
@@ -688,6 +688,8 @@ def make_graph(ev, iev):
             phierror3=element_phierror3[iobj],
             phierror4=element_phierror4[iobj],
         )
+
+    #Pythia generator particles
     for iobj in range(len(gen_pdgid)):
         g.add_node(
             ("gen", iobj),
@@ -697,7 +699,13 @@ def make_graph(ev, iev):
             eta=gen_eta[iobj],
             phi=gen_phi[iobj],
             status=gen_status[iobj],
+            num_daughters=len(gen_daughters[iobj]),
         )
+    for iobj in range(len(gen_daughters)):
+        for idau in range(len(gen_daughters[iobj])):
+            g.add_edge(("gen", iobj), ("gen", idau))
+    
+    #TrackingParticles
     for iobj in range(len(trackingparticle_pid)):
         g.add_node(
             ("tp", iobj),
@@ -709,6 +717,8 @@ def make_graph(ev, iev):
             phi=trackingparticle_phi[iobj],
             ispu=float(trackingparticle_ev[iobj] != 0),
         )
+    
+    #CaloParticles
     for iobj in range(len(caloparticle_pid)):
         g.add_node(
             ("sc", iobj),
@@ -721,6 +731,7 @@ def make_graph(ev, iev):
             ispu=float(caloparticle_ev[iobj] != 0),
         )
 
+    #baseline PF for cross-checks
     for iobj in range(len(pfcandidate_pdgid)):
         g.add_node(
             ("pfcand", iobj),
@@ -731,7 +742,7 @@ def make_graph(ev, iev):
             sin_phi=np.sin(pfcandidate_phi[iobj]),
             cos_phi=np.cos(pfcandidate_phi[iobj]),
             charge=get_charge(pfcandidate_pdgid[iobj]),
-            ispu=0.0,
+            ispu=0.0, #for PF candidates, we don't know if it was PU or not
         )
 
     trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
@@ -743,8 +754,10 @@ def make_graph(ev, iev):
         trackingparticle_to_element_second,
         trackingparticle_to_element_cmp,
     ):
-        if not (g.nodes[("elem", elem)]["typ"] in [7]):
-            g.add_edge(("tp", tp), ("elem", elem), weight=float("inf"))
+        #ignore BREM, because the TrackingParticle is already linked to GSF
+        if (g.nodes[("elem", elem)]["typ"] in [7]):
+            continue
+        g.add_edge(("tp", tp), ("elem", elem), weight=float("inf"))
 
     caloparticle_to_element_first = ev["caloparticle_to_element.first"][iev]
     caloparticle_to_element_second = ev["caloparticle_to_element.second"][iev]
@@ -756,7 +769,6 @@ def make_graph(ev, iev):
     ):
         if not (g.nodes[("elem", elem)]["typ"] in [7]):
             g.add_edge(("sc", sc), ("elem", elem), weight=c)
-
     print("make_graph init, met={:.2f}".format(compute_gen_met(g)))
 
     # merge caloparticles and trackingparticles that refer to the same particle
@@ -772,7 +784,6 @@ def make_graph(ev, iev):
             g.nodes[("tp", idx_tp)]["idx_sc"] = idx_sc
             nodes_to_remove += [("sc", idx_sc)]
     g.remove_nodes_from(nodes_to_remove)
-
     print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
 
     element_to_candidate_first = ev["element_to_candidate.first"][iev]
@@ -783,28 +794,12 @@ def make_graph(ev, iev):
     return g
 
 
-def gen_e(g):
-    etot_gen = 0.0
-    etot_pf = 0.0
-    for node in g.nodes:
-        if node[0] == "tp" or node[0] == "sc":
-            etot_gen += g.nodes[node]["e"]
-        if node[0] == "pfcand":
-            etot_pf += g.nodes[node]["e"]
-    return etot_gen, etot_pf
-
-
 def process(args):
     infile = args.input
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
 
-    if "ana" in tf:
-        tt = tf["ana/pftree"]
-    elif "pfana" in tf:
-        tt = tf["pfana/pftree"]
-    else:
-        raise Exception("Could not find the PFAnalysisNtuplizer TTree")
+    tt = tf["pfana/pftree"]
 
     if args.num_events == -1:
         args.num_events = tt.num_entries
@@ -813,45 +808,40 @@ def process(args):
     all_data = []
     ev = tt.arrays(library="np")
     for iev in tqdm.tqdm(events_to_process):
-        print("processing iev={}, met={:.2f}".format(iev, ev["genmet_pt"][iev][0]))
+        print("processing iev={}, genmet_cmssw={:.2f}".format(iev, ev["genmet_pt"][iev][0]))
         g = make_graph(ev, iev)
         g = cleanup_graph(g)
-
-        # for elem in g.nodes:
-        #     if elem[0]=="tp" or elem[0]=="sc":
-        #         if g.nodes[elem]["typ"] == 11:
-        #             print(elem)
-        #             for suc in g.successors(elem):
-        #                 print("  ", suc, g.nodes[suc]["typ"], g.edges[(elem, suc)]["weight"])
 
         # associate target particles to input elements
         Xelem, ycand, ygen = prepare_normalized_table(g)
         data = {}
 
-        # produce a list of status=1 pythia particles
-        ptcls_pythia = [n for n in g.nodes if n[0] == "gen" and g.nodes[n]["status"] == 1]
+        # produce a list of stable pythia particles for downstream validation
+        # stable: status=1 (typical) or status=2 and no daughters (B hadrons) 
+        ptcls_pythia = [n for n in g.nodes if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or ((g.nodes[n]["status"]==2) and g.nodes[n]["num_daughters"]==0))]
         feats = ["typ", "pt", "eta", "phi", "e"]
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
+        # produce pythia-level genjets and genmet
         genjet_pt = ev["genjet_pt"][iev]
         genjet_eta = ev["genjet_eta"][iev]
         genjet_phi = ev["genjet_phi"][iev]
         genjet_mass = ev["genjet_mass"][iev]
-        genjet = np.stack([genjet_pt, genjet_eta, genjet_phi, genjet_mass], axis=-1)
+        genjet = vector.awk(awkward.zip({"pt": genjet_pt, "eta": genjet_eta, "phi": genjet_phi, "mass": genjet_mass}))
+        genjet = np.stack([awkward.to_numpy(genjet.pt), awkward.to_numpy(genjet.eta), awkward.to_numpy(genjet.phi), awkward.to_numpy(genjet.e)], axis=-1)
 
         genmet_pt = ev["genmet_pt"][iev]
         genmet_phi = ev["genmet_phi"][iev]
         genmet = np.stack([genmet_pt, genmet_phi], axis=-1)
 
-        if args.save_normalized_table:
-            data = {
-                "Xelem": Xelem,
-                "ycand": ycand,
-                "ygen": ygen,
-                "pythia": arr_ptcls_pythia,
-                "genjet": genjet,
-                "genmet": genmet,
-            }
+        data = {
+            "Xelem": Xelem,
+            "ycand": ycand,
+            "ygen": ygen,
+            "pythia": arr_ptcls_pythia,
+            "genjet": genjet,
+            "genmet": genmet,
+        }
 
         if args.save_full_graph:
             data["full_graph"] = g
@@ -872,11 +862,6 @@ def parse_args():
         "--save-full-graph",
         action="store_true",
         help="save the full event graph",
-    )
-    parser.add_argument(
-        "--save-normalized-table",
-        action="store_true",
-        help="save the uniquely identified table",
     )
     parser.add_argument(
         "--num-events",

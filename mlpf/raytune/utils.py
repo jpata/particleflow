@@ -16,9 +16,7 @@ from ray.tune.search.skopt import SkOptSearch
 def get_raytune_search_alg(raytune_cfg, seeds=False):
     if (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "pb2"):
         if raytune_cfg["search_alg"] is not None:
-            print(
-                "INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(raytune_cfg["sched"])
-            )
+            print("INFO: Using schedule '{}' is not compatible with Ray Tune search algorithms.".format(raytune_cfg["sched"]))
             print("INFO: Uing the Ray Tune {} scheduler without search algorithm".format(raytune_cfg["sched"]))
         return None
 

@@ -21,9 +21,10 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version("1.7.1")
+    VERSION = tfds.core.Version("1.8.0")
     RELEASE_NOTES = {
         "1.7.1": "First version",
+        "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/
@@ -43,9 +44,10 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "genmet": tfds.features.Scalar(dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ycand"),
+            supervised_keys=("X", "ygen"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),

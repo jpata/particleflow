@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from .gnn_lsh import CombinedGraphLayer
 
-from torch.backends.cuda import sdp_kernel
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from pyg.logger import _logger
 
 
@@ -52,9 +52,9 @@ class SelfAttentionLayer(nn.Module):
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
         self.attn_params = {
-            "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
-            "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
-            "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
+            "math": [SDPBackend.MATH],
+            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
+            "flash": [SDPBackend.FLASH_ATTENTION],
         }
 
     def forward(self, x, mask):
@@ -63,7 +63,7 @@ class SelfAttentionLayer(nn.Module):
             mha_out = self.mha(x)
         else:
             if self.enable_ctx_manager:
-                with sdp_kernel(**self.attn_params[self.attention_type]):
+                with sdpa_kernel(self.attn_params[self.attention_type]):
                     mha_out = self.mha(x, x, x, need_weights=False)[0]
             else:
                 mha_out = self.mha(x, x, x, need_weights=False)[0]
@@ -291,9 +291,6 @@ class MLPF(nn.Module):
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-
-        # elementwise DNN for node charge regression, classes (-1, 0, 1)
-        # self.nn_charge = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
     # @torch.compile
     def forward(self, X_features, mask):
