@@ -75,7 +75,7 @@ cmsRun step2_phase1_new.py > /dev/null
 cmsRun step3_phase1_new.py > /dev/null
 #cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
+python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
 bzip2 -z pfntuple_${SEED}.pkl
 cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
