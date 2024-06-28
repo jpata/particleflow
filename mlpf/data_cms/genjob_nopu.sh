@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition main
+#SBATCH --partition short
 #SBATCH --cpus-per-task 1
 #SBATCH --mem-per-cpu 6G
 #SBATCH -o slurm-%x-%j-%N.out

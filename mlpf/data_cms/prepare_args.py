@@ -20,7 +20,7 @@ samples = [
 #    ("MultiParticlePFGun50_cfi",                               800000, 850000, "genjob_nopu.sh", outdir + "/nopu"),
     ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 900100, "genjob_nopu.sh", outdir + "/nopu"),
     ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1000100, "genjob_nopu.sh", outdir + "/nopu"),
-    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1100100, "genjob_nopu.sh", outdir + "/nopu"),
+#    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1100100, "genjob_nopu.sh", outdir + "/nopu"),
     ("SingleNeutronFlatPt0p7To1000_cfi",                      1200000,1200100, "genjob_nopu.sh", outdir + "/nopu"),
     ("SinglePi0Pt1To1000_pythia8_cfi",                        1300000,1300100, "genjob_nopu.sh", outdir + "/nopu"),
     ("SinglePiMinusFlatPt0p7To1000_cfi",                      1400000,1400100, "genjob_nopu.sh", outdir + "/nopu"),
@@ -36,6 +36,5 @@ if __name__ == "__main__":
 
         for seed in range(seed0, seed1):
             p = this_outdir + "/" + samp + "/raw/pfntuple_{}.pkl.bz2".format(seed)
-            #if not os.path.isfile(p):
-            if True:
-                print(f"sbatch scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")
+            if not os.path.isfile(p):
+                print(f"sbatch --mem-per-cpu 6G --partition main --time 04:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")
