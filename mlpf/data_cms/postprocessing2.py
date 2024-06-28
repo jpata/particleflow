@@ -751,7 +751,7 @@ def make_graph(ev, iev):
     #CaloParticles
     for iobj in range(len(caloparticle_pid)):
         if abs(caloparticle_pid[iobj]) == 15:
-            import pdb;pdb.set_trace()
+            print("tau caloparticle pt={}, this will introduce fake MET due to inclusion of neutrino in the caloparticle".format(caloparticle_pt[iobj]))
         g.add_node(
             ("cp", iobj),
             pid=caloparticle_pid[iobj],
@@ -866,9 +866,8 @@ def process(args):
         genjet_pt = ev["genjet_pt"][iev]
         genjet_eta = ev["genjet_eta"][iev]
         genjet_phi = ev["genjet_phi"][iev]
-        genjet_mass = ev["genjet_mass"][iev]
-        genjet = vector.awk(awkward.zip({"pt": genjet_pt, "eta": genjet_eta, "phi": genjet_phi, "mass": genjet_mass}))
-        genjet = np.stack([awkward.to_numpy(genjet.pt), awkward.to_numpy(genjet.eta), awkward.to_numpy(genjet.phi), awkward.to_numpy(genjet.e)], axis=-1)
+        genjet_energy = ev["genjet_energy"][iev]
+        genjet = np.stack([awkward.to_numpy(genjet_pt), awkward.to_numpy(genjet_eta), awkward.to_numpy(genjet_phi), awkward.to_numpy(genjet_energy)], axis=-1)
 
         genmet_pt = ev["genmet_pt"][iev]
         genmet_phi = ev["genmet_phi"][iev]
