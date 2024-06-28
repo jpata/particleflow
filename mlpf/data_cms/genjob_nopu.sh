@@ -6,7 +6,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_2/nopu/
+OUTDIR=/local/joosep/mlpf/cms/v3_3/nopu/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
