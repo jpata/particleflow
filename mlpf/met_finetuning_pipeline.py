@@ -123,33 +123,29 @@ class DeepMET(nn.Module):
     def __init__(
         self,
         input_dim=11,
-        # output_dim=2,
         output_dim=1,
-        width=256,
+        width=512,
         dropout=0,
     ):
         super(DeepMET, self).__init__()
 
         """
         Takes as input either (1) the MLPF candidates OR (2) the latent representations of the MLPF candidates,
-        and runs an MLP to predict two outputs per candidate: "w_xi" and "w_yi"; which will enter the loss as follows:
-            pred_met_x = sum(w_xi * pxi)
-            pred_met_y = sum(w_yi * pyi)
+        and runs an MLP to predict two outputs per candidate: "w_i" and "w_i"; which will enter the loss as follows:
+            pred_met_x = sum(w_i * pxi)
+            pred_met_y = sum(w_i * pyi)
 
-            LOSS = Huber(true_met_x, pred_met_x) + Huber(true_met_y, pred_met_y)
+            LOSS = MSE(true_met_x, pred_met_x) + MSE(true_met_y, pred_met_y)
 
         Note: default `input_dim` is 9 which stands for "clf_nodes (6) + regression_nodes (5)"
         """
 
-        self.act = nn.ELU
+        self.act = nn.ReLU
         self.nn = ffn(input_dim, output_dim, width, self.act, dropout)
 
     # @torch.compile
     def forward(self, X):
-
         MET = self.nn(X)
-
-        # return MET[:, :, 0], MET[:, :, 1]
         return MET.squeeze(-1)
 
 

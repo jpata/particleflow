@@ -153,21 +153,16 @@ def train_and_valid(
         # ----------------------- Run finetuning -----------------------
 
         if is_train:
-            # wx, wy = deepmet(X)
             w = deepmet(X)
 
         else:
             with torch.no_grad():
-                # wx, wy = deepmet(X)
                 w = deepmet(X)
 
         pred_met_x = torch.sum(w * reco_px, axis=1)
         pred_met_y = torch.sum(w * reco_py, axis=1)
 
-        # pred_met_x = torch.sum(wx * reco_px, axis=1)
-        # pred_met_y = torch.sum(wy * reco_py, axis=1)
-
-        # Gen(MET) to compute the loss
+        # get the gen MET to compute the loss
         msk_gen = ygen["cls_id"] != 0
         gen_px = (ygen["pt"] * ygen["cos_phi"]) * msk_gen
         gen_py = (ygen["pt"] * ygen["sin_phi"]) * msk_gen
@@ -176,9 +171,8 @@ def train_and_valid(
         true_met_y = torch.sum(gen_py, axis=1)
 
         if is_train:
-            loss["MET"] = torch.nn.functional.huber_loss(true_met_x, pred_met_x) + torch.nn.functional.huber_loss(
-                true_met_y, pred_met_y
-            )
+            loss["MET"] = torch.nn.MSELoss(true_met_x, pred_met_x) + torch.nn.MSELoss(true_met_y, pred_met_y)
+
             for param in deepmet.parameters():
                 param.grad = None
 
@@ -190,24 +184,22 @@ def train_and_valid(
 
         else:
             with torch.no_grad():
-                loss["MET"] = torch.nn.functional.huber_loss(true_met_x, pred_met_x) + torch.nn.functional.huber_loss(
-                    true_met_y, pred_met_y
-                )
+                loss["MET"] = torch.nn.MSELoss(true_met_x, pred_met_x) + torch.nn.MSELoss(true_met_y, pred_met_y)
 
         # monitor the MLPF and PF MET loss
         with torch.no_grad():
-            if downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
-                loss["MET_mlpf"] = torch.nn.functional.huber_loss(
-                    true_met_x, torch.sum(reco_px, axis=1)
-                ) + torch.nn.functional.huber_loss(true_met_y, torch.sum(reco_py, axis=1))
+            if downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was on
+                loss["MET_MLPF"] = torch.nn.MSELoss(true_met_x, torch.sum(reco_px, axis=1)) + torch.nn.MSELoss(
+                    true_met_y, torch.sum(reco_py, axis=1)
+                )
 
             msk_ycand = ycand["cls_id"] != 0
             cand_px = (ycand["pt"] * ycand["cos_phi"]) * msk_ycand
             cand_py = (ycand["pt"] * ycand["sin_phi"]) * msk_ycand
 
-            loss["MET_PF"] = torch.nn.functional.huber_loss(
-                true_met_x, torch.sum(cand_px, axis=1)
-            ) + torch.nn.functional.huber_loss(true_met_y, torch.sum(cand_py, axis=1))
+            loss["MET_PF"] = torch.nn.MSELoss(true_met_x, torch.sum(cand_px, axis=1)) + torch.nn.MSELoss(
+                true_met_y, torch.sum(cand_py, axis=1)
+            )
 
         for loss_ in loss.keys():
             if loss_ not in epoch_loss:
@@ -271,7 +263,7 @@ def finetune_mlpf(
 
     losses_of_interest = ["MET", "MET_PF"]
     if downstream_input != "pfcands":  # monitor MLPF loss only if the backbone inference was run
-        losses_of_interest += ["MET_mlpf"]
+        losses_of_interest += ["MET_MLPF"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
