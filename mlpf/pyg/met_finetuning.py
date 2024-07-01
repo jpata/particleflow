@@ -321,7 +321,9 @@ def finetune_mlpf(
             if losses_v["MET"] < best_val_loss:
                 best_val_loss = losses_v["MET"]
                 # stale_epochs = 0
+                print("b4", stale_epochs)
                 stale_epochs += 1
+                print("after", stale_epochs)
                 # torch.distributed.broadcast(stale_epochs, src=rank)
 
                 torch.save(
