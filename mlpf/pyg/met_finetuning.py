@@ -337,6 +337,7 @@ def finetune_mlpf(
                 stale_epochs += 1
 
         if world_size > 1:
+            dist.barrier()
             torch.distributed.broadcast(stale_epochs, src=0)
 
         if stale_epochs > patience:
