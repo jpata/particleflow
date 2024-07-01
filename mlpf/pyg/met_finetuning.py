@@ -346,10 +346,6 @@ def finetune_mlpf(
                 checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}_deepmet.pth".format(checkpoint_dir, epoch, losses_v["MET"])
                 save_checkpoint(checkpoint_path, deepmet, optimizer, extra_state)
 
-        if stale_epochs > patience:
-            break
-
-        if (rank == 0) or (rank == "cpu"):
             for k, v in losses_t.items():
                 tensorboard_writer_train.add_scalar("epoch/loss_" + k, v, epoch)
 
@@ -383,6 +379,9 @@ def finetune_mlpf(
                 tensorboard_writer_train.flush()
             if tensorboard_writer_valid:
                 tensorboard_writer_valid.flush()
+
+        if stale_epochs > patience:
+            break
 
     if world_size > 1:
         dist.barrier()
