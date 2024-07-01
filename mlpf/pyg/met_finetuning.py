@@ -322,8 +322,6 @@ def finetune_mlpf(
                 best_val_loss = losses_v["MET"]
                 # stale_epochs = 0
                 stale_epochs += 1
-                # if world_size > 1:
-                #     torch.distributed.broadcast(stale_epochs, src=rank)
 
                 torch.save(
                     {
@@ -337,12 +335,13 @@ def finetune_mlpf(
                 save_checkpoint(f"{outdir}/best_weights_deepmet.pth", deepmet, optimizer, extra_state)
             else:
                 stale_epochs += 1
-                # if world_size > 1:
-                #     torch.distributed.broadcast(stale_epochs, src=rank)
 
-        # if stale_epochs > patience:
-        #     _logger.info(f"stale_epochs = {patience}, will stop the training.")
-        #     break
+        # if world_size > 1:
+        #     torch.distributed.broadcast(stale_epochs, src=rank)
+
+        if stale_epochs > patience:
+            _logger.info(f"stale_epochs = {patience}, will stop the training.")
+            break
 
         if (rank == 0) or (rank == "cpu"):
             if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
