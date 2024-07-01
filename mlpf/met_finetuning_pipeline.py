@@ -123,7 +123,8 @@ class DeepMET(nn.Module):
     def __init__(
         self,
         input_dim=11,
-        output_dim=2,
+        # output_dim=2,
+        output_dim=1,
         width=256,
         dropout=0,
     ):
@@ -148,7 +149,8 @@ class DeepMET(nn.Module):
 
         MET = self.nn(X)
 
-        return MET[:, :, 0], MET[:, :, 1]
+        # return MET[:, :, 0], MET[:, :, 1]
+        return MET.squeeze(-1)
 
 
 def main():

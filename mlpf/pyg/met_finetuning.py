@@ -153,13 +153,19 @@ def train_and_valid(
         # ----------------------- Run finetuning -----------------------
 
         if is_train:
-            wx, wy = deepmet(X)
+            # wx, wy = deepmet(X)
+            w = deepmet(X)
+
         else:
             with torch.no_grad():
-                wx, wy = deepmet(X)
+                # wx, wy = deepmet(X)
+                w = deepmet(X)
 
-        pred_met_x = torch.sum(wx * reco_px, axis=1)
-        pred_met_y = torch.sum(wy * reco_py, axis=1)
+        pred_met_x = torch.sum(w * reco_px, axis=1)
+        pred_met_y = torch.sum(w * reco_py, axis=1)
+
+        # pred_met_x = torch.sum(wx * reco_px, axis=1)
+        # pred_met_y = torch.sum(wy * reco_py, axis=1)
 
         # Gen(MET) to compute the loss
         msk_gen = ygen["cls_id"] != 0
