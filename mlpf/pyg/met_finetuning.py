@@ -321,9 +321,7 @@ def finetune_mlpf(
             if losses_v["MET"] < best_val_loss:
                 best_val_loss = losses_v["MET"]
                 # stale_epochs = 0
-                print("b4", stale_epochs)
                 stale_epochs += 1
-                print("after", stale_epochs)
                 # torch.distributed.broadcast(stale_epochs, src=rank)
 
                 torch.save(
@@ -337,9 +335,7 @@ def finetune_mlpf(
                 save_checkpoint(f"{outdir}/best_weights_mlpf.pth", mlpf, optimizer, extra_state)
                 save_checkpoint(f"{outdir}/best_weights_deepmet.pth", deepmet, optimizer, extra_state)
             else:
-                print("b4", stale_epochs)
                 stale_epochs += 1
-                print("after", stale_epochs)
                 # torch.distributed.broadcast(stale_epochs, src=rank)
 
             if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
