@@ -320,8 +320,8 @@ def finetune_mlpf(
             extra_state = {"epoch": epoch}
             if losses_v["MET"] < best_val_loss:
                 best_val_loss = losses_v["MET"]
-                stale_epochs = 0
-                # stale_epochs += 1
+                # stale_epochs = 0
+                stale_epochs += 1
                 # if world_size > 1:
                 #     torch.distributed.broadcast(stale_epochs, src=rank)
 
