@@ -338,8 +338,9 @@ def finetune_mlpf(
                 stale_epochs += 1
                 torch.distributed.broadcast(stale_epochs, src=rank)
 
-            if stale_epochs > patience:
-                break
+        if stale_epochs > patience:
+            _logger.info(f"stale_epochs = {patience}, will stop the training.")
+            break
 
         if (rank == 0) or (rank == "cpu"):
 
