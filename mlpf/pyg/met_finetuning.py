@@ -337,7 +337,7 @@ def finetune_mlpf(
                 stale_epochs += 1
 
         if world_size > 1:
-            torch.distributed.broadcast(stale_epochs, src=rank)
+            torch.distributed.broadcast(stale_epochs, src=0)
 
         if stale_epochs > patience:
             _logger.info(f"stale_epochs = {patience}, will stop the training.")
