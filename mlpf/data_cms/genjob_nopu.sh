@@ -6,7 +6,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3_3/nopu/
+OUTDIR=/local/joosep/mlpf/cms/20240702_cptruthdef/nopu/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -82,6 +82,6 @@ cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 #copy ROOT outputs
 #cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
-cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
+#cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
 rm -Rf $WORKDIR
