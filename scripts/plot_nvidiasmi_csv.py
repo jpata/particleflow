@@ -78,18 +78,10 @@ if __name__ == "__main__":
             dfs.append(
                 pd.DataFrame(
                     {
-                        "GPU{}_util".format(ii): df[df[" pci.bus_id"] == gpu][" utilization.gpu [%]"].map(
-                            lambda x: int(x.split(" ")[1])
-                        ),
-                        "GPU{}_power".format(ii): df[df[" pci.bus_id"] == gpu][" power.draw [W]"].map(
-                            lambda x: float(x.split(" ")[1])
-                        ),
-                        "GPU{}_mem_util".format(ii): df[df[" pci.bus_id"] == gpu][" utilization.memory [%]"].map(
-                            lambda x: int(x.split(" ")[1])
-                        ),
-                        "GPU{}_mem_used".format(ii): df[df[" pci.bus_id"] == gpu][" memory.used [MiB]"].map(
-                            lambda x: int(x.split(" ")[1])
-                        ),
+                        "GPU{}_util".format(ii): df[df[" pci.bus_id"] == gpu][" utilization.gpu [%]"].map(lambda x: int(x.split(" ")[1])),
+                        "GPU{}_power".format(ii): df[df[" pci.bus_id"] == gpu][" power.draw [W]"].map(lambda x: float(x.split(" ")[1])),
+                        "GPU{}_mem_util".format(ii): df[df[" pci.bus_id"] == gpu][" utilization.memory [%]"].map(lambda x: int(x.split(" ")[1])),
+                        "GPU{}_mem_used".format(ii): df[df[" pci.bus_id"] == gpu][" memory.used [MiB]"].map(lambda x: int(x.split(" ")[1])),
                         "time": df[df[" pci.bus_id"] == gpu]["timestamp"].map(
                             lambda x: datetime.strptime(x, "%Y/%m/%d %H:%M:%S.%f").timestamp() - start_t
                         ),

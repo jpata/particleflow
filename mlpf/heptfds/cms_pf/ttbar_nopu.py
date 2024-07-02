@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-TTbar events with PU~55 in a Run3 setup.
+TTbar events without PU in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -18,31 +18,21 @@ _CITATION = """
 """
 
 
-class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf dataset."""
+class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
     VERSION = tfds.core.Version("1.8.0")
     RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-        "1.1.0": "Add muon type, fix electron GSF association",
-        "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
-        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
-        "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information",
-        "1.5.0": "No padding",
-        "1.5.1": "Remove outlier caps",
-        "1.6.0": "Regenerate with ARRAY_RECORD",
-        "1.7.0": "Add cluster shape vars",
-        "1.7.1": "Increase stats to 400k events",
+        "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CmsPfTtbar, self).__init__(*args, **kwargs)
+        super(CmsPfTtbarNopu, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -54,9 +44,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
             supervised_keys=("X", "ygen"),

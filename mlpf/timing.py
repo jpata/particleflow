@@ -60,11 +60,7 @@ if __name__ == "__main__":
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
-    print(
-        "batch_size={} bin_size={} num_features={} use_gpu={} num_threads={}".format(
-            batch_size, bin_size, num_features, use_gpu, num_threads
-        )
-    )
+    print("batch_size={} bin_size={} num_features={} use_gpu={} num_threads={}".format(batch_size, bin_size, num_features, use_gpu, num_threads))
 
     EP_list = [args.execution_provider]
 

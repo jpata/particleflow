@@ -294,9 +294,7 @@ def get_optimizer(config, lr_schedule=None):
             nesterov=cfg_sgd["nesterov"],
         )
     else:
-        raise ValueError(
-            "Only 'adam', 'adamw', 'sgd', 'lion' are supported optimizers, got {}".format(config["setup"]["optimizer"])
-        )
+        raise ValueError("Only 'adam', 'adamw', 'sgd', 'lion' are supported optimizers, got {}".format(config["setup"]["optimizer"]))
 
 
 def get_tuner(cfg_hypertune, model_builder, outdir, recreate, strategy):
@@ -402,9 +400,7 @@ def load_and_interleave(
         bucket_boundaries = [int(x[0]) for x in bucket_batch_sizes[:-1]]
 
         # increase batch sizes for number of gpus and with the overall batch multiplier
-        bucket_batch_sizes = [
-            max(int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]), 1) for x in bucket_batch_sizes
-        ]
+        bucket_batch_sizes = [max(int(x[1] * num_batches_multiplier * config["batching"]["batch_multiplier"]), 1) for x in bucket_batch_sizes]
         logging.info("Batching {}:{} with bucket_by_sequence_length".format(ds.name, ds.split))
         logging.info("bucket_boundaries={}".format(bucket_boundaries))
         logging.info("bucket_batch_sizes={}".format(bucket_batch_sizes))
@@ -846,9 +842,7 @@ def model_scope(config, total_steps, weights=None, horovod_enabled=False):
         logging.info("model weights follow")
         tw_names = [m.name for m in model.trainable_weights]
         for w in model.weights:
-            logging.info(
-                "layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape))
-            )
+            logging.info("layer={} trainable={} shape={} num_weights={}".format(w.name, w.name in tw_names, w.shape, np.prod(w.shape)))
 
     loss_dict, loss_weights = get_loss_dict(config)
 

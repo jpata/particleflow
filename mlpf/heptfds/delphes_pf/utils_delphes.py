@@ -129,9 +129,7 @@ def prepare_data_delphes(fname, with_jet_idx=True):
             # 1 is 1st highest-pt jet,
             # 2 is 2nd highest-pt jet, ...
             for jet_idx in sorted_jet_idx:
-                jet_constituents = [
-                    index_mapping[idx] for idx in constituent_idx[jet_idx]
-                ]  # map back to constituent index *before* masking
+                jet_constituents = [index_mapping[idx] for idx in constituent_idx[jet_idx]]  # map back to constituent index *before* masking
                 ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
                 ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
 

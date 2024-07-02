@@ -92,9 +92,7 @@ def main(args):
                 plt.plot([df[x][i], df[x][j]], [df[y][i], df[y][j]], "-", **seg_args)
             k += 1
 
-        cut_mask = (
-            (df[x] > min_eta - extra) & (df[x] < max_eta + extra) & (df[y] > min_phi - extra) & (df[y] < max_phi + extra)
-        )
+        cut_mask = (df[x] > min_eta - extra) & (df[x] < max_eta + extra) & (df[y] > min_phi - extra) & (df[y] < max_phi + extra)
         cluster_mask = cut_mask & ~df["isTrack"]
         track_mask = cut_mask & df["isTrack"]
         plt.scatter(

@@ -182,11 +182,9 @@ def unpack_target(y):
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
-    ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1
-    )
+    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
 
-    ret["genjet_idx"] = y[..., -1].long()
+    ret["ispu"] = y[..., -1]
 
     return ret
 
@@ -268,11 +266,7 @@ def load_lr_schedule(lr_schedule, checkpoint):
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
         return lr_schedule
     else:
-        raise KeyError(
-            "Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(
-                checkpoint["extra_state"].keys()
-            )
-        )
+        raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):

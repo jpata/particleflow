@@ -130,9 +130,7 @@ def set_raytune_search_parameters(search_space, config):
     if "num_node_messages" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["num_node_messages"] = int(search_space["num_node_messages"])
     if "normalize_degrees" in search_space.keys():
-        config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = bool(
-            search_space["normalize_degrees"]
-        )
+        config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = bool(search_space["normalize_degrees"])
     if "output_dim" in search_space.keys():
         config["parameters"]["combined_graph_layer"]["node_message"]["output_dim"] = int(search_space["output_dim"])
 

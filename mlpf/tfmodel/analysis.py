@@ -55,11 +55,7 @@ def plot_cometml_json(path, ylabel, xlabel, title=None, save_dir=None):
                 if ("val_" + metric["name"]) != val_metric["name"]:
                     val_metric = data[ii - 1]
                     if ("val_" + metric["name"]) != val_metric["name"]:
-                        raise ValueError(
-                            "The val and train metrics don't match, {}, {}".format(
-                                "val_" + metric["name"], val_metric["name"]
-                            )
-                        )
+                        raise ValueError("The val and train metrics don't match, {}, {}".format("val_" + metric["name"], val_metric["name"]))
 
                 pp = plt.plot(
                     metric["x"],

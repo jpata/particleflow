@@ -77,9 +77,7 @@ def assign_genparticles_to_obj(gpdata):
     )
 
     gp_to_calohit = np.array(
-        coo_matrix(
-            (gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit)
-        ).todense()
+        coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit)).todense()
     )
 
     # map each genparticle to a track or calohit
@@ -279,23 +277,15 @@ def process_one_file(fn, ofn):
             print("unmatched reco", reco_features["energy"][used_rps == 0])
 
         gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata.gen_features, particle_feature_order)
-        gps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])]
-        )
+        gps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])])
         gps_hit = get_particle_feature_matrix(hit_to_gp_all, gpdata.gen_features, particle_feature_order)
-        gps_hit[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_hit[:, 0], gps_hit[:, 1])]
-        )
+        gps_hit[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_hit[:, 0], gps_hit[:, 1])])
         gps_hit[:, 1] = 0
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
-        rps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])]
-        )
+        rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
         rps_hit = get_particle_feature_matrix(hit_to_rp_all, reco_features, particle_feature_order)
-        rps_hit[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_hit[:, 0], rps_hit[:, 1])]
-        )
+        rps_hit[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_hit[:, 0], rps_hit[:, 1])])
         rps_hit[:, 1] = 0
 
         # we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
