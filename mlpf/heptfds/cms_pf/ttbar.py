@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("1.8.0")
+    VERSION = tfds.core.Version("2.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -35,6 +35,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "1.7.0": "Add cluster shape vars",
         "1.7.1": "Increase stats to 400k events",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
+        "2.0.0": "New truth def based primarily on CaloParticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
@@ -54,7 +55,6 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }

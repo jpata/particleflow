@@ -3,9 +3,7 @@ import pickle
 import tqdm
 
 import awkward as ak
-import fastjet
 import numpy as np
-import vector
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -124,11 +122,6 @@ def prepare_data_cms(fn, with_jet_idx=False):
     genmets = []
     genjets = []
 
-    # prepare jet definition and min jet pt for clustering gen jets
-    if with_jet_idx:
-        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-        min_jet_pt = 5.0  # GeV
-
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
     elif fn.endswith(".pkl.bz2"):
@@ -192,7 +185,7 @@ def prepare_data_cms(fn, with_jet_idx=False):
 
 def split_sample(path, test_frac=0.8):
     files = sorted(list(path.glob("*.pkl*")))
-    print("Found {} files in {}".format(files, path))
+    print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
     files_train = files[:idx_split]
@@ -218,4 +211,4 @@ def generate_examples(files):
             gj = genjets[ii]
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {"X": x, "ygen": yg, "ycand": yc, "genmet": gm, "genjet": gj}
+            yield str(fi) + "_" + str(ii), {"X": x, "ygen": yg, "ycand": yc, "genmet": gm, "genjets": gj}
