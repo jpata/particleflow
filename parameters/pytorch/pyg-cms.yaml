@@ -107,7 +107,7 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.8.0
+          version: 2.0.0
     #     cms_pf_qcd:
     #       version: 1.7.1
     #     cms_pf_ztt:
@@ -126,7 +126,7 @@ valid_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.8.0
+          version: 2.0.0
         # cms_pf_qcd:
         #   version: 1.7.1
         # cms_pf_ztt:
@@ -134,7 +134,7 @@ valid_dataset:
 
 test_dataset:
   cms_pf_ttbar:
-    version: 1.8.0
+    version: 2.0.0
   # cms_pf_qcd:
   #   version: 1.7.1
   # cms_pf_ztt:
