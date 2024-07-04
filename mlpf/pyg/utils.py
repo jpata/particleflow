@@ -13,39 +13,33 @@ from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 # All possible PFElement types
 ELEM_TYPES = {
     "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    "delphes": [0, 1, 2],
     "clic": [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
 ELEM_TYPES_NONZERO = {
     "cms": [1, 4, 5, 6, 8, 9, 10, 11],
-    "delphes": [1, 2],
     "clic": [1, 2],
 }
 
 CLASS_LABELS = {
     "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
-    "delphes": [0, 211, 130, 22, 11, 13],
     "clic": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
     "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
-    "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
@@ -107,20 +101,6 @@ X_FEATURES = {
         "sigma_x",
         "sigma_y",
         "sigma_z",
-    ],
-    "delphes": [
-        "Track|cluster",
-        "$p_{T}|E_{T}$",
-        r"$\eta$",
-        r"$Sin(\phi)$",
-        r"$Cos(\phi)$",
-        "P|E",
-        r"$\eta_\mathrm{out}|E_{em}$",
-        r"$Sin(\(phi)_\mathrm{out}|E_{had}$",
-        r"$Cos(\phi)_\mathrm{out}|E_{had}$",
-        "charge",
-        "is_gen_mu",
-        "is_gen_el",
     ],
     "clic": [
         "type",

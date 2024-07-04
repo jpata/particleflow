@@ -29,7 +29,7 @@ parser.add_argument(
     "--dataset",
     type=str,
     default=None,
-    choices=["clic", "cms", "delphes", "clic_hits"],
+    choices=["clic", "cms", "clic_hits"],
     required=False,
     help="which dataset?",
 )

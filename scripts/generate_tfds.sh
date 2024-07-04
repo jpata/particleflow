@@ -60,9 +60,3 @@ $CMD mlpf/heptfds/cms_pf/ttbar_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DI
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_gamma --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_gamma_hits.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep_hits/single_mu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_single_mu_hits.log &
 # wait
-
-# Delphes
-# export MANUAL_DIR=/local/joosep/mlpf/delphes/
-# $CMD mlpf/heptfds/delphes_pf/delphes_ttbar_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_ttbar.log &
-# $CMD mlpf/heptfds/delphes_pf/delphes_qcd_pf --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_delphes_qcd.log &
-# wait

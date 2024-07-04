@@ -99,15 +99,11 @@ def get_class_names(sample_name):
         return CLASS_NAMES_CLIC
     elif sample_name.startswith("cms_"):
         return CLASS_NAMES_CMS
-    elif sample_name.startswith("delphes_"):
-        return CLASS_NAMES_CLIC
     else:
         raise Exception("Unknown sample name: {}".format(sample_name))
 
 
 EVALUATION_DATASET_NAMES = {
-    "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
@@ -243,13 +239,8 @@ def clic_label(ax):
     return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation", tag2="ee (380 GeV)", x1=0.35)
 
 
-def delphes_label(ax):
-    return experiment_label(ax, experiment="Delphes-CMS", tag1="Simulation", tag2="pp (14 TeV)", x1=0.30)
-
-
 EXPERIMENT_LABELS = {
     "cms": cms_label,
-    "delphes": delphes_label,
     "clic": clic_label,
 }
 
