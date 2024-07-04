@@ -31,12 +31,12 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
 
-    #skip prediction if output exists
+    # skip prediction if output exists
     outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
     if os.path.isfile(outfile):
         return
 
-    #run model on batch
+    # run model on batch
     batch = batch.to(rank)
     ypred = model(batch.X, batch.mask)
 
@@ -47,7 +47,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ycand = unpack_target(batch.ycand.to(torch.float32))
     ypred = unpack_predictions(ypred)
 
-    #flatten events across batch dimwith padding mask
+    # flatten events across batch dimwith padding mask
     X = batch.X[batch.mask].cpu().contiguous().numpy()
     for k, v in ygen.items():
         ygen[k] = v[batch.mask].detach().cpu().contiguous().numpy()

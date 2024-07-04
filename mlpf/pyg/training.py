@@ -90,12 +90,6 @@ def mlpf_loss(y, ypred, batch):
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
 
-    #give higher weight to non-PU component, but keep a nonzero weight for PU particles as well
-    inv_pu = 1e-3 + (1.0 - y["ispu"])
-    e = batch.X[..., 5]
-    loss_classification = loss_classification * e
-    loss_regression = loss_regression
-
     # average over all elements that were not padded
     loss["Classification"] = loss_classification.sum() / nelem
 
@@ -301,7 +295,7 @@ def train_and_valid(
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
             if not (tensorboard_writer is None):
-                if step%100 == 0:
+                if step % 100 == 0:
                     tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
                     tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
                     tensorboard_writer.add_scalar("step/num_batch", num_batch, step)

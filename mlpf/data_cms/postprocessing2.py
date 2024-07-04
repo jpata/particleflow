@@ -74,28 +74,24 @@ target_branches = ["typ", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "isp
 
 
 def print_gen(g, min_pt=1):
-    gen_nodes = [n for n in g.nodes if n[0]=="gen" and ((g.nodes[n]["status"]==1) or (g.nodes[n]["status"]==2 and g.nodes[n]["num_daughters"]==0))]
+    gen_nodes = [
+        n for n in g.nodes if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or (g.nodes[n]["status"] == 2 and g.nodes[n]["num_daughters"] == 0))
+    ]
     for node in gen_nodes:
         print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["typ"])
 
-    elem_nodes = [(n, g.nodes[n]["pt"]) for n in g.nodes if n[0]=="elem" and g.nodes[n]["typ"]!=7]
+    elem_nodes = [(n, g.nodes[n]["pt"]) for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] != 7]
     elem_nodes = sorted(elem_nodes, key=lambda x: x[1], reverse=True)
     elem_nodes = [n[0] for n in elem_nodes]
     for node in elem_nodes:
-        if g.nodes[node]["pt"]>min_pt:
+        if g.nodes[node]["pt"] > min_pt:
             print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["typ"])
 
-    gen_nodes = [n for n in g.nodes if n[0]=="cp" and g.nodes[n]["pt"]>min_pt]
+    gen_nodes = [n for n in g.nodes if n[0] == "cp" and g.nodes[n]["pt"] > min_pt]
     for node in gen_nodes:
         children = [(g.nodes[suc]["typ"], g.edges[node, suc]["weight"]) for suc in g.successors(node)]
-        print(
-            node,
-            g.nodes[node]["pt"],
-            g.nodes[node]["eta"],
-            g.nodes[node]["phi"],
-            g.nodes[node]["pid"],
-            children
-        )
+        print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["pid"], children)
+
 
 def map_pdgid_to_candid(pdgid, charge):
     if pdgid in [22, 11, 13]:
@@ -263,7 +259,7 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
     # For each truth particle, compute the energy in tracks or calorimeter clusters
     for node in g.nodes:
 
-        #CaloParticles or TrackingParticles
+        # CaloParticles or TrackingParticles
         if node[0] == "cp":
             E_track = 0.0
             E_calo = 0.0
@@ -501,7 +497,7 @@ def prepare_normalized_table(g, genparticle_energy_threshold=0.2):
 
         lv = vector.obj(x=0, y=0, z=0, t=0)
 
-        #if several CaloParticles/TrackingParticles are associated to ONLY this element, merge them, as they are not reconstructable separately
+        # if several CaloParticles/TrackingParticles are associated to ONLY this element, merge them, as they are not reconstructable separately
         if len(genparticles) > 0:
 
             orig_pid = [(g.nodes[gp]["pid"], g.nodes[gp]["e"]) for gp in genparticles]
@@ -660,7 +656,7 @@ def make_graph(ev, iev):
     g = nx.DiGraph()
     for iobj in range(len(element_type)):
 
-        #PF input features
+        # PF input features
         g.add_node(
             ("elem", iobj),
             typ=element_type[iobj],
@@ -719,7 +715,7 @@ def make_graph(ev, iev):
             phierror4=element_phierror4[iobj],
         )
 
-    #Pythia generator particles
+    # Pythia generator particles
     for iobj in range(len(gen_pdgid)):
         g.add_node(
             ("gen", iobj),
@@ -734,8 +730,8 @@ def make_graph(ev, iev):
     for iobj in range(len(gen_daughters)):
         for idau in range(len(gen_daughters[iobj])):
             g.add_edge(("gen", iobj), ("gen", idau))
-    
-    #TrackingParticles
+
+    # TrackingParticles
     for iobj in range(len(trackingparticle_pid)):
         g.add_node(
             ("tp", iobj),
@@ -748,10 +744,12 @@ def make_graph(ev, iev):
             ispu=float(trackingparticle_ev[iobj] != 0),
         )
 
-    #CaloParticles
+    # CaloParticles
     for iobj in range(len(caloparticle_pid)):
         if abs(caloparticle_pid[iobj]) == 15:
-            print("tau caloparticle pt={}, this will introduce fake MET due to inclusion of neutrino in the caloparticle".format(caloparticle_pt[iobj]))
+            print(
+                "tau caloparticle pt={}, this will introduce fake MET due to inclusion of neutrino in the caloparticle".format(caloparticle_pt[iobj])
+            )
         g.add_node(
             ("cp", iobj),
             pid=caloparticle_pid[iobj],
@@ -763,7 +761,7 @@ def make_graph(ev, iev):
             ispu=float(caloparticle_ev[iobj] != 0),
         )
 
-    #baseline PF for cross-checks
+    # baseline PF for cross-checks
     for iobj in range(len(pfcandidate_pdgid)):
         g.add_node(
             ("pfcand", iobj),
@@ -774,8 +772,8 @@ def make_graph(ev, iev):
             sin_phi=np.sin(pfcandidate_phi[iobj]),
             cos_phi=np.cos(pfcandidate_phi[iobj]),
             charge=get_charge(pfcandidate_pdgid[iobj]),
-            ispu=0.0, #for PF candidates, we don't know if it was PU or not
-            orig_pid=0 #placeholder to match processed gp
+            ispu=0.0,  # for PF candidates, we don't know if it was PU or not
+            orig_pid=0,  # placeholder to match processed gp
         )
 
     trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
@@ -787,11 +785,10 @@ def make_graph(ev, iev):
         trackingparticle_to_element_second,
         trackingparticle_to_element_cmp,
     ):
-        #ignore BREM, because the TrackingParticle is already linked to GSF
-        if (g.nodes[("elem", elem)]["typ"] in [7]):
+        # ignore BREM, because the TrackingParticle is already linked to GSF
+        if g.nodes[("elem", elem)]["typ"] in [7]:
             continue
         g.add_edge(("tp", tp), ("elem", elem), weight=c)
-
 
     caloparticle_to_element_first = ev["caloparticle_to_element.first"][iev]
     caloparticle_to_element_second = ev["caloparticle_to_element.second"][iev]
@@ -811,18 +808,18 @@ def make_graph(ev, iev):
     for idx_cp, idx_tp in enumerate(caloparticle_idx_trackingparticle):
         if idx_tp != -1:
 
-            #add all the edges from the trackingparticle to the caloparticle
+            # add all the edges from the trackingparticle to the caloparticle
             for elem in g.neighbors(("tp", idx_tp)):
                 g.add_edge(
                     ("cp", idx_cp),
                     elem,
                     weight=g.edges[("tp", idx_tp), elem]["weight"],
                 )
-            #remove the trackingparticle, keep the caloparticle
+            # remove the trackingparticle, keep the caloparticle
             nodes_to_remove += [("tp", idx_tp)]
     g.remove_nodes_from(nodes_to_remove)
     print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
-    
+
     # merge_closeby_particles(g)
     # print("cleanup done, met={:.2f}".format(compute_gen_met(g)))
 
@@ -857,8 +854,12 @@ def process(args):
         data = {}
 
         # produce a list of stable pythia particles for downstream validation
-        # stable: status=1 (typical) or status=2 and no daughters (B hadrons) 
-        ptcls_pythia = [n for n in g.nodes if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or ((g.nodes[n]["status"]==2) and g.nodes[n]["num_daughters"]==0))]
+        # stable: status=1 (typical) or status=2 and no daughters (B hadrons)
+        ptcls_pythia = [
+            n
+            for n in g.nodes
+            if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or ((g.nodes[n]["status"] == 2) and g.nodes[n]["num_daughters"] == 0))
+        ]
         feats = ["typ", "pt", "eta", "phi", "e"]
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
@@ -867,7 +868,9 @@ def process(args):
         genjet_eta = ev["genjet_eta"][iev]
         genjet_phi = ev["genjet_phi"][iev]
         genjet_energy = ev["genjet_energy"][iev]
-        genjet = np.stack([awkward.to_numpy(genjet_pt), awkward.to_numpy(genjet_eta), awkward.to_numpy(genjet_phi), awkward.to_numpy(genjet_energy)], axis=-1)
+        genjet = np.stack(
+            [awkward.to_numpy(genjet_pt), awkward.to_numpy(genjet_eta), awkward.to_numpy(genjet_phi), awkward.to_numpy(genjet_energy)], axis=-1
+        )
 
         genmet_pt = ev["genmet_pt"][iev]
         genmet_phi = ev["genmet_phi"][iev]

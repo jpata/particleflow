@@ -72,7 +72,7 @@ class PFBatch:
     def __init__(self, **kwargs):
         self.attrs = list(kwargs.keys())
 
-        #write out the possible attributes here explicitly
+        # write out the possible attributes here explicitly
         self.X = kwargs.get("X")
         self.ygen = kwargs.get("ygen")
         self.ycand = kwargs.get("ycand", None)
@@ -91,17 +91,17 @@ class PFBatch:
 class Collater:
     def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, **kwargs):
         super(Collater, self).__init__(**kwargs)
-        self.per_particle_keys_to_get = per_particle_keys_to_get #these quantities are a variable-length tensor per each event
-        self.per_event_keys_to_get = per_event_keys_to_get #these quantities are one value (scalar) per event
+        self.per_particle_keys_to_get = per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
+        self.per_event_keys_to_get = per_event_keys_to_get  # these quantities are one value (scalar) per event
 
     def __call__(self, inputs):
         ret = {}
 
-        #per-particle quantities need to be padded across events of different size
+        # per-particle quantities need to be padded across events of different size
         for key_to_get in self.per_particle_keys_to_get:
             ret[key_to_get] = torch.nn.utils.rnn.pad_sequence([torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True)
 
-        #per-event quantities can be stacked across events
+        # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
             ret[key_to_get] = torch.stack([torch.tensor(inp[key_to_get]) for inp in inputs])
 

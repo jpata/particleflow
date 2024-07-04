@@ -2,10 +2,7 @@ import numpy as np
 import awkward
 import uproot
 import vector
-import glob
 import os
-import sys
-import multiprocessing
 import tqdm
 from scipy.sparse import coo_matrix
 
@@ -270,7 +267,7 @@ def gen_to_features(prop_data, iev):
     gen_arr["sin_phi"] = np.sin(gen_arr["phi"])
     gen_arr["cos_phi"] = np.cos(gen_arr["phi"])
 
-    #placeholder
+    # placeholder
     gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
     return awkward.Record(
@@ -572,6 +569,7 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         "sin_phi": np.sin(phi_arr[mask_gp_unmatched]),
         "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
+        "ispu": gpdata.gen_features["ispu"][mask_gp_unmatched],
     }
     assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
 
@@ -764,6 +762,7 @@ def process_one_file(fn, ofn):
                 "sin_phi": np.sin(reco_arr["phi"]),
                 "cos_phi": np.cos(reco_arr["phi"]),
                 "energy": reco_arr["energy"],
+                "ispu": np.zeros(len(reco_type)),
             }
         )
 
@@ -817,7 +816,7 @@ def process_one_file(fn, ofn):
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
 
-        # we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
+        # we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert np.all(gps_cluster[:, 1] == 0)
         assert np.all(rps_cluster[:, 1] == 0)
 
@@ -852,30 +851,33 @@ def process_one_file(fn, ofn):
     awkward.to_parquet(ret, ofn)
 
 
-def process_sample(sample):
-    inp = "/local/joosep/clic_edm4hep/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
+def parse_args():
+    import argparse
 
-    pool = multiprocessing.Pool(4)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
+    parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    parser.add_argument(
+        "--save-full-graph",
+        action="store_true",
+        help="save the full event graph",
+    )
+    parser.add_argument(
+        "--num-events",
+        type=int,
+        help="number of events to process",
+        default=-1,
+    )
+    args = parser.parse_args()
+    return args
 
-    inpath_samp = inp + sample
-    outpath_samp = outp + sample
-    infiles = list(glob.glob(inpath_samp + "/*.root"))
-    if not os.path.isdir(outpath_samp):
-        os.makedirs(outpath_samp)
 
-    # for inf in infiles:
-    #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-    #    process_one_file(inf, of)
-    args = []
-    for inf in infiles:
-        of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-        args.append((inf, of))
-    pool.starmap(process_one_file, args)
+def process(args):
+    infile = args.input
+    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+    process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        process_sample(sys.argv[1])
-    else:
-        process_one_file(sys.argv[1], sys.argv[2])
+    args = parse_args()
+    process(args)

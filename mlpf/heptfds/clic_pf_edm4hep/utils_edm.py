@@ -1,11 +1,6 @@
 import awkward as ak
-import fastjet
 import numpy as np
-import vector
 import random
-
-jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-min_jet_pt = 5.0  # GeV
 
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
@@ -136,7 +131,7 @@ def prepare_data_clic(fn):
         ygen = np.concatenate([ygen_track, ygen_cluster])
         ycand = np.concatenate([ycand_track, ycand_cluster])
 
-        #this should not happen
+        # this should not happen
         if (ygen.shape[0] != X.shape[0]) or (ycand.shape[0] != X.shape[0]):
             print(X.shape, ygen.shape, ycand.shape)
             raise Exception("Shape mismatgch")

@@ -270,7 +270,7 @@ def gen_to_features(prop_data, iev):
     gen_arr["sin_phi"] = np.sin(gen_arr["phi"])
     gen_arr["cos_phi"] = np.cos(gen_arr["phi"])
 
-    #placeholder
+    # placeholder
     gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
     return awkward.Record(
