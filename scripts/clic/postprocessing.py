@@ -4,6 +4,9 @@ import uproot
 import vector
 import os
 import tqdm
+import pyhepmc
+import bz2
+import fastjet
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -681,6 +684,60 @@ def get_feature_matrix(feature_dict, features):
     return feats.T
 
 
+def get_p4(part, prefix="MCParticles"):
+    p4_x = part[prefix + ".momentum.x"]
+    p4_y = part[prefix + ".momentum.y"]
+    p4_z = part[prefix + ".momentum.z"]
+    p4_mass = part[prefix + ".mass"]
+
+    p4 = vector.awk(
+        awkward.zip(
+            {
+                "mass": p4_mass,
+                "px": p4_x,
+                "py": p4_y,
+                "pz": p4_z,
+            }
+        )
+    )
+
+    return p4
+
+
+def compute_met(part, prefix="MCParticles"):
+    p4 = get_p4(part, prefix)
+    px = awkward.sum(p4.px, axis=1)
+    py = awkward.sum(p4.py, axis=1)
+    met = np.sqrt(px**2 + py**2)
+    return met
+
+
+def compute_jets(part, prefix="MCParticles", min_pt=0):
+    particles_p4 = get_p4(part, prefix)
+    jetdef = fastjet.JetDefinition2Param(fastjet.ee_genkt_algorithm, 0.4, -1)
+    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+    return jets
+
+
+def load_hepmc(hepmc_file_path):
+    events = []
+    with pyhepmc.open(bz2.BZ2File(hepmc_file_path, "rb")) as f:
+        for event in f:
+            parts = [p for p in event.particles if p.status == 1 and (p.pid != 12) and (p.pid != 14) and (p.pid != 16)]
+            parts = {
+                "MCParticles.momentum.x": [p.momentum.x for p in parts],
+                "MCParticles.momentum.y": [p.momentum.y for p in parts],
+                "MCParticles.momentum.z": [p.momentum.z for p in parts],
+                "MCParticles.mass": [p.momentum.m() for p in parts],
+            }
+            events.append(parts)
+    events = awkward.from_iter(events)
+    return events
+
+
 def process_one_file(fn, ofn):
 
     # output exists, do not recreate
@@ -690,8 +747,16 @@ def process_one_file(fn, ofn):
 
     print("loading {}".format(fn))
     fi = uproot.open(fn)
-
     arrs = fi["events"]
+
+    # load .hepmc file corresponding to the .root file
+    hepmc_file_path = fn.replace("/root/", "/sim/").replace(".root", ".hepmc.bz2").replace("reco_", "sim_")
+    hepmc_mcp = load_hepmc(hepmc_file_path)
+
+    met_hepmc = compute_met(hepmc_mcp)
+    genjets_hepmc = compute_jets(hepmc_mcp)
+
+    assert len(hepmc_mcp) == arrs.num_entries
 
     collectionIDs = {
         k: v
@@ -843,6 +908,8 @@ def process_one_file(fn, ofn):
                 "ygen_cluster": ygen_cluster,
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
+                "genmet": met_hepmc[iev],
+                "genjet": get_feature_matrix(genjets_hepmc[iev], ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
