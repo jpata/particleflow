@@ -16,7 +16,7 @@ env
 #     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
 #     --train --conv-type attention --attention-type flash --gpu-batch-multiplier 5 --num-workers 1 --prefetch-factor 50 --dtype bfloat16 --ntrain 1000 --nvalid 1000 --num-epochs 50
 
-WEIGHTS=experiments/pyg-cms_20240705_102527_068348/checkpoints/checkpoint-44-25.959111.pth
+WEIGHTS=experiments/pyg-cms_20240705_135150_750439/checkpoints/checkpoint-01-34.679519.pth
 # singularity exec -B /scratch/persistent --nv \
 #      --env PYTHONPATH=hep_tfds \
 #      --env KERAS_BACKEND=torch \

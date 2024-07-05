@@ -105,6 +105,10 @@ def get_outdir(resume_training, load):
 
 
 def main():
+    import torch.multiprocessing as mp
+
+    mp.set_sharing_strategy("file_system")
+
     # import matplotlib.pyplot as plt
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
