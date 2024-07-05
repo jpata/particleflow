@@ -77,6 +77,7 @@ class PFBatch:
         self.ygen = kwargs.get("ygen")
         self.ycand = kwargs.get("ycand", None)
         self.genmet = kwargs.get("genmet", None)
+        self.genjets = kwargs.get("genjets", None)
         self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
@@ -187,7 +188,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen"], ["genmet"]),
+                collate_fn=Collater(["X", "ygen", "genjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],

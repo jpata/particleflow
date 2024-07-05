@@ -8,7 +8,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.00005
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -103,39 +103,30 @@ raytune:
 
 train_dataset:
   cms:
-    physical:
-      batch_size: 1
+    physical_nopu:
+      batch_size: 50
       samples:
-        cms_pf_ttbar:
+        cms_pf_ttbar_nopu:
           version: 2.0.0
-    #     cms_pf_qcd:
-    #       version: 1.7.1
-    #     cms_pf_ztt:
-    #       version: 1.7.1
-    #     cms_pf_vbf:
-    #       version: 1.7.1
-    # gun:
-    #   batch_size: 5
+    # physical_pu:
+    #   batch_size: 1
     #   samples:
-    #     cms_pf_multi_particle_gun:
-    #       version: 1.7.1
+    #     cms_pf_ttbar:
+    #       version: 2.0.0
 
 valid_dataset:
   cms:
-    physical:
-      batch_size: 1
+    physical_nopu:
+      batch_size: 50
       samples:
-        cms_pf_ttbar:
+        cms_pf_ttbar_nopu:
           version: 2.0.0
-        # cms_pf_qcd:
-        #   version: 1.7.1
-        # cms_pf_ztt:
-        #   version: 1.7.1
+    # physical_pu:
+    #   batch_size: 1
+    #   samples:
+    #     cms_pf_ttbar:
+    #       version: 2.0.0
 
 test_dataset:
-  cms_pf_ttbar:
+  cms_pf_ttbar_nopu:
     version: 2.0.0
-  # cms_pf_qcd:
-  #   version: 1.7.1
-  # cms_pf_ztt:
-  #   version: 1.7.1

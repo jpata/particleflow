@@ -113,6 +113,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
+    "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
     "cms_pf_single_electron": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
@@ -302,7 +303,7 @@ def load_eval_data(path, max_files=None):
             yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
 
     yvals.update(compute_jet_ratio(data, yvals))
-
+    yvals["genmet"] = data["genmet"]
     return yvals, X, filenames
 
 

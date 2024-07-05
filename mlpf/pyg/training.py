@@ -753,7 +753,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand"]),  # in inference, use sparse dataset
+                collate_fn=Collater(["X", "ygen", "ycand", "genjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
