@@ -15,9 +15,8 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 # cd /scratch/persistent/joosep/CMSSW_14_1_0_pre3
 # eval `scram runtime -sh`
 # cd $PREVDIR
-
-export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
-export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
+# OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}/
+# WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
 set -e
