@@ -192,8 +192,8 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
-                pin_memory=use_cuda,
-                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                # pin_memory=use_cuda,
+                # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
             )
 

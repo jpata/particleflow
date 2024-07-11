@@ -16,7 +16,7 @@ env
 #     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
 #     --train --conv-type attention --attention-type flash --gpu-batch-multiplier 5 --num-workers 1 --prefetch-factor 50 --dtype bfloat16 --ntrain 1000 --nvalid 1000 --num-epochs 50
 
-WEIGHTS=experiments/pyg-cms_20240705_135150_750439/checkpoints/checkpoint-01-34.679519.pth
+WEIGHTS=experiments/pyg-cms_20240710_123023_806687/checkpoints/checkpoint-01-21.539658.pth
 # singularity exec -B /scratch/persistent --nv \
 #      --env PYTHONPATH=hep_tfds \
 #      --env KERAS_BACKEND=torch \
@@ -30,7 +30,7 @@ singularity exec -B /scratch/persistent --nv \
      --env KERAS_BACKEND=torch \
      $IMG  python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-     --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --load $WEIGHTS --ntrain 100000 --nvalid 100000 --ntest 100000 #--test-datasets cms_pf_ttbar --ntest 50000 &> logs/eval_cms_pf_ttbar.txt
+     --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --load $WEIGHTS --ntest 10000 #--test-datasets cms_pf_ttbar --ntest 50000 &> logs/eval_cms_pf_ttbar.txt
 
 # singularity exec -B /scratch/persistent --nv \
 #      --env PYTHONPATH=hep_tfds \
