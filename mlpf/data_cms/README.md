@@ -45,10 +45,10 @@ scram b -j4
 
 #download the latest MLPF model
 mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
-wget https://huggingface.co/jpata/particleflow/resolve/main/cms/2024_05_16_attn_model21M/onnx/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
+wget https://huggingface.co/jpata/particleflow/resolve/main/cms/2022_10_04_gnnlsh_model40M_acat2022/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
-# must be 57d334c9a5eaa9eb5f1c2708e0fbc5e0
-md5sum RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
+# must be b786aa6de49b51f703c87533a66326d6
+md5sum RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 ```
 
 ## Running MLPF in CMSSW
