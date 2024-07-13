@@ -45,49 +45,13 @@ scram b -j4
 
 #download the latest MLPF model
 mkdir -p RecoParticleFlow/PFProducer/data/mlpf/
-wget https://huggingface.co/jpata/particleflow/blob/main/cms/2024_05_16_attn_model21M/onnx/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
+wget https://huggingface.co/jpata/particleflow/resolve/main/cms/2022_10_04_gnnlsh_model40M_acat2022/dev.onnx?download=true -O RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 
-# must be 57d334c9a5eaa9eb5f1c2708e0fbc5e0
-md5sum RecoParticleFlow/PFProducer/data/mlpf/mlpf_21M_attn2x6x512_bs40_relu_tt_qcd_zh400k_checkpoint25_1xa100_fp32_fused.onnx
+# must be b786aa6de49b51f703c87533a66326d6
+md5sum RecoParticleFlow/PFProducer/data/mlpf/dev.onnx
 ```
 
 ## Running MLPF in CMSSW
-MLPF is integrated in CMSSW reconstruction and can be run either using simple but slow matrix workflows, or using the faster but more elaborate PF validation.
-
-### Matrix workflows
-
-Matrix workflows allow to run MLPF directly out of the box, rerunning the full reconstruction chain.
-This is easy to run, but time consuming.
-```
-#check the workflows with the .13 suffix (that have MLPF enabled)
-> runTheMatrix.py --what upgrade -n | grep "\.13"
-
-#Run this workflow TTbar_14TeV + 2021PU_mlpf
-> runTheMatrix.py --what upgrade -l 11834.13
-
-#Takes around 30 minutes
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU Step0-PASSED Step1-PASSED Step2-PASSED Step3-PASSED  - time date Thu May 16 15:24:47 2024-date Thu May 16 15:06:24 2024; exit: 0 0 0 0
-1 1 1 1 tests passed, 0 0 0 0 failed
-```
-
-Check the outputs
-```
-> ls 11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/*.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/histProbFunction.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step1.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step2.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step3_inDQM.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step3_inMINIAODSIM.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step3_inNANOEDMAODSIM.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step3_inRECOSIM.root
-11834.13_TTbar_14TeV+2021PU_mlpf+TTbar_14TeV_TuneCP5_GenSim+DigiPU+RecoNanoPU+HARVESTNanoPU/step3.root
-```
-
-The particle flow candidates can be found in `step3.root`:
-```
-vector<reco::PFCandidate>             "particleFlow"              ""                "RECO"
-```
 
 ### PF validation
 To test MLPF on higher statistics, it's not practical to redo full reconstruction before the particle flow step.
