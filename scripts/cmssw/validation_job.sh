@@ -35,25 +35,25 @@ env
 if [ $JOBTYPE == "mlpf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n 10 --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n 10 --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root
 fi
 
-cmsDriver.py step4 -s NANO --mc --conditions $CONDITIONS --era $ERA \
+cmsDriver.py step3 -s NANO --mc --conditions $CONDITIONS --era $ERA \
     --eventcontent NANOAODSIM --datatier NANOAODSIM \
-    --customise_commands=process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000 \
-    -n 1 --no_exec --filein step3_inMINIAODSIM.root --fileout file:step4.root
+    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
+    -n -1 --no_exec --filein step3_inMINIAODSIM.root --fileout file:step3_NANO.root
 
-echo "from PhysicsTools.NanoAOD.custom_jme_cff import PrepJMECustomNanoAOD" >> step4_NANO.py
-echo "process = PrepJMECustomNanoAOD(process)" >> step4_NANO.py
-cmsRun step4_NANO.py
+echo "from PhysicsTools.NanoAOD.custom_jme_cff import PrepJMECustomNanoAOD" >> step3_NANO.py
+echo "process = PrepJMECustomNanoAOD(process)" >> step3_NANO.py
+cmsRun step3_NANO.py
 
 ls *.root
 
@@ -64,7 +64,7 @@ python3 $PREVDIR/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3.pkl
 
 cp step3_inRECOSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
 cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
-cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
+cp step3_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_${NJOB}.root
 cp step3.pkl $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 
 rm -Rf $WORKDIR
