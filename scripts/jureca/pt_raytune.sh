@@ -104,9 +104,8 @@ python3 -u $PWD/mlpf/pyg_pipeline.py --train \
     --prefetch-factor 8 \
     --gpu-batch-multiplier 8 \
     --num-epochs 2 \
-    --ntrain 10000 \
-    --ntest 10000 \
-    --nvalid 10000 \
+    --ntrain 5000 \
+    --nvalid 5000 \
     --raytune-num-samples 2
 
 echo 'HPO done.'
