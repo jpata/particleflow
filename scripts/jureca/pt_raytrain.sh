@@ -2,16 +2,15 @@
 
 #SBATCH --account=jureap57
 #SBATCH --partition=dc-gpu-devel
-#SBATCH --time 0:20:00
-#SBATCH --nodes=2
+#SBATCH --time 2:00:00
+#SBATCH --nodes 1
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:4
-#SBATCH --cpus-per-task=128
 #SBATCH --gpus-per-task=4
-#SBATCH --exclusive
+#SBATCH --cpus-per-task=128
 
 # Job name
-#SBATCH -J raytune
+#SBATCH -J raytrain
 
 # Output and error logs
 #SBATCH -o logs_slurm/log_%x_%j.out
@@ -31,16 +30,24 @@ jutil env activate -p jureap57
 
 source ray_tune_env/bin/activate
 
-echo "Python used:"
-which python3
-python3 --version
+echo "DEBUG: SLURM_JOB_ID: $SLURM_JOB_ID"
+echo "DEBUG: SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
+echo "DEBUG: SLURM_NNODES: $SLURM_NNODES"
+echo "DEBUG: SLURM_NTASKS: $SLURM_NTASKS"
+echo "DEBUG: SLURM_TASKS_PER_NODE: $SLURM_TASKS_PER_NODE"
+echo "DEBUG: SLURM_SUBMIT_HOST: $SLURM_SUBMIT_HOST"
+echo "DEBUG: SLURMD_NODENAME: $SLURMD_NODENAME"
+echo "DEBUG: SLURM_NODEID: $SLURM_NODEID"
+echo "DEBUG: SLURM_LOCALID: $SLURM_LOCALID"
+echo "DEBUG: SLURM_PROCID: $SLURM_PROCID"
+echo "DEBUG: CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+echo "DEBUG: SLURM_JOB_NUM_NODES: $SLURM_JOB_NUM_NODES"
+echo "DEBUG: SLURM_CPUS_PER_TASK: $SLURM_CPUS_PER_TASK"
+echo "DEBUG: SLURM_GPUS_PER_TASK: $SLURM_GPUS_PER_TASK"
 
-sleep 1
-# make sure CUDA devices are visible
-export CUDA_VISIBLE_DEVICES="0,1,2,3"
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+num_gpus=${SLURM_GPUS_PER_TASK}  # gpus per compute node
 export SRUN_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK}  # necessary on JURECA for Ray to work
-
-num_gpus=4
 
 ## Limit number of max pending trials
 export TUNE_MAX_PENDING_TRIALS_PG=$(($SLURM_NNODES * 4))
@@ -50,6 +57,7 @@ export RAY_USAGE_STATS_DISABLE=1
 
 
 ################# DO NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
+# if [ "$SLURM_JOB_NUM_NODES" -gt 1 ]; then
 nodes=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 nodes_array=($nodes)
 
@@ -61,10 +69,12 @@ export ip_head="$head_node"i:"$port"
 export head_node_ip="$head_node"i
 
 echo "Starting HEAD at $head_node"
+# apptainer exec --nv -B /p/project/jureap57/cern \
+# apptainer/images/jureca_torch2307.sif \
 srun --nodes=1 --ntasks=1 -w "$head_node" \
     ray start --head --node-ip-address="$head_node"i --port=$port \
     --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus $num_gpus  --block &
-sleep 10
+sleep 20
 
 # number of nodes other than the head node
 worker_num=$((SLURM_JOB_NUM_NODES - 1))
@@ -74,29 +84,26 @@ for ((i = 1; i <= worker_num; i++)); do
     srun --nodes=1 --ntasks=1 -w "$node_i" \
         ray start --address "$head_node"i:"$port" --redis-password='5241580000000000' \
         --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus $num_gpus --block &
-    sleep 5
+    sleep 10
 done
 echo All Ray workers started.
+# fi
 ##############################################################################################
 
-# echo "Starting test..."
-# python3 -u $PWD/mlpf/raytune/rayinit.py
-# echo "Exited test."
-
-echo 'Starting HPO.'
+echo 'Starting training.'
 # when training with Ray Train, --gpus should be equal to toal number of GPUs across the Ray Cluster
-python3 -u $PWD/mlpf/pyg_pipeline.py --train \
-    --data-dir /p/project/jureap57/cern/tensorflow_datasets/clusters \
+# apptainer exec --nv -B /p/project/jureap57/cern/data/tensorflow_datasets,/p/project/jureap57/cern/particleflow \
+#  apptainer/images/jureca_torch2307.sif \
+python3 -u $PWD/mlpf/pyg_pipeline.py --train --ray-train \
     --config $1 \
-    --hpo $2 \
-    --ray-cpus 64 \
-    --gpus $num_gpus \
+    --prefix $2 \
+    --ray-cpus $((SLURM_CPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
+    --gpus $((SLURM_GPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
+    --gpu-batch-multiplier 8 \
     --num-workers 8 \
     --prefetch-factor 8 \
-    --gpu-batch-multiplier 8 \
-    --num-epochs 2 \
-    --ntrain 5000 \
-    --nvalid 5000 \
-    --raytune-num-samples 2
+    --experiments-dir /p/project/jureap57/cern/particleflow/experiments \
+    --local \
+    --ntrain 50000
 
-echo 'HPO done.'
+echo 'Training done.'
