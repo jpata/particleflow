@@ -135,9 +135,9 @@ def main():
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
-                    "physical": {
-                        "batch_size": config[ds]["cms"]["physical"]["batch_size"],
-                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
+                    "physical_pu": {
+                        "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
+                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}

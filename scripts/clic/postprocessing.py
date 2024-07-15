@@ -1,8 +1,16 @@
+import os
+
+# to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
 import awkward
 import uproot
 import vector
-import os
 import tqdm
 import pyhepmc
 import bz2
@@ -257,7 +265,7 @@ def hit_cluster_adj(prop_data, hit_idx_local_to_global, iev):
 
 
 def gen_to_features(prop_data, iev):
-    gen_arr = prop_data[mc_coll][iev]
+    gen_arr = prop_data[iev]
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
     MCParticles_p4 = vector.awk(
@@ -768,7 +776,13 @@ def process_one_file(fn, ofn):
 
     prop_data = arrs.arrays(
         [
-            mc_coll,
+            "MCParticles.PDG",
+            "MCParticles.momentum.x",
+            "MCParticles.momentum.y",
+            "MCParticles.momentum.z",
+            "MCParticles.mass",
+            "MCParticles.charge",
+            "MCParticles.generatorStatus",
             track_coll,
             "SiTracks_1",
             "PandoraClusters",

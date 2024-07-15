@@ -1,4 +1,5 @@
 import glob
+import os
 
 
 def chunks(lst, n):
@@ -18,7 +19,7 @@ def write_script(infiles, outpath):
 
     for inf in infiles:
         s += [
-            "singularity exec -B /local /home/software/singularity/pytorch.simg:2024-06-26 python3 "
+            "singularity exec -B /local /home/software/singularity/pytorch.simg:2024-07-08 python3 "
             + f"scripts/clic/postprocessing.py --input {inf} --outpath {outpath}"
         ]
     ret = "\n".join(s)
@@ -27,11 +28,15 @@ def write_script(infiles, outpath):
     return ret
 
 
-samples = [("/local/joosep/clic_edm4hep/2024_03/p8_ee_qq_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_qq_ecm380/")]
+samples = [
+    ("/local/joosep/clic_edm4hep/2024_07/p8_ee_qq_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_qq_ecm380/"),
+    ("/local/joosep/clic_edm4hep/2024_07/p8_ee_tt_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_tt_ecm380/"),
+]
 
 ichunk = 1
 for sample, outpath in samples:
     infiles = list(glob.glob(f"{sample}/*.root"))
+    os.makedirs(outpath, exist_ok=True)
     for infiles_chunk in chunks(infiles, 20):
         scr = write_script(infiles_chunk, outpath)
         ofname = f"jobscripts/postproc_{ichunk}.sh"

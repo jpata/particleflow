@@ -90,6 +90,8 @@ def prepare_data_clic(fn):
     Xs = []
     ygens = []
     ycands = []
+    genmets = []
+    genjets = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -107,6 +109,8 @@ def prepare_data_clic(fn):
         ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+        genmet = ak.to_numpy(ret["genmet"][iev])
+        genjet = ak.to_numpy(ret["genjet"][iev])
 
         if len(ygen_track) == 0 and len(ygen_cluster) == 0:
             continue
@@ -145,18 +149,23 @@ def prepare_data_clic(fn):
         Xs.append(X)
         ygens.append(ygen)
         ycands.append(ycand)
-    return Xs, ygens, ycands
+        genmets.append(genmet)
+        genjets.append(genjet)
+    return Xs, ygens, ycands, genmets, genjets
 
 
 def generate_examples(files):
     for fi in files:
-        print(fi)
-        Xs, ygens, ycands = prepare_data_clic(fi)
+        Xs, ygens, ycands, genmets, genjets = prepare_data_clic(fi)
         for iev in range(len(Xs)):
+            gm = genmets[iev][0]
+            gj = genjets[iev]
             yield str(fi) + "_" + str(iev), {
                 "X": Xs[iev].astype(np.float32),
-                "ygen": ygens[iev],
-                "ycand": ycands[iev],
+                "ygen": ygens[iev].astype(np.float32),
+                "ycand": ycands[iev].astype(np.float32),
+                "genmet": gm,
+                "genjets": gj.astype(np.float32),
             }
 
 
