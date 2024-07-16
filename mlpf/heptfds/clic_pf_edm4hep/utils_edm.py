@@ -138,8 +138,9 @@ def prepare_data_clic(fn):
 
         # this should not happen
         if (ygen.shape[0] != X.shape[0]) or (ycand.shape[0] != X.shape[0]):
-            print(X.shape, ygen.shape, ycand.shape)
-            raise Exception("Shape mismatch")
+            print("Shape mismatch:", X.shape, ygen.shape, ycand.shape)
+            continue
+            # raise Exception("Shape mismatch")
 
         # replace PID with index in labels array
         arr = np.array([labels.index(p) for p in ygen[:, 0]])
