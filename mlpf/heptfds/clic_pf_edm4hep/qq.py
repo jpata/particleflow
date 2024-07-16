@@ -10,7 +10,6 @@ from utils_edm import (
 )
 
 import tensorflow_datasets as tfds
-import numpy as np
 
 _DESCRIPTION = """
 CLIC EDM4HEP dataset with ee -> gamma/Z* -> quarks at 380GeV.
@@ -63,8 +62,8 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
                         ),
                         dtype=tf.float32,
                     ),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }

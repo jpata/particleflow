@@ -115,14 +115,15 @@ def prepare_data_clic(fn):
         if len(ygen_track) == 0 and len(ygen_cluster) == 0:
             continue
 
+        # in case the event had no track or cluster, create the right shapes
         if len(ygen_track) == 0:
-            ygen_track = np.zeros((0, N_Y_FEATURES - 1))
+            ygen_track = np.zeros((0, N_Y_FEATURES))
         if len(ygen_cluster) == 0:
-            ygen_cluster = np.zeros((0, N_Y_FEATURES - 1))
+            ygen_cluster = np.zeros((0, N_Y_FEATURES))
         if len(ycand_track) == 0:
-            ycand_track = np.zeros((0, N_Y_FEATURES - 1))
+            ycand_track = np.zeros((0, N_Y_FEATURES))
         if len(ycand_cluster) == 0:
-            ycand_cluster = np.zeros((0, N_Y_FEATURES - 1))
+            ycand_cluster = np.zeros((0, N_Y_FEATURES))
 
         # pad feature dim between tracks and clusters to the same size
         if X1.shape[1] < N_X_FEATURES:
@@ -138,7 +139,7 @@ def prepare_data_clic(fn):
         # this should not happen
         if (ygen.shape[0] != X.shape[0]) or (ycand.shape[0] != X.shape[0]):
             print(X.shape, ygen.shape, ycand.shape)
-            raise Exception("Shape mismatgch")
+            raise Exception("Shape mismatch")
 
         # replace PID with index in labels array
         arr = np.array([labels.index(p) for p in ygen[:, 0]])
