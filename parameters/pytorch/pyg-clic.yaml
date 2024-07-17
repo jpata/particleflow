@@ -8,9 +8,9 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 10
 patience: 20
-lr: 0.0001
+lr: 0.00001
 lr_schedule: constant  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: attention
 ntrain:
 ntest:
 nvalid:
@@ -105,33 +105,23 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
         clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+          version: 2.0.0
+        clic_edm_qq_pf:
+          version: 2.0.0
 
 valid_dataset:
   clic:
     physical:
       batch_size: 1
       samples:
+        clic_edm_ttbar_pf:
+          version: 2.0.0
         clic_edm_qq_pf:
-          version: 1.5.0
+          version: 2.0.0
 
 test_dataset:
-  clic_edm_qq_pf:
-    version: 1.5.0
   clic_edm_ttbar_pf:
-    version: 1.5.0
-  clic_edm_ttbar_pu10_pf:
-    version: 1.5.0
-  clic_edm_ww_fullhad_pf:
-    version: 1.5.0
-  clic_edm_zh_tautau_pf:
-    version: 1.5.0
+    version: 2.0.0
+  clic_edm_qq_pf:
+    version: 2.0.0

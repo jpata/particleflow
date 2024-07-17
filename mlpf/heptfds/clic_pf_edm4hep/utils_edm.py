@@ -1,11 +1,6 @@
 import awkward as ak
-import fastjet
 import numpy as np
-import vector
 import random
-
-jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-min_jet_pt = 5.0  # GeV
 
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
@@ -46,7 +41,7 @@ X_FEATURES_CL = [
     "sigma_z",
 ]
 
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
 labels = [0, 211, 130, 22, 11, 13]
 
 N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
@@ -84,7 +79,7 @@ def split_sample_several(paths, test_frac=0.8):
     }
 
 
-def prepare_data_clic(fn, with_jet_idx=True):
+def prepare_data_clic(fn):
     ret = ak.from_parquet(fn)
     X_track = ret["X_track"]
     X_cluster = ret["X_cluster"]
@@ -95,6 +90,8 @@ def prepare_data_clic(fn, with_jet_idx=True):
     Xs = []
     ygens = []
     ycands = []
+    genmets = []
+    genjets = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -112,18 +109,21 @@ def prepare_data_clic(fn, with_jet_idx=True):
         ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+        genmet = ak.to_numpy(ret["genmet"][iev])
+        genjet = ak.to_numpy(ret["genjet"][iev])
 
         if len(ygen_track) == 0 and len(ygen_cluster) == 0:
             continue
 
+        # in case the event had no track or cluster, create the right shapes
         if len(ygen_track) == 0:
-            ygen_track = np.zeros((0, N_Y_FEATURES - 1))
+            ygen_track = np.zeros((0, N_Y_FEATURES))
         if len(ygen_cluster) == 0:
-            ygen_cluster = np.zeros((0, N_Y_FEATURES - 1))
+            ygen_cluster = np.zeros((0, N_Y_FEATURES))
         if len(ycand_track) == 0:
-            ycand_track = np.zeros((0, N_Y_FEATURES - 1))
+            ycand_track = np.zeros((0, N_Y_FEATURES))
         if len(ycand_cluster) == 0:
-            ycand_cluster = np.zeros((0, N_Y_FEATURES - 1))
+            ycand_cluster = np.zeros((0, N_Y_FEATURES))
 
         # pad feature dim between tracks and clusters to the same size
         if X1.shape[1] < N_X_FEATURES:
@@ -136,26 +136,11 @@ def prepare_data_clic(fn, with_jet_idx=True):
         ygen = np.concatenate([ygen_track, ygen_cluster])
         ycand = np.concatenate([ycand_track, ycand_cluster])
 
+        # this should not happen
         if (ygen.shape[0] != X.shape[0]) or (ycand.shape[0] != X.shape[0]):
-            print(X.shape, ygen.shape, ycand.shape)
+            print("Shape mismatch:", X.shape, ygen.shape, ycand.shape)
             continue
-
-        # add jet_idx column
-        if with_jet_idx:
-            ygen = np.concatenate(
-                [
-                    ygen.astype(np.float32),
-                    np.zeros((len(ygen), 1), dtype=np.float32),
-                ],
-                axis=-1,
-            )
-            ycand = np.concatenate(
-                [
-                    ycand.astype(np.float32),
-                    np.zeros((len(ycand), 1), dtype=np.float32),
-                ],
-                axis=-1,
-            )
+            # raise Exception("Shape mismatch")
 
         # replace PID with index in labels array
         arr = np.array([labels.index(p) for p in ygen[:, 0]])
@@ -163,57 +148,26 @@ def prepare_data_clic(fn, with_jet_idx=True):
         arr = np.array([labels.index(p) for p in ycand[:, 0]])
         ycand[:, 0][:] = arr[:]
 
-        if with_jet_idx:
-            # prepare gen candidates for clustering
-            cls_id = ygen[..., 0]
-            valid = cls_id != 0
-            # save mapping of index after masking -> index before masking as numpy array
-            # inspired from:
-            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-            cumsum = np.cumsum(valid) - 1
-            _, index_mapping = np.unique(cumsum, return_index=True)
-
-            pt = ygen[valid, Y_FEATURES.index("pt")]
-            eta = ygen[valid, Y_FEATURES.index("eta")]
-            sin_phi = ygen[valid, Y_FEATURES.index("sin_phi")]
-            cos_phi = ygen[valid, Y_FEATURES.index("cos_phi")]
-            phi = np.arctan2(sin_phi, cos_phi)
-            energy = ygen[valid, Y_FEATURES.index("energy")]
-            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "energy": energy}))
-
-            # cluster jets, sort jet indices in descending order by pt
-            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
-            # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
-
-            # add index information to ygen and ycand
-            # index jets in descending order by pt starting from 1:
-            # 0 is null (unclustered),
-            # 1 is 1st highest-pt jet,
-            # 2 is 2nd highest-pt jet, ...
-            for jet_idx in sorted_jet_idx:
-                jet_constituents = [
-                    index_mapping[idx] for idx in constituent_idx[jet_idx]
-                ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
         Xs.append(X)
         ygens.append(ygen)
         ycands.append(ycand)
-    return Xs, ygens, ycands
+        genmets.append(genmet)
+        genjets.append(genjet)
+    return Xs, ygens, ycands, genmets, genjets
 
 
-def generate_examples(files, with_jet_idx=True):
+def generate_examples(files):
     for fi in files:
-        print(fi)
-        Xs, ygens, ycands = prepare_data_clic(fi, with_jet_idx=with_jet_idx)
+        Xs, ygens, ycands, genmets, genjets = prepare_data_clic(fi)
         for iev in range(len(Xs)):
+            gm = genmets[iev][0]
+            gj = genjets[iev]
             yield str(fi) + "_" + str(iev), {
                 "X": Xs[iev].astype(np.float32),
-                "ygen": ygens[iev],
-                "ycand": ycands[iev],
+                "ygen": ygens[iev].astype(np.float32),
+                "ycand": ycands[iev].astype(np.float32),
+                "genmet": gm,
+                "genjets": gj.astype(np.float32),
             }
 
 

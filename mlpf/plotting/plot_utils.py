@@ -99,15 +99,11 @@ def get_class_names(sample_name):
         return CLASS_NAMES_CLIC
     elif sample_name.startswith("cms_"):
         return CLASS_NAMES_CMS
-    elif sample_name.startswith("delphes_"):
-        return CLASS_NAMES_CLIC
     else:
         raise Exception("Unknown sample name: {}".format(sample_name))
 
 
 EVALUATION_DATASET_NAMES = {
-    "delphes_ttbar_pf": r"Delphes-CMS $pp \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "delphes_qcd_pf": r"Delphes-CMS $pp \rightarrow \mathrm{QCD}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
@@ -117,6 +113,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
+    "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
     "cms_pf_single_electron": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
@@ -203,9 +200,7 @@ def get_fake(df, pid):
     return v0 / len(df), np.sqrt(v0) / len(df)
 
 
-def experiment_label(
-    ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x0=0.01, x1=0.17, x2=0.98, y=1.01
-):
+def experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x0=0.01, x1=0.17, x2=0.98, y=1.01):
     plt.figtext(
         x0,
         y,
@@ -245,13 +240,8 @@ def clic_label(ax):
     return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation", tag2="ee (380 GeV)", x1=0.35)
 
 
-def delphes_label(ax):
-    return experiment_label(ax, experiment="Delphes-CMS", tag1="Simulation", tag2="pp (14 TeV)", x1=0.30)
-
-
 EXPERIMENT_LABELS = {
     "cms": cms_label,
-    "delphes": delphes_label,
     "clic": clic_label,
 }
 
@@ -279,7 +269,6 @@ def load_eval_data(path, max_files=None):
     print("path", path)
 
     filelist = list(glob.glob(path))
-    print(filelist)
 
     if max_files is not None:
         filelist = filelist[:max_files]
@@ -314,7 +303,7 @@ def load_eval_data(path, max_files=None):
             yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
 
     yvals.update(compute_jet_ratio(data, yvals))
-
+    yvals["genmet"] = data["genmet"]
     return yvals, X, filenames
 
 
@@ -408,15 +397,9 @@ def compute_3dmomentum_and_ratio(yvals):
     cand_py = yvals["cand_py"][msk_cand]
     cand_pz = yvals["cand_pz"][msk_cand]
 
-    gen_mom = awkward.to_numpy(
-        np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2 + np.sum(gen_pz, axis=1) ** 2)
-    )
-    pred_mom = awkward.to_numpy(
-        np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2 + np.sum(pred_pz, axis=1) ** 2)
-    )
-    cand_mom = awkward.to_numpy(
-        np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2 + np.sum(cand_pz, axis=1) ** 2)
-    )
+    gen_mom = awkward.to_numpy(np.sqrt(np.sum(gen_px, axis=1) ** 2 + np.sum(gen_py, axis=1) ** 2 + np.sum(gen_pz, axis=1) ** 2))
+    pred_mom = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2 + np.sum(pred_pz, axis=1) ** 2))
+    cand_mom = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2 + np.sum(cand_pz, axis=1) ** 2))
 
     mom_ratio_pred = awkward.to_numpy(pred_mom / gen_mom)
     mom_ratio_cand = awkward.to_numpy(cand_mom / gen_mom)
@@ -760,9 +743,7 @@ def plot_met_ratio(
     )
 
 
-def plot_3dmomentum_ratio(
-    mom_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False
-):
+def plot_3dmomentum_ratio(mom_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, bins=None, file_modifier="", logy=False):
     plt.figure()
     ax = plt.axes()
     if bins is None:
@@ -1366,9 +1347,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     )
 
 
-def plot_jet_response_binned_eta(
-    yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None
-):
+def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     pf_genjet_eta = yvals["jet_gen_to_cand_geneta"]
     mlpf_genjet_eta = yvals["jet_gen_to_pred_geneta"]
 

@@ -561,15 +561,7 @@ def build_kernel_from_conf(kernel_dict, name):
 
 
 class MessageBuildingLayerLSH(tf.keras.layers.Layer):
-    def __init__(
-        self,
-        distance_dim=128,
-        max_num_bins=200,
-        bin_size=128,
-        kernel=NodePairGaussianKernel(),
-        small_graph_opt=False,
-        **kwargs
-    ):
+    def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), small_graph_opt=False, **kwargs):
         self.distance_dim = distance_dim
         self.max_num_bins = max_num_bins
         self.bin_size = bin_size
@@ -1192,12 +1184,8 @@ class PFNetDense(tf.keras.Model):
 
         self.bin_size = combined_graph_layer["bin_size"]
 
-        self.cg_id = [
-            CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)
-        ]
-        self.cg_reg = [
-            CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_reg)
-        ]
+        self.cg_id = [CombinedGraphLayer(name="cg_id_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_id)]
+        self.cg_reg = [CombinedGraphLayer(name="cg_reg_{}".format(i), **combined_graph_layer) for i in range(num_graph_layers_reg)]
 
         output_decoding["schema"] = schema
         output_decoding["num_output_classes"] = num_output_classes

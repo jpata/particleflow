@@ -10,7 +10,7 @@ num_epochs: 100
 patience: 20
 lr: 0.00005
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: attention
 ntrain:
 ntest:
 nvalid:
@@ -54,7 +54,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 6
+    num_convs: 8
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
@@ -103,39 +103,38 @@ raytune:
 
 train_dataset:
   cms:
-    physical:
+    physical_nopu:
+      batch_size: 30
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+    physical_pu:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.1
+          version: 2.0.0
         cms_pf_qcd:
-          version: 1.7.1
-        cms_pf_ztt:
-          version: 1.7.1
-        cms_pf_vbf:
-          version: 1.7.1
-    gun:
-      batch_size: 5
-      samples:
-        cms_pf_multi_particle_gun:
-          version: 1.7.1
+          version: 2.0.0
 
 valid_dataset:
   cms:
-    physical:
+    physical_nopu:
+      batch_size: 30
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+    physical_pu:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.1
+          version: 2.0.0
         cms_pf_qcd:
-          version: 1.7.1
-        cms_pf_ztt:
-          version: 1.7.1
+          version: 2.0.0
 
 test_dataset:
   cms_pf_ttbar:
-    version: 1.7.1
+    version: 2.0.0
   cms_pf_qcd:
-    version: 1.7.1
-  cms_pf_ztt:
-    version: 1.7.1
+    version: 2.0.0
+  cms_pf_ttbar_nopu:
+    version: 2.0.0

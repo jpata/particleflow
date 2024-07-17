@@ -25,7 +25,7 @@ class TFDSDataSource:
         if len(item) == 1:
             ret = ret[0]
 
-        # sorting the elements in pT descending order for the Mamba-based model
+        # sort the elements in each event in pT descending order
         if self.sort:
             sortidx = np.argsort(ret["X"][:, 1])[::-1]
             ret["X"] = ret["X"][sortidx]
@@ -50,7 +50,7 @@ class PFDataset:
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test" (if "valid" then will use "test")
-            keys_to_get: any selection of ["X", "ygen", "ycand"] to retrieve
+            keys_to_get: any keys in the TFDS to retrieve (e.g. X, ygen, ycand)
         """
         if split == "valid":
             split = "test"
@@ -67,33 +67,46 @@ class PFDataset:
 
 
 class PFBatch:
-    def __init__(self, X=None, ygen=None, ycand=None):
-        self.X = X
-        self.ygen = ygen
-        self.ycand = ycand
-        self.mask = X[:, :, 0] != 0
+    def __init__(self, **kwargs):
+        self.attrs = list(kwargs.keys())
+
+        # write out the possible attributes here explicitly
+        self.X = kwargs.get("X")
+        self.ygen = kwargs.get("ygen")
+        self.ycand = kwargs.get("ycand", None)
+        self.genmet = kwargs.get("genmet", None)
+        self.genjets = kwargs.get("genjets", None)
+        self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
         attrs = {}
-        for attr in ["X", "ygen", "ycand"]:
+        for attr in self.attrs:
             this_attr = getattr(self, attr)
-            if not (this_attr is None):
-                attrs[attr] = this_attr.to(device, **kwargs)
+            attrs[attr] = this_attr.to(device, **kwargs)
         return PFBatch(**attrs)
 
 
 # pads items with variable lengths (seq_len1, seq_len2, ...) to [batch, max(seq_len), ...]
 class Collater:
-    def __init__(self, keys_to_get, **kwargs):
+    def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, **kwargs):
         super(Collater, self).__init__(**kwargs)
-        self.keys_to_get = keys_to_get
+        self.per_particle_keys_to_get = (
+            per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
+        )
+        self.per_event_keys_to_get = per_event_keys_to_get  # these quantities are one value (scalar) per event
 
     def __call__(self, inputs):
         ret = {}
-        for key_to_get in self.keys_to_get:
+
+        # per-particle quantities need to be padded across events of different size
+        for key_to_get in self.per_particle_keys_to_get:
             ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
                 [torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True
             )
+
+        # per-event quantities can be stacked across events
+        for key_to_get in self.per_event_keys_to_get:
+            ret[key_to_get] = torch.stack([torch.tensor(inp[key_to_get]) for inp in inputs])
 
         return PFBatch(**ret)
 
@@ -148,8 +161,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
         loaders[split] = []
-        # build dataloader for physical and gun samples seperately
-        for type_ in config[f"{split}_dataset"][config["dataset"]]:  # will be "physical", "gun", "multiparticlegun"
+        for type_ in config[f"{split}_dataset"][config["dataset"]]:
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
@@ -178,21 +190,14 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand"]),
+                collate_fn=Collater(["X", "ygen", "genjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
-                pin_memory=use_cuda,
-                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                # pin_memory=use_cuda,
+                # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
             )
-
-            # This doesn't seem to be needed anymore. 2024.04.17
-            # if use_ray:
-            #     import ray
-
-            #     # prepare loader for distributed training, adds distributed sampler
-            #     loader = ray.train.torch.prepare_data_loader(loader)
 
             loaders[split].append(loader)
 

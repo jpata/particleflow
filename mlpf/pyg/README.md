@@ -20,7 +20,7 @@ After that, the entry point to launch training or testing for either CMS, DELPHE
 python -u mlpf/pyg_pipeline.py --dataset=${} --data_dir=${} --prefix=${} --gpus=${} --ntrain 10 --nvalid 10 --ntest 10
 ```
 where:
-- `--dataset`: choices are `cms` or `delphes` or `clic`
+- `--dataset`: choices are `cms` or `clic`
 - `--data_dir`: path to the tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
 - `--prefix`: path pointing to the model directory (note: a unique hash will be appended to avoid overwrite)
 - `--gpus`: to use CPU set to empty string ""; else to use gpus provide e.g. "0,1"

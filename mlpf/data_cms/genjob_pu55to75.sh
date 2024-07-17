@@ -1,13 +1,14 @@
 #!/bin/bash
 #SBATCH --partition main
+#SBATCH --time 04:00:00
 #SBATCH --cpus-per-task 1
 #SBATCH --mem-per-cpu 6G
 #SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/v3/pu55to75/
-CMSSWDIR=/home/joosep/CMSSW_12_3_0_pre6
+OUTDIR=/local/joosep/mlpf/cms/20240702_cptruthdef/pu55to75/
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -22,8 +23,9 @@ mkdir -p $OUTDIR
 PILEUP=Run3_Flat55To75_PoissonOOTPU
 PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data_cms/pu_files_local.txt
 
-N=20
+N=50
 
+env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 cd $CMSSWDIR
@@ -31,15 +33,17 @@ eval `scramv1 runtime -sh`
 which python
 which python3
 
+env
+
 cd $WORKDIR
 
 #Generate the MC
 cmsDriver.py $SAMPLE \
-  --conditions auto:phase1_2021_realistic \
+  --conditions auto:phase1_2023_realistic \
   -n $N \
-  --era Run3 \
+  --era Run3_2023 \
   --eventcontent FEVTDEBUGHLT \
-  -s GEN,SIM,DIGI,L1,DIGI2RAW,HLT \
+  -s GEN,SIM,DIGI:pdigi_valid,L1,DIGI2RAW,HLT:@relval2023 \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
@@ -51,8 +55,8 @@ cmsDriver.py $SAMPLE \
 
 #Run the reco sequences
 cmsDriver.py step3 \
-  --conditions auto:phase1_2021_realistic \
-  --era Run3 \
+  --conditions auto:phase1_2023_realistic \
+  --era Run3_2023 \
   -n -1 \
   --eventcontent FEVTDEBUGHLT \
   --runUnscheduled \
@@ -73,8 +77,13 @@ cmsRun step2_phase1_new.py > /dev/null
 cmsRun step3_phase1_new.py > /dev/null
 #cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./ --save-normalized-table
+python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
 bzip2 -z pfntuple_${SEED}.pkl
 cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
+
+#copy ROOT outputs
+#cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+#cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
 #cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
+
 rm -Rf $WORKDIR

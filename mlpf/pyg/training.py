@@ -51,7 +51,7 @@ from utils import create_comet_experiment
 np.seterr(divide="ignore", invalid="ignore")
 
 
-def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
+def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
     theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
     theta = theta / torch.sqrt(torch.sum(theta**2, axis=1, keepdims=True))
@@ -67,32 +67,28 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, mask):
+def mlpf_loss(y, ypred, batch):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
+        batch [PFBatch]: the MLPF inputs
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    nelem = torch.sum(mask)
+    nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
-    # ypred["charge"] = ypred["charge"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
-    # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
-    # in case of the 3D-padded mode, pytorch expects (N, C, ...)
+    # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-    # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
-    # loss_charge = 0.0*torch.nn.functional.cross_entropy(
-    #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
     # average over all elements that were not padded
     loss["Classification"] = loss_classification.sum() / nelem
@@ -100,38 +96,26 @@ def mlpf_loss(y, ypred, mask):
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
     mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
+
     # average over all true particles
     loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
-    # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
-    if len(msk_true_particle.shape) == 3:
-        msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
-        # pt * cos_phi
-        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_pred_particle
-        # pt * sin_phi
-        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_pred_particle
-        # sum across events
-        pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
+    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
+    # pt * cos_phi
+    px = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 3:4].detach() * msk_pred_particle
+    # pt * sin_phi
+    py = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 2:3].detach() * msk_pred_particle
+    # sum across events
+    pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
-        px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
-        py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
-        true_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
-        loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
-        loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
+    loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
+    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
 
-    loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
-
-    # Keep track of loss components for each true particle type
-    # These are detached to keeping track of the gradient
-    for icls in range(0, 7):
-        loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
-        loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
+    loss["Total"] = loss["Classification"] + loss["Regression"]
 
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
-    # loss["Charge"] = loss["Charge"].detach()
-    # print(loss["Total"].detach().item(), y["cls_id"].shape, nelem, npart)
     return loss
 
 
@@ -147,9 +131,7 @@ class FocalLoss(nn.Module):
         - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
     """
 
-    def __init__(
-        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
-    ):
+    def __init__(self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100):
         """Constructor.
         Args:
             alpha (Tensor, optional): Weights for each class. Defaults to None.
@@ -266,9 +248,7 @@ def train_and_valid(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(data_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
-        )
+        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}")
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
@@ -293,12 +273,12 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batch.mask)
+                loss = mlpf_loss(ygen, ypred, batch)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batch.mask)
+                    loss = mlpf_loss(ygen, ypred, batch)
 
         if is_train:
             loss["Total"].backward()
@@ -315,13 +295,13 @@ def train_and_valid(
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
             if not (tensorboard_writer is None):
-                tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
-                tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
-                tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
-                tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
-                if itrain % 10 == 0:
+                if step % 100 == 0:
+                    tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
+                    tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
+                    tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                    tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
                     tensorboard_writer.flush()
-                loss_accum = 0.0
+                    loss_accum = 0.0
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
@@ -450,9 +430,7 @@ def train_mlpf(
 
         # training step, edit here to profile a specific epoch
         if epoch == -1:
-            with profile(
-                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
-            ) as prof:
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
                         rank,
@@ -624,7 +602,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
-    _logger.info("using dtype={}".format(dtype))
+    _logger.info("configured dtype={} for autocast".format(dtype))
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -697,9 +675,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if args.comet:
-            comet_experiment = create_comet_experiment(
-                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
-            )
+            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
@@ -777,7 +753,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand"]),  # in inference, use sparse dataset
+                collate_fn=Collater(["X", "ygen", "ycand", "genjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -933,9 +909,7 @@ def train_ray_trial(config, args, outdir=None):
     loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(
-            config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
-        )
+        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -969,9 +943,7 @@ def train_ray_trial(config, args, outdir=None):
                 if args.resume_training:
                     model, optimizer = load_checkpoint(checkpoint, model, optimizer)
                     start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                    lr_schedule = get_lr_schedule(
-                        config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1
-                    )
+                    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
@@ -1148,9 +1120,7 @@ def run_hpo(config, args):
 
     if tune.Tuner.can_restore(str(expdir)):
         # resume unfinished HPO run
-        tuner = tune.Tuner.restore(
-            str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True
-        )
+        tuner = tune.Tuner.restore(str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True)
     else:
         # start new HPO run
         search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
@@ -1191,9 +1161,7 @@ def run_hpo(config, args):
     print(result_df.columns)
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
-    logging.info(
-        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
-    )
+    logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
 
     # clean up ray cache
     tmp_ray_cache.cleanup()
