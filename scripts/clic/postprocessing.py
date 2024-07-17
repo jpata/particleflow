@@ -1,19 +1,27 @@
+import os
+
+# to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
 import awkward
 import uproot
 import vector
-import glob
-import os
-import sys
-import multiprocessing
 import tqdm
+import pyhepmc
+import bz2
+import fastjet
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
 # the feature matrices will be saved in this order
-particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
+particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
 
 # arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 # so we can easily use them in skip connections
@@ -129,9 +137,7 @@ class EventData:
         self.cluster_features = cluster_features  # feature matrix of the calo clusters
         self.track_features = track_features  # feature matrix of the tracks
         self.genparticle_to_hit = genparticle_to_hit  # sparse COO matrix of genparticles to hits (idx_gp, idx_hit, weight)
-        self.genparticle_to_track = (
-            genparticle_to_track  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
-        )
+        self.genparticle_to_track = genparticle_to_track  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
         self.hit_to_cluster = hit_to_cluster  # sparse COO matrix of hits to clusters (idx_hit, idx_cluster, weight)
         self.gp_merges = gp_merges  # sparse COO matrix of any merged genparticles
 
@@ -197,10 +203,7 @@ def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
             hit_idx_global += 1
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
     hit_feature_matrix = awkward.Record(
-        {
-            k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))])
-            for k in hit_feature_matrix[0].fields
-        }
+        {k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))]) for k in hit_feature_matrix[0].fields}
     )
 
     # add all edges from genparticle to calohit
@@ -262,13 +265,11 @@ def hit_cluster_adj(prop_data, hit_idx_local_to_global, iev):
 
 
 def gen_to_features(prop_data, iev):
-    gen_arr = prop_data[mc_coll][iev]
+    gen_arr = prop_data[iev]
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
     MCParticles_p4 = vector.awk(
-        awkward.zip(
-            {"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]}
-        )
+        awkward.zip({"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]})
     )
     gen_arr["pt"] = MCParticles_p4.pt
     gen_arr["eta"] = MCParticles_p4.eta
@@ -276,6 +277,9 @@ def gen_to_features(prop_data, iev):
     gen_arr["energy"] = MCParticles_p4.energy
     gen_arr["sin_phi"] = np.sin(gen_arr["phi"])
     gen_arr["cos_phi"] = np.cos(gen_arr["phi"])
+
+    # placeholder
+    gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
     return awkward.Record(
         {
@@ -288,6 +292,7 @@ def gen_to_features(prop_data, iev):
             "sin_phi": gen_arr["sin_phi"],
             "cos_phi": gen_arr["cos_phi"],
             "energy": gen_arr["energy"],
+            "ispu": gen_arr["ispu"],
         }
     )
 
@@ -420,9 +425,7 @@ def filter_adj(adj, all_to_filtered):
 
 def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
     gen_features = gen_to_features(prop_data, iev)
-    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(
-        hit_data, calohit_links, iev, collectionIDs
-    )
+    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
@@ -435,9 +438,7 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
 
     if len(genparticle_to_track[0]) > 0:
         gp_to_track = (
-            coo_matrix((genparticle_to_track[2], (genparticle_to_track[0], genparticle_to_track[1])), shape=(n_gp, n_track))
-            .max(axis=1)
-            .todense()
+            coo_matrix((genparticle_to_track[2], (genparticle_to_track[0], genparticle_to_track[1])), shape=(n_gp, n_track)).max(axis=1).todense()
         )
     else:
         gp_to_track = np.zeros((n_gp, 1))
@@ -490,12 +491,8 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         ).todense()
     )
 
-    gp_to_calohit = coo_matrix(
-        (gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit)
-    )
-    calohit_to_cluster = coo_matrix(
-        (gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster)
-    )
+    gp_to_calohit = coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit))
+    calohit_to_cluster = coo_matrix((gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster))
 
     gp_to_cluster = np.array((gp_to_calohit * calohit_to_cluster).todense())
 
@@ -583,6 +580,7 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         "sin_phi": np.sin(phi_arr[mask_gp_unmatched]),
         "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
+        "ispu": gpdata.gen_features["ispu"][mask_gp_unmatched],
     }
     assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
 
@@ -659,9 +657,7 @@ def get_reco_properties(prop_data, iev):
     reco_arr = {k.replace("MergedRecoParticles.", ""): reco_arr[k] for k in reco_arr.fields}
 
     reco_p4 = vector.awk(
-        awkward.zip(
-            {"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]}
-        )
+        awkward.zip({"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]})
     )
     reco_arr["pt"] = reco_p4.pt
     reco_arr["eta"] = reco_p4.eta
@@ -696,6 +692,60 @@ def get_feature_matrix(feature_dict, features):
     return feats.T
 
 
+def get_p4(part, prefix="MCParticles"):
+    p4_x = part[prefix + ".momentum.x"]
+    p4_y = part[prefix + ".momentum.y"]
+    p4_z = part[prefix + ".momentum.z"]
+    p4_mass = part[prefix + ".mass"]
+
+    p4 = vector.awk(
+        awkward.zip(
+            {
+                "mass": p4_mass,
+                "px": p4_x,
+                "py": p4_y,
+                "pz": p4_z,
+            }
+        )
+    )
+
+    return p4
+
+
+def compute_met(part, prefix="MCParticles"):
+    p4 = get_p4(part, prefix)
+    px = awkward.sum(p4.px, axis=1)
+    py = awkward.sum(p4.py, axis=1)
+    met = np.sqrt(px**2 + py**2)
+    return met
+
+
+def compute_jets(part, prefix="MCParticles", min_pt=0):
+    particles_p4 = get_p4(part, prefix)
+    jetdef = fastjet.JetDefinition2Param(fastjet.ee_genkt_algorithm, 0.4, -1)
+    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+    return jets
+
+
+def load_hepmc(hepmc_file_path):
+    events = []
+    with pyhepmc.open(bz2.BZ2File(hepmc_file_path, "rb")) as f:
+        for event in f:
+            parts = [p for p in event.particles if p.status == 1 and (p.pid != 12) and (p.pid != 14) and (p.pid != 16)]
+            parts = {
+                "MCParticles.momentum.x": [p.momentum.x for p in parts],
+                "MCParticles.momentum.y": [p.momentum.y for p in parts],
+                "MCParticles.momentum.z": [p.momentum.z for p in parts],
+                "MCParticles.mass": [p.momentum.m() for p in parts],
+            }
+            events.append(parts)
+    events = awkward.from_iter(events)
+    return events
+
+
 def process_one_file(fn, ofn):
 
     # output exists, do not recreate
@@ -705,8 +755,16 @@ def process_one_file(fn, ofn):
 
     print("loading {}".format(fn))
     fi = uproot.open(fn)
-
     arrs = fi["events"]
+
+    # load .hepmc file corresponding to the .root file
+    hepmc_file_path = fn.replace("/root/", "/sim/").replace(".root", ".hepmc.bz2").replace("reco_", "sim_")
+    hepmc_mcp = load_hepmc(hepmc_file_path)
+
+    met_hepmc = compute_met(hepmc_mcp)
+    genjets_hepmc = compute_jets(hepmc_mcp)
+
+    assert len(hepmc_mcp) == arrs.num_entries
 
     collectionIDs = {
         k: v
@@ -718,7 +776,13 @@ def process_one_file(fn, ofn):
 
     prop_data = arrs.arrays(
         [
-            mc_coll,
+            "MCParticles.PDG",
+            "MCParticles.momentum.x",
+            "MCParticles.momentum.y",
+            "MCParticles.momentum.z",
+            "MCParticles.mass",
+            "MCParticles.charge",
+            "MCParticles.generatorStatus",
             track_coll,
             "SiTracks_1",
             "PandoraClusters",
@@ -777,6 +841,7 @@ def process_one_file(fn, ofn):
                 "sin_phi": np.sin(reco_arr["phi"]),
                 "cos_phi": np.cos(reco_arr["phi"]),
                 "energy": reco_arr["energy"],
+                "ispu": np.zeros(len(reco_type)),
             }
         )
 
@@ -814,33 +879,23 @@ def process_one_file(fn, ofn):
         assert np.all(used_rps == 1)
 
         gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])]
-        )
+        gps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])])
         gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_cluster[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])]
-        )
+        gps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])])
         gps_cluster[:, 1] = 0
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
-        rps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])]
-        )
+        rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
         rps_cluster = get_particle_feature_matrix(cluster_to_rp_all, reco_features, particle_feature_order)
-        rps_cluster[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])]
-        )
+        rps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])])
         rps_cluster[:, 1] = 0
 
         # all initial gen/reco particle energy must be reconstructable
-        assert (
-            abs(np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])) < 1e-2
-        )
+        assert abs(np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])) < 1e-2
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
 
-        # we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
+        # we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert np.all(gps_cluster[:, 1] == 0)
         assert np.all(rps_cluster[:, 1] == 0)
 
@@ -867,6 +922,8 @@ def process_one_file(fn, ofn):
                 "ygen_cluster": ygen_cluster,
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
+                "genmet": met_hepmc[iev],
+                "genjet": get_feature_matrix(genjets_hepmc[iev], ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
@@ -875,30 +932,33 @@ def process_one_file(fn, ofn):
     awkward.to_parquet(ret, ofn)
 
 
-def process_sample(sample):
-    inp = "/local/joosep/clic_edm4hep/"
-    outp = "/local/joosep/mlpf/clic_edm4hep_2023_12_15/"
+def parse_args():
+    import argparse
 
-    pool = multiprocessing.Pool(4)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
+    parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    parser.add_argument(
+        "--save-full-graph",
+        action="store_true",
+        help="save the full event graph",
+    )
+    parser.add_argument(
+        "--num-events",
+        type=int,
+        help="number of events to process",
+        default=-1,
+    )
+    args = parser.parse_args()
+    return args
 
-    inpath_samp = inp + sample
-    outpath_samp = outp + sample
-    infiles = list(glob.glob(inpath_samp + "/*.root"))
-    if not os.path.isdir(outpath_samp):
-        os.makedirs(outpath_samp)
 
-    # for inf in infiles:
-    #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-    #    process_one_file(inf, of)
-    args = []
-    for inf in infiles:
-        of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-        args.append((inf, of))
-    pool.starmap(process_one_file, args)
+def process(args):
+    infile = args.input
+    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+    process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        process_sample(sys.argv[1])
-    else:
-        process_one_file(sys.argv[1], sys.argv[2])
+    args = parse_args()
+    process(args)

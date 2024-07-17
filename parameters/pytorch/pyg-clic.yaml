@@ -2,13 +2,13 @@ backend: pytorch
 
 dataset: clic
 sort_data: no
-data_dir: /p/project/jureap57/cern/tensorflow_datasets/clusters
+data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
 num_epochs: 10
 patience: 20
-lr: 0.0001
+lr: 0.00001
 lr_schedule: constant  # constant, cosinedecay, onecycle
 conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
@@ -51,15 +51,15 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 2
-    dropout_ff: 0.3
-    dropout_conv_id_mha: 0.3
-    dropout_conv_id_ff: 0.3
-    dropout_conv_reg_mha: 0.3
-    dropout_conv_reg_ff: 0.3
-    activation: "elu"
+    num_convs: 6
+    dropout_ff: 0.0
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
+    activation: "relu"
     head_dim: 16
-    num_heads: 16
+    num_heads: 32
     attention_type: flash
 
   mamba:
@@ -81,7 +81,7 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: /p/project/jureap57/cern/ray_results # Note: please specify an absolute path
+  local_dir:  # Note: please specify an absolute path
   sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
@@ -105,41 +105,23 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
         clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+          version: 2.0.0
+        clic_edm_qq_pf:
+          version: 2.0.0
 
 valid_dataset:
   clic:
     physical:
       batch_size: 1
       samples:
-        clic_edm_qq_pf:
-          version: 1.5.0
         clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
-        clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+          version: 2.0.0
+        clic_edm_qq_pf:
+          version: 2.0.0
 
 test_dataset:
-  clic_edm_qq_pf:
-    version: 1.5.0
   clic_edm_ttbar_pf:
-    version: 1.5.0
-  clic_edm_ttbar_pu10_pf:
-    version: 1.5.0
-  clic_edm_ww_fullhad_pf:
-    version: 1.5.0
-  clic_edm_zh_tautau_pf:
-    version: 1.5.0
+    version: 2.0.0
+  clic_edm_qq_pf:
+    version: 2.0.0

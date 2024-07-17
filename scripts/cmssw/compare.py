@@ -89,9 +89,7 @@ def parse_args():
         #    "JetResponse:reso_dist_10_24:reso_dist_10_24_eta05:reso_dist_10_24_eta13"
         # ]
     )
-    parser.add_argument(
-        "--doResponsePlots", action="store_true", required=False, help="If enabled, do all jet response plots"
-    )
+    parser.add_argument("--doResponsePlots", action="store_true", required=False, help="If enabled, do all jet response plots")
     parser.add_argument("--doOffsetPlots", action="store_true", required=False, help="If enabled, do all offset plots")
     parser.add_argument("--doMETPlots", action="store_true", required=False, help="If enabled, do all JetMET plots")
     parser.add_argument("--doPFCandPlots", action="store_true", required=False, help="If enabled, do all PFCandidate plots")
@@ -164,9 +162,7 @@ def parse_args():
                 pthistograms = []
                 for ietabin in range(len(etabins) - 1):
                     pthistograms += [response_distribution_name(iptbin, ietabin)]
-                plots += [
-                    (JetFolderDir, "response_{0:.0f}_{1:.0f}".format(ptbins[iptbin], ptbins[iptbin + 1]), pthistograms)
-                ]
+                plots += [(JetFolderDir, "response_{0:.0f}_{1:.0f}".format(ptbins[iptbin], ptbins[iptbin + 1]), pthistograms)]
 
     if args.doOffsetPlots:
         if args.offsetVar == "npv":
@@ -177,9 +173,7 @@ def parse_args():
             offsetHists = []
             for itype in candidateType:
                 offsetHists += [offset_name(args.offsetVar, ivar, itype)]
-            plots += [
-                ("Offset/{0}Plots/{0}{1}".format(args.offsetVar, ivar), "{0}{1}".format(args.offsetVar, ivar), offsetHists)
-            ]
+            plots += [("Offset/{0}Plots/{0}{1}".format(args.offsetVar, ivar), "{0}{1}".format(args.offsetVar, ivar), offsetHists)]
 
     if args.doMETPlots:
         doMETPlots(files, plots)
@@ -242,9 +236,7 @@ def addPlots(plotter, folder, name, section, histograms, opts, Offset=False):
         plotter.append("Offset", folders, PlotFolder(*plots, loopSubFolders=False, page="offset", section=section))
     elif "JetResponse" in folder:
         plots = [PlotGroup(name, [Plot(h, **opts) for h in histograms])]
-        plotter.append(
-            "ParticleFlow/" + section, folders, PlotFolder(*plots, loopSubFolders=False, page="pf", section=section)
-        )
+        plotter.append("ParticleFlow/" + section, folders, PlotFolder(*plots, loopSubFolders=False, page="pf", section=section))
         for plot in plots:
             plot.setProperties(ncols=3)
             plot.setProperties(legendDw=-0.68)
@@ -358,9 +350,7 @@ def main():
             for f in s.files():
                 fname = f.split("/")[-2]
                 outName = offsetStack([(fname, f)], offsetVar, offsetDR, fullOffsetDir)
-                outName = outName.replace(
-                    "plots/", ""
-                )  # KH: This "plots" look redundant and causes trouble for .html. Stripping it off.
+                outName = outName.replace("plots/", "")  # KH: This "plots" look redundant and causes trouble for .html. Stripping it off.
                 addLine(outName, lines)
 
                 for f2 in s.files():
@@ -368,9 +358,7 @@ def main():
                         continue
                     fname2 = f2.split("/")[-2]
                     outName = offsetStack([(fname, f), (fname2, f2)], offsetVar, offsetDR, fullOffsetDir)
-                    outName = outName.replace(
-                        "plots/", ""
-                    )  # KH: This "plots" look redundant and causes trouble for .html. Stripping it off.
+                    outName = outName.replace("plots/", "")  # KH: This "plots" look redundant and causes trouble for .html. Stripping it off.
                     addLine(outName, lines)
 
             offFile = open(outputDir + "/" + s.label() + "_offset.html", "w")

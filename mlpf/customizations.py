@@ -7,9 +7,6 @@ def customize_pipeline_test(config):
     # don't use dynamic batching, as that can result in weird stuff with very few events
     config["batching"]["bucket_by_sequence_length"] = False
 
-    if "delphes_pf_ttbar" in config["datasets"]:
-        config["train_test_datasets"]["physical"]["datasets"] = ["delphes_pf_ttbar"]
-
     # for cms, keep only ttbar
     if "cms_pf_ttbar" in config["datasets"]:
         config["train_test_datasets"]["physical"]["datasets"] = ["cms_pf_ttbar"]

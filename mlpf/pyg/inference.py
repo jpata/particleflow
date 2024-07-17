@@ -30,20 +30,38 @@ from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+
+    # skip prediction if output exists
     outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
     if os.path.isfile(outfile):
         return
 
+    # run model on batch
     batch = batch.to(rank)
     ypred = model(batch.X, batch.mask)
 
-    # convert all outputs to float32
+    # convert all outputs to float32 in case running in float16 or bfloat16
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
     ygen = unpack_target(batch.ygen.to(torch.float32))
     ycand = unpack_target(batch.ycand.to(torch.float32))
     ypred = unpack_predictions(ypred)
 
+    genjets_msk = batch.genjets[:, :, 0].cpu() != 0
+    genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
+    genjets = vector.awk(
+        awkward.zip(
+            {
+                "pt": genjets[:, :, 0],
+                "eta": genjets[:, :, 1],
+                "phi": genjets[:, :, 2],
+                "e": genjets[:, :, 3],
+            }
+        )
+    )
+    genjets = awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.e})
+
+    # flatten events across batch dim with padding mask
     X = batch.X[batch.mask].cpu().contiguous().numpy()
     for k, v in ygen.items():
         ygen[k] = v[batch.mask].detach().cpu().contiguous().numpy()
@@ -52,13 +70,12 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     for k, v in ypred.items():
         ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
 
-    # loop over the batch to disentangle the events
-    jets_coll = {}
-
+    # turn batched, flattened events into awkward-array events
     counts = torch.sum(batch.mask, axis=1).cpu().numpy()
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
-    for typ, ydata in zip(["gen", "cand"], [ygen, ycand]):
+    jets_coll = {}
+    for typ, ydata in zip(["cand"], [ycand]):
         clsid = awkward.unflatten(ydata["cls_id"], counts)
         msk = clsid != 0
         p4 = awkward.unflatten(ydata["p4"], counts)
@@ -73,7 +90,12 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             )
         )
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
+        jets = cluster.inclusive_jets(min_pt=jet_ptcut)
+        jets_coll[typ] = awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e})
+
+    jets_coll["gen"] = genjets
+    print(jets_coll["cand"])
+    print(jets_coll["gen"])
 
     # in case of no predicted particles in the batch
     if np.sum(ypred["cls_id"] != 0) == 0:
@@ -118,14 +140,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
 
     awkward.to_parquet(
-        awkward.Array(
-            {
-                "inputs": Xs,
-                "particles": awkvals,
-                "jets": jets_coll,
-                "matched_jets": matched_jets,
-            }
-        ),
+        awkward.Array({"inputs": Xs, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets, "genmet": batch.genmet.cpu()}),
         outfile,
     )
     _logger.info(f"Saved predictions at {outfile}")
