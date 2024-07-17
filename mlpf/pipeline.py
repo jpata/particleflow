@@ -344,9 +344,7 @@ def train(
         if config["setup"]["use_normalizer"]:
             normalizer_cache = "{}/normalizations.npz".format(config["cache"])
             if not os.path.isfile(normalizer_cache):
-                logging.error(
-                    f"Could not find normalizer cache in {normalizer_cache}" + "run once without horovod to create cache"
-                )
+                logging.error(f"Could not find normalizer cache in {normalizer_cache}" + "run once without horovod to create cache")
                 return
 
             cache = np.load(normalizer_cache, allow_pickle=True)
@@ -387,9 +385,7 @@ def train(
                 if not os.path.isfile(normalizer_cache):
                     logging.info(f"Could not find normalizer cache in {normalizer_cache}, recreating")
                     model.normalizer.adapt(
-                        ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE).map(
-                            lambda X, y, w: X[:, :, 1:], num_parallel_calls=tf.data.AUTOTUNE
-                        )
+                        ds_train.tensorflow_dataset.prefetch(tf.data.AUTOTUNE).map(lambda X, y, w: X[:, :, 1:], num_parallel_calls=tf.data.AUTOTUNE)
                     )
                     print(model.normalizer.mean)
                     print(model.normalizer.variance)
@@ -506,18 +502,14 @@ def evaluate(config, train_dir, weights, customize, nevents):
 def infer(config, train_dir, weights, bs, customize, nevents, verbose, num_runs, output, cpus):
     import json
 
-    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(
-        num_cpus=cpus
-    )  # sets TF ENV variables to use num_cpus
+    strategy, num_gpus, num_batches_multiplier = get_singlenode_strategy(num_cpus=cpus)  # sets TF ENV variables to use num_cpus
     assert num_gpus < 2, "Multi-GPU inference is not supported"
 
     if output:
         assert num_runs > 1, "If writing summary results to file, num_runs must be >1"
 
     if train_dir is None:
-        assert (config is not None) and (
-            weights is not None
-        ), "Please provide a config and weight file when not giving train_dir"
+        assert (config is not None) and (weights is not None), "Please provide a config and weight file when not giving train_dir"
 
     if config is None:
         config = Path(train_dir) / "config.yaml"
@@ -1157,9 +1149,7 @@ def test_datasets(config):
                 bh.axis.Regular(100, 0, 100000),
                 bh.axis.Regular(100, 0, 100000),
             )
-            histograms[dataset]["sum_gen_cand_energy_log"] = bh.Histogram(
-                bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6)
-            )
+            histograms[dataset]["sum_gen_cand_energy_log"] = bh.Histogram(bh.axis.Regular(100, 2, 6), bh.axis.Regular(100, 2, 6))
 
             histograms[dataset]["sum_gen_cand_pt"] = bh.Histogram(
                 bh.axis.Regular(100, 0, 100000),
@@ -1395,12 +1385,8 @@ def plots(train_dir, max_files):
 
             mom_data = compute_3dmomentum_and_ratio(yvals)
             plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 20, 100), logy=True)
-            plot_3dmomentum_ratio(
-                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=True, file_modifier="_bins_0_2"
-            )
-            plot_3dmomentum_ratio(
-                mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True, file_modifier="_bins_0_5"
-            )
+            plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 2, 100), logy=True, file_modifier="_bins_0_2")
+            plot_3dmomentum_ratio(mom_data, cp_dir=cp_dir, title=_title, bins=np.linspace(0, 5, 100), logy=True, file_modifier="_bins_0_5")
             plot_3dmomentum_response_binned(mom_data, cp_dir=cp_dir, title=_title)
 
 

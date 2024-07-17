@@ -13,7 +13,7 @@ track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
 # the feature matrices will be saved in this order
-particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
+particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
 
 # arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 # so we can easily use them in skip connections
@@ -129,9 +129,7 @@ class EventData:
         self.cluster_features = cluster_features  # feature matrix of the calo clusters
         self.track_features = track_features  # feature matrix of the tracks
         self.genparticle_to_hit = genparticle_to_hit  # sparse COO matrix of genparticles to hits (idx_gp, idx_hit, weight)
-        self.genparticle_to_track = (
-            genparticle_to_track  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
-        )
+        self.genparticle_to_track = genparticle_to_track  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
         self.hit_to_cluster = hit_to_cluster  # sparse COO matrix of hits to clusters (idx_hit, idx_cluster, weight)
         self.gp_merges = gp_merges  # sparse COO matrix of any merged genparticles
 
@@ -197,10 +195,7 @@ def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
             hit_idx_global += 1
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
     hit_feature_matrix = awkward.Record(
-        {
-            k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))])
-            for k in hit_feature_matrix[0].fields
-        }
+        {k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))]) for k in hit_feature_matrix[0].fields}
     )
 
     # add all edges from genparticle to calohit
@@ -266,9 +261,7 @@ def gen_to_features(prop_data, iev):
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
     MCParticles_p4 = vector.awk(
-        awkward.zip(
-            {"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]}
-        )
+        awkward.zip({"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]})
     )
     gen_arr["pt"] = MCParticles_p4.pt
     gen_arr["eta"] = MCParticles_p4.eta
@@ -276,6 +269,9 @@ def gen_to_features(prop_data, iev):
     gen_arr["energy"] = MCParticles_p4.energy
     gen_arr["sin_phi"] = np.sin(gen_arr["phi"])
     gen_arr["cos_phi"] = np.cos(gen_arr["phi"])
+
+    # placeholder
+    gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
     return awkward.Record(
         {
@@ -288,6 +284,7 @@ def gen_to_features(prop_data, iev):
             "sin_phi": gen_arr["sin_phi"],
             "cos_phi": gen_arr["cos_phi"],
             "energy": gen_arr["energy"],
+            "ispu": gen_arr["ispu"],
         }
     )
 
@@ -420,9 +417,7 @@ def filter_adj(adj, all_to_filtered):
 
 def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
     gen_features = gen_to_features(prop_data, iev)
-    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(
-        hit_data, calohit_links, iev, collectionIDs
-    )
+    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
@@ -435,9 +430,7 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
 
     if len(genparticle_to_track[0]) > 0:
         gp_to_track = (
-            coo_matrix((genparticle_to_track[2], (genparticle_to_track[0], genparticle_to_track[1])), shape=(n_gp, n_track))
-            .max(axis=1)
-            .todense()
+            coo_matrix((genparticle_to_track[2], (genparticle_to_track[0], genparticle_to_track[1])), shape=(n_gp, n_track)).max(axis=1).todense()
         )
     else:
         gp_to_track = np.zeros((n_gp, 1))
@@ -490,12 +483,8 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         ).todense()
     )
 
-    gp_to_calohit = coo_matrix(
-        (gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit)
-    )
-    calohit_to_cluster = coo_matrix(
-        (gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster)
-    )
+    gp_to_calohit = coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit))
+    calohit_to_cluster = coo_matrix((gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster))
 
     gp_to_cluster = np.array((gp_to_calohit * calohit_to_cluster).todense())
 
@@ -659,9 +648,7 @@ def get_reco_properties(prop_data, iev):
     reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
 
     reco_p4 = vector.awk(
-        awkward.zip(
-            {"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]}
-        )
+        awkward.zip({"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]})
     )
     reco_arr["pt"] = reco_p4.pt
     reco_arr["eta"] = reco_p4.eta
@@ -812,29 +799,19 @@ def process_one_file(fn, ofn):
         assert np.all(used_rps == 1)
 
         gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])]
-        )
+        gps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])])
         gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_cluster[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])]
-        )
+        gps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])])
         gps_cluster[:, 1] = 0
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
-        rps_track[:, 0] = np.array(
-            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])]
-        )
+        rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
         rps_cluster = get_particle_feature_matrix(cluster_to_rp_all, reco_features, particle_feature_order)
-        rps_cluster[:, 0] = np.array(
-            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])]
-        )
+        rps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])])
         rps_cluster[:, 1] = 0
 
         # all initial gen/reco particle energy must be reconstructable
-        assert (
-            abs(np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])) < 1e-2
-        )
+        assert abs(np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])) < 1e-2
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
 

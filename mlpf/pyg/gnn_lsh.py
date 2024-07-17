@@ -146,15 +146,11 @@ class NodePairGaussianKernel(nn.Module):
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
     bins_split_2 = torch.reshape(bins_split, (bins_split.shape[0], bins_split.shape[1] * bins_split.shape[2]))
 
-    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(
-        bins_split_2.shape[0], bins_split_2.shape[1], x_msg.shape[-1]
-    )
+    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(bins_split_2.shape[0], bins_split_2.shape[1], x_msg.shape[-1])
     x_msg_binned = torch.gather(x_msg, 1, bins_split_3)
     x_msg_binned = torch.reshape(x_msg_binned, (cmul.shape[0], n_bins, bin_size, x_msg_binned.shape[-1]))
 
-    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(
-        bins_split_2.shape[0], bins_split_2.shape[1], x_node.shape[-1]
-    )
+    bins_split_3 = torch.unsqueeze(bins_split_2, axis=-1).expand(bins_split_2.shape[0], bins_split_2.shape[1], x_node.shape[-1])
     x_features_binned = torch.gather(x_node, 1, bins_split_3)
     x_features_binned = torch.reshape(x_features_binned, (cmul.shape[0], n_bins, bin_size, x_features_binned.shape[-1]))
 
@@ -216,9 +212,7 @@ class MessageBuildingLayerLSH(nn.Module):
         bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk, self.stable_sort)
 
         # replaced tf.gather with torch.vmap, indexing and reshape
-        x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(
-            bins_split, cmul, x_msg, x_node, msk, n_bins, self.bin_size
-        )
+        x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, self.bin_size)
 
         # Run the node-to-node kernel (distance computation / graph building / attention)
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
@@ -273,9 +267,7 @@ class CombinedGraphLayer(nn.Module):
 
         self.message_passing_layers = nn.ModuleList()
         for iconv in range(self.num_node_messages):
-            self.message_passing_layers.append(
-                GHConvDense(output_dim=self.inout_dim, hidden_dim=self.inout_dim, activation="elu")
-            )
+            self.message_passing_layers.append(GHConvDense(output_dim=self.inout_dim, hidden_dim=self.inout_dim, activation="elu"))
         self.dropout_layer = None
         if self.dropout:
             self.dropout_layer = torch.nn.Dropout(self.dropout)
