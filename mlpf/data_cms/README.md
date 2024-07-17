@@ -105,7 +105,7 @@ singularity exec --env CUDA_VISIBLE_DEVICES=0 -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env KERAS_BACKEND=torch \
     pytorch.simg python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
-    --data-dir /tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
+    --data-dir ./tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
     --train --test --make-plots --conv-type attention --num-epochs 10 --gpu-batch-multiplier 1 \
     --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --ntrain 1000 --ntest 1000 --nvalid 1000
 ```
