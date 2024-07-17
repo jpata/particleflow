@@ -18,7 +18,7 @@ samples = [
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("MultiParticlePFGun50_cfi",                               800000, 850000, "genjob_nopu.sh", outdir + "/nopu"),
     ("VBF_TuneCP5_14TeV_pythia8_cfi",                         900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
-    ("QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi",              1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
+    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                      1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
 
 #    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 900100, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1000100, "genjob_nopu.sh", outdir + "/nopu"),
