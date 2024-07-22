@@ -23,4 +23,4 @@ singularity exec -B /scratch/persistent --nv \
      --env KERAS_BACKEND=torch \
      $IMG  python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-     --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --load $WEIGHTS --ntest 10000
+     --test --make-plots --conv-type attention --attention-type math --gpu-batch-multiplier 50 --load $WEIGHTS --ntest 10000
