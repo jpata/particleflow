@@ -1,55 +1,13 @@
-sbatch mlpf/tallinn/validate_cms.sh 1
-sbatch mlpf/tallinn/validate_cms.sh 2
-sbatch mlpf/tallinn/validate_cms.sh 3
-sbatch mlpf/tallinn/validate_cms.sh 4
-sbatch mlpf/tallinn/validate_cms.sh 5
-sbatch mlpf/tallinn/validate_cms.sh 6
-sbatch mlpf/tallinn/validate_cms.sh 7
-sbatch mlpf/tallinn/validate_cms.sh 8
-sbatch mlpf/tallinn/validate_cms.sh 9
-sbatch mlpf/tallinn/validate_cms.sh 10
-sbatch mlpf/tallinn/validate_cms.sh 11
-sbatch mlpf/tallinn/validate_cms.sh 12
-sbatch mlpf/tallinn/validate_cms.sh 13
-sbatch mlpf/tallinn/validate_cms.sh 14
-sbatch mlpf/tallinn/validate_cms.sh 15
-sbatch mlpf/tallinn/validate_cms.sh 16
-sbatch mlpf/tallinn/validate_cms.sh 17
-sbatch mlpf/tallinn/validate_cms.sh 18
-sbatch mlpf/tallinn/validate_cms.sh 19
-sbatch mlpf/tallinn/validate_cms.sh 20
-sbatch mlpf/tallinn/validate_cms.sh 21
-sbatch mlpf/tallinn/validate_cms.sh 22
-sbatch mlpf/tallinn/validate_cms.sh 23
-sbatch mlpf/tallinn/validate_cms.sh 24
-sbatch mlpf/tallinn/validate_cms.sh 25
-sbatch mlpf/tallinn/validate_cms.sh 26
-sbatch mlpf/tallinn/validate_cms.sh 27
-sbatch mlpf/tallinn/validate_cms.sh 28
-sbatch mlpf/tallinn/validate_cms.sh 29
-sbatch mlpf/tallinn/validate_cms.sh 30
-sbatch mlpf/tallinn/validate_cms.sh 31
-sbatch mlpf/tallinn/validate_cms.sh 32
-sbatch mlpf/tallinn/validate_cms.sh 33
-sbatch mlpf/tallinn/validate_cms.sh 34
-sbatch mlpf/tallinn/validate_cms.sh 35
-sbatch mlpf/tallinn/validate_cms.sh 36
-sbatch mlpf/tallinn/validate_cms.sh 37
-sbatch mlpf/tallinn/validate_cms.sh 38
-sbatch mlpf/tallinn/validate_cms.sh 39
-sbatch mlpf/tallinn/validate_cms.sh 40
-sbatch mlpf/tallinn/validate_cms.sh 41
-sbatch mlpf/tallinn/validate_cms.sh 42
-sbatch mlpf/tallinn/validate_cms.sh 43
-sbatch mlpf/tallinn/validate_cms.sh 44
-sbatch mlpf/tallinn/validate_cms.sh 45
-sbatch mlpf/tallinn/validate_cms.sh 46
+#!/bin/bash
 
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 1
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 2
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 3
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 4
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 5
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 6
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 7
-sbatch mlpf/tallinn/validate_cms_ttbar.sh 8
+END=`wc -l scripts/cmssw/qcd_pu.txt | cut -f1 -d' '`
+for ifile in $(seq 1 $END); do
+    sbatch scripts/tallinn/cmssw-el8.sh scripts/cmssw/validation_job.sh mlpf scripts/cmssw/qcd_pu.txt QCD_PU $ifile
+    sbatch scripts/tallinn/cmssw-el8.sh scripts/cmssw/validation_job.sh pf scripts/cmssw/qcd_pu.txt QCD_PU $ifile
+done
+
+END=`wc -l scripts/cmssw/ttbar_pu.txt | cut -f1 -d' '`
+for ifile in $(seq 1 $END); do
+    sbatch scripts/tallinn/cmssw-el8.sh scripts/cmssw/validation_job.sh mlpf scripts/cmssw/ttbar_pu.txt TTbar_PU $ifile
+    sbatch scripts/tallinn/cmssw-el8.sh scripts/cmssw/validation_job.sh pf scripts/cmssw/ttbar_pu.txt TTbar_PU $ifile
+done

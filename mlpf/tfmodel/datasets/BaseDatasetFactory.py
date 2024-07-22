@@ -65,9 +65,7 @@ def unpack_target(y, num_output_classes, config):
 
 
 def my_getitem(self, vals):
-    tf.print(
-        "reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self))
-    )
+    tf.print("reading dataset {}:{} from disk in slice {}, total={}".format(self.dataset_info.name, self.split, vals, len(self)))
     records = self.data_source.__getitems__(vals)
     return [self.dataset_info.features.deserialize_example_np(record, decoders=self.decoders) for record in records]
 
@@ -182,9 +180,7 @@ def interleave_datasets(joint_dataset_name, split, datasets):
     np.random.shuffle(indices)
 
     choice_dataset = tf.data.Dataset.from_tensor_slices(indices)
-    interleaved_tensorflow_dataset = tf.data.experimental.choose_from_datasets(
-        [ds.tensorflow_dataset for ds in datasets], choice_dataset
-    )
+    interleaved_tensorflow_dataset = tf.data.experimental.choose_from_datasets([ds.tensorflow_dataset for ds in datasets], choice_dataset)
 
     ds = MLPFDataset(
         joint_dataset_name,
@@ -193,9 +189,7 @@ def interleave_datasets(joint_dataset_name, split, datasets):
         sum([ds.num_samples for ds in datasets]),
     )
     ds._num_steps = num_steps_total
-    logging.info(
-        "Interleaved joint dataset {}:{} with {} steps, {} samples".format(ds.name, ds.split, ds.num_steps(), ds.num_samples)
-    )
+    logging.info("Interleaved joint dataset {}:{} with {} steps, {} samples".format(ds.name, ds.split, ds.num_steps(), ds.num_samples))
     return ds
 
 

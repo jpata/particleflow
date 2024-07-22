@@ -11,6 +11,7 @@ from datetime import datetime
 import tqdm
 import yaml
 import csv
+import json
 
 import numpy as np
 
@@ -33,7 +34,6 @@ from pyg.utils import (
     save_checkpoint,
     CLASS_LABELS,
     X_FEATURES,
-    ELEM_TYPES,
     ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
@@ -44,14 +44,14 @@ from pyg.utils import (
 import fastjet
 from pyg.inference import make_plots, run_predictions
 from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataLoader, PFDataset, get_interleaved_dataloaders
+from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
 
 
-def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
+def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
     theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
     theta = theta / torch.sqrt(torch.sum(theta**2, axis=1, keepdims=True))
@@ -67,37 +67,28 @@ def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batchidx_or_mask):
+def mlpf_loss(y, ypred, batch):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
+        batch [PFBatch]: the MLPF inputs
     """
-    pad_mode_3d = len(batchidx_or_mask.shape) == 2
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    if pad_mode_3d:
-        nelem = torch.sum(batchidx_or_mask)
-    else:
-        nelem = len(batchidx_or_mask)
+    nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
-    # ypred["charge"] = ypred["charge"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
-    # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
-    # in case of the 3D-padded mode, pytorch expects (N, C, ...)
-    if pad_mode_3d:
-        ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-        # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
+    # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
+    ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
 
     loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
-    # loss_charge = 0.0*torch.nn.functional.cross_entropy(
-    #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
     # average over all elements that were not padded
     loss["Classification"] = loss_classification.sum() / nelem
@@ -105,42 +96,26 @@ def mlpf_loss(y, ypred, batchidx_or_mask):
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
     mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
+
     # average over all true particles
     loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
-    # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
-    if len(msk_true_particle.shape) == 3:
-        msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
-        # pt * cos_phi
-        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_pred_particle
-        # pt * sin_phi
-        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_pred_particle
-        # sum across events
-        pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
+    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
+    # pt * cos_phi
+    px = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 3:4].detach() * msk_pred_particle
+    # pt * sin_phi
+    py = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 2:3].detach() * msk_pred_particle
+    # sum across events
+    pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
-        px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
-        py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
-        true_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
-        loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
-        loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
+    loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
+    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
 
-    loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
-
-    # if pad_mode_3d:
-    #     loss["Total"] += 1e-6 * loss["MET"]
-    #     # loss["Total"] += 1e-3 * loss["Sliced_Wasserstein_Loss"]
-
-    # Keep track of loss components for each true particle type
-    # These are detached to keeping track of the gradient
-    for icls in range(0, 7):
-        loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
-        loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
+    loss["Total"] = loss["Classification"] + loss["Regression"]
 
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
-    # loss["Charge"] = loss["Charge"].detach()
-    # print(loss["Total"].detach().item(), y["cls_id"].shape, nelem, npart)
     return loss
 
 
@@ -156,9 +131,7 @@ class FocalLoss(nn.Module):
         - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
     """
 
-    def __init__(
-        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
-    ):
+    def __init__(self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100):
         """Constructor.
         Args:
             alpha (Tensor, optional): Weights for each class. Defaults to None.
@@ -275,9 +248,7 @@ def train_and_valid(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(data_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
-        )
+        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}")
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
@@ -288,37 +259,26 @@ def train_and_valid(
 
         ygen = unpack_target(batch.ygen)
 
-        if world_size > 1:
-            conv_type = model.module.conv_type
-        else:
-            conv_type = model.conv_type
-
-        if conv_type == "gravnet":
-            batchidx_or_mask = batch.batch
-            num_elems = len(batch.batch)
-            num_batch = len(torch.unique(batch.batch))
-        else:
-            batchidx_or_mask = batch.mask
-            num_elems = batch.X[batch.mask].shape[0]
-            num_batch = batch.X.shape[0]
+        num_elems = batch.X[batch.mask].shape[0]
+        num_batch = batch.X.shape[0]
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred = model(batch.X, batchidx_or_mask)
+                ypred = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    ypred = model(batch.X, batchidx_or_mask)
+                    ypred = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                loss = mlpf_loss(ygen, ypred, batch)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batchidx_or_mask)
+                    loss = mlpf_loss(ygen, ypred, batch)
 
         if is_train:
             loss["Total"].backward()
@@ -334,19 +294,18 @@ def train_and_valid(
 
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
-            if (rank == 0) or (rank == "cpu"):
-                if not (tensorboard_writer is None):
+            if not (tensorboard_writer is None):
+                if step % 100 == 0:
                     tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
                     tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
                     tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
                     tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
-                    if itrain % 10 == 0:
-                        tensorboard_writer.flush()
+                    tensorboard_writer.flush()
                     loss_accum = 0.0
-                if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
-                    # this loss is not normalized to batch size
-                    comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
-                    comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+            if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
+                # this loss is not normalized to batch size
+                comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
+                comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
         if val_freq is not None and is_train:
             if itrain != 0 and itrain % val_freq == 0:
@@ -469,11 +428,9 @@ def train_mlpf(
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
-        # training step
+        # training step, edit here to profile a specific epoch
         if epoch == -1:
-            with profile(
-                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
-            ) as prof:
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
                         rank,
@@ -525,18 +482,17 @@ def train_mlpf(
             comet_step_freq=comet_step_freq,
             epoch=epoch,
             dtype=dtype,
+            tensorboard_writer=tensorboard_writer_valid,
         )
 
+        if comet_experiment:
+            comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
+            comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
+            comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
+            comet_experiment.log_epoch_end(epoch)
 
         if (rank == 0) or (rank == "cpu"):
-
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
-            if comet_experiment:
-                comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
-                comet_experiment.log_metrics(losses_v, prefix="epoch_valid_loss", epoch=epoch)
-                comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
-                comet_experiment.log_epoch_end(epoch)
-
             extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
@@ -617,30 +573,16 @@ def train_mlpf(
                 color="bold",
             )
 
-            # for loss in losses_of_interest:
-            #     fig, ax = plt.subplots()
-
-            #     ax.plot(
-            #         range(len(losses["train"][loss])),
-            #         losses["train"][loss],
-            #         label="training",
-            #     )
-            #     ax.plot(
-            #         range(len(losses["valid"][loss])),
-            #         losses["valid"][loss],
-            #         label=f"validation ({best_val_loss:.3f})",
-            #     )
-
-            #     ax.set_xlabel("Epochs")
-            #     ax.set_ylabel(f"{loss} Loss")
-            #     ax.set_ylim(0.8 * losses["train"][loss][-1], 1.2 * losses["train"][loss][-1])
-            #     ax.legend(title="MLPF", loc="best", title_fontsize=20, fontsize=15)
-            #     plt.tight_layout()
-            #     plt.savefig(f"{outdir}/mlpf_loss_{loss}.pdf")
-            #     plt.close()
-
             with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
                 pkl.dump(losses, f)
+
+            # save separate json files with stats for each epoch, this is robust to crashed-then-resumed trainings
+            history_path = Path(outdir) / "history"
+            history_path.mkdir(parents=True, exist_ok=True)
+            with open("{}/epoch_{}.json".format(str(history_path), epoch), "w") as fi:
+                stats = {"train": losses_t, "valid": losses_v}
+                stats["epoch_time"] = t1 - t0
+                json.dump(stats, fi)
 
             if tensorboard_writer_train:
                 tensorboard_writer_train.flush()
@@ -654,36 +596,23 @@ def train_mlpf(
 
 
 def run(rank, world_size, config, args, outdir, logfile):
-    """Demo function that will be passed to each gpu if (world_size > 1) else will run normally on the given device."""
-
-    pad_3d = config["conv_type"] != "gravnet"
+    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
+        _configLogger("mlpf", filename=logfile)
 
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
-    _logger.info("using dtype={}".format(dtype))
+    _logger.info("configured dtype={} for autocast".format(dtype))
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", filename=logfile)
-
     start_epoch = 1
 
     if config["load"]:  # load a pre-trained model
-        if Path(config["load"]).name == "checkpoint.pth":
-            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
-            loaddir = str(Path(config["load"]).parent.parent.parent)
-            testdir_name = "_" + Path(config["load"]).parent.stem
-        else:
-            # the checkpoint is likely from a DDP run and we need to step up one dir less
-            loaddir = str(Path(config["load"]).parent.parent)
-            testdir_name = "_" + Path(config["load"]).stem
-
-        with open(f"{loaddir}/model_kwargs.pkl", "rb") as f:
+        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
@@ -694,6 +623,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+        start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
@@ -701,20 +631,11 @@ def run(rank, world_size, config, args, outdir, logfile):
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
-        testdir_name = "_" + Path(config["load"]).name
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-    elif args.resume_training:
-        raise NotImplementedError(
-            "Resuming an interrupted training is only supported in our \
-                Ray Train-based training. Consider using `--load` instead, \
-                which starts a new training using model weights from a pre-trained checkpoint."
-        )
     else:  # instantiate a new model in the outdir created
-        testdir_name = "_bestweights"
-
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
@@ -724,7 +645,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             "sin_phi_mode": config["model"]["sin_phi_mode"],
             "cos_phi_mode": config["model"]["cos_phi_mode"],
             "energy_mode": config["model"]["energy_mode"],
-            "elemtypes": ELEM_TYPES[config["dataset"]],
             "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
             "learned_representation_mode": config["model"]["learned_representation_mode"],
             **config["model"][config["conv_type"]],
@@ -755,9 +675,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if args.comet:
-            comet_experiment = create_comet_experiment(
-                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
-            )
+            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
@@ -782,7 +700,6 @@ def run(rank, world_size, config, args, outdir, logfile):
             rank,
             config,
             use_cuda,
-            pad_3d,
             use_ray=False,
         )
         steps_per_epoch = len(loaders["train"])
@@ -813,19 +730,12 @@ def run(rank, world_size, config, args, outdir, logfile):
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
-    if args.test:
-        if config["load"] is None:
-            # if we don't load, we must have a newly trained model
-            assert args.train, "Please train a model before testing, or load a model with --load"
-            assert outdir is not None, "Error: no outdir to evaluate model from"
-        else:
-            if Path(config["load"]).name == "checkpoint.pth":
-                # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
-                outdir = str(Path(config["load"]).parent.parent.parent)
-            else:
-                # the checkpoint is likely from a DDP run and we need to step up one dir less
-                outdir = str(Path(config["load"]).parent.parent)
+    if not (config["load"] is None):
+        testdir_name = "_" + Path(config["load"]).stem
+    else:
+        testdir_name = "_bestweights"
 
+    if args.test:
         for sample in args.test_datasets:
             batch_size = config["gpu_batch_multiplier"]
             version = config["test_dataset"][sample]["version"]
@@ -840,15 +750,15 @@ def run(rank, world_size, config, args, outdir, logfile):
             else:
                 sampler = torch.utils.data.RandomSampler(ds)
 
-            test_loader = PFDataLoader(
+            test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand"], pad_3d=False),  # in inference, use sparse dataset
+                collate_fn=Collater(["X", "ygen", "ycand", "genjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
-                pin_memory=use_cuda,
-                pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+                # pin_memory=use_cuda,
+                # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
             )
 
             if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
@@ -878,39 +788,11 @@ def run(rank, world_size, config, args, outdir, logfile):
                     dir_name=testdir_name,
                 )
 
-    if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
+    if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name)
-
-        if args.export_onnx:
-            try:
-                dummy_features = torch.randn(1, 8192, model_kwargs["input_dim"], device=rank)
-                dummy_mask = torch.zeros(1, 8192, dtype=torch.bool, device=rank)
-
-                # Torch ONNX export in the old way
-                torch.onnx.export(
-                    model,
-                    (dummy_features, dummy_mask),
-                    "test.onnx",
-                    verbose=False,
-                    input_names=["features", "mask"],
-                    output_names=["id", "momentum"],
-                    dynamic_axes={
-                        "features": {0: "num_batch", 1: "num_elements"},
-                        "mask": [0, 1],
-                        "id": [0, 1],
-                        "momentum": [0, 1],
-                        # "charge": [0, 1],
-                    },
-                )
-
-                # Torch ONNX export in the new way
-                # onnx_program = torch.onnx.dynamo_export(model, (dummy_features, dummy_mask))
-                # onnx_program.save("test.onnx")
-            except Exception as e:
-                print("ONNX export failed: {}".format(e))
 
     if world_size > 1:
         dist.destroy_process_group()
@@ -927,7 +809,7 @@ def override_config(config, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "gravnet", "attention", "attention", "mamba"]:
+        for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     if len(args.test_datasets) == 0:
@@ -937,13 +819,12 @@ def override_config(config, args):
 
 
 def device_agnostic_run(config, args, world_size, outdir):
+
     if args.train:
         logfile = f"{outdir}/train.log"
-        _configLogger("mlpf", filename=logfile)
     else:
-        outdir = str(Path(args.load).parent.parent)
         logfile = f"{outdir}/test.log"
-        _configLogger("mlpf", filename=logfile)
+    _configLogger("mlpf", filename=logfile)
 
     if config["gpus"]:
         assert (
@@ -979,16 +860,23 @@ def train_ray_trial(config, args, outdir=None):
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
 
-    pad_3d = config["conv_type"] != "gravnet"
-    use_cuda = True
+    use_cuda = args.gpus > 0
 
-    rank = ray.train.get_context().get_local_rank()
+    rank = ray.train.get_context().get_local_rank() if use_cuda else "cpu"
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
     model = MLPF(**model_kwargs)
@@ -1018,12 +906,10 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, pad_3d, use_ray=True)
+    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(
-            config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
-        )
+        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -1057,9 +943,7 @@ def train_ray_trial(config, args, outdir=None):
                 if args.resume_training:
                     model, optimizer = load_checkpoint(checkpoint, model, optimizer)
                     start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                    lr_schedule = get_lr_schedule(
-                        config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1
-                    )
+                    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
@@ -1103,11 +987,12 @@ def run_ray_training(config, args, outdir):
 
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
-    num_workers = args.gpus
+    use_gpu = args.gpus > 0
+    num_workers = args.gpus if use_gpu else 1
     scaling_config = ray.train.ScalingConfig(
         num_workers=num_workers,
-        use_gpu=True,
-        resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": 1},  # -1 to avoid blocking
+        use_gpu=use_gpu,
+        resources_per_worker={"CPU": max(1, args.ray_cpus // num_workers - 1), "GPU": int(use_gpu)},  # -1 to avoid blocking
     )
     storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
     run_config = ray.train.RunConfig(
@@ -1235,9 +1120,7 @@ def run_hpo(config, args):
 
     if tune.Tuner.can_restore(str(expdir)):
         # resume unfinished HPO run
-        tuner = tune.Tuner.restore(
-            str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True
-        )
+        tuner = tune.Tuner.restore(str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True)
     else:
         # start new HPO run
         search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
@@ -1278,9 +1161,7 @@ def run_hpo(config, args):
     print(result_df.columns)
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
-    logging.info(
-        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
-    )
+    logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
 
     # clean up ray cache
     tmp_ray_cache.cleanup()

@@ -12,65 +12,73 @@ import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
     compute_met_and_ratio,
-    format_dataset_name,
     load_eval_data,
     plot_jets,
     plot_jet_ratio,
     plot_jet_response_binned,
     plot_jet_response_binned_eta,
-    plot_jet_response_binned_separate,
     plot_met,
     plot_met_ratio,
     plot_met_response_binned,
     plot_num_elements,
-    plot_particle_multiplicity,
     plot_particles,
     plot_sum_energy,
 )
-import torch_geometric
-from torch_geometric.data import Batch
 
 from .logger import _logger
 from .utils import CLASS_NAMES, unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+
+    # skip prediction if output exists
     outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
     if os.path.isfile(outfile):
         return
 
-    if conv_type != "gravnet":
-        X_pad, mask = torch_geometric.utils.to_dense_batch(batch.X, batch.batch)
-        batch_pad = Batch(X=X_pad, mask=mask).to(rank)
-        ypred = model(batch_pad.X, batch_pad.mask)
-        ypred = ypred[0][mask], ypred[1][mask]
-    else:
-        _batch = batch.to(rank)
-        ypred = model(_batch.X, _batch.batch)
+    # run model on batch
+    batch = batch.to(rank)
+    ypred = model(batch.X, batch.mask)
 
-    ygen = unpack_target(batch.ygen)
-    ycand = unpack_target(batch.ycand)
+    # convert all outputs to float32 in case running in float16 or bfloat16
+    ypred = tuple([y.to(torch.float32) for y in ypred])
+
+    ygen = unpack_target(batch.ygen.to(torch.float32))
+    ycand = unpack_target(batch.ycand.to(torch.float32))
     ypred = unpack_predictions(ypred)
 
-    for k, v in ygen.items():
-        ygen[k] = v.detach().cpu()
-    for k, v in ycand.items():
-        ycand[k] = v.detach().cpu()
-    for k, v in ypred.items():
-        ypred[k] = v.detach().cpu()
+    genjets_msk = batch.genjets[:, :, 0].cpu() != 0
+    genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
+    genjets = vector.awk(
+        awkward.zip(
+            {
+                "pt": genjets[:, :, 0],
+                "eta": genjets[:, :, 1],
+                "phi": genjets[:, :, 2],
+                "e": genjets[:, :, 3],
+            }
+        )
+    )
+    genjets = awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.e})
 
-    # loop over the batch to disentangle the events
-    batch_ids = batch.batch.cpu().numpy()
+    # flatten events across batch dim with padding mask
+    X = batch.X[batch.mask].cpu().contiguous().numpy()
+    for k, v in ygen.items():
+        ygen[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+    for k, v in ycand.items():
+        ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+    for k, v in ypred.items():
+        ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+
+    # turn batched, flattened events into awkward-array events
+    counts = torch.sum(batch.mask, axis=1).cpu().numpy()
+    Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     jets_coll = {}
-
-    cs = np.unique(batch_ids, return_counts=True)[1]
-    Xs = awkward.unflatten(awkward.from_numpy(batch.X.numpy()), cs)
-
-    for typ, ydata in zip(["gen", "cand"], [ygen, ycand]):
-        clsid = awkward.unflatten(ydata["cls_id"], cs)
+    for typ, ydata in zip(["cand"], [ycand]):
+        clsid = awkward.unflatten(ydata["cls_id"], counts)
         msk = clsid != 0
-        p4 = awkward.unflatten(ydata["p4"], cs)
+        p4 = awkward.unflatten(ydata["p4"], counts)
         vec = vector.awk(
             awkward.zip(
                 {
@@ -82,10 +90,15 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             )
         )
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        jets_coll[typ] = cluster.inclusive_jets(min_pt=jet_ptcut)
+        jets = cluster.inclusive_jets(min_pt=jet_ptcut)
+        jets_coll[typ] = awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e})
+
+    jets_coll["gen"] = genjets
+    print(jets_coll["cand"])
+    print(jets_coll["gen"])
 
     # in case of no predicted particles in the batch
-    if torch.sum(ypred["cls_id"] != 0) == 0:
+    if np.sum(ypred["cls_id"] != 0) == 0:
         vec = vector.awk(
             awkward.zip(
                 {
@@ -97,9 +110,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             )
         )
     else:
-        clsid = awkward.unflatten(ypred["cls_id"], cs)
+        clsid = awkward.unflatten(ypred["cls_id"], counts)
         msk = clsid != 0
-        p4 = awkward.unflatten(ypred["p4"], cs)
+        p4 = awkward.unflatten(ypred["p4"], counts)
 
         vec = vector.awk(
             awkward.zip(
@@ -120,21 +133,14 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
 
-    awkvals = {
-        "gen": awkward.from_iter([{k: ygen[k][batch_ids == b] for k in ygen.keys()} for b in np.unique(batch_ids)]),
-        "cand": awkward.from_iter([{k: ycand[k][batch_ids == b] for k in ycand.keys()} for b in np.unique(batch_ids)]),
-        "pred": awkward.from_iter([{k: ypred[k][batch_ids == b] for k in ypred.keys()} for b in np.unique(batch_ids)]),
-    }
+    awkvals = {}
+    for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:
+        awk_arr = awkward.Array({k: flat_arr[k] for k in flat_arr.keys()})
+        counts = torch.sum(batch.mask, axis=1).cpu().numpy()
+        awkvals[typ] = awkward.unflatten(awk_arr, counts)
 
     awkward.to_parquet(
-        awkward.Array(
-            {
-                "inputs": Xs,
-                "particles": awkvals,
-                "jets": jets_coll,
-                "matched_jets": matched_jets,
-            }
-        ),
+        awkward.Array({"inputs": Xs, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets, "genmet": batch.genmet.cpu()}),
         outfile,
     )
     _logger.info(f"Saved predictions at {outfile}")
@@ -170,7 +176,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 def make_plots(outpath, sample, dataset, dir_name=""):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
-    mplhep.set_style(mplhep.styles.CMS)
+    mplhep.style.use(mplhep.styles.CMS)
 
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
@@ -179,61 +185,58 @@ def make_plots(outpath, sample, dataset, dir_name=""):
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
-    title = format_dataset_name(sample)
-    plot_num_elements(X, cp_dir=plots_path, title=title)
-    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
-    plot_particle_multiplicity(X, yvals, CLASS_NAMES[dataset], cp_dir=plots_path, title=title)
+    plot_num_elements(X, cp_dir=plots_path)
+    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path)
 
     plot_jets(
         yvals,
         cp_dir=plots_path,
-        title=title,
+        dataset=dataset,
+        sample=sample,
     )
     plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
-        title=title,
         bins=np.linspace(0, 5, 100),
         logy=True,
+        dataset=dataset,
+        sample=sample,
     )
     plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
-        title=title,
         bins=np.linspace(0.5, 1.5, 100),
         logy=False,
         file_modifier="_bins_0p5_1p5",
+        dataset=dataset,
+        sample=sample,
     )
-    plot_jet_response_binned(yvals, cp_dir=plots_path, title=title)
-    plot_jet_response_binned_eta(yvals, cp_dir=plots_path, title=title)
-    plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
+    plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
     met_data = compute_met_and_ratio(yvals)
-    plot_met(met_data, cp_dir=plots_path, title=title)
-    plot_met_ratio(met_data, cp_dir=plots_path, title=title)
+    plot_met(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_met_ratio(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_met_ratio(met_data, cp_dir=plots_path, bins=np.linspace(0, 20, 100), logy=True, dataset=dataset, sample=sample)
     plot_met_ratio(
         met_data,
         cp_dir=plots_path,
-        title=title,
-        bins=np.linspace(0, 20, 100),
-        logy=True,
-    )
-    plot_met_ratio(
-        met_data,
-        cp_dir=plots_path,
-        title=title,
         bins=np.linspace(0, 2, 100),
         logy=False,
         file_modifier="_bins_0_2",
+        dataset=dataset,
+        sample=sample,
     )
     plot_met_ratio(
         met_data,
         cp_dir=plots_path,
-        title=title,
         bins=np.linspace(0, 5, 100),
         logy=False,
         file_modifier="_bins_0_5",
+        dataset=dataset,
+        sample=sample,
     )
-    plot_met_response_binned(met_data, cp_dir=plots_path, title=title)
+    plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
 
-    plot_particles(yvals, cp_dir=plots_path, title=format_dataset_name(sample))
+    plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)

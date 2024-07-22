@@ -6,17 +6,23 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
+<<<<<<< HEAD
 num_epochs: 20
 patience: 500
 lr: 0.0001
+=======
+num_epochs: 100
+patience: 20
+lr: 0.00005
+>>>>>>> origin/main
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: attention
 ntrain:
 ntest:
 nvalid:
 num_workers: 0
 prefetch_factor:
-checkpoint_freq:
+checkpoint_freq: 1
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
@@ -52,18 +58,6 @@ model:
     ffn_dist_hidden_dim: 128
     ffn_dist_num_layers: 2
 
-  gravnet:
-    conv_type: gravnet
-    embedding_dim: 512
-    width: 512
-    num_convs: 3
-    dropout_ff: 0.1
-    activation: "elu"
-    # gravnet specific parameters
-    k: 16
-    propagate_dimensions: 32
-    space_dimensions: 4
-
   attention:
     conv_type: attention
     num_convs: 8
@@ -73,7 +67,11 @@ model:
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
     activation: "relu"
+<<<<<<< HEAD
     head_dim: 64
+=======
+    head_dim: 16
+>>>>>>> origin/main
     num_heads: 32
     attention_type: flash
 
@@ -115,20 +113,38 @@ raytune:
 
 train_dataset:
   cms:
-    physical:
+    physical_nopu:
+      batch_size: 30
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+    physical_pu:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.0
+          version: 2.0.0
+        cms_pf_qcd:
+          version: 2.0.0
 
 valid_dataset:
   cms:
-    physical:
+    physical_nopu:
+      batch_size: 30
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+    physical_pu:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 1.7.0
+          version: 2.0.0
+        cms_pf_qcd:
+          version: 2.0.0
 
 test_dataset:
   cms_pf_ttbar:
-    version: 1.7.0
+    version: 2.0.0
+  cms_pf_qcd:
+    version: 2.0.0
+  cms_pf_ttbar_nopu:
+    version: 2.0.0

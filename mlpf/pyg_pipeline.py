@@ -6,6 +6,7 @@ Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 # comet needs to be imported before torch
@@ -18,8 +19,6 @@ import yaml
 from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
 
-logging.basicConfig(level=logging.INFO)
-
 parser = argparse.ArgumentParser()
 
 # add default=None to all arparse arguments to ensure they do not override
@@ -28,22 +27,18 @@ parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
-parser.add_argument(
-    "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
-)
+parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
 parser.add_argument(
     "--dataset",
     type=str,
     default=None,
-    choices=["clic", "cms", "delphes", "clic_hits"],
+    choices=["clic", "cms", "clic_hits"],
     required=False,
     help="which dataset?",
 )
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
-parser.add_argument(
-    "--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume"
-)
+parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
 parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
 
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
@@ -56,9 +51,9 @@ parser.add_argument(
     type=str,
     default=None,
     help="which graph layer to use",
-    choices=["gravnet", "attention", "gnn_lsh", "mamba"],
+    choices=["attention", "gnn_lsh", "mamba"],
 )
-parser.add_argument("--num-convs", type=int, default=None, help="number of convlution (GNN, attention, Mamba) layers")
+parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -93,38 +88,38 @@ parser.add_argument(
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
 
+def get_outdir(resume_training, load):
+    outdir = None
+    if not (resume_training is None):
+        outdir = resume_training
+    if not (load is None):
+        pload = Path(load)
+        if pload.name == "checkpoint.pth":
+            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
+            outdir = str(pload.parent.parent.parent)
+        elif pload.name == "best_weights.pth":
+            outdir = str(pload.parent)
+        else:
+            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            outdir = str(pload.parent.parent)
+    if not (outdir is None):
+        assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
+    return outdir
+
+
 def main():
-
-    if True:
-        from flash_attn import flash_attn_func
-    
-        sdpa = torch.nn.functional.scaled_dot_product_attention
-    
-        def sdpa_hijack(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
-            if query.shape[3] <= 128 and attn_mask is None:
-                hidden_states = flash_attn_func(
-                    q=query.transpose(1, 2),
-                    k=key.transpose(1, 2),
-                    v=value.transpose(1, 2),
-                    dropout_p=dropout_p,
-                    causal=is_causal,
-                    softmax_scale=scale,
-                ).transpose(1, 2)
-            else:
-                hidden_states = sdpa(
-                    query=query,
-                    key=key,
-                    value=value,
-                    attn_mask=attn_mask,
-                    dropout_p=dropout_p,
-                    is_causal=is_causal,
-                    scale=scale,
-                )
-            return hidden_states
-        torch.nn.functional.scaled_dot_product_attention = sdpa_hijack
-        print("Using ROCm Flash Attention")
-
+    # import matplotlib.pyplot as plt
+    # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
+
+    if args.resume_training and not args.ray_train:
+        raise NotImplementedError(
+            "Resuming an interrupted training is only supported in our \
+                Ray Train-based training. Consider using `--load` instead, \
+                which starts a new training using model weights from a pre-trained checkpoint."
+        )
+
+    logging.basicConfig(level=logging.INFO)
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
@@ -136,10 +131,6 @@ def main():
         config["model"]["gnn_lsh"]["width"] = 64
         config["model"]["gnn_lsh"]["embedding_dim"] = 64
 
-        config["model"]["gravnet"]["num_convs"] = 1
-        config["model"]["gravnet"]["width"] = 64
-        config["model"]["gravnet"]["embedding_dim"] = 64
-
         config["model"]["attention"]["num_convs"] = 1
         config["model"]["attention"]["num_heads"] = 8
         config["model"]["attention"]["head_dim"] = 8
@@ -147,9 +138,9 @@ def main():
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
-                    "physical": {
-                        "batch_size": config[ds]["cms"]["physical"]["batch_size"],
-                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
+                    "physical_pu": {
+                        "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
+                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
@@ -160,13 +151,13 @@ def main():
     if args.hpo:
         run_hpo(config, args)
     else:
-        if args.resume_training:
-            outdir = args.resume_training
-        else:
+        outdir = get_outdir(args.resume_training, config["load"])
+        if outdir is None:
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
             )
+
         # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
         config_filename = "train-config.yaml" if args.train else "test-config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:
