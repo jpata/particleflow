@@ -33,16 +33,18 @@ export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
 # $CMD mlpf/heptfds/cms_pf/singletau --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_singletau.log &
 # $CMD mlpf/heptfds/cms_pf/multiparticlegun --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_multiparticlegun.log &
 # $CMD mlpf/heptfds/cms_pf/ttbar_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_ttbar_nopu.log &
+# $CMD mlpf/heptfds/cms_pf/qcd_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_qcd_nopu.log &
+# $CMD mlpf/heptfds/cms_pf/vbf_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_vbf_nopu.log &
 # wait
 
 # CLIC cluster-based
-export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
-$CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
+# export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
+# $CMD mlpf/heptfds/clic_pf_edm4hep/qq --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_qq.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/zh --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_zh.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ttbar_pu10 --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ttbar_pu10.log &
 # $CMD mlpf/heptfds/clic_pf_edm4hep/ww_fullhad --data_dir $DATA_DIR --manual_dir $MANUAL_DIR --overwrite &> logs/tfds_ww_fullhad.log &
-wait
+# wait
 
 # CLIC hit-based
 # export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep_hits/
