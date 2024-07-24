@@ -86,4 +86,4 @@ cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
 #cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
-rm -Rf $WORKDIR
+rm -Rf /scratch/local/joosep/$SLURM_JOBID

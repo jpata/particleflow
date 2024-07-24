@@ -1,4 +1,4 @@
-"""CMS PF QCD dataset."""
+"""CMS PF TTbar dataset."""
 import cms_utils
 import tensorflow as tf
 
@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-QCD events with PU~55 in a Run3 setup.
+VBF events without PU in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -18,32 +18,25 @@ _CITATION = """
 """
 
 
-class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_qcd dataset."""
+class CmsPfVbfNopu(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_vbf_nopu dataset."""
 
     VERSION = tfds.core.Version("2.0.0")
     RELEASE_NOTES = {
-        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
-        "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information",
-        "1.5.0": "No padding",
-        "1.5.1": "Remove outlier caps",
-        "1.6.0": "Regenerate with ARRAY_RECORD",
-        "1.7.0": "Add cluster shape vars",
-        "1.7.1": "Increase stats to 400k events",
+        "1.7.1": "First version",
+        "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
         "2.0.0": "New truth def based primarily on CaloParticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_vbf_nopu ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CmsPfQcd, self).__init__(*args, **kwargs)
+        super(CmsPfVbfNopu, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
-        # TODO(cms_pf): Specifies the tfds.core.DatasetInfo object
         return tfds.core.DatasetInfo(
             builder=self,
             description=_DESCRIPTION,
@@ -65,7 +58,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        sample_dir = "VBF_TuneCP5_14TeV_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):

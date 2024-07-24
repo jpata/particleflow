@@ -118,12 +118,16 @@ train_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.0.0
+        cms_pf_vbf_nopu:
+          version: 2.0.0
+        cms_pf_qcd_nopu:
+          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.0.0
         cms_pf_qcd:
+          version: 2.0.0
+        cms_pf_ttbar:
           version: 2.0.0
 
 valid_dataset:
@@ -133,12 +137,16 @@ valid_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.0.0
+        cms_pf_vbf_nopu:
+          version: 2.0.0
+        cms_pf_qcd_nopu:
+          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.0.0
         cms_pf_qcd:
+          version: 2.0.0
+        cms_pf_ttbar:
           version: 2.0.0
 
 test_dataset:
@@ -147,4 +155,8 @@ test_dataset:
   cms_pf_qcd:
     version: 2.0.0
   cms_pf_ttbar_nopu:
+    version: 2.0.0
+  cms_pf_vbf_nopu:
+    version: 2.0.0
+  cms_pf_qcd_nopu:
     version: 2.0.0
