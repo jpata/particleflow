@@ -114,6 +114,8 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
     "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
+    "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
+    "cms_pf_vbf_nopu": r"VBF",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
     "cms_pf_single_electron": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
