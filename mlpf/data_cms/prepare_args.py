@@ -12,14 +12,13 @@ samples = [
 #    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 500000, 520010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                         1700000,1720010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-#
 
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
-#    ("MultiParticlePFGun50_cfi",                               800000, 850000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("MultiParticlePFGun50_cfi",                               800000, 820000, "genjob_nopu.sh", outdir + "/nopu"),
     ("VBF_TuneCP5_14TeV_pythia8_cfi",                         900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
     ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                      1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
 
-#    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 900100, "genjob_nopu.sh", outdir + "/nopu"),
+    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 901000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1000100, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("SingleMuFlatPt1To1000_pythia8_cfi",                     1100000,1100100, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("SingleNeutronFlatPt0p7To1000_cfi",                      1200000,1200100, "genjob_nopu.sh", outdir + "/nopu"),
