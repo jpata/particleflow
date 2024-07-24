@@ -15,7 +15,7 @@ cd /scratch/project_465000301/particleflow
 
 module load LUMI/23.09 partition/G
 
-export IMG=/scratch/project_465000301/pytorch-rocm.simg
+export IMG=/scratch/project_465000301/pytorch-rocm5.7.simg
 export PYTHONPATH=hep_tfds
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
@@ -23,15 +23,11 @@ export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
 export TF_CPP_MAX_VLOG_LEVEL=-1 #to suppress ROCm fusion is enabled messages
 export ROCM_PATH=/opt/rocm
-export NCCL_DEBUG=WARN
+export NCCL_DEBUG=INFO
 export MIOPEN_ENABLE_LOGGING=1
 export MIOPEN_ENABLE_LOGGING_CMD=1
 export MIOPEN_LOG_LEVEL=4
 export KERAS_BACKEND=torch
-
-singularity exec \
-    --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
-    --rocm $IMG rocm-smi --showdriverversion --showmeminfo vram
 
 env
 
@@ -44,4 +40,4 @@ singularity exec \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 8 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 50 --ntrain 1000 --nvalid 1000
+     --train --gpu-batch-multiplier 200 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1

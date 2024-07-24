@@ -6,15 +6,9 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-<<<<<<< HEAD
-num_epochs: 20
-patience: 500
-lr: 0.0001
-=======
 num_epochs: 100
 patience: 20
-lr: 0.00005
->>>>>>> origin/main
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -118,16 +112,9 @@ train_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.0.0
-        cms_pf_vbf_nopu:
-          version: 2.0.0
         cms_pf_qcd_nopu:
           version: 2.0.0
-    physical_pu:
-      batch_size: 1
-      samples:
-        cms_pf_qcd:
-          version: 2.0.0
-        cms_pf_ttbar:
+        cms_pf_vbf_nopu:
           version: 2.0.0
 
 valid_dataset:
@@ -137,23 +124,12 @@ valid_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.0.0
-        cms_pf_vbf_nopu:
-          version: 2.0.0
         cms_pf_qcd_nopu:
           version: 2.0.0
-    physical_pu:
-      batch_size: 1
-      samples:
-        cms_pf_qcd:
-          version: 2.0.0
-        cms_pf_ttbar:
+        cms_pf_vbf_nopu:
           version: 2.0.0
 
 test_dataset:
-  cms_pf_ttbar:
-    version: 2.0.0
-  cms_pf_qcd:
-    version: 2.0.0
   cms_pf_ttbar_nopu:
     version: 2.0.0
   cms_pf_vbf_nopu:

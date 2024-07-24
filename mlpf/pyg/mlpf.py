@@ -3,7 +3,6 @@ import torch.nn as nn
 
 from .gnn_lsh import CombinedGraphLayer
 
-from torch.nn.attention import SDPBackend, sdpa_kernel
 from pyg.logger import _logger
 
 
@@ -35,7 +34,7 @@ class SelfAttentionLayer(nn.Module):
         super(SelfAttentionLayer, self).__init__()
 
         # to enable manual override for ONNX export
-        self.enable_ctx_manager = True
+        self.enable_ctx_manager = False
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
@@ -46,11 +45,13 @@ class SelfAttentionLayer(nn.Module):
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
-        self.attn_params = {
-            "math": [SDPBackend.MATH],
-            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-            "flash": [SDPBackend.FLASH_ATTENTION],
-        }
+        if self.enable_ctx_manager:
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+            self.attn_params = {
+                "math": [SDPBackend.MATH],
+                "efficient": [SDPBackend.EFFICIENT_ATTENTION],
+                "flash": [SDPBackend.FLASH_ATTENTION],
+            }
 
     def forward(self, x, mask):
         # explicitly call the desired attention mechanism
