@@ -38,4 +38,4 @@ if __name__ == "__main__":
         for seed in range(seed0, seed1):
             p = this_outdir + "/" + samp + "/raw/pfntuple_{}.pkl.bz2".format(seed)
             if not os.path.isfile(p):
-                print(f"sbatch --mem-per-cpu 6G --partition main --time 10:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")
+                print(f"sbatch --mem-per-cpu 8G --partition main --time 20:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")

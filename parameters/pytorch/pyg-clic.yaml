@@ -38,7 +38,6 @@ model:
     embedding_dim: 256
     width: 256
     num_convs: 6
-    dropout: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
     bin_size: 256
