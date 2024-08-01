@@ -13,4 +13,4 @@ singularity exec -B /scratch/persistent --nv \
     --env KERAS_BACKEND=torch \
     $IMG python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-    --train --conv-type attention --num-epochs 20 --gpu-batch-multiplier 5 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --comet --load experiments/pyg-cms_20240710_123023_806687/checkpoints/checkpoint-14-125.286808.pth
+    --train --conv-type attention --num-epochs 20 --gpu-batch-multiplier 10 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --comet
