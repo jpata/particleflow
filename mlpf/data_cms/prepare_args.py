@@ -6,12 +6,12 @@ import os
 outdir = "/local/joosep/mlpf/cms/20240702_cptruthdef"
 
 samples = [
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 120010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 220010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 310010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 320010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 500000, 520010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-#    ("VBF_TuneCP5_14TeV_pythia8_cfi",                         1700000,1720010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          700000, 720010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 
     ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
     ("MultiParticlePFGun50_cfi",                               800000, 820000, "genjob_nopu.sh", outdir + "/nopu"),
