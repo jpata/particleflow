@@ -172,7 +172,6 @@ def unpack_target(y):
 def unpack_predictions(preds):
     ret = {}
     ret["cls_id_onehot"], ret["momentum"] = preds
-    ret["cls_id_onehot"] = torch.softmax(ret["cls_id_onehot"], axis=-1)
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
