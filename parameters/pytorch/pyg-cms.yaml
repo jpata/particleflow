@@ -154,9 +154,9 @@ test_dataset:
     version: 2.0.0
   cms_pf_qcd:
     version: 2.0.0
-  cms_pf_ttbar_nopu:
-    version: 2.0.0
-  cms_pf_vbf_nopu:
-    version: 2.0.0
-  cms_pf_qcd_nopu:
-    version: 2.0.0
+#  cms_pf_ttbar_nopu:
+#    version: 2.0.0
+#  cms_pf_vbf_nopu:
+#    version: 2.0.0
+#  cms_pf_qcd_nopu:
+#    version: 2.0.0
