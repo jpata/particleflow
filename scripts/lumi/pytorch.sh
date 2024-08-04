@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=mlpf-train-cms
+#SBATCH --job-name=mlpf-train
 #SBATCH --account=project_465000301
 #SBATCH --time=3-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=80G
+#SBATCH --mem=200G
 #SBATCH --gpus-per-task=8
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
@@ -23,10 +23,10 @@ export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
 export TF_CPP_MAX_VLOG_LEVEL=-1 #to suppress ROCm fusion is enabled messages
 export ROCM_PATH=/opt/rocm
-export NCCL_DEBUG=INFO
-export MIOPEN_ENABLE_LOGGING=1
-export MIOPEN_ENABLE_LOGGING_CMD=1
-export MIOPEN_LOG_LEVEL=4
+#export NCCL_DEBUG=INFO
+#export MIOPEN_ENABLE_LOGGING=1
+#export MIOPEN_ENABLE_LOGGING_CMD=1
+#export MIOPEN_LOG_LEVEL=4
 export KERAS_BACKEND=torch
 
 env
@@ -40,4 +40,4 @@ singularity exec \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 8 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 200 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1
+     --train --gpu-batch-multiplier 400 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --attention-type math --dtype bfloat16

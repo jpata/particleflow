@@ -54,18 +54,14 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs: 4
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
     activation: "relu"
-<<<<<<< HEAD
-    head_dim: 64
-=======
     head_dim: 16
->>>>>>> origin/main
     num_heads: 32
     attention_type: flash
 
@@ -107,26 +103,50 @@ raytune:
 
 train_dataset:
   cms:
-    physical_nopu:
-      batch_size: 30
+#    physical_nopu:
+#      batch_size: 30
+#      samples:
+#        cms_pf_ttbar_nopu:
+#          version: 2.0.0
+#        cms_pf_vbf_nopu:
+#          version: 2.0.0
+#        cms_pf_qcd_nopu:
+#          version: 2.0.0
+#    multiparticlegun:
+#      batch_size: 4
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 2.0.0
+    physical_pu:
+      batch_size: 1
       samples:
-        cms_pf_ttbar_nopu:
+        cms_pf_qcd:
           version: 2.0.0
-        cms_pf_qcd_nopu:
-          version: 2.0.0
-        cms_pf_vbf_nopu:
+        cms_pf_ttbar:
           version: 2.0.0
 
 valid_dataset:
   cms:
-    physical_nopu:
-      batch_size: 30
+#    physical_nopu:
+#      batch_size: 30
+#      samples:
+#        cms_pf_ttbar_nopu:
+#          version: 2.0.0
+#        cms_pf_vbf_nopu:
+#          version: 2.0.0
+#        cms_pf_qcd_nopu:
+#          version: 2.0.0
+#    multiparticlegun:
+#      batch_size: 5
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 2.0.0
+    physical_pu:
+      batch_size: 1
       samples:
-        cms_pf_ttbar_nopu:
+        cms_pf_qcd:
           version: 2.0.0
-        cms_pf_qcd_nopu:
-          version: 2.0.0
-        cms_pf_vbf_nopu:
+        cms_pf_ttbar:
           version: 2.0.0
 
 test_dataset:
