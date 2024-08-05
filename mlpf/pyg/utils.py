@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
-
+import logging
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -172,7 +172,6 @@ def unpack_target(y):
 def unpack_predictions(preds):
     ret = {}
     ret["cls_id_onehot"], ret["momentum"] = preds
-    ret["cls_id_onehot"] = torch.softmax(ret["cls_id_onehot"], axis=-1)
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
@@ -219,13 +218,42 @@ def get_model_state_dict(model):
         return model.state_dict()
 
 
+def print_optimizer_stats(optimizer, stage):
+    print(f"\nOptimizer statistics {stage}:")
+    for i, param_group in enumerate(optimizer.param_groups):
+        print(f"  Parameter group {i}:")
+        print(f"    Learning rate: {param_group['lr']}")
+        print(f"    Weight decay: {param_group['weight_decay']}")
+        if "momentum" in param_group:
+            print(f"    Momentum: {param_group['momentum']}")
+        elif "betas" in param_group:
+            print(f"    Betas: {param_group['betas']}")
+
+    if hasattr(optimizer, "state"):
+        print("  Optimizer state:")
+        print(f"    Number of steps: {len(optimizer.state)}")
+        if len(optimizer.state) > 0:
+            first_param = next(iter(optimizer.state.values()))
+            for key, value in first_param.items():
+                if torch.is_tensor(value):
+                    print(f"    {key}: shape {value.shape}, dtype {value.dtype}")
+                else:
+                    print(f"    {key}: {value}")
+
+
 def load_checkpoint(checkpoint, model, optimizer=None):
+    if optimizer:
+        print_optimizer_stats(optimizer, "Before loading")
+
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"])
     else:
         model.load_state_dict(checkpoint["model_state_dict"])
+
     if optimizer:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        logging.info("Loaded optimizer state")
+        print_optimizer_stats(optimizer, "After loading")
         return model, optimizer
     else:
         return model
