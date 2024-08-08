@@ -99,11 +99,14 @@ def get_class_names(sample_name):
         return CLASS_NAMES_CLIC
     elif sample_name.startswith("cms_"):
         return CLASS_NAMES_CMS
+    if sample_name.startswith("cld_"):
+        return CLASS_NAMES_CLIC
     else:
         raise Exception("Unknown sample name: {}".format(sample_name))
 
 
 EVALUATION_DATASET_NAMES = {
+    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
@@ -242,9 +245,14 @@ def clic_label(ax):
     return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Simulation", tag2="ee (380 GeV)", x1=0.35)
 
 
+def cld_label(ax):
+    return experiment_label(ax, experiment="Key4HEP-CLD", tag1="Simulation", tag2="ee (365 GeV)", x1=0.35)
+
+
 EXPERIMENT_LABELS = {
     "cms": cms_label,
     "clic": clic_label,
+    "cld": cld_label,
 }
 
 
