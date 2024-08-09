@@ -59,7 +59,7 @@ class PFDataset:
 
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
 
-        if num_samples:
+        if num_samples and num_samples < len(self.ds):
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
 
     def __len__(self):

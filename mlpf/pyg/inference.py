@@ -75,7 +75,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     jets_coll = {}
-    for typ, ydata in zip(["cand"], [ycand]):
+    for typ, ydata in zip(["cand", "target"], [ycand, ygen]):
         clsid = awkward.unflatten(ydata["cls_id"], counts)
         msk = clsid != 0
         p4 = awkward.unflatten(ydata["p4"], counts)
@@ -130,8 +130,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
     gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
+    gen_to_target = match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr)
 
-    matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand})
+    matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand, "gen_to_target": gen_to_target})
 
     awkvals = {}
     for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:

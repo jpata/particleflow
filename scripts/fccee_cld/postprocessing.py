@@ -1,12 +1,12 @@
+import os
 import numpy as np
 import awkward
 import uproot
 import vector
-import glob
-import os
-import sys
-import multiprocessing
 import tqdm
+import pyhepmc
+import bz2
+import fastjet
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -572,6 +572,7 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         "sin_phi": np.sin(phi_arr[mask_gp_unmatched]),
         "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
+        "ispu": gpdata.gen_features["ispu"][mask_gp_unmatched],
     }
     assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
 
@@ -654,6 +655,7 @@ def get_reco_properties(prop_data, iev):
     reco_arr["eta"] = reco_p4.eta
     reco_arr["phi"] = reco_p4.phi
     reco_arr["energy"] = reco_p4.energy
+
     msk = reco_arr["PDG"] != 0
     reco_arr = awkward.Record({k: reco_arr[k][msk] for k in reco_arr.keys()})
     return reco_arr
@@ -682,6 +684,60 @@ def get_feature_matrix(feature_dict, features):
     return feats.T
 
 
+def get_p4(part, prefix="MCParticles"):
+    p4_x = part[prefix + ".momentum.x"]
+    p4_y = part[prefix + ".momentum.y"]
+    p4_z = part[prefix + ".momentum.z"]
+    p4_mass = part[prefix + ".mass"]
+
+    p4 = vector.awk(
+        awkward.zip(
+            {
+                "mass": p4_mass,
+                "px": p4_x,
+                "py": p4_y,
+                "pz": p4_z,
+            }
+        )
+    )
+
+    return p4
+
+
+def compute_met(part, prefix="MCParticles"):
+    p4 = get_p4(part, prefix)
+    px = awkward.sum(p4.px, axis=1)
+    py = awkward.sum(p4.py, axis=1)
+    met = np.sqrt(px**2 + py**2)
+    return met
+
+
+def compute_jets(part, prefix="MCParticles", min_pt=0):
+    particles_p4 = get_p4(part, prefix)
+    jetdef = fastjet.JetDefinition2Param(fastjet.ee_genkt_algorithm, 0.4, -1)
+    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+    return jets
+
+
+def load_hepmc(hepmc_file_path):
+    events = []
+    with pyhepmc.open(bz2.BZ2File(hepmc_file_path, "rb")) as f:
+        for event in f:
+            parts = [p for p in event.particles if p.status == 1 and (p.pid != 12) and (p.pid != 14) and (p.pid != 16)]
+            parts = {
+                "MCParticles.momentum.x": [p.momentum.x for p in parts],
+                "MCParticles.momentum.y": [p.momentum.y for p in parts],
+                "MCParticles.momentum.z": [p.momentum.z for p in parts],
+                "MCParticles.mass": [p.momentum.m() for p in parts],
+            }
+            events.append(parts)
+    events = awkward.from_iter(events)
+    return events
+
+
 def process_one_file(fn, ofn):
 
     # output exists, do not recreate
@@ -691,8 +747,16 @@ def process_one_file(fn, ofn):
 
     print("loading {}".format(fn))
     fi = uproot.open(fn)
-
     arrs = fi["events"]
+
+    # load .hepmc file corresponding to the .root file
+    hepmc_file_path = fn.replace("/root/", "/sim/").replace(".root", ".hepmc.bz2").replace("reco_", "sim_")
+    hepmc_mcp = load_hepmc(hepmc_file_path)
+
+    met_hepmc = compute_met(hepmc_mcp)
+    genjets_hepmc = compute_jets(hepmc_mcp)
+
+    assert len(hepmc_mcp) == arrs.num_entries
 
     collectionIDs = {
         k: v
@@ -762,6 +826,7 @@ def process_one_file(fn, ofn):
                 "sin_phi": np.sin(reco_arr["phi"]),
                 "cos_phi": np.cos(reco_arr["phi"]),
                 "energy": reco_arr["energy"],
+                "ispu": np.zeros(len(reco_type)),
             }
         )
 
@@ -815,7 +880,7 @@ def process_one_file(fn, ofn):
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
 
-        # we don"t want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
+        # we don't want to try to reconstruct charged particles from primary clusters, make sure the charge is 0
         assert np.all(gps_cluster[:, 1] == 0)
         assert np.all(rps_cluster[:, 1] == 0)
 
@@ -842,6 +907,8 @@ def process_one_file(fn, ofn):
                 "ygen_cluster": ygen_cluster,
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
+                "genmet": met_hepmc[iev],
+                "genjet": get_feature_matrix(genjets_hepmc[iev], ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
@@ -850,30 +917,22 @@ def process_one_file(fn, ofn):
     awkward.to_parquet(ret, ofn)
 
 
-def process_sample(sample):
-    inp = "/local/joosep/cld_edm4hep/2024_05_full/"
-    outp = "/local/joosep/mlpf/cld_edm4hep/2024_05/"
+def parse_args():
+    import argparse
 
-    pool = multiprocessing.Pool(4)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
+    parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    args = parser.parse_args()
+    return args
 
-    inpath_samp = inp + sample
-    outpath_samp = outp + sample
-    infiles = list(glob.glob(inpath_samp + "/*.root"))
-    if not os.path.isdir(outpath_samp):
-        os.makedirs(outpath_samp)
 
-    # for inf in infiles:
-    #    of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-    #    process_one_file(inf, of)
-    args = []
-    for inf in infiles:
-        of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-        args.append((inf, of))
-    pool.starmap(process_one_file, args)
+def process(args):
+    infile = args.input
+    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+    process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        process_sample(sys.argv[1])
-    else:
-        process_one_file(sys.argv[1], sys.argv[2])
+    args = parse_args()
+    process(args)

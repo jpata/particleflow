@@ -6,11 +6,11 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 10
+num_epochs: 100
 patience: 20
-lr: 0.00001
-lr_schedule: constant  # constant, cosinedecay, onecycle
-conv_type: attention
+lr: 0.0001
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
+conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
@@ -35,13 +35,12 @@ model:
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 512
-    width: 512
-    num_convs: 3
-    dropout: 0.0
+    embedding_dim: 256
+    width: 256
+    num_convs: 6
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 640
+    bin_size: 256
     max_num_bins: 200
     distance_dim: 128
     layernorm: True

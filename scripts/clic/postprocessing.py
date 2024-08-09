@@ -938,17 +938,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument(
-        "--save-full-graph",
-        action="store_true",
-        help="save the full event graph",
-    )
-    parser.add_argument(
-        "--num-events",
-        type=int,
-        help="number of events to process",
-        default=-1,
-    )
     args = parser.parse_args()
     return args
 
