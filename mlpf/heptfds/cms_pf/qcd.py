@@ -56,7 +56,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ycand"),
+            supervised_keys=("X", "ygen"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),

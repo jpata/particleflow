@@ -8,7 +8,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.00005
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -54,7 +54,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs: 4
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
@@ -103,32 +103,50 @@ raytune:
 
 train_dataset:
   cms:
-    physical_nopu:
-      batch_size: 30
-      samples:
-        cms_pf_ttbar_nopu:
-          version: 2.0.0
+#    physical_nopu:
+#      batch_size: 30
+#      samples:
+#        cms_pf_ttbar_nopu:
+#          version: 2.0.0
+#        cms_pf_vbf_nopu:
+#          version: 2.0.0
+#        cms_pf_qcd_nopu:
+#          version: 2.0.0
+#    multiparticlegun:
+#      batch_size: 4
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.0.0
         cms_pf_qcd:
+          version: 2.0.0
+        cms_pf_ttbar:
           version: 2.0.0
 
 valid_dataset:
   cms:
-    physical_nopu:
-      batch_size: 30
-      samples:
-        cms_pf_ttbar_nopu:
-          version: 2.0.0
+#    physical_nopu:
+#      batch_size: 30
+#      samples:
+#        cms_pf_ttbar_nopu:
+#          version: 2.0.0
+#        cms_pf_vbf_nopu:
+#          version: 2.0.0
+#        cms_pf_qcd_nopu:
+#          version: 2.0.0
+#    multiparticlegun:
+#      batch_size: 5
+#      samples:
+#        cms_pf_multi_particle_gun:
+#          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.0.0
         cms_pf_qcd:
+          version: 2.0.0
+        cms_pf_ttbar:
           version: 2.0.0
 
 test_dataset:
@@ -136,5 +154,9 @@ test_dataset:
     version: 2.0.0
   cms_pf_qcd:
     version: 2.0.0
-  cms_pf_ttbar_nopu:
-    version: 2.0.0
+#  cms_pf_ttbar_nopu:
+#    version: 2.0.0
+#  cms_pf_vbf_nopu:
+#    version: 2.0.0
+#  cms_pf_qcd_nopu:
+#    version: 2.0.0
