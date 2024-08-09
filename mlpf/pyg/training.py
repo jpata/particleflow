@@ -1065,7 +1065,7 @@ def run_hpo(config, args):
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
     if args.raytune_num_samples:
-        raytune_num_samples = args.raytune_num_samples
+        raytune_num_samples = args.raytune_num_samples  # noqa: F811
 
     name = args.hpo  # name of Ray Tune experiment directory
 
@@ -1150,6 +1150,4 @@ def run_hpo(config, args):
     print(result_df.columns)
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
-    logging.info(
-        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
-    )
+    logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
