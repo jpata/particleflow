@@ -103,50 +103,36 @@ raytune:
 
 train_dataset:
   cms:
-#    physical_nopu:
-#      batch_size: 30
-#      samples:
-#        cms_pf_ttbar_nopu:
-#          version: 2.0.0
-#        cms_pf_vbf_nopu:
-#          version: 2.0.0
-#        cms_pf_qcd_nopu:
-#          version: 2.0.0
-#    multiparticlegun:
-#      batch_size: 4
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 2.0.0
-    physical_pu:
+    physical_nopu:
+      batch_size: 5
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+        cms_pf_vbf_nopu:
+          version: 2.0.0
+        cms_pf_qcd_nopu:
+          version: 2.0.0
+    multiparticlegun:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
-        cms_pf_ttbar:
+        cms_pf_multi_particle_gun:
           version: 2.0.0
 
 valid_dataset:
   cms:
-#    physical_nopu:
-#      batch_size: 30
-#      samples:
-#        cms_pf_ttbar_nopu:
-#          version: 2.0.0
-#        cms_pf_vbf_nopu:
-#          version: 2.0.0
-#        cms_pf_qcd_nopu:
-#          version: 2.0.0
-#    multiparticlegun:
-#      batch_size: 5
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 2.0.0
-    physical_pu:
+    physical_nopu:
+      batch_size: 5
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.0.0
+        cms_pf_vbf_nopu:
+          version: 2.0.0
+        cms_pf_qcd_nopu:
+          version: 2.0.0
+    multiparticlegun:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
-        cms_pf_ttbar:
+        cms_pf_multi_particle_gun:
           version: 2.0.0
 
 test_dataset:
@@ -154,9 +140,3 @@ test_dataset:
     version: 2.0.0
   cms_pf_qcd:
     version: 2.0.0
-#  cms_pf_ttbar_nopu:
-#    version: 2.0.0
-#  cms_pf_vbf_nopu:
-#    version: 2.0.0
-#  cms_pf_qcd_nopu:
-#    version: 2.0.0

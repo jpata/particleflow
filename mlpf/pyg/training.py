@@ -338,11 +338,9 @@ def train_and_valid(
                     loss=intermediate_losses_t["Total"],
                     reg_loss=intermediate_losses_t["Regression"],
                     cls_loss=intermediate_losses_t["Classification"],
-                    charge_loss=intermediate_losses_t["Charge"],
                     val_loss=intermediate_losses_v["Total"],
                     val_reg_loss=intermediate_losses_v["Regression"],
                     val_cls_loss=intermediate_losses_v["Classification"],
-                    val_charge_loss=intermediate_losses_v["Charge"],
                     inside_epoch=epoch,
                     step=(epoch - 1) * len(data_loader) + itrain,
                     val_freq_time=val_freq_time.cpu().item(),
@@ -521,11 +519,9 @@ def train_mlpf(
                 loss=losses_t["Total"],
                 reg_loss=losses_t["Regression"],
                 cls_loss=losses_t["Classification"],
-                # charge_loss=losses_t["Charge"],
                 val_loss=losses_v["Total"],
                 val_reg_loss=losses_v["Regression"],
                 val_cls_loss=losses_v["Classification"],
-                # val_charge_loss=losses_v["Charge"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
