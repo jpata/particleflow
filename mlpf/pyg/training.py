@@ -855,6 +855,8 @@ def train_ray_trial(config, args, outdir=None):
 
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
     use_cuda = args.gpus > 0
 
@@ -970,11 +972,6 @@ def run_ray_training(config, args, outdir):
     from ray import tune
     from ray.train.torch import TorchTrainer
 
-    # create ray cache for intermediate storage of trials
-    tmp_ray_cache = TemporaryDirectory()
-    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
-    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
-
     if not args.local:
         ray.init(address="auto")
 
@@ -1027,9 +1024,6 @@ def run_ray_training(config, args, outdir):
     _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
     # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
 
-    # clean up ray cache
-    tmp_ray_cache.cleanup()
-
 
 def set_searchspace_and_run_trial(search_space, config, args):
     import ray
@@ -1066,25 +1060,21 @@ def run_hpo(config, args):
     from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
-    # create ray cache for intermediate storage of trials
-    tmp_ray_cache = TemporaryDirectory()
-    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
-    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
+    if args.raytune_num_samples:
+        raytune_num_samples = args.raytune_num_samples  # noqa: F811
 
     name = args.hpo  # name of Ray Tune experiment directory
 
     os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"  # don't crash if a metric is missing
     if isinstance(config["raytune"]["local_dir"], type(None)):
         raise TypeError("Please specify a local_dir in the raytune section of the config file.")
-    trd = config["raytune"]["local_dir"] + "/tune_result_dir"
-    os.environ["TUNE_RESULT_DIR"] = trd
 
     expdir = Path(config["raytune"]["local_dir"]) / name
     expdir.mkdir(parents=True, exist_ok=True)
     dirname = Path(config["raytune"]["local_dir"]) / name
     shutil.copy(
-        "mlpf/raytune/search_space.py",
-        str(dirname / "search_space.py"),
+        "mlpf/raytune/pt_search_space.py",
+        str(dirname / "pt_search_space.py"),
     )  # Copy the search space definition file to the train dir for later reference
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
     with open((dirname / "config.yaml"), "w") as file:
@@ -1095,7 +1085,6 @@ def run_hpo(config, args):
         ray.init(
             address=os.environ["ip_head"],
             _node_ip_address=os.environ["head_node_ip"],
-            # _temp_dir="/p/project/raise-ctp2/cern/tmp_ray",
         )
         _logger.info("Done.")
 
@@ -1158,6 +1147,3 @@ def run_hpo(config, args):
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
     logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
-
-    # clean up ray cache
-    tmp_ray_cache.cleanup()

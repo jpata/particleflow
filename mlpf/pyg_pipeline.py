@@ -63,6 +63,7 @@ parser.add_argument("--ray-train", action="store_true", help="run training using
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
+parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")

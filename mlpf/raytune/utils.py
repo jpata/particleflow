@@ -8,7 +8,6 @@ from ray.tune.schedulers.pb2 import PB2  # Population Based Bandits
 from ray.tune.search.bayesopt import BayesOptSearch
 from ray.tune.search.bohb import TuneBOHB
 from ray.tune.search.hyperopt import HyperOptSearch
-from ray.tune.search.skopt import SkOptSearch
 
 # from ray.tune.search.hebo import HEBOSearch # HEBO is not yet supported
 
@@ -50,21 +49,6 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
             n_initial_points=raytune_cfg["hyperopt"]["n_random_steps"],
             # points_to_evaluate=,
         )
-    if raytune_cfg["search_alg"] == "scikit":
-        print("INFO: Using bayesian optimization from scikit-learn")
-        return SkOptSearch(
-            metric=raytune_cfg["default_metric"],
-            mode=raytune_cfg["default_mode"],
-            convert_to_python=True,
-        )
-    # HEBO is not yet supported
-    # if (raytune_cfg["search_alg"] == "hebo") or (raytune_cfg["search_alg"] == "HEBO"):
-    #     print("Using HEBOSearch")
-    #     return HEBOSearch(
-    #         metric=raytune_cfg["default_metric"],
-    #         mode=raytune_cfg["default_mode"],
-    #         # max_concurrent=8,
-    #     )
     else:
         print("INFO: Not using any Ray Tune search algorithm")
         return None

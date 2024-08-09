@@ -10,7 +10,7 @@ num_epochs: 100
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: gnn_lsh  # gnn_lsh, attention, mamba, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -80,8 +80,8 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: # Note: please specify an absolute path
-  sched: asha # asha, hyperband
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
