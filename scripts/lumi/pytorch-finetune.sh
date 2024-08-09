@@ -38,6 +38,6 @@ singularity exec \
     -B /tmp \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
-     $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 8 \
-     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 200 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type gnn_lsh --dtype bfloat16 --lr 0.0001
+     $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus 8 \
+     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms-finetune.yaml \
+     --train --gpu-batch-multiplier 1 --num-workers 8 --prefetch-factor 20 --checkpoint-freq 1 --dtype bfloat16 --load experiments/pyg-cms_20240804_095032_809397_finetune/checkpoints/checkpoint-16-19.681200.pth

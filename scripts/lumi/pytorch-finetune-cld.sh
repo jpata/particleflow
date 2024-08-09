@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=200G
-#SBATCH --gpus-per-task=8
+#SBATCH --gpus-per-task=1
 #SBATCH --partition=small-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -38,6 +38,6 @@ singularity exec \
     -B /tmp \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
-     $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 8 \
-     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 200 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type gnn_lsh --dtype bfloat16 --lr 0.0001
+     $IMG python3 mlpf/pyg_pipeline.py --dataset cld --gpus 1 \
+     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cld.yaml \
+     --train --gpu-batch-multiplier 200 --num-workers 8 --prefetch-factor 20 --checkpoint-freq 1 --dtype bfloat16 --load experiments/pyg-clic_20240807_134034_168101_finetune_cld/checkpoints/checkpoint-50-9.891216.pth
