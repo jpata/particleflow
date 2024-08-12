@@ -33,7 +33,7 @@ python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset c
   --prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type attention \
   --export-onnx --pipeline --dtype float32 --attention-type math --num-convs 1
 
-#test Ray Train training
-# python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ${PWD}/tensorflow_datasets/ \
-# 	--prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --ray-train --ray-cpus 2 --local --conv-type attention \
-# 	--pipeline --dtype float32 --attention-type math --num-convs 1 --experiments-dir ${PWD}/experiments
+# test Ray Train training
+python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ${PWD}/tensorflow_datasets/ \
+	--prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --ray-train --ray-cpus 2 --local --conv-type attention \
+	--pipeline --dtype float32 --attention-type math --num-convs 1 --experiments-dir ${PWD}/experiments
