@@ -8,7 +8,7 @@
 #SBATCH -p gpu
 #SBATCH --gpus-per-task=8
 #SBATCH --cpus-per-task=64
-#SBATCH --constraint=h100,ib
+#SBATCH --constraint=ib-h100p
 
 # Job name
 #SBATCH -J pt_raytrain
@@ -81,9 +81,9 @@ python3 -u mlpf/pyg_pipeline.py --train --ray-train \
     --prefix $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
     --gpus $((SLURM_GPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
-    --gpu-batch-multiplier 4 \
-    --num-workers 1 \
-    --prefetch-factor 2 \
+    --gpu-batch-multiplier 8 \
+    --num-workers 4 \
+    --prefetch-factor 8 \
     --experiments-dir /mnt/ceph/users/ewulff/particleflow/experiments \
     --local \
     --comet
