@@ -355,9 +355,9 @@ class MLPF(nn.Module):
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
 
-        if self.use_pre_layernorm:
-            self.final_norm_id = torch.nn.LayerNorm(embedding_dim)
-            self.final_norm_reg = torch.nn.LayerNorm(embedding_dim)
+        if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
+            self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
+            self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
     # @torch.compile
     def forward(self, X_features, mask):
@@ -395,7 +395,6 @@ class MLPF(nn.Module):
         if self.use_pre_layernorm:
             final_embedding_id = self.final_norm_id(final_embedding_id)
 
-        preds_id = self.nn_id(final_embedding_id)
         preds_binary_particle = self.nn_binary_particle(final_embedding_id)
         preds_pid = self.nn_pid(final_embedding_id)
 
