@@ -323,15 +323,12 @@ def cleanup_graph(g, node_energy_threshold=0.1, edge_energy_threshold=0.05):
             remap_pid = g.nodes[node]["remap_pid"]
 
             # charged particles that leave no track should not be reconstructed as charged
-            print(g.nodes[node])
             if remap_pid in [211, 13] and g.nodes[node]["E_track"] == 0:
                 g.nodes[node]["remap_pid"] = 130
                 g.nodes[node]["charge"] = 0
-                print("remapped")
             if remap_pid in [11] and g.nodes[node]["E_track"] == 0:
                 g.nodes[node]["remap_pid"] = 22
                 g.nodes[node]["charge"] = 0
-                print("remapped")
 
             # if a particle only leaves deposits in the HF, it should be reconstructed as an HF candidate
             if (g.nodes[node]["E_track"] == 0) and (g.nodes[node]["E_calo"] == 0) and (g.nodes[node]["E_other"] == 0) and g.nodes[node]["E_hf"] > 0:
@@ -888,9 +885,9 @@ def process(args):
             "genmet": genmet,
         }
 
-        print("trk", ygen[Xelem["typ"] == 1]["typ"])
-        print("ecal", ygen[Xelem["typ"] == 4]["typ"])
-        print("hcal", ygen[Xelem["typ"] == 4]["typ"])
+        # print("trk", ygen[Xelem["typ"] == 1]["typ"])
+        # print("ecal", ygen[Xelem["typ"] == 4]["typ"])
+        # print("hcal", ygen[Xelem["typ"] == 4]["typ"])
 
         if args.save_full_graph:
             data["full_graph"] = g
