@@ -885,6 +885,10 @@ def process(args):
             "genmet": genmet,
         }
 
+        # print("trk", ygen[Xelem["typ"] == 1]["typ"])
+        # print("ecal", ygen[Xelem["typ"] == 4]["typ"])
+        # print("hcal", ygen[Xelem["typ"] == 4]["typ"])
+
         if args.save_full_graph:
             data["full_graph"] = g
 

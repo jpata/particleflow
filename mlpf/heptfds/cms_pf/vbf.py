@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-TTbar events with PU~55 in a Run3 setup.
+VBF events with PU 55-75 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -18,33 +18,23 @@ _CITATION = """
 """
 
 
-class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf dataset."""
+class CmsPfVbf(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_vbf dataset."""
 
     VERSION = tfds.core.Version("2.1.0")
     RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-        "1.1.0": "Add muon type, fix electron GSF association",
-        "1.2.0": "12_1_0_pre3 generation, add corrected energy, cluster flags, 20k events",
-        "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
-        "1.3.1": "Remove PS again",
-        "1.4.0": "Add gen jet index information",
-        "1.5.0": "No padding",
-        "1.5.1": "Remove outlier caps",
-        "1.6.0": "Regenerate with ARRAY_RECORD",
-        "1.7.0": "Add cluster shape vars",
-        "1.7.1": "Increase stats to 400k events",
+        "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
         "2.0.0": "New truth def based primarily on CaloParticles",
-        "2.1.0": "Additional stats",
+        "2.1.0": "Additional statistics",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_vbf ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CmsPfTtbar, self).__init__(*args, **kwargs)
+        super(CmsPfVbf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -69,7 +59,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
+        sample_dir = "VBF_TuneCP5_14TeV_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):
