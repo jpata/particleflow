@@ -344,10 +344,11 @@ class MLPF(nn.Module):
             decoding_dim = self.input_dim + embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
+        self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
+        self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
-        embed_dim = decoding_dim + num_classes
+        embed_dim = decoding_dim + 2 + num_classes
         self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
@@ -385,30 +386,29 @@ class MLPF(nn.Module):
                 out_padded = conv(conv_input, mask)
                 embeddings_reg.append(out_padded)
 
-        if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
-            embeddings_id[-1] = self.final_norm_id(embeddings_id[-1])
-            embeddings_reg[-1] = self.final_norm_reg(embeddings_reg[-1])
-
+        # id input
         if self.learned_representation_mode == "concat":
             final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
         elif self.learned_representation_mode == "last":
             final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
 
-        # if self.use_pre_layernorm:
-        #     final_embedding_id = self.final_norm_id(final_embedding_id)
+        if self.use_pre_layernorm:
+            final_embedding_id = self.final_norm_id(final_embedding_id)
 
         preds_id = self.nn_id(final_embedding_id)
+        preds_binary_particle = self.nn_binary_particle(final_embedding_id)
+        preds_pid = self.nn_pid(final_embedding_id)
 
         # pred_charge = self.nn_charge(final_embedding_id)
 
         # regression input
         if self.learned_representation_mode == "concat":
-            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_id], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
         elif self.learned_representation_mode == "last":
-            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_id], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
 
-        # if self.use_pre_layernorm:
-            # final_embedding_reg = self.final_norm_reg(final_embedding_reg)
+        if self.use_pre_layernorm:
+            final_embedding_reg = self.final_norm_reg(final_embedding_reg)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
@@ -418,4 +418,4 @@ class MLPF(nn.Module):
         preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        return preds_id, preds_momentum
+        return preds_binary_particle, preds_pid, preds_momentum

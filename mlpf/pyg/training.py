@@ -12,7 +12,8 @@ import tqdm
 import yaml
 import csv
 import json
-
+import sklearn
+import sklearn.metrics
 import numpy as np
 
 # comet needs to be imported before torch
@@ -85,13 +86,28 @@ def mlpf_loss(y, ypred, batch):
     y["momentum"] = y["momentum"] * msk_true_particle
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
+    ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
 
-    loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    # binary loss for particle / no-particle classification
+    loss_binary_classification = 100 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
+
+    # compare the particle type, only for cases where there was a true particle
+    loss_pid_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    loss_pid_classification[y["cls_id"] == 0] *= 0
+
+    # compare particle momentum, only for cases where there was a true particle
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression[y["cls_id"] == 0] *= 0
+
+    # set the loss to 0 on padded elements in the batch
+    loss_binary_classification[batch.mask == 0] *= 0
+    loss_pid_classification[batch.mask == 0] *= 0
+    loss_regression[batch.mask == 0] *= 0
 
     # average over all elements that were not padded
-    loss["Classification"] = loss_classification.sum() / nelem
+    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
+    loss["Classification"] = loss_pid_classification.sum() / nelem
 
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
     mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
@@ -101,7 +117,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
-    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
+    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)
     # pt * cos_phi
     px = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 3:4].detach() * msk_pred_particle
     # pt * sin_phi
@@ -112,8 +128,9 @@ def mlpf_loss(y, ypred, batch):
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
 
-    loss["Total"] = loss["Classification"] + loss["Regression"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
 
+    loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
     return loss
@@ -254,6 +271,12 @@ def train_and_valid(
 
     loss_accum = 0.0
     val_freq_time_0 = time.time()
+
+    if not is_train:
+        cm_X_gen = np.zeros((13, 13))
+        cm_X_pred = np.zeros((13, 13))
+        cm_id = np.zeros((13, 13))
+
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
@@ -270,6 +293,17 @@ def train_and_valid(
                     ypred = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred)
+
+        if not is_train:
+            cm_X_gen += sklearn.metrics.confusion_matrix(
+                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ygen["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            )
+            cm_X_pred += sklearn.metrics.confusion_matrix(
+                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            )
+            cm_id += sklearn.metrics.confusion_matrix(
+                ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            )
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
@@ -302,6 +336,14 @@ def train_and_valid(
                     tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
                     tensorboard_writer.flush()
                     loss_accum = 0.0
+
+                    extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
+                    torch.save(
+                        {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
+                        f"{outdir}/step_weights.pth",
+                    )
+                    save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
+
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
@@ -338,9 +380,11 @@ def train_and_valid(
                     loss=intermediate_losses_t["Total"],
                     reg_loss=intermediate_losses_t["Regression"],
                     cls_loss=intermediate_losses_t["Classification"],
+                    cls_binary_loss=intermediate_losses_t["Classification_binary"],
                     val_loss=intermediate_losses_v["Total"],
                     val_reg_loss=intermediate_losses_v["Regression"],
                     val_cls_loss=intermediate_losses_v["Classification"],
+                    val_cls_binary_loss=intermediate_losses_v["Classification_binary"],
                     inside_epoch=epoch,
                     step=(epoch - 1) * len(data_loader) + itrain,
                     val_freq_time=val_freq_time.cpu().item(),
@@ -355,6 +399,17 @@ def train_and_valid(
                 if comet_experiment:
                     comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
                 val_freq_time_0 = time.time()  # reset intermediate validation spacing timer
+
+    if not is_train and comet_experiment:
+        comet_experiment.log_confusion_matrix(
+            matrix=cm_X_gen, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_gen.json"
+        )
+        comet_experiment.log_confusion_matrix(
+            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
+        )
+        comet_experiment.log_confusion_matrix(
+            matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
+        )
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -414,7 +469,7 @@ def train_mlpf(
 
     t0_initial = time.time()
 
-    losses_of_interest = ["Total", "Classification", "Regression"]
+    losses_of_interest = ["Total", "Classification", "Classification_binary", "Regression"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
@@ -521,9 +576,11 @@ def train_mlpf(
                 loss=losses_t["Total"],
                 reg_loss=losses_t["Regression"],
                 cls_loss=losses_t["Classification"],
+                cls_binary_loss=losses_t["Classification_binary"],
                 val_loss=losses_v["Total"],
                 val_reg_loss=losses_v["Regression"],
                 val_cls_loss=losses_v["Classification"],
+                val_cls_binary_loss=losses_v["Classification_binary"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
