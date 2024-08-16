@@ -32,6 +32,33 @@ class TFDSDataSource:
             ret["ycand"] = ret["ycand"][sortidx]
             ret["ygen"] = ret["ygen"][sortidx]
 
+        if self.ds.dataset_info.name.startswith("cms_"):
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 2)] = 1
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 5)] = 1
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 1)] = 5
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 1)] = 2
+            # ret["ygen"][:, 0][(ret["X"][:, 0]==4) & (ret["ygen"][:, 0] == 6)] = 5
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 7)] = 5
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 7)] = 2
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 1)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 1)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 2)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 2)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 6)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 6)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 7)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 7)] = 3
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 1)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 1)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 7)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 7)] = 2
+
         return ret
 
     def __len__(self):
@@ -183,7 +210,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset)
             else:
-                sampler = torch.utils.data.RandomSampler(dataset)
+                sampler = torch.utils.data.SequentialSampler(dataset)
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
