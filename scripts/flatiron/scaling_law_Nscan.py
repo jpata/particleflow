@@ -126,7 +126,7 @@ for nconvs, width in nconvs_width_list:
     replaceline_width(batch_file, width)
     replaceline_embedding_dim(batch_file, width)
     replaceline_num_convs(batch_file, nconvs)
-    time.sleep(.5)
+    time.sleep(0.5)
     process = subprocess.run(
         ["sbatch", batch_file, config_file, prefix_string.format(nconvs, width)],
         stdout=subprocess.PIPE,
