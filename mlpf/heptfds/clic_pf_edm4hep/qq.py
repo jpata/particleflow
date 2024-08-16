@@ -26,7 +26,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.0.0")
+    VERSION = tfds.core.Version("2.1.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
@@ -36,6 +36,7 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
         "1.4.0": "Fix ycand matching",
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.0.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
+        "2.1.0": "Bump dataset size",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

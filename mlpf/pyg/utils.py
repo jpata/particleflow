@@ -171,7 +171,8 @@ def unpack_target(y):
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_id_onehot"], ret["momentum"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
+    # ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
@@ -182,8 +183,14 @@ def unpack_predictions(preds):
     ret["cos_phi"] = ret["momentum"][..., 3]
     ret["energy"] = ret["momentum"][..., 4]
 
-    # get PID with the maximum proba
-    ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+    # first get the cases where a particle was predicted
+    ret["cls_id"] = torch.argmax(ret["cls_binary"], axis=-1)
+    # when a particle was predicted, get the particle ID
+    ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], axis=-1)[ret["cls_id"] == 1]
+
+    # get the predicted particle ID
+    # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+
     # particle properties
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(

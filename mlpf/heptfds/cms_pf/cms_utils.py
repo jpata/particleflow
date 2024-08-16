@@ -115,7 +115,7 @@ Y_FEATURES = [
 ]
 
 
-def prepare_data_cms(fn, with_jet_idx=False):
+def prepare_data_cms(fn):
     Xs = []
     ygens = []
     ycands = []
@@ -146,10 +146,6 @@ def prepare_data_cms(fn, with_jet_idx=False):
         Xelem["typ_idx"] = np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
         ygen["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32)
         ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32)
-
-        if with_jet_idx:
-            ygen["jet_idx"] = np.zeros(len(ygen["typ"]), dtype=np.float32)
-            ycand["jet_idx"] = np.zeros(len(ycand["typ"]), dtype=np.float32)
 
         Xelem_flat = ak.to_numpy(
             np.stack(

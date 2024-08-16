@@ -11,6 +11,7 @@ import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
+    get_class_names,
     compute_met_and_ratio,
     load_eval_data,
     plot_jets,
@@ -22,6 +23,7 @@ from plotting.plot_utils import (
     plot_met_response_binned,
     plot_num_elements,
     plot_particles,
+    plot_particle_ratio,
     plot_sum_energy,
 )
 
@@ -178,7 +180,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
     mplhep.style.use(mplhep.styles.CMS)
-
+    class_names = get_class_names(sample)
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
@@ -241,3 +243,4 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
 
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
