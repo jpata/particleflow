@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 4
+#SBATCH -N 2
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --constraint=a100-80gb&sxm4
@@ -45,8 +45,8 @@ nodes_array=( $nodes )
 node_1=${nodes_array[0]}
 ip=$(srun --nodes=1 --ntasks=1 -w $node_1 hostname --ip-address) # making redis-address
 port=6379
-ip_head=$ip:$port
-export ip_head
+export ip_head=$node_1:$port
+export head_node_ip=$node_1
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $node_1"
@@ -74,8 +74,8 @@ echo All Ray workers started.
 python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
-    --ray-cpus $((SLURM_CPUS_PER_TASK/4)) \
-    --gpus 1 \
+    --ray-cpus $((SLURM_CPUS_PER_TASK/2)) \
+    --gpus 2 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2
