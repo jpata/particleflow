@@ -51,6 +51,7 @@ model:
     num_node_messages: 2
     ffn_dist_hidden_dim: 128
     ffn_dist_num_layers: 2
+    use_pre_layernorm: True
 
   attention:
     conv_type: attention
