@@ -51,7 +51,6 @@ model:
     num_node_messages: 2
     ffn_dist_hidden_dim: 128
     ffn_dist_num_layers: 2
-    use_pre_layernorm: True
 
   attention:
     conv_type: attention
@@ -65,6 +64,7 @@ model:
     head_dim: 16
     num_heads: 32
     attention_type: flash
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
