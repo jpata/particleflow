@@ -118,5 +118,7 @@ valid_dataset:
           version: 2.0.0
 
 test_dataset:
+  cms_pf_ttbar:
+    version: 2.1.0
   cms_pf_ttbar_nopu:
     version: 2.0.0

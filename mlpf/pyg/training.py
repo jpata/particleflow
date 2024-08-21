@@ -78,11 +78,12 @@ def mlpf_loss(y, ypred, batch):
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
+    msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
-    ypred["momentum"] = ypred["momentum"] * msk_true_particle
+    ypred["momentum"] = ypred["momentum"] * msk_pred_particle
     y["momentum"] = y["momentum"] * msk_true_particle
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
@@ -126,13 +127,14 @@ def mlpf_loss(y, ypred, batch):
     pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
+    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"], y["momentum"]).mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"] + loss["Sliced_Wasserstein_Loss"]
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
+    loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
     return loss
 
 
@@ -667,6 +669,8 @@ def run(rank, world_size, config, args, outdir, logfile):
     if config["load"]:  # load a pre-trained model
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
+            if "use_pre_layernorm" in model_kwargs:
+                model_kwargs.pop("use_pre_layernorm")
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
         if config["conv_type"] == "attention":

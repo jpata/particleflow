@@ -35,12 +35,12 @@ model:
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 256
-    width: 256
-    num_convs: 6
+    embedding_dim: 512
+    width: 512
+    num_convs: 8
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 256
+    bin_size: 32
     max_num_bins: 200
     distance_dim: 128
     layernorm: True

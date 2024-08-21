@@ -35,12 +35,21 @@ class TFDSDataSource:
             ret["ygen"] = ret["ygen"][sortidx]
 
         if self.ds.dataset_info.name.startswith("cms_"):
+            # track, target label neutral hadron -> reconstruct as charged hadron
             ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 2)] = 1
+
+            # track, target label photon -> reconstruct as charged hadron
             ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 5)] = 1
 
+            # ECAL cluster, target label charged hadron -> reconstruct as photon
             ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 1)] = 5
+
+            # HCAL cluster, target label charged hadron -> reconstruct as neutral hadron
             ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 1)] = 2
+
+            # ECAL cluster, target label electron -> reconstruct as photon
             # ret["ygen"][:, 0][(ret["X"][:, 0]==4) & (ret["ygen"][:, 0] == 6)] = 5
+
             ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 6)] = 2
             ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 7)] = 5
             ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 7)] = 2
