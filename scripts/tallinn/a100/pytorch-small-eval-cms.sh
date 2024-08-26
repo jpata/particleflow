@@ -7,7 +7,7 @@
 IMG=/home/software/singularity/pytorch.simg:2024-08-02
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms-ttbar-nopu_20240816_143034_376064/checkpoints/checkpoint-30-563.293516.pth
+WEIGHTS=experiments/pyg-cms-ttbar-nopu_20240822_152543_025051/checkpoints/checkpoint-04-226.784858.pth
 singularity exec -B /scratch/persistent --nv \
      --env PYTHONPATH=hep_tfds \
      --env KERAS_BACKEND=torch \

@@ -7,7 +7,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20240702_cptruthdef/pu55to75/
+OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -77,13 +77,13 @@ cmsRun step2_phase1_new.py > /dev/null
 cmsRun step3_phase1_new.py > /dev/null
 #cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
-bzip2 -z pfntuple_${SEED}.pkl
-cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
+#python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
+#bzip2 -z pfntuple_${SEED}.pkl
+#cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
 #copy ROOT outputs
-#cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
-#cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
-#cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
+cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
+cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
 rm -Rf /scratch/local/joosep/$SLURM_JOBID
