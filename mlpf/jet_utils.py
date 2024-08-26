@@ -67,28 +67,28 @@ def build_dummy_array(num, dtype=np.int64):
     )
 
 
-def to_p4(p4_obj):
-    return vector.awk(
+def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
+    num_events = len(jets_coll[name1])
+    vec1 = vector.awk(
         awkward.zip(
             {
-                "E": p4_obj.E,
-                "px": p4_obj.px,
-                "py": p4_obj.py,
-                "pz": p4_obj.pz,
+                "pt": jets_coll[name1].pt,
+                "eta": jets_coll[name1].eta,
+                "phi": jets_coll[name1].phi,
+                "energy": jets_coll[name1].energy,
             }
         )
     )
-
-
-def to_p4_sph(p4_obj):
-    return awkward.zip({"pt": p4_obj.pt, "eta": p4_obj.eta, "phi": p4_obj.phi, "E": p4_obj.E})
-
-
-def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
-    num_events = len(jets_coll[name1])
-
-    vec1 = to_p4_sph(to_p4(jets_coll[name1]))
-    vec2 = to_p4_sph(to_p4(jets_coll[name2]))
+    vec2 = vector.awk(
+        awkward.zip(
+            {
+                "pt": jets_coll[name2].pt,
+                "eta": jets_coll[name2].eta,
+                "phi": jets_coll[name2].phi,
+                "energy": jets_coll[name2].energy,
+            }
+        )
+    )
     ret = match_jets(vec1, vec2, jet_match_dr)
     j1_idx = awkward.from_iter(ret[0])
     j2_idx = awkward.from_iter(ret[1])

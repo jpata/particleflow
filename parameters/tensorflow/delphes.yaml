@@ -1,0 +1,242 @@
+backend: tensorflow
+
+cache: caches/delphes
+
+dataset:
+  schema: delphes
+  target_particles: gen
+  num_input_features: 12
+  #(none=0, track=1, cluster=2)
+  num_input_classes: 3
+  #(none=0, charged hadron=1, neutral hadron=2, photon=3, electron=4, muon=5)
+  num_output_classes: 6
+  cls_weight_by_pt: no
+  reg_weight_by_pt: no
+  enable_tfds_caching: no
+
+loss:
+  classification_loss_coef: 1.0
+  charge_loss_coef: 1.0
+  pt_loss_coef: 1.0
+  eta_loss_coef: 1.0
+  sin_phi_loss_coef: 1.0
+  cos_phi_loss_coef: 1.0
+  energy_loss_coef: 1.0
+  cls_loss:
+    type: SigmoidFocalCrossEntropy
+    from_logits: yes
+    gamma: 2.0
+  charge_loss:
+    type: CategoricalCrossentropy
+    from_logits: yes
+  energy_loss:
+    type: Huber
+    delta: 1.0
+  pt_loss:
+    type: Huber
+    delta: 1.0
+  sin_phi_loss:
+    type: Huber
+    delta: 0.1
+  cos_phi_loss:
+    type: Huber
+    delta: 0.1
+  eta_loss:
+    type: Huber
+    delta: 0.1
+  event_loss: none
+  event_loss_coef: 0.0
+  met_loss: none
+  met_loss_coef: 1.0
+
+tensorflow:
+  eager: no
+
+setup:
+  train: yes
+  weights:
+  weights_config:
+  lr: 1e-5
+  num_epochs: 50
+  dtype: float32
+  trainable:
+  lr_schedule: exponentialdecay  # exponentialdecay, onecycle
+  optimizer: adam  # adam, adamw, sgd
+  horovod_enabled: False
+  cls_output_as_logits: yes
+  small_graph_opt: no
+  use_normalizer: no
+
+batching:
+  # if enabled, use dynamic batching instead of the fixed-size batches configured in batch_per_gpu
+  bucket_by_sequence_length: no
+  bucket_batch_sizes: auto
+  batch_multiplier: 1
+
+optimizer:
+  adam:
+    amsgrad: no
+    pcgrad: no
+  adamw:
+    amsgrad: yes
+    weight_decay: 0.001
+  sgd:
+    nesterov: no
+    momentum: 0.9
+
+# LR Schedules
+exponentialdecay:
+  decay_steps: 10000
+  decay_rate: 0.99
+  staircase: yes
+onecycle:
+  mom_min: 0.85
+  mom_max: 0.95
+  warmup_ratio: 0.3
+  div_factor: 25.0
+  final_div: 100000.0
+
+sample_weights:
+  cls: inverse_sqrt
+  charge: signal_only
+  pt: signal_only
+  eta: signal_only
+  sin_phi: signal_only
+  cos_phi: signal_only
+  energy: signal_only
+
+parameters:
+  model: gnn_dense
+  input_encoding: default
+  node_update_mode: additive
+  do_node_encoding: yes
+  node_encoding_hidden_dim: 512
+  combined_graph_layer:
+    bin_size: 640
+    max_num_bins: 100
+    distance_dim: 128
+    layernorm: no
+    num_node_messages: 1
+    dropout: 0.0
+    dist_activation: linear
+    ffn_dist_num_layers: 1
+    ffn_dist_hidden_dim: 128
+    kernel:
+      type: NodePairGaussianKernel
+      dist_mult: 0.1
+      clip_value_low: 0.0
+      dist_norm: l2
+    node_message:
+      type: GHConvDense
+      output_dim: 512
+      activation: elu
+      normalize_degrees: yes
+    activation: elu
+  num_graph_layers_id: 3
+  num_graph_layers_reg: 3
+  output_decoding:
+    activation: elu
+    regression_use_classification: yes
+    dropout: 0.0
+
+    pt_as_correction: no
+
+    id_dim_decrease: yes
+    charge_dim_decrease: yes
+    eta_dim_decrease: yes
+    phi_dim_decrease: yes
+
+    id_hidden_dim: 256
+    charge_hidden_dim: 256
+    pt_hidden_dim: 256
+    eta_hidden_dim: 256
+    phi_hidden_dim: 256
+    energy_hidden_dim: 256
+
+    id_num_layers: 4
+    charge_num_layers: 2
+    pt_num_layers: 3
+    eta_num_layers: 3
+    phi_num_layers: 3
+    energy_num_layers: 3
+    layernorm: yes
+    mask_reg_cls0: no
+
+  skip_connection: yes
+  debug: no
+
+timing:
+  num_ev: 100
+  num_iter: 3
+
+callbacks:
+  checkpoint:
+    monitor: "val_loss"
+  plot_freq: 10
+  tensorboard:
+    dump_history: yes
+    hist_freq: 1
+
+hypertune:
+  algorithm: hyperband  # random, bayesian, hyperband
+  random:
+    objective: val_loss
+    max_trials: 100
+  bayesian:
+    objective: val_loss
+    max_trials: 100
+    num_initial_points: 2
+  hyperband:
+    objective: val_loss
+    max_epochs: 100
+    factor: 3
+    iterations: 1
+    executions_per_trial: 1
+
+raytune:
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 100
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 5
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
+train_test_datasets:
+  delphes:
+    batch_per_gpu: 5
+    event_pad_size: -1
+    datasets:
+      - delphes_ttbar_pf
+
+validation_dataset: delphes_qcd_pf
+validation_batch_size: 5
+validation_num_events: 100
+
+evaluation_datasets:
+  delphes_qcd_pf:
+    batch_size: 5
+    num_events: -1
+
+evaluation_jet_algo: antikt_algorithm
+
+datasets:
+  delphes_ttbar_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:
+  delphes_qcd_pf:
+    version: 1.2.0
+    data_dir:
+    manual_dir:

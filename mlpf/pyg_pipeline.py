@@ -24,18 +24,22 @@ parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
-parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
+parser.add_argument(
+    "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
+)
 parser.add_argument(
     "--dataset",
     type=str,
     default=None,
-    choices=["clic", "cms", "clic_hits"],
+    choices=["clic", "cms", "delphes", "clic_hits"],
     required=False,
     help="which dataset?",
 )
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
-parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
+parser.add_argument(
+    "--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume"
+)
 parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
 
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
@@ -50,7 +54,7 @@ parser.add_argument(
     help="which graph layer to use",
     choices=["attention", "gnn_lsh", "mamba"],
 )
-parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
+parser.add_argument("--num-convs", type=int, default=None, help="number of convlution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -63,7 +67,6 @@ parser.add_argument("--ray-train", action="store_true", help="run training using
 parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
-parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
@@ -136,9 +139,9 @@ def main():
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "valid_dataset"]:
                 config[ds]["cms"] = {
-                    "physical_pu": {
-                        "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
-                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
+                    "physical": {
+                        "batch_size": config[ds]["cms"]["physical"]["batch_size"],
+                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}

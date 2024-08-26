@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-VBF events with PU 55-75 in a Run3 setup.
+VBF events with PU~55 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -19,14 +19,11 @@ _CITATION = """
 
 
 class CmsPfVbf(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_vbf dataset."""
+    """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("2.1.0")
+    VERSION = tfds.core.Version("1.7.0")
     RELEASE_NOTES = {
-        "1.7.1": "First version",
-        "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
-        "2.0.0": "New truth def based primarily on CaloParticles",
-        "2.1.0": "Additional statistics",
+        "1.7.0": "Add cluster shape vars",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_vbf ~/tensorflow_datasets/
@@ -46,11 +43,9 @@ class CmsPfVbf(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ygen"),
+            supervised_keys=("X", "ycand"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),

@@ -6,11 +6,11 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 100
+num_epochs: 10
 patience: 20
 lr: 0.0001
-lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh  # gnn_lsh, attention, mamba, flashattention
+lr_schedule: constant  # constant, cosinedecay, onecycle
+conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
@@ -35,12 +35,13 @@ model:
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 256
-    width: 256
-    num_convs: 6
+    embedding_dim: 512
+    width: 512
+    num_convs: 3
+    dropout: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 256
+    bin_size: 640
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -80,8 +81,8 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir:  # Note: please specify an absolute path
-  sched:  # asha, hyperband
+  local_dir: # Note: please specify an absolute path
+  sched: asha # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
@@ -104,23 +105,33 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        clic_edm_ttbar_pf:
-          version: 2.0.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 1.5.0
+        clic_edm_ttbar_pf:
+          version: 1.5.0
+        clic_edm_ttbar_pu10_pf:
+          version: 1.5.0
+        clic_edm_ww_fullhad_pf:
+          version: 1.5.0
+        clic_edm_zh_tautau_pf:
+          version: 1.5.0
 
 valid_dataset:
   clic:
     physical:
       batch_size: 1
       samples:
-        clic_edm_ttbar_pf:
-          version: 2.0.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 1.5.0
 
 test_dataset:
-  clic_edm_ttbar_pf:
-    version: 2.0.0
   clic_edm_qq_pf:
-    version: 2.0.0
+    version: 1.5.0
+  clic_edm_ttbar_pf:
+    version: 1.5.0
+  clic_edm_ttbar_pu10_pf:
+    version: 1.5.0
+  clic_edm_ww_fullhad_pf:
+    version: 1.5.0
+  clic_edm_zh_tautau_pf:
+    version: 1.5.0

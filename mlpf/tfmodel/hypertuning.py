@@ -16,12 +16,16 @@ def get_model_builder(config, total_steps):
         config["parameters"]["combined_graph_layer"]["dropout"] = hp.Choice("cg_dropout", values=[0.0, 0.1, 0.2])
         config["parameters"]["combined_graph_layer"]["num_node_messages"] = hp.Choice("num_node_messages", [1, 2])
         config["parameters"]["combined_graph_layer"]["bin_size"] = hp.Choice("bin_size", values=[160, 320, 640])
-        config["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"] = hp.Choice("ffn_dist_hidden_dim", values=[64, 128, 256])
+        config["parameters"]["combined_graph_layer"]["ffn_dist_hidden_dim"] = hp.Choice(
+            "ffn_dist_hidden_dim", values=[64, 128, 256]
+        )
         config["parameters"]["combined_graph_layer"]["ffn_dist_num_layers"] = hp.Choice("ffn_dist_num_layers", values=[1, 2])
         config["parameters"]["combined_graph_layer"]["kernel"]["dist_mult"] = hp.Choice("dist_mult", values=[0.01, 0.1, 1.0])
 
         config["parameters"]["combined_graph_layer"]["node_message"]["output_dim"] = node_encoding_hidden_dim
-        config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = hp.Choice("normalize_degrees", values=[True, False])
+        config["parameters"]["combined_graph_layer"]["node_message"]["normalize_degrees"] = hp.Choice(
+            "normalize_degrees", values=[True, False]
+        )
         config["parameters"]["output_decoding"]["dropout"] = hp.Choice("output_dropout", values=[0.0, 0.1, 0.2])
         config["parameters"]["output_decoding"]["layernorm"] = hp.Choice("output_layernorm", values=[True, False])
         config["parameters"]["output_decoding"]["mask_reg_cls0"] = hp.Choice("output_mask_reg_cls0", values=[True, False])

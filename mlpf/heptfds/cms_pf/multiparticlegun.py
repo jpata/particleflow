@@ -21,13 +21,12 @@ _CITATION = """
 class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_multi_particle_gun dataset."""
 
-    VERSION = tfds.core.Version("2.0.0")
+    VERSION = tfds.core.Version("1.7.1")
     RELEASE_NOTES = {
         "1.6.0": "Initial release",
         "1.6.1": "Additional stats",
         "1.7.0": "Add cluster shape vars",
         "1.7.1": "Additional stats",
-        "2.0.0": "New truth def based primarily on CaloParticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress \
@@ -50,11 +49,9 @@ class CmsPfMultiParticleGun(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
                     "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ygen"),
+            supervised_keys=("X", "ycand"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),

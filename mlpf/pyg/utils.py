@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
-import logging
+
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -13,33 +13,39 @@ import logging
 # All possible PFElement types
 ELEM_TYPES = {
     "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    "delphes": [0, 1, 2],
     "clic": [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
 ELEM_TYPES_NONZERO = {
     "cms": [1, 4, 5, 6, 8, 9, 10, 11],
+    "delphes": [1, 2],
     "clic": [1, 2],
 }
 
 CLASS_LABELS = {
     "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
+    "delphes": [0, 211, 130, 22, 11, 13],
     "clic": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
     "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
+    "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
+    "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
@@ -102,6 +108,20 @@ X_FEATURES = {
         "sigma_y",
         "sigma_z",
     ],
+    "delphes": [
+        "Track|cluster",
+        "$p_{T}|E_{T}$",
+        r"$\eta$",
+        r"$Sin(\phi)$",
+        r"$Cos(\phi)$",
+        "P|E",
+        r"$\eta_\mathrm{out}|E_{em}$",
+        r"$Sin(\(phi)_\mathrm{out}|E_{had}$",
+        r"$Cos(\phi)_\mathrm{out}|E_{had}$",
+        "charge",
+        "is_gen_mu",
+        "is_gen_el",
+    ],
     "clic": [
         "type",
         "pt | et",
@@ -162,17 +182,18 @@ def unpack_target(y):
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
-    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1
+    )
 
-    ret["ispu"] = y[..., -1]
+    ret["genjet_idx"] = y[..., -1].long()
 
     return ret
 
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
-    # ret["cls_id_onehot"], ret["momentum"] = preds
+    ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
@@ -183,15 +204,8 @@ def unpack_predictions(preds):
     ret["cos_phi"] = ret["momentum"][..., 3]
     ret["energy"] = ret["momentum"][..., 4]
 
-    # first get the cases where a particle was predicted
-    ret["cls_id"] = torch.argmax(ret["cls_binary"], axis=-1)
-    # when a particle was predicted, get the particle ID
-    ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], axis=-1)[ret["cls_id"] == 1]
-
-    # get the predicted particle ID
-    # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
-
-    # particle properties
+    # new variables
+    ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
         [
@@ -225,42 +239,13 @@ def get_model_state_dict(model):
         return model.state_dict()
 
 
-def print_optimizer_stats(optimizer, stage):
-    print(f"\nOptimizer statistics {stage}:")
-    for i, param_group in enumerate(optimizer.param_groups):
-        print(f"  Parameter group {i}:")
-        print(f"    Learning rate: {param_group['lr']}")
-        print(f"    Weight decay: {param_group['weight_decay']}")
-        if "momentum" in param_group:
-            print(f"    Momentum: {param_group['momentum']}")
-        elif "betas" in param_group:
-            print(f"    Betas: {param_group['betas']}")
-
-    if hasattr(optimizer, "state"):
-        print("  Optimizer state:")
-        print(f"    Number of steps: {len(optimizer.state)}")
-        if len(optimizer.state) > 0:
-            first_param = next(iter(optimizer.state.values()))
-            for key, value in first_param.items():
-                if torch.is_tensor(value):
-                    print(f"    {key}: shape {value.shape}, dtype {value.dtype}")
-                else:
-                    print(f"    {key}: {value}")
-
-
 def load_checkpoint(checkpoint, model, optimizer=None):
-    if optimizer:
-        print_optimizer_stats(optimizer, "Before loading")
-
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"])
     else:
         model.load_state_dict(checkpoint["model_state_dict"])
-
     if optimizer:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        logging.info("Loaded optimizer state")
-        print_optimizer_stats(optimizer, "After loading")
         return model, optimizer
     else:
         return model
@@ -283,7 +268,11 @@ def load_lr_schedule(lr_schedule, checkpoint):
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
         return lr_schedule
     else:
-        raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
+        raise KeyError(
+            "Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(
+                checkpoint["extra_state"].keys()
+            )
+        )
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
@@ -308,7 +297,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
 
 
 def count_parameters(model):
-    column_names = ["Modules", "Trainable parameters", "Non-trainable parameters"]
+    column_names = ["Modules", "Trainable parameters", "Non-tranable parameters"]
     table = pd.DataFrame(columns=column_names)
     trainable_params = 0
     nontrainable_params = 0

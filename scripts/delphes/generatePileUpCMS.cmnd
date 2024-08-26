@@ -1,0 +1,71 @@
+! Lines not beginning with a letter or digit are comments.
+! Names are case-insensitive  -  but spellings-sensitive!
+! The changes here are illustrative, not always physics-motivated.
+
+! 1) Settings that will be used in a main program.
+Main:numberOfEvents = 1000000          ! number of events to generate
+Main:timesAllowErrors = 3          ! abort run after this many flawed events
+
+! 2) Settings related to output in init(), next() and stat().
+Init:showChangedSettings = on      ! list changed settings
+Init:showAllSettings = off         ! list all settings
+Init:showChangedParticleData = on  ! list changed particle data
+Init:showAllParticleData = off     ! list all particle data
+Next:numberCount = 5            ! print message every n events
+Next:numberShowLHA = 1             ! print LHA information n times
+Next:numberShowInfo = 1            ! print event information n times
+Next:numberShowProcess = 1         ! print process record n times
+Next:numberShowEvent = 1           ! print event record n times
+Stat:showPartonLevel = on          ! additional statistics on MPI
+Random:setSeed = on
+Random:setSeed = 10
+
+! 3) Beam parameter settings. Values below agree with default ones.
+Beams:idA = 2212                   ! first beam, p = 2212, pbar = -2212
+Beams:idB = 2212                   ! second beam, p = 2212, pbar = -2212
+Beams:eCM = 14000.                 ! CM energy of collision
+
+! Common Settings
+
+Main:timesAllowErrors = 10000
+
+! CUEP8M1 Settings
+PDF:pSet = LHAPDF6:NNPDF23_lo_as_0130_qed
+PDF:extrapolate = on
+Tune:pp 14
+Tune:ee 7
+SpaceShower:rapidityOrder = on
+SigmaProcess:alphaSvalue = 0.140
+SpaceShower:pT0Ref = 1.56
+SpaceShower:pTmaxFudge = 0.91
+SpaceShower:pTdampFudge = 1.05
+SpaceShower:alphaSvalue = 0.127
+TimeShower:alphaSvalue = 0.127
+BeamRemnants:primordialKThard = 1.88
+MultipartonInteractions:pT0Ref = 2.09
+MultipartonInteractions:alphaSvalue = 0.126
+# BeamRemnants:reconnectRange  = 1.71
+
+#Pythia settings
+#PhaseSpace:mHatMin = 100.
+#PhaseSpace:mHatMax = 10000
+#PhaseSpace:pTHatMin = 40
+#PhaseSpace:pTHatMax = 4000
+#set K_S, Lambda stable
+ParticleDecays:limitTau0 = on
+#Makes particles with c*tau>10 mm stable
+ParticleDecays:tau0Max = 10
+
+# fill high-pT tail and add weights to events
+#PhaseSpace:bias2Selection = on
+#PhaseSpace:bias2SelectionPow = 5.0
+
+# color reconnection
+ColourReconnection:reconnect=on
+ColourReconnection:range=1.71
+
+! Process parameters
+
+SoftQCD:nonDiffractive = on
+SoftQCD:singleDiffractive = on
+SoftQCD:doubleDiffractive = on

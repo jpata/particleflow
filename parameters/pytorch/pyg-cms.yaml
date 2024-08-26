@@ -8,9 +8,9 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.0002
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: attention
+conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
@@ -54,7 +54,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs: 6
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
@@ -103,25 +103,24 @@ raytune:
 
 train_dataset:
   cms:
-    physical_pu:
+    physical:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
+          version: 1.7.1
 
 valid_dataset:
   cms:
-    physical_pu:
+    physical:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
+          version: 1.7.1
+
 test_dataset:
   cms_pf_ttbar:
-    version: 2.0.0
+    version: 1.7.1
   cms_pf_qcd:
-    version: 2.0.0
+    version: 1.7.1
+  cms_pf_ztt:
+    version: 1.7.1

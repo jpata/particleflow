@@ -162,9 +162,15 @@ def causal_windowed_performer_attention(
     value_matrix = pad_to_chunk_length(value_matrix, -3, chunk_length, padding)
 
     new_shape = tf.shape(value_matrix)
-    chunked_query_matrix = split_tensor_into_chunks(query_matrix, -3, chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
-    chunked_key_matrix = split_tensor_into_chunks(key_matrix, -3, chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
-    chunked_value_matrix = split_tensor_into_chunks(value_matrix, -3, chunk_length)  # [-1, T//chunk_length, chunk_length, N, out_dim]
+    chunked_query_matrix = split_tensor_into_chunks(
+        query_matrix, -3, chunk_length
+    )  # [-1, T//chunk_length, chunk_length, N, dim]
+    chunked_key_matrix = split_tensor_into_chunks(
+        key_matrix, -3, chunk_length
+    )  # [-1, T//chunk_length, chunk_length, N, dim]
+    chunked_value_matrix = split_tensor_into_chunks(
+        value_matrix, -3, chunk_length
+    )  # [-1, T//chunk_length, chunk_length, N, out_dim]
 
     kp_v = tf.einsum("BNCHD,BNCHO->BNHDO", chunked_key_matrix, chunked_value_matrix)
     kp_v_cumsum = tf.cumsum(kp_v, axis=-4)
@@ -354,7 +360,9 @@ def expplus(
         if extra_renormalize_exp_fun:
             extra_stab = tf.reduce_max(diag_data, axis=1, keepdims=True)
             stab = tf.math.maximum(stab, extra_stab)
-        data_dash = ratio * d_coeff * (tf.math.exp(b_coeff * data_dash - stab - diag_data + diag_omega) + numerical_stabilizer)
+        data_dash = (
+            ratio * d_coeff * (tf.math.exp(b_coeff * data_dash - stab - diag_data + diag_omega) + numerical_stabilizer)
+        )
     else:
         data_dash = ratio * d_coeff * (tf.math.exp(b_coeff * data_dash - diag_data + diag_omega) + numerical_stabilizer)
 
@@ -476,7 +484,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
         """
         if feature_transform not in _TRANSFORM_MAP and feature_transform != "expplus":
             raise ValueError(
-                "Unsupported feature_transform. The supported " "feature_transform are %s. " "Got '%s'." % (_TRANSFORM_MAP.keys(), feature_transform)
+                "Unsupported feature_transform. The supported "
+                "feature_transform are %s. "
+                "Got '%s'." % (_TRANSFORM_MAP.keys(), feature_transform)
             )
         if num_random_features <= 0 and redraw:
             raise ValueError("There is nothing to redraw when num_random_features <= 0.")

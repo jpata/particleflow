@@ -12,8 +12,7 @@ import tqdm
 import yaml
 import csv
 import json
-import sklearn
-import sklearn.metrics
+
 import numpy as np
 
 # comet needs to be imported before torch
@@ -52,7 +51,7 @@ from utils import create_comet_experiment
 np.seterr(divide="ignore", invalid="ignore")
 
 
-def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
+def sliced_wasserstein_loss(y_true, y_pred, num_projections=200):
     # create normalized random basis vectors
     theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
     theta = theta / torch.sqrt(torch.sum(theta**2, axis=1, keepdims=True))
@@ -68,71 +67,71 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batch):
+def mlpf_loss(y, ypred, mask):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
-        batch [PFBatch]: the MLPF inputs
     """
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    nelem = torch.sum(batch.mask)
+    nelem = torch.sum(mask)
     npart = torch.sum(y["cls_id"] != 0)
 
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
+    # ypred["charge"] = ypred["charge"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
+    # y["charge"] = y["charge"] * msk_true_particle[..., 0]
 
-    # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
-    ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
+    # in case of the 3D-padded mode, pytorch expects (N, C, ...)
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+    # ypred["charge"] = ypred["charge"].permute((0, 2, 1))
 
-    # binary loss for particle / no-particle classification
-    loss_binary_classification = 100 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
-
-    # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
-    loss_pid_classification[y["cls_id"] == 0] *= 0
-
-    # compare particle momentum, only for cases where there was a true particle
+    loss_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
-    loss_regression[y["cls_id"] == 0] *= 0
-
-    # set the loss to 0 on padded elements in the batch
-    loss_binary_classification[batch.mask == 0] *= 0
-    loss_pid_classification[batch.mask == 0] *= 0
-    loss_regression[batch.mask == 0] *= 0
+    # loss_charge = 0.0*torch.nn.functional.cross_entropy(
+    #     ypred["charge"], y["charge"].to(dtype=torch.int64), reduction="none")
 
     # average over all elements that were not padded
-    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
-    loss["Classification"] = loss_pid_classification.sum() / nelem
+    loss["Classification"] = loss_classification.sum() / nelem
 
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
     mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
-
     # average over all true particles
     loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    # loss["Charge"] = loss_charge.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
-    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)
-    # pt * cos_phi
-    px = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 3:4].detach() * msk_pred_particle
-    # pt * sin_phi
-    py = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 2:3].detach() * msk_pred_particle
-    # sum across events
-    pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
+    if len(msk_true_particle.shape) == 3:
+        msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_id_onehot"].detach(), axis=1) != 0, axis=-1)
+        # pt * cos_phi
+        px = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 3:4] * msk_pred_particle
+        # pt * sin_phi
+        py = ypred["momentum"][..., 0:1] * ypred["momentum"][..., 2:3] * msk_pred_particle
+        # sum across events
+        pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
-    loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
+        px = y["momentum"][..., 0:1] * y["momentum"][..., 3:4] * msk_true_particle
+        py = y["momentum"][..., 0:1] * y["momentum"][..., 2:3] * msk_true_particle
+        true_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
+        loss["MET"] = torch.nn.functional.huber_loss(pred_met, true_met).detach().mean()
+        loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(y["momentum"], ypred["momentum"]).detach().mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
+    loss["Total"] = loss["Classification"] + loss["Regression"]  # + loss["Charge"]
 
-    loss["Classification_binary"] = loss["Classification_binary"].detach()
+    # Keep track of loss components for each true particle type
+    # These are detached to keeping track of the gradient
+    for icls in range(0, 7):
+        loss["cls{}_Classification".format(icls)] = (loss_classification[y["cls_id"] == icls].sum() / npart).detach()
+        loss["cls{}_Regression".format(icls)] = (loss_regression[y["cls_id"] == icls].sum() / npart).detach()
+
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
+    # loss["Charge"] = loss["Charge"].detach()
+    # print(loss["Total"].detach().item(), y["cls_id"].shape, nelem, npart)
     return loss
 
 
@@ -148,7 +147,9 @@ class FocalLoss(nn.Module):
         - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
     """
 
-    def __init__(self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100):
+    def __init__(
+        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
+    ):
         """Constructor.
         Args:
             alpha (Tensor, optional): Weights for each class. Defaults to None.
@@ -265,18 +266,14 @@ def train_and_valid(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(data_loader)
     else:
-        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
+        )
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
     loss_accum = 0.0
     val_freq_time_0 = time.time()
-
-    if not is_train:
-        cm_X_gen = np.zeros((13, 13))
-        cm_X_pred = np.zeros((13, 13))
-        cm_id = np.zeros((13, 13))
-
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
@@ -294,25 +291,14 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred)
 
-        if not is_train:
-            cm_X_gen += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ygen["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-            cm_X_pred += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-            cm_id += sklearn.metrics.confusion_matrix(
-                ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batch)
+                loss = mlpf_loss(ygen, ypred, batch.mask)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batch)
+                    loss = mlpf_loss(ygen, ypred, batch.mask)
 
         if is_train:
             loss["Total"].backward()
@@ -329,21 +315,13 @@ def train_and_valid(
         if is_train:
             step = (epoch - 1) * len(data_loader) + itrain
             if not (tensorboard_writer is None):
-                if step % 100 == 0:
-                    tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
-                    tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
-                    tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
-                    tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
+                tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
+                tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
+                tensorboard_writer.add_scalar("step/num_batch", num_batch, step)
+                tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
+                if itrain % 10 == 0:
                     tensorboard_writer.flush()
-                    loss_accum = 0.0
-
-                    extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-                    torch.save(
-                        {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
-                        f"{outdir}/step_weights.pth",
-                    )
-                    save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
-
+                loss_accum = 0.0
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
                 comet_experiment.log_metrics(loss, prefix=f"{train_or_valid}", step=step)
@@ -380,11 +358,11 @@ def train_and_valid(
                     loss=intermediate_losses_t["Total"],
                     reg_loss=intermediate_losses_t["Regression"],
                     cls_loss=intermediate_losses_t["Classification"],
-                    cls_binary_loss=intermediate_losses_t["Classification_binary"],
+                    charge_loss=intermediate_losses_t["Charge"],
                     val_loss=intermediate_losses_v["Total"],
                     val_reg_loss=intermediate_losses_v["Regression"],
                     val_cls_loss=intermediate_losses_v["Classification"],
-                    val_cls_binary_loss=intermediate_losses_v["Classification_binary"],
+                    val_charge_loss=intermediate_losses_v["Charge"],
                     inside_epoch=epoch,
                     step=(epoch - 1) * len(data_loader) + itrain,
                     val_freq_time=val_freq_time.cpu().item(),
@@ -399,17 +377,6 @@ def train_and_valid(
                 if comet_experiment:
                     comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
                 val_freq_time_0 = time.time()  # reset intermediate validation spacing timer
-
-    if not is_train and comet_experiment:
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_gen, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_gen.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
-        )
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -469,7 +436,7 @@ def train_mlpf(
 
     t0_initial = time.time()
 
-    losses_of_interest = ["Total", "Classification", "Classification_binary", "Regression"]
+    losses_of_interest = ["Total", "Classification", "Regression"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
@@ -483,7 +450,9 @@ def train_mlpf(
 
         # training step, edit here to profile a specific epoch
         if epoch == -1:
-            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
+            ) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
                         rank,
@@ -574,11 +543,11 @@ def train_mlpf(
                 loss=losses_t["Total"],
                 reg_loss=losses_t["Regression"],
                 cls_loss=losses_t["Classification"],
-                cls_binary_loss=losses_t["Classification_binary"],
+                # charge_loss=losses_t["Charge"],
                 val_loss=losses_v["Total"],
                 val_reg_loss=losses_v["Regression"],
                 val_cls_loss=losses_v["Classification"],
-                val_cls_binary_loss=losses_v["Classification_binary"],
+                # val_charge_loss=losses_v["Charge"],
                 epoch=epoch,
             )
             if (rank == 0) or (rank == "cpu"):
@@ -655,7 +624,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     use_cuda = rank != "cpu"
 
     dtype = getattr(torch, config["dtype"])
-    _logger.info("configured dtype={} for autocast".format(dtype))
+    _logger.info("using dtype={}".format(dtype))
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -728,7 +697,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if args.comet:
-            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+            comet_experiment = create_comet_experiment(
+                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+            )
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
@@ -806,7 +777,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand", "genjets"], ["genmet"]),
+                collate_fn=Collater(["X", "ygen", "ycand"]),  # in inference, use sparse dataset
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -841,11 +812,39 @@ def run(rank, world_size, config, args, outdir, logfile):
                     dir_name=testdir_name,
                 )
 
-    if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
+    if (rank == 0) or (rank == "cpu"):  # make plots and export to onnx only on a single machine
         if args.make_plots:
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name)
+
+        if args.export_onnx:
+            try:
+                dummy_features = torch.randn(1, 8192, model_kwargs["input_dim"], device=rank)
+                dummy_mask = torch.zeros(1, 8192, dtype=torch.bool, device=rank)
+
+                # Torch ONNX export in the old way
+                torch.onnx.export(
+                    model,
+                    (dummy_features, dummy_mask),
+                    "test.onnx",
+                    verbose=False,
+                    input_names=["features", "mask"],
+                    output_names=["id", "momentum"],
+                    dynamic_axes={
+                        "features": {0: "num_batch", 1: "num_elements"},
+                        "mask": [0, 1],
+                        "id": [0, 1],
+                        "momentum": [0, 1],
+                        # "charge": [0, 1],
+                    },
+                )
+
+                # Torch ONNX export in the new way
+                # onnx_program = torch.onnx.dynamo_export(model, (dummy_features, dummy_mask))
+                # onnx_program.save("test.onnx")
+            except Exception as e:
+                print("ONNX export failed: {}".format(e))
 
     if world_size > 1:
         dist.destroy_process_group()
@@ -912,8 +911,6 @@ def train_ray_trial(config, args, outdir=None):
 
     if outdir is None:
         outdir = ray.train.get_context().get_trial_dir()
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
 
     use_cuda = args.gpus > 0
 
@@ -964,7 +961,9 @@ def train_ray_trial(config, args, outdir=None):
     loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+        comet_experiment = create_comet_experiment(
+            config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+        )
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -998,7 +997,9 @@ def train_ray_trial(config, args, outdir=None):
                 if args.resume_training:
                     model, optimizer = load_checkpoint(checkpoint, model, optimizer)
                     start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
+                    lr_schedule = get_lr_schedule(
+                        config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1
+                    )
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
@@ -1028,6 +1029,11 @@ def run_ray_training(config, args, outdir):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer
+
+    # create ray cache for intermediate storage of trials
+    tmp_ray_cache = TemporaryDirectory()
+    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
+    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
 
     if not args.local:
         ray.init(address="auto")
@@ -1081,6 +1087,9 @@ def run_ray_training(config, args, outdir):
     _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
     # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
 
+    # clean up ray cache
+    tmp_ray_cache.cleanup()
+
 
 def set_searchspace_and_run_trial(search_space, config, args):
     import ray
@@ -1117,21 +1126,25 @@ def run_hpo(config, args):
     from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
-    if args.raytune_num_samples:
-        raytune_num_samples = args.raytune_num_samples  # noqa: F811
+    # create ray cache for intermediate storage of trials
+    tmp_ray_cache = TemporaryDirectory()
+    os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = tmp_ray_cache.name
+    _logger.info(f"RAY_AIR_LOCAL_CACHE_DIR: {os.environ['RAY_AIR_LOCAL_CACHE_DIR']}")
 
     name = args.hpo  # name of Ray Tune experiment directory
 
     os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"  # don't crash if a metric is missing
     if isinstance(config["raytune"]["local_dir"], type(None)):
         raise TypeError("Please specify a local_dir in the raytune section of the config file.")
+    trd = config["raytune"]["local_dir"] + "/tune_result_dir"
+    os.environ["TUNE_RESULT_DIR"] = trd
 
     expdir = Path(config["raytune"]["local_dir"]) / name
     expdir.mkdir(parents=True, exist_ok=True)
     dirname = Path(config["raytune"]["local_dir"]) / name
     shutil.copy(
-        "mlpf/raytune/pt_search_space.py",
-        str(dirname / "pt_search_space.py"),
+        "mlpf/raytune/search_space.py",
+        str(dirname / "search_space.py"),
     )  # Copy the search space definition file to the train dir for later reference
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
     with open((dirname / "config.yaml"), "w") as file:
@@ -1142,6 +1155,7 @@ def run_hpo(config, args):
         ray.init(
             address=os.environ["ip_head"],
             _node_ip_address=os.environ["head_node_ip"],
+            # _temp_dir="/p/project/raise-ctp2/cern/tmp_ray",
         )
         _logger.info("Done.")
 
@@ -1162,7 +1176,9 @@ def run_hpo(config, args):
 
     if tune.Tuner.can_restore(str(expdir)):
         # resume unfinished HPO run
-        tuner = tune.Tuner.restore(str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True)
+        tuner = tune.Tuner.restore(
+            str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True
+        )
     else:
         # start new HPO run
         search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
@@ -1203,4 +1219,9 @@ def run_hpo(config, args):
     print(result_df.columns)
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
-    logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
+    logging.info(
+        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
+    )
+
+    # clean up ray cache
+    tmp_ray_cache.cleanup()

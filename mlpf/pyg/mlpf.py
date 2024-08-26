@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from .gnn_lsh import CombinedGraphLayer
 
-from torch.nn.attention import SDPBackend, sdpa_kernel
+from torch.backends.cuda import sdp_kernel
 from pyg.logger import _logger
 
 
@@ -16,8 +16,6 @@ def get_activation(activation):
         act = nn.ReLU6
     elif activation == "leakyrelu":
         act = nn.LeakyReLU
-    elif activation == "gelu":
-        act = nn.GELU
     return act
 
 
@@ -47,14 +45,16 @@ class SelfAttentionLayer(nn.Module):
             self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.seq = torch.nn.Sequential(
+            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
+        )
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
         self.attn_params = {
-            "math": [SDPBackend.MATH],
-            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-            "flash": [SDPBackend.FLASH_ATTENTION],
+            "math": {"enable_math": True, "enable_mem_efficient": False, "enable_flash": False},
+            "efficient": {"enable_math": False, "enable_mem_efficient": True, "enable_flash": False},
+            "flash": {"enable_math": False, "enable_mem_efficient": False, "enable_flash": True},
         }
 
     def forward(self, x, mask):
@@ -63,7 +63,7 @@ class SelfAttentionLayer(nn.Module):
             mha_out = self.mha(x)
         else:
             if self.enable_ctx_manager:
-                with sdpa_kernel(self.attn_params[self.attention_type]):
+                with sdp_kernel(**self.attn_params[self.attention_type]):
                     mha_out = self.mha(x, x, x, need_weights=False)[0]
             else:
                 mha_out = self.mha(x, x, x, need_weights=False)[0]
@@ -90,7 +90,9 @@ class MambaLayer(nn.Module):
             expand=expand,
         )
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.seq = torch.nn.Sequential(
+            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
+        )
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, mask):
@@ -282,16 +284,18 @@ class MLPF(nn.Module):
             decoding_dim = self.input_dim + embedding_dim
 
         # DNN that acts on the node level to predict the PID
-        self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
-        self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
+        self.nn_id = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
-        embed_dim = decoding_dim + 2 + num_classes
+        embed_dim = decoding_dim + num_classes
         self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+
+        # elementwise DNN for node charge regression, classes (-1, 0, 1)
+        # self.nn_charge = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
     # @torch.compile
     def forward(self, X_features, mask):
@@ -320,21 +324,20 @@ class MLPF(nn.Module):
                 out_padded = conv(conv_input, mask)
                 embeddings_reg.append(out_padded)
 
-        # id input
         if self.learned_representation_mode == "concat":
             final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
         elif self.learned_representation_mode == "last":
             final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
-        preds_binary_particle = self.nn_binary_particle(final_embedding_id)
-        preds_pid = self.nn_pid(final_embedding_id)
+        preds_id = self.nn_id(final_embedding_id)
 
         # pred_charge = self.nn_charge(final_embedding_id)
 
         # regression input
         if self.learned_representation_mode == "concat":
-            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_id], axis=-1)
         elif self.learned_representation_mode == "last":
-            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
+            final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_id], axis=-1)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
@@ -344,4 +347,4 @@ class MLPF(nn.Module):
         preds_energy = self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        return preds_binary_particle, preds_pid, preds_momentum
+        return preds_id, preds_momentum
