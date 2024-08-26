@@ -4,8 +4,7 @@ import pickle as pkl
 import pandas as pd
 import torch
 import torch.utils.data
-from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
-
+from torch.optim.lr_scheduler import ConstantLR, CosineAnnealingLR, OneCycleLR
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -15,6 +14,7 @@ ELEM_TYPES = {
     "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     "delphes": [0, 1, 2],
     "clic": [0, 1, 2],
+    "cld": [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
@@ -29,6 +29,7 @@ CLASS_LABELS = {
     "delphes": [0, 211, 130, 22, 11, 13],
     "clic": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
+    "cld": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -36,18 +37,21 @@ CLASS_NAMES_LATEX = {
     "delphes": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "cld": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     "delphes": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "cld": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     "delphes": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "cld": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -158,6 +162,25 @@ X_FEATURES = {
         "omega | Null",
         "Z0 | Null",
         "time | Null",
+    ],
+    "cld": [
+        "type",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | iTheta",
+        "radiusOfInnermostHit | energy_ecal",
+        "tanLambda | energy_hcal",
+        "D0 | energy_other",
+        "omega | num_hits",
+        "Z0 | sigma_x",
+        "time | sigma_y",
+        "Null | sigma_z",
     ],
 }
 
