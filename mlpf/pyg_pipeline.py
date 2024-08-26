@@ -155,7 +155,7 @@ def main():
     else:
         outdir = get_outdir(args.resume_training, config["load"])
         # if outdir is None:
-        if args.load:
+        if args.load or (outdir is None):
 
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
