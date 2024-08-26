@@ -22,6 +22,7 @@ ELEM_TYPES_NONZERO = {
     "cms": [1, 4, 5, 6, 8, 9, 10, 11],
     "delphes": [1, 2],
     "clic": [1, 2],
+    "cld": [1, 2],
 }
 
 CLASS_LABELS = {
