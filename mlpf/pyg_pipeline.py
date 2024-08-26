@@ -9,12 +9,13 @@ import logging
 import os
 from pathlib import Path
 
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
-
 import yaml
 from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 
 parser = argparse.ArgumentParser()
 
@@ -31,7 +32,7 @@ parser.add_argument(
     "--dataset",
     type=str,
     default=None,
-    choices=["clic", "cms", "delphes", "clic_hits"],
+    choices=["clic", "cms", "delphes", "clic_hits", "cld"],
     required=False,
     help="which dataset?",
 )
