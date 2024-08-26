@@ -634,10 +634,9 @@ def run(rank, world_size, config, args, outdir, logfile):
     if config["load"]:  # load a pre-trained model
 
         pload = Path(config["load"])
-        print("pload", pload)
-        print("pload.parent", pload.parent)
 
-        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+        # with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+        with open(f"{pload.parent.parent}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
