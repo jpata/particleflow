@@ -516,7 +516,7 @@ def train_mlpf(
             extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
-                stale_epochs = 0
+                stale_epochs *= 0
                 torch.save(
                     {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
                     f"{outdir}/best_weights.pth",
