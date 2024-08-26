@@ -1,51 +1,49 @@
+import csv
+import json
+import logging
 import os
 import os.path as osp
 import pickle as pkl
+import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
-import logging
-import shutil
-from datetime import datetime
-import tqdm
-import yaml
-import csv
-import json
 
+import fastjet
 import numpy as np
-
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import tqdm
+import yaml
+from pyg.inference import make_plots, run_predictions
+from pyg.logger import _configLogger, _logger
+from pyg.mlpf import MLPF
+from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
+from pyg.utils import (
+    CLASS_LABELS,
+    ELEM_TYPES_NONZERO,
+    X_FEATURES,
+    count_parameters,
+    get_lr_schedule,
+    get_model_state_dict,
+    load_checkpoint,
+    save_checkpoint,
+    save_HPs,
+    unpack_predictions,
+    unpack_target,
+)
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
-
-from pyg.logger import _logger, _configLogger
-from pyg.utils import (
-    unpack_predictions,
-    unpack_target,
-    get_model_state_dict,
-    load_checkpoint,
-    save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
-    save_HPs,
-    get_lr_schedule,
-    count_parameters,
-)
-
-
-import fastjet
-from pyg.inference import make_plots, run_predictions
-from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -634,6 +632,11 @@ def run(rank, world_size, config, args, outdir, logfile):
     start_epoch = 1
 
     if config["load"]:  # load a pre-trained model
+
+        pload = Path(config["load"])
+        print("pload", pload)
+        print("pload.parent", pload.parent)
+
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
@@ -1122,7 +1125,6 @@ def run_hpo(config, args):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer
-
     from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
