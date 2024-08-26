@@ -651,7 +651,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
-        start_epoch = checkpoint["extra_state"]["epoch"] + 1
+        # start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
