@@ -563,6 +563,10 @@ def train_mlpf(
                 # ray requires all workers to report metrics
                 ray.train.report(metrics)
 
+        if world_size > 1:
+            dist.barrier()
+            torch.distributed.broadcast(stale_epochs, src=0)
+
         if stale_epochs > patience:
             break
 
