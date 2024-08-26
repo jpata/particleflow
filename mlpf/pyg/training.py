@@ -636,7 +636,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         pload = Path(config["load"])
 
         # with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
-        with open(f"{pload.parent.parent}/model_kwargs.pkl", "rb") as f:
+        with open(f"{pload.parent}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
