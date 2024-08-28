@@ -60,6 +60,7 @@ model:
     head_dim: 32
     num_heads: 32
     attention_type: flash
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba

@@ -533,6 +533,7 @@ def train_mlpf(
                 dtype=dtype,
                 tensorboard_writer=tensorboard_writer_train,
             )
+        t_train = time.time()  # epoch time excluding validation
 
         losses_v = train_and_valid(
             rank,
@@ -551,6 +552,7 @@ def train_mlpf(
             dtype=dtype,
             tensorboard_writer=tensorboard_writer_valid,
         )
+        t_valid = time.time()
 
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
@@ -624,6 +626,9 @@ def train_mlpf(
             for k, v in losses_v.items():
                 tensorboard_writer_valid.add_scalar("epoch/loss_" + k, v, epoch)
 
+            with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
+                pkl.dump(losses, f)
+
             t1 = time.time()
 
             epochs_remaining = num_epochs - epoch
@@ -635,20 +640,21 @@ def train_mlpf(
                 + f"train_loss={losses_t['Total']:.4f} "
                 + f"valid_loss={losses_v['Total']:.4f} "
                 + f"stale={stale_epochs} "
-                + f"time={round((t1-t0)/60, 2)}m "
+                + f"epoch_train_time={round((t_train-t0)/60, 2)}m "
+                + f"epoch_valid_time={round((t_valid-t_train)/60, 2)}m "
+                + f"epoch_total_time={round((t1-t0)/60, 2)}m "
                 + f"eta={round(eta, 1)}m",
                 color="bold",
             )
-
-            with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
-                pkl.dump(losses, f)
 
             # save separate json files with stats for each epoch, this is robust to crashed-then-resumed trainings
             history_path = Path(outdir) / "history"
             history_path.mkdir(parents=True, exist_ok=True)
             with open("{}/epoch_{}.json".format(str(history_path), epoch), "w") as fi:
                 stats = {"train": losses_t, "valid": losses_v}
-                stats["epoch_time"] = t1 - t0
+                stats["epoch_train_time"] = t_train - t0
+                stats["epoch_valid_time"] = t_valid - t_train
+                stats["epoch_total_time"] = t1 - t0
                 json.dump(stats, fi)
 
             if tensorboard_writer_train:
