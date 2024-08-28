@@ -77,6 +77,63 @@ class SelfAttentionLayer(nn.Module):
         return x
 
 
+class PreLnSelfAttentionLayer(nn.Module):
+    def __init__(
+        self,
+        activation="elu",
+        embedding_dim=128,
+        num_heads=2,
+        width=128,
+        dropout_mha=0.1,
+        dropout_ff=0.1,
+        attention_type="efficient",
+    ):
+        super(PreLnSelfAttentionLayer, self).__init__()
+
+        # to enable manual override for ONNX export
+        self.enable_ctx_manager = True
+
+        self.attention_type = attention_type
+        self.act = get_activation(activation)
+        if self.attention_type == "flash_external":
+            from flash_attn.modules.mha import MHA
+
+            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
+        else:
+            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+        self.norm0 = torch.nn.LayerNorm(embedding_dim)
+        self.norm1 = torch.nn.LayerNorm(embedding_dim)
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.dropout = torch.nn.Dropout(dropout_ff)
+        _logger.info("using attention_type={}".format(attention_type))
+        # params for torch sdp_kernel
+        self.attn_params = {
+            "math": [SDPBackend.MATH],
+            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
+            "flash": [SDPBackend.FLASH_ATTENTION],
+        }
+
+    def forward(self, x, mask):
+        x = self.norm0(x)
+
+        # explicitly call the desired attention mechanism
+        if self.attention_type == "flash_external":
+            mha_out = self.mha(x)
+        else:
+            if self.enable_ctx_manager:
+                with sdpa_kernel(self.attn_params[self.attention_type]):
+                    mha_out = self.mha(x, x, x, need_weights=False)[0]
+            else:
+                mha_out = self.mha(x, x, x, need_weights=False)[0]
+
+        mha_out = x + mha_out
+        x = self.norm1(mha_out)
+        x = mha_out + self.seq(x)
+        x = self.dropout(x)
+        x = x * mask.unsqueeze(-1)
+        return x
+
+
 class MambaLayer(nn.Module):
     def __init__(self, activation="elu", embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
         super(MambaLayer, self).__init__()
@@ -187,6 +244,7 @@ class MLPF(nn.Module):
         dropout_conv_reg_ff=0.0,
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
+        use_pre_layernorm=False,
         # mamba specific parameters
         d_state=16,
         d_conv=4,
@@ -207,6 +265,8 @@ class MLPF(nn.Module):
 
         self.bin_size = bin_size
         self.elemtypes_nonzero = elemtypes_nonzero
+
+        self.use_pre_layernorm = use_pre_layernorm
 
         if self.conv_type == "attention":
             embedding_dim = num_heads * head_dim
@@ -229,9 +289,11 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
 
+                attention_layer = PreLnSelfAttentionLayer if self.use_pre_layernorm else SelfAttentionLayer
+
                 for i in range(num_convs):
                     self.conv_id.append(
-                        SelfAttentionLayer(
+                        attention_layer(
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
@@ -242,7 +304,7 @@ class MLPF(nn.Module):
                         )
                     )
                     self.conv_reg.append(
-                        SelfAttentionLayer(
+                        attention_layer(
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
@@ -293,6 +355,10 @@ class MLPF(nn.Module):
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
 
+        if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
+            self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
+            self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
+
     # @torch.compile
     def forward(self, X_features, mask):
         Xfeat_normed = X_features
@@ -325,6 +391,10 @@ class MLPF(nn.Module):
             final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
         elif self.learned_representation_mode == "last":
             final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
+
+        if self.use_pre_layernorm:
+            final_embedding_id = self.final_norm_id(final_embedding_id)
+
         preds_binary_particle = self.nn_binary_particle(final_embedding_id)
         preds_pid = self.nn_pid(final_embedding_id)
 
@@ -335,6 +405,9 @@ class MLPF(nn.Module):
             final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
         elif self.learned_representation_mode == "last":
             final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
+
+        if self.use_pre_layernorm:
+            final_embedding_reg = self.final_norm_reg(final_embedding_reg)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
