@@ -149,13 +149,16 @@ def compute_gen_met(g):
 
 
 def split_caloparticles(g, elem_type):
+
+    # loop over caloparticles
     cps = [(g.nodes[n]["pt"], n) for n in g.nodes if n[0] == "cp"]
     for _, cp in cps:
 
-        # get all associated elements
-        sucs = [suc for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
+        # get all associated elements with type==elem_type that received a contribution from this caloparticle
+        sucs = [(suc, g.edges[cp, suc]["weight"], g.nodes[suc]["e"]) for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
+        sum_sucs_w = sum([s[1] for s in sucs])
+        sucs = [s[0] for s in sucs]
         if len(sucs) > 1:
-            sum_sucs_w = sum([g.edges[cp, suc]["weight"] for suc in sucs])
             lv = vector.obj(
                 pt=g.nodes[cp]["pt"],
                 eta=g.nodes[cp]["eta"],
@@ -183,7 +186,6 @@ def split_caloparticles(g, elem_type):
                 g.add_edge(("cp", new_cp_index), suc, weight=g.edges[cp, suc]["weight"])
                 new_cp_index += 1
             g.remove_node(cp)
-    # print_gen(g)
 
 
 def find_representative_elements(g, elem_to_gp, gp_to_elem, elem_type):
@@ -202,12 +204,9 @@ def find_representative_elements(g, elem_to_gp, gp_to_elem, elem_type):
             unused_elems.append(elem)
 
 
-def prepare_normalized_table(g):
+def prepare_normalized_table(g, iev):
     split_caloparticles(g, 1)
-    split_caloparticles(g, 4)
-    split_caloparticles(g, 5)
-    split_caloparticles(g, 8)
-    split_caloparticles(g, 9)
+    # pickle.dump(g, open("split_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
     all_genparticles = []
     all_elements = []
@@ -317,7 +316,6 @@ def prepare_normalized_table(g):
     ycand.fill(0.0)
 
     for ielem, elem in enumerate(all_elements):
-        # elem_type = g.nodes[elem]["typ"]
         genparticles = sorted(
             elem_to_gp.get(elem, []),
             key=lambda x: g.edges[(x, elem)]["weight"],
@@ -336,7 +334,10 @@ def prepare_normalized_table(g):
 
         # if several CaloParticles/TrackingParticles are associated to ONLY this element, merge them, as they are not reconstructable separately
         if len(genparticles) > 0:
-            pid = g.nodes[genparticles[0]]["pid"]
+            pids_e = sorted([(g.nodes[gp]["pid"], g.nodes[gp]["e"]) for gp in genparticles], key=lambda x: x[1], reverse=True)
+            # get the pid of the highest-energy particle associated with this element
+            pid = pids_e[0][0]
+
             charge = g.nodes[genparticles[0]]["charge"]
             pid = map_pdgid_to_candid(pid, charge)
 
@@ -368,6 +369,7 @@ def prepare_normalized_table(g):
 
             for j in range(len(target_branches)):
                 ygen[target_branches[j]][ielem] = gp[target_branches[j]]
+
     px = np.sum(ygen["pt"] * ygen["cos_phi"])
     py = np.sum(ygen["pt"] * ygen["sin_phi"])
     met = np.sqrt(px**2 + py**2)
@@ -615,7 +617,6 @@ def make_graph(ev, iev):
     trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
     trackingparticle_to_element_second = ev["trackingparticle_to_element.second"][iev]
     trackingparticle_to_element_cmp = ev["trackingparticle_to_element_cmp"][iev]
-    # for trackingparticles associated to elements, set a very high edge weight
     for iobj, elem, c in zip(
         trackingparticle_to_element_first,
         trackingparticle_to_element_second,
@@ -662,11 +663,11 @@ def make_graph(ev, iev):
         sucs = g.successors(tp)
         for pred in preds:
             for suc in sucs:
-                if (pred, suc) in g.edges:
-                    g.edges[(pred, suc)]["weight"] += g.edges[(tp, suc)]["weight"]
-                else:
+                if (pred, suc) not in g.edges:
                     g.add_edge(pred, suc, weight=g.edges[(tp, suc)]["weight"])
     g.remove_nodes_from(tps)
+
+    # pickle.dump(g, open("init_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
     # add any remaining links between CaloParticles and Elements using delta-R proximity
     elems = [n for n in g.nodes if n[0] == "elem"]
@@ -674,10 +675,10 @@ def make_graph(ev, iev):
     sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [g.nodes[n]["phi"] for n in scs]])
     tree = KDTree(sc_coords.T, leaf_size=32)
     for elem in elems:
-        if len(list(g.predecessors(elem))) == 0:
+        if len(list(g.predecessors(elem))) == 0 and g.nodes[elem]["pt"] > 1:
             eta = g.nodes[elem]["eta"]
             phi = g.nodes[elem]["phi"]
-            nearby_scs = tree.query_radius([[eta, phi]], 0.02)[0]
+            nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
             for isc in nearby_scs:
                 if scs[isc] in g.nodes:
                     if (scs[isc], elem) not in g.edges:
@@ -690,10 +691,9 @@ def make_graph(ev, iev):
         sucs = g.successors(sc)
         for pred in preds:
             for suc in sucs:
-                if (pred, suc) in g.edges:
-                    g.edges[(pred, suc)]["weight"] += g.edges[(sc, suc)]["weight"]
-                else:
+                if (pred, suc) not in g.edges:
                     g.add_edge(pred, suc, weight=g.edges[(sc, suc)]["weight"])
+
     g.remove_nodes_from(scs)
     print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
 
@@ -713,6 +713,7 @@ def make_graph(ev, iev):
         if ("elem", elem) in g.nodes:
             g.add_edge(("elem", elem), ("pfcand", pfcand), weight=1.0)
 
+    # pickle.dump(g, open("cleanup_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
     # print_gen(g)
     return g
 
@@ -753,7 +754,7 @@ def process(args):
         # g = cleanup_graph(g)
 
         # associate target particles to input elements
-        Xelem, ycand, ygen = prepare_normalized_table(g)
+        Xelem, ycand, ygen = prepare_normalized_table(g, iev)
         data = {}
 
         # produce a list of stable pythia particles for downstream validation

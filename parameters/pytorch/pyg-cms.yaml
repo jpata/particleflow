@@ -54,12 +54,12 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
-    dropout_ff: 0.0
-    dropout_conv_id_mha: 0.0
-    dropout_conv_id_ff: 0.0
-    dropout_conv_reg_mha: 0.0
-    dropout_conv_reg_ff: 0.0
+    num_convs: 6
+    dropout_ff: 0.1
+    dropout_conv_id_mha: 0.1
+    dropout_conv_id_ff: 0.1
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
     activation: "relu"
     head_dim: 16
     num_heads: 32
@@ -107,22 +107,16 @@ train_dataset:
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
+          version: 2.2.0
 
 valid_dataset:
   cms:
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
+          version: 2.2.0
 test_dataset:
   cms_pf_ttbar:
-    version: 2.0.0
-  cms_pf_qcd:
-    version: 2.0.0
+    version: 2.2.0

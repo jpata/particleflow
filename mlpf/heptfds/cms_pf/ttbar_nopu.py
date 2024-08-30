@@ -21,11 +21,12 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.0.0")
+    VERSION = tfds.core.Version("2.2.0")
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
         "2.0.0": "New truth def based primarily on CaloParticles",
+        "2.2.0": "Split CaloParticles",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/

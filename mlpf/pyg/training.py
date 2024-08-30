@@ -128,20 +128,18 @@ def mlpf_loss(y, ypred, batch):
 
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
-    was_input_pred = torch.concat([
-        torch.softmax(ypred["cls_binary"].transpose(1,2), axis=-1),
-        ypred["momentum"]
-    ], axis=-1)*batch.mask.unsqueeze(axis=-1)
-    was_input_true = torch.concat([
-        torch.nn.functional.one_hot((y["cls_id"]!=0).to(torch.long)),
-        y["momentum"]
-    ], axis=-1)*batch.mask.unsqueeze(axis=-1)
+    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
+        axis=-1
+    )
+    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
+        axis=-1
+    )
 
     std = was_input_true[batch.mask].std(axis=0)
-    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred/std, was_input_true/std).mean()
+    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    # loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"] + loss["Sliced_Wasserstein_Loss"]
-    loss["Total"] = loss["Sliced_Wasserstein_Loss"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"] + 0.01 * loss["Sliced_Wasserstein_Loss"]
+    # loss["Total"] = loss["Sliced_Wasserstein_Loss"]
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
@@ -687,8 +685,6 @@ def run(rank, world_size, config, args, outdir, logfile):
     if config["load"]:  # load a pre-trained model
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
-            if "use_pre_layernorm" in model_kwargs:
-                model_kwargs.pop("use_pre_layernorm")
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
         if config["conv_type"] == "attention":
