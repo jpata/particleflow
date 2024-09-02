@@ -50,16 +50,16 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs: 12
     dropout_ff: 0.1
-    dropout_conv_id_mha: 0.1
-    dropout_conv_id_ff: 0.1
-    dropout_conv_reg_mha: 0.1
-    dropout_conv_reg_ff: 0.1
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
     activation: "relu"
     head_dim: 32
     num_heads: 32
-    attention_type: flash
+    attention_type: math
     use_pre_layernorm: True
 
   mamba:

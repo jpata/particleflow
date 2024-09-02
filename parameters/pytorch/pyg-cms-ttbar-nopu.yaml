@@ -55,11 +55,11 @@ model:
   attention:
     conv_type: attention
     num_convs: 8
-    dropout_ff: 0.1
-    dropout_conv_id_mha: 0.1
-    dropout_conv_id_ff: 0.1
-    dropout_conv_reg_mha: 0.1
-    dropout_conv_reg_ff: 0.1
+    dropout_ff: 0.0
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
     activation: "relu"
     head_dim: 16
     num_heads: 32
