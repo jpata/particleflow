@@ -10,7 +10,7 @@ num_epochs: 100
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh  # gnn_lsh, attention, mamba, flashattention
+conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -35,12 +35,12 @@ model:
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 256
-    width: 256
-    num_convs: 6
+    embedding_dim: 512
+    width: 512
+    num_convs: 8
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 256
+    bin_size: 32
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -50,16 +50,16 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 6
-    dropout_ff: 0.0
+    num_convs: 12
+    dropout_ff: 0.1
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
     activation: "relu"
-    head_dim: 16
+    head_dim: 32
     num_heads: 32
-    attention_type: flash
+    attention_type: math
     use_pre_layernorm: True
 
   mamba:
@@ -106,9 +106,9 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 2.1.0
 
 valid_dataset:
   clic:
@@ -116,12 +116,12 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 2.1.0
 
 test_dataset:
   clic_edm_ttbar_pf:
-    version: 2.0.0
+    version: 2.1.0
   clic_edm_qq_pf:
-    version: 2.0.0
+    version: 2.1.0

@@ -108,7 +108,7 @@ train_dataset:
       batch_size: 10
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.0.0
+          version: 2.2.0
 
 valid_dataset:
   cms:
@@ -116,8 +116,8 @@ valid_dataset:
       batch_size: 10
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.0.0
+          version: 2.2.0
 
 test_dataset:
   cms_pf_ttbar_nopu:
-    version: 2.0.0
+    version: 2.2.0

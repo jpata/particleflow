@@ -78,6 +78,7 @@ def mlpf_loss(y, ypred, batch):
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
+    msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
@@ -126,13 +127,23 @@ def mlpf_loss(y, ypred, batch):
     pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(ypred["momentum"].detach(), y["momentum"]).mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
+    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
+        axis=-1
+    )
+    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
+        axis=-1
+    )
+
+    std = was_input_true[batch.mask].std(axis=0)
+    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
+
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]  # + 0.01 * loss["Sliced_Wasserstein_Loss"]
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
+    loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
     return loss
 
 

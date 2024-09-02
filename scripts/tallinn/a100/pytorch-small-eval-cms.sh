@@ -4,13 +4,13 @@
 #SBATCH --mem-per-gpu 50G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2024-08-02
+IMG=/home/software/singularity/pytorch.simg:2024-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms-ttbar-nopu_20240815_233931_332621/checkpoints/checkpoint-17-17.282402.pth
+WEIGHTS=experiments/pyg-cms_20240901_194940_868487/checkpoints/checkpoint-02-18.710537.pth
 singularity exec -B /scratch/persistent --nv \
      --env PYTHONPATH=hep_tfds \
      --env KERAS_BACKEND=torch \
      $IMG  python mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
-     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms-ttbar-nopu.yaml \
-     --test --make-plots --gpu-batch-multiplier 5 --load $WEIGHTS --ntest 10000 --dtype bfloat16
+     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
+     --test --make-plots --gpu-batch-multiplier 10 --load $WEIGHTS --ntest 5000 --dtype bfloat16
