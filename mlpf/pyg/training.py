@@ -83,7 +83,7 @@ def mlpf_loss(y, ypred, batch):
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
-    ypred["momentum"] = ypred["momentum"] * msk_pred_particle
+    ypred["momentum"] = ypred["momentum"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
