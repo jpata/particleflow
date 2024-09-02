@@ -138,8 +138,7 @@ def mlpf_loss(y, ypred, batch):
     std = was_input_true[batch.mask].std(axis=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"] + 0.01 * loss["Sliced_Wasserstein_Loss"]
-    # loss["Total"] = loss["Sliced_Wasserstein_Loss"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]  # + 0.01 * loss["Sliced_Wasserstein_Loss"]
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()

@@ -37,7 +37,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.1.0": "Additional stats",
-        "2.2.0": "Split CaloParticles",
+        "2.2.0": "Split CaloParticles along tracks",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
@@ -71,7 +71,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw")
+        return cms_utils.split_sample(path / sample_dir / "raw2")
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

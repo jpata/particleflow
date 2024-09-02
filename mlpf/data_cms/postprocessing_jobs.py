@@ -24,7 +24,7 @@ def write_script(infiles, outfiles):
         s += [f"if [ ! -f {outf} ]; then"]
         s += [
             "  singularity exec -B /local /home/software/singularity/pytorch.simg:2024-08-18"
-            + f" python3 postprocessing2.py --input {inf} --outpath {outpath}"
+            + f" python3 mlpf/data_cms/postprocessing2.py --input {inf} --outpath {outpath}"
         ]
         s += [f"  bzip2 -z {outf_no_bzip}"]
         s += ["fi"]
