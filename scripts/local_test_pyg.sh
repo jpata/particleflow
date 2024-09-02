@@ -9,8 +9,8 @@ mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240702_cptruthdef/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240702_cptruthdef/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
 
 cd ../../..
 
