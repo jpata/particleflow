@@ -220,11 +220,11 @@ class MLPF(nn.Module):
         layernorm=True,
         conv_type="attention",
         input_encoding="joint",
-        pt_mode="additive-elemtype",
-        eta_mode="additive-elemtype",
-        sin_phi_mode="additive-elemtype",
-        cos_phi_mode="additive-elemtype",
-        energy_mode="additive-elemtype",
+        pt_mode="linear",
+        eta_mode="linear",
+        sin_phi_mode="linear",
+        cos_phi_mode="linear",
+        energy_mode="linear",
         # element types which actually exist in the dataset
         elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
         # should the conv layer outputs be concatted (concat) or take the last (last)
@@ -348,7 +348,7 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
-        embed_dim = decoding_dim + 2 + num_classes
+        embed_dim = decoding_dim
         self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
@@ -402,9 +402,9 @@ class MLPF(nn.Module):
 
         # regression input
         if self.learned_representation_mode == "concat":
-            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg, axis=-1)
         elif self.learned_representation_mode == "last":
-            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]] + [preds_binary_particle.detach(), preds_pid.detach()], axis=-1)
+            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]], axis=-1)
 
         if self.use_pre_layernorm:
             final_embedding_reg = self.final_norm_reg(final_embedding_reg)

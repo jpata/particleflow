@@ -75,11 +75,10 @@ ls -lrt
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py > /dev/null
 cmsRun step3_phase1_new.py > /dev/null
-#cmsRun $CMSSWDIR/src/Validation/RecoParticleFlow/test/pfanalysis_ntuple.py
 mv pfntuple.root pfntuple_${SEED}.root
-# python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
-# bzip2 -z pfntuple_${SEED}.pkl
-# cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
+python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
+bzip2 -z pfntuple_${SEED}.pkl
+cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
 #copy ROOT outputs
 #cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root

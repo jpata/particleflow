@@ -70,6 +70,20 @@ class TFDSDataSource:
             ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 7)] = 2
             ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 7)] = 2
 
+            # set pt for HO which would otherwise be 0
+            msk_ho = ret["X"][:, 0] == 10
+            eta = ret["X"][:, 2][msk_ho]
+            e = ret["X"][:, 5][msk_ho]
+            ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
+
+        # transform pt -> log(pt / elem pt), same for energy
+        ret["ygen"][:, 6] = np.log(ret["ygen"][:, 6] / ret["X"][:, 5])
+        ret["ygen"][:, 6][np.isnan(ret["ygen"][:, 6])] = 0.0
+        ret["ygen"][:, 6][np.isinf(ret["ygen"][:, 6])] = 0.0
+        ret["ygen"][:, 2] = np.log(ret["ygen"][:, 2] / ret["X"][:, 1])
+        ret["ygen"][:, 2][np.isnan(ret["ygen"][:, 2])] = 0.0
+        ret["ygen"][:, 2][np.isinf(ret["ygen"][:, 2])] = 0.0
+
         return ret
 
     def __len__(self):

@@ -15,6 +15,7 @@ import json
 import sklearn
 import sklearn.metrics
 import numpy as np
+import pandas
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -98,7 +99,7 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = 10 * torch.nn.functional.huber_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression = 10 * torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_regression[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
@@ -111,11 +112,12 @@ def mlpf_loss(y, ypred, batch):
     loss["Classification"] = loss_pid_classification.sum() / nelem
 
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
-    mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
+    # mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
 
     # average over all true particles
-    loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    # loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    loss["Regression"] = reg_losses.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)
@@ -298,12 +300,12 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred = model(batch.X, batch.mask)
+                ypred_raw = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    ypred = model(batch.X, batch.mask)
+                    ypred_raw = model(batch.X, batch.mask)
 
-        ypred = unpack_predictions(ypred)
+        ypred = unpack_predictions(ypred_raw)
 
         if not is_train:
             cm_X_gen += sklearn.metrics.confusion_matrix(
@@ -315,6 +317,19 @@ def train_and_valid(
             cm_id += sklearn.metrics.confusion_matrix(
                 ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
+            # save the events of the first validation batch for quick checks
+            if itrain == 0:
+                arr = (
+                    torch.concatenate(
+                        [batch.X[batch.mask], batch.ygen[batch.mask], ypred_raw[0][batch.mask], ypred_raw[1][batch.mask], ypred_raw[2][batch.mask]],
+                        axis=-1,
+                    )
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+                df = pandas.DataFrame(arr)
+                df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:

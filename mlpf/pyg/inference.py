@@ -42,6 +42,14 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     batch = batch.to(rank)
     ypred = model(batch.X, batch.mask)
 
+    # transform log (pt/elempt) -> pt
+    ypred[2][..., 0] = torch.exp(ypred[2][..., 0]) * batch.X[..., 1]
+    batch.ygen[..., 2] = torch.exp(batch.ygen[..., 2]) * batch.X[..., 1]
+
+    # transform log (E/elemE) -> E
+    ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
+    batch.ygen[..., 6] = torch.exp(batch.ygen[..., 6]) * batch.X[..., 1]
+
     # convert all outputs to float32 in case running in float16 or bfloat16
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
