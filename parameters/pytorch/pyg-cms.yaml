@@ -8,7 +8,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.0001
+lr: 0.00001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -28,7 +28,6 @@ model:
     # - nn_energy
     # - nn_pt
 
-  learned_representation_mode: last #last, concat
   input_encoding: joint #split, joint
   pt_mode: linear
   eta_mode: linear
@@ -54,12 +53,16 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs_common: 3
+    num_convs_id: 2
+    num_convs_reg: 1
     dropout_ff: 0.0
+    dropout_conv_common_mha: 0.0
+    dropout_conv_common_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
-    dropout_conv_reg_mha: 0.0
-    dropout_conv_reg_ff: 0.0
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
     activation: "relu"
     head_dim: 16
     num_heads: 32

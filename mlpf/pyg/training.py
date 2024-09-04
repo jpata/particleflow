@@ -111,11 +111,12 @@ def mlpf_loss(y, ypred, batch):
     loss["Classification"] = loss_pid_classification.sum() / nelem
 
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
-    mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
+    # mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
 
     # average over all true particles
-    loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    # loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
+    loss["Regression"] = reg_losses.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)

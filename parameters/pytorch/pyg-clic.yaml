@@ -25,7 +25,6 @@ val_freq:  # run an extra validation run every val_freq training steps
 
 model:
   trainable: all
-  learned_representation_mode: last #last, concat
   input_encoding: joint #split, joint
   pt_mode: linear
   eta_mode: linear
@@ -50,7 +49,9 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 12
+    num_convs_common: 4
+    num_convs_id: 2
+    num_convs_reg: 2
     dropout_ff: 0.1
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0

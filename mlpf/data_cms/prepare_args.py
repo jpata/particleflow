@@ -6,15 +6,15 @@ import os
 outdir = "/local/joosep/mlpf/cms/20240823_simcluster"
 
 samples = [
-#    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           105000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           105000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 220010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 305000, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        305000, 310010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 500000, 520010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-#    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          700000, 720010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+#    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          700000, 705010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 
 #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           702000, 705000, "genjob_nopu.sh", outdir + "/nopu"),
-#    ("MultiParticlePFGun50_cfi",                               800000, 820000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("MultiParticlePFGun50_cfi",                               800000, 805000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                         900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                      1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
 
@@ -36,6 +36,6 @@ if __name__ == "__main__":
         os.makedirs(this_outdir + "/" + samp + "/root", exist_ok=True)
 
         for seed in range(seed0, seed1):
-            p = this_outdir + "/" + samp + "/raw2/pfntuple_{}.pkl.bz2".format(seed)
+            p = this_outdir + "/" + samp + "/root/pfntuple_{}.root".format(seed)
             if not os.path.isfile(p):
                 print(f"sbatch --mem-per-cpu 8G --partition main --time 20:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data_cms/{script} {samp} {seed}")
