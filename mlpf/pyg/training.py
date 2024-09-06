@@ -261,6 +261,7 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
     X = batch.X[batch.mask].cpu()
     ygen_flat = batch.ygen[batch.mask].cpu()
     ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
+    ypred_binary_cls = torch.argmax(ypred_binary, axis=-1)
     ypred_cls = ypred_raw[1][batch.mask].detach().cpu()
     ypred_p4 = ypred_raw[2][batch.mask].detach().cpu()
 
@@ -276,8 +277,8 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         for xcls in np.unique(X[:, 0]):
             fig = plt.figure()
             msk = X[:, 0] == xcls
-            egen = ygen_flat[msk, 6]
-            epred = ypred_p4[msk, 4]
+            egen = ygen_flat[msk & (ygen_flat[:, 0]!=0), 6]
+            epred = ypred_p4[msk & (ypred_binary_cls!=0), 4]
             b = np.linspace(-8,8,100)
             plt.hist(egen, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
@@ -285,8 +286,8 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
         
             fig = plt.figure()
-            e_bin_pred = torch.argmax(ypred["energy_bins"][batch.mask].detach().cpu(), axis=-1)[msk]
-            e_bin_true = ygen["energy_bins"][batch.mask].cpu()[msk]
+            e_bin_pred = torch.argmax(ypred["energy_bins"][batch.mask].detach().cpu(), axis=-1)[msk & (ygen_flat[:, 0]!=0) & (ypred_binary_cls!=0)]
+            e_bin_true = ygen["energy_bins"][batch.mask].cpu()[msk & (ygen_flat[:, 0]!=0) & (ypred_binary_cls!=0)]
             cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(256))
             plt.imshow(cm, cmap="Blues", norm=matplotlib.colors.LogNorm())
             tensorboard_writer.add_figure("energy_cm_elemtype{}".format(int(xcls)), fig, global_step=epoch)
