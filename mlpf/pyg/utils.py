@@ -144,7 +144,7 @@ X_FEATURES = {
 Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 
-def unpack_target(y):
+def unpack_target(y, model):
     ret = {}
     ret["cls_id"] = y[..., 0].long()
     ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
@@ -166,12 +166,20 @@ def unpack_target(y):
 
     ret["ispu"] = y[..., -1]
 
+    ret["pt_bins"] = torch.clamp(torch.searchsorted(model.bins_pt, ret["pt"].contiguous()), 0, len(model.bins_pt)-1)
+    ret["eta_bins"] = torch.clamp(torch.searchsorted(model.bins_eta, ret["eta"].contiguous()), 0, len(model.bins_pt)-1)
+    ret["sin_phi_bins"] = torch.clamp(torch.searchsorted(model.bins_sin_phi, ret["sin_phi"].contiguous()), 0, len(model.bins_pt)-1)
+    ret["cos_phi_bins"] = torch.clamp(torch.searchsorted(model.bins_cos_phi, ret["cos_phi"].contiguous()), 0, len(model.bins_pt)-1)
+    ret["energy_bins"] = torch.clamp(torch.searchsorted(model.bins_energy, ret["energy"].contiguous()), 0, len(model.bins_pt)-1)
+
     return ret
 
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret_momentum_bins = preds
+    preds_pt_bins, preds_eta_bins, preds_sin_phi_bins, preds_cos_phi_bins, preds_energy_bins = ret_momentum_bins
+    
     # ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
@@ -202,6 +210,11 @@ def unpack_predictions(preds):
         ],
         axis=-1,
     )
+    ret["pt_bins"] = preds_pt_bins
+    ret["eta_bins"] = preds_eta_bins
+    ret["sin_phi_bins"] = preds_sin_phi_bins
+    ret["cos_phi_bins"] = preds_cos_phi_bins
+    ret["energy_bins"] = preds_energy_bins
 
     return ret
 

@@ -16,6 +16,8 @@ import sklearn
 import sklearn.metrics
 import numpy as np
 import pandas
+import matplotlib
+import matplotlib.pyplot as plt
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -99,7 +101,7 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = 10 * torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression = torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_regression[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
@@ -130,6 +132,13 @@ def mlpf_loss(y, ypred, batch):
 
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
+    #compute the classification loss between bin indices
+    loss["Bins_pt"] = 10*torch.nn.functional.cross_entropy(ypred["pt_bins"].transpose(1,2), y["pt_bins"])
+    loss["Bins_eta"] = 10*torch.nn.functional.cross_entropy(ypred["eta_bins"].transpose(1,2), y["eta_bins"])
+    loss["Bins_sin_phi"] = 10*torch.nn.functional.cross_entropy(ypred["sin_phi_bins"].transpose(1,2), y["sin_phi_bins"])
+    loss["Bins_cos_phi"] = 10*torch.nn.functional.cross_entropy(ypred["cos_phi_bins"].transpose(1,2), y["cos_phi_bins"])
+    loss["Bins_energy"] = 10*torch.nn.functional.cross_entropy(ypred["energy_bins"].transpose(1,2), y["energy_bins"])
+
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
         axis=-1
     )
@@ -140,7 +149,16 @@ def mlpf_loss(y, ypred, batch):
     std = was_input_true[batch.mask].std(axis=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]  # + 0.01 * loss["Sliced_Wasserstein_Loss"]
+    loss["Total"] = (
+        loss["Classification_binary"] +
+        loss["Classification"] +
+        loss["Regression"] + 
+        loss["Bins_pt"] +
+        loss["Bins_eta"] + 
+        loss["Bins_sin_phi"] + 
+        loss["Bins_cos_phi"] +
+        loss["Bins_energy"]
+    )
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
@@ -239,6 +257,67 @@ def configure_model_trainable(model, trainable, is_training):
     else:
         model.eval()
 
+def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir):
+    X = batch.X[batch.mask].cpu()
+    ygen_flat = batch.ygen[batch.mask].cpu()
+    ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
+    ypred_cls = ypred_raw[1][batch.mask].detach().cpu()
+    ypred_p4 = ypred_raw[2][batch.mask].detach().cpu()
+
+    arr = (
+        torch.concatenate(
+            [X, ygen_flat, ypred_binary, ypred_cls, ypred_p4],
+            axis=-1,
+        )
+        .numpy()
+    )
+
+    if tensorboard_writer:
+        for xcls in np.unique(X[:, 0]):
+            fig = plt.figure()
+            msk = X[:, 0] == xcls
+            egen = ygen_flat[msk, 6]
+            epred = ypred_p4[msk, 4]
+            b = np.linspace(-8,8,100)
+            plt.hist(egen, bins=b, histtype="step")
+            plt.hist(epred, bins=b, histtype="step")
+            plt.xlabel("log [E/E_elem]")
+            tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+        
+            fig = plt.figure()
+            e_bin_pred = torch.argmax(ypred["energy_bins"][batch.mask].detach().cpu(), axis=-1)[msk]
+            e_bin_true = ygen["energy_bins"][batch.mask].cpu()[msk]
+            cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(256))
+            plt.imshow(cm, cmap="Blues", norm=matplotlib.colors.LogNorm())
+            tensorboard_writer.add_figure("energy_cm_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+
+        tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ygen[batch.mask][:, 2], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
+        ratio = (ypred_raw[2][batch.mask][:, 0]/batch.ygen[batch.mask][:, 2])[batch.ygen[batch.mask][:, 0]!=0]
+        tensorboard_writer.add_histogram("pt_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+
+        tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ygen[batch.mask][:, 3], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1], -10, 10), global_step=epoch)
+        ratio = (ypred_raw[2][batch.mask][:, 1]/batch.ygen[batch.mask][:, 3])[batch.ygen[batch.mask][:, 0]!=0]
+        tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+
+        tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ygen[batch.mask][:, 4], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
+        ratio = (ypred_raw[2][batch.mask][:, 2]/batch.ygen[batch.mask][:, 4])[batch.ygen[batch.mask][:, 0]!=0]
+        tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+
+        tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ygen[batch.mask][:, 5], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
+        ratio = (ypred_raw[2][batch.mask][:, 3]/batch.ygen[batch.mask][:, 5])[batch.ygen[batch.mask][:, 0]!=0]
+        tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+
+        tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ygen[batch.mask][:, 6], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
+        ratio = (ypred_raw[2][batch.mask][:, 4]/batch.ygen[batch.mask][:, 6])[batch.ygen[batch.mask][:, 0]!=0]
+        tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+
+    df = pandas.DataFrame(arr)
+    df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
 
 def train_and_valid(
     rank,
@@ -293,7 +372,7 @@ def train_and_valid(
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
-        ygen = unpack_target(batch.ygen)
+        ygen = unpack_target(batch.ygen, model)
 
         num_elems = batch.X[batch.mask].shape[0]
         num_batch = batch.X.shape[0]
@@ -319,17 +398,8 @@ def train_and_valid(
             )
             # save the events of the first validation batch for quick checks
             if itrain == 0:
-                arr = (
-                    torch.concatenate(
-                        [batch.X[batch.mask], batch.ygen[batch.mask], ypred_raw[0][batch.mask], ypred_raw[1][batch.mask], ypred_raw[2][batch.mask]],
-                        axis=-1,
-                    )
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-                df = pandas.DataFrame(arr)
-                df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
+                validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
+                
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
@@ -495,7 +565,7 @@ def train_mlpf(
 
     t0_initial = time.time()
 
-    losses_of_interest = ["Total", "Classification", "Classification_binary", "Regression"]
+    losses_of_interest = ["Total", "Classification", "Classification_binary", "Regression", "Bins_pt", "Bins_eta", "Bins_sin_phi", "Bins_cos_phi", "Bins_energy"]
 
     losses = {}
     losses["train"], losses["valid"] = {}, {}
