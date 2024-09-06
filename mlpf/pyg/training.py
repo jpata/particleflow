@@ -818,7 +818,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     if not (config["load"] is None):
         testdir_name = "_" + Path(config["load"]).stem
     else:
-        testdir_name = "_bestweights"
+        testdir_name = "_best_weights"
 
     if args.test:
         for sample in args.test_datasets:
@@ -875,6 +875,7 @@ def run(rank, world_size, config, args, outdir, logfile):
 
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
+            testdir_name = "_bestweights"
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name)

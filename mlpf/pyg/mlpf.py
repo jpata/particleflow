@@ -177,6 +177,8 @@ class RegressionOutput(nn.Module):
         # single output
         if self.mode == "direct" or self.mode == "additive" or self.mode == "multiplicative":
             self.nn = ffn(embed_dim, 1, width, act, dropout)
+        elif self.mode == "direct-elemtype":
+            self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
         # two outputs
         elif self.mode == "linear":
             self.nn = ffn(embed_dim, 2, width, act, dropout)
@@ -188,6 +190,11 @@ class RegressionOutput(nn.Module):
 
         if self.mode == "direct":
             nn_out = self.nn(x)
+            return nn_out
+        elif self.mode == "direct-elemtype":
+            nn_out = self.nn(x)
+            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return nn_out
         elif self.mode == "additive":
             nn_out = self.nn(x)

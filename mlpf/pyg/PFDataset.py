@@ -80,9 +80,12 @@ class TFDSDataSource:
         ret["ygen"][:, 6] = np.log(ret["ygen"][:, 6] / ret["X"][:, 5])
         ret["ygen"][:, 6][np.isnan(ret["ygen"][:, 6])] = 0.0
         ret["ygen"][:, 6][np.isinf(ret["ygen"][:, 6])] = 0.0
+        ret["ygen"][:, 6][ret["ygen"][:, 0] == 0] = 0
+
         ret["ygen"][:, 2] = np.log(ret["ygen"][:, 2] / ret["X"][:, 1])
         ret["ygen"][:, 2][np.isnan(ret["ygen"][:, 2])] = 0.0
         ret["ygen"][:, 2][np.isinf(ret["ygen"][:, 2])] = 0.0
+        ret["ygen"][:, 2][ret["ygen"][:, 0] == 0] = 0
 
         return ret
 

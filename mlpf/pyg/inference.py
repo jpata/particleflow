@@ -43,6 +43,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ypred = model(batch.X, batch.mask)
 
     # transform log (pt/elempt) -> pt
+    pred_cls = torch.argmax(ypred[0], axis=-1)
     ypred[2][..., 0] = torch.exp(ypred[2][..., 0]) * batch.X[..., 1]
     batch.ygen[..., 2] = torch.exp(batch.ygen[..., 2]) * batch.X[..., 1]
 
@@ -50,13 +51,17 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
     batch.ygen[..., 6] = torch.exp(batch.ygen[..., 6]) * batch.X[..., 1]
 
+    ypred[2][..., 0][pred_cls == 0] = 0
+    ypred[2][..., 4][pred_cls == 0] = 0
+    batch.ygen[..., 2][batch.ygen[..., 0] == 0] = 0
+    batch.ygen[..., 6][batch.ygen[..., 0] == 0] = 0
+
     # convert all outputs to float32 in case running in float16 or bfloat16
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
     ygen = unpack_target(batch.ygen.to(torch.float32))
     ycand = unpack_target(batch.ycand.to(torch.float32))
     ypred = unpack_predictions(ypred)
-
     genjets_msk = batch.genjets[:, :, 0].cpu() != 0
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
     genjets = vector.awk(
