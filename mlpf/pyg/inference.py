@@ -49,7 +49,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     # transform log (E/elemE) -> E
     ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
-    batch.ygen[..., 6] = torch.exp(batch.ygen[..., 6]) * batch.X[..., 1]
+    batch.ygen[..., 6] = torch.exp(batch.ygen[..., 6]) * batch.X[..., 5]
 
     ypred[2][..., 0][pred_cls == 0] = 0
     ypred[2][..., 4][pred_cls == 0] = 0
@@ -57,12 +57,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     batch.ygen[..., 6][batch.ygen[..., 0] == 0] = 0
 
     # convert all outputs to float32 in case running in float16 or bfloat16
-    ypred = tuple([
-        ypred[0].to(torch.float),
-        ypred[1].to(torch.float),
-        ypred[2].to(torch.float),
-        tuple([y.to(torch.float) for y in ypred[3]])
-    ])
+    ypred = tuple([ypred[0].to(torch.float), ypred[1].to(torch.float), ypred[2].to(torch.float), tuple([y.to(torch.float) for y in ypred[3]])])
 
     ygen = unpack_target(batch.ygen.to(torch.float32), model)
     ycand = unpack_target(batch.ycand.to(torch.float32), model)
