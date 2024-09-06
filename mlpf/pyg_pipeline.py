@@ -106,7 +106,9 @@ def get_outdir(resume_training, load):
 
 
 def main():
-    # import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('agg')
+
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
 

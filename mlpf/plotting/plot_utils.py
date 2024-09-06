@@ -530,6 +530,16 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
 
     plt.figure()
     b = np.linspace(0, 1000, 100)
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_target_pt"]))
+    plt.hist(
+        pt,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
     plt.hist(
         pt,

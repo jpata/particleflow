@@ -94,14 +94,14 @@ def mlpf_loss(y, ypred, batch):
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
 
     # binary loss for particle / no-particle classification
-    loss_binary_classification = 100 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
+    loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
 
     # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    loss_pid_classification = 100*loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression = 1e-5*torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_regression[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
@@ -123,21 +123,18 @@ def mlpf_loss(y, ypred, batch):
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)
-    # pt * cos_phi
-    px = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 3:4].detach() * msk_pred_particle
-    # pt * sin_phi
-    py = ypred["momentum"][..., 0:1].detach() * ypred["momentum"][..., 2:3].detach() * msk_pred_particle
+    pred_pt = torch.exp(ypred["pt"].detach())*batch.X[..., 1]
+    px = torch.unsqueeze(pred_pt * ypred["cos_phi"].detach(), axis=-1)
+    py = torch.unsqueeze(pred_pt * ypred["sin_phi"].detach(), axis=-1)
+
     # sum across events
     pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
 
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
     # compute the classification loss between bin indices
-    loss["Bins_pt"] = 10 * torch.nn.functional.cross_entropy(ypred["pt_bins"].transpose(1, 2), y["pt_bins"])
-    loss["Bins_eta"] = 10 * torch.nn.functional.cross_entropy(ypred["eta_bins"].transpose(1, 2), y["eta_bins"])
-    loss["Bins_sin_phi"] = 10 * torch.nn.functional.cross_entropy(ypred["sin_phi_bins"].transpose(1, 2), y["sin_phi_bins"])
-    loss["Bins_cos_phi"] = 10 * torch.nn.functional.cross_entropy(ypred["cos_phi_bins"].transpose(1, 2), y["cos_phi_bins"])
-    loss["Bins_energy"] = 10 * torch.nn.functional.cross_entropy(ypred["energy_bins"].transpose(1, 2), y["energy_bins"])
+    loss_bins = 10 * loss_obj_id(ypred["energy_bins"].transpose(1, 2), y["energy_bins"])
+    loss["Bins_energy"] = loss_bins.mean()
 
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
         axis=-1
@@ -152,11 +149,6 @@ def mlpf_loss(y, ypred, batch):
     loss["Total"] = (
         loss["Classification_binary"]
         + loss["Classification"]
-        + loss["Regression"]
-        + loss["Bins_pt"]
-        + loss["Bins_eta"]
-        + loss["Bins_sin_phi"]
-        + loss["Bins_cos_phi"]
         + loss["Bins_energy"]
     )
 
@@ -289,7 +281,7 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             ]
             e_bin_true = ygen["energy_bins"][batch.mask].cpu()[msk & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)]
             if len(e_bin_pred) > 0 and len(e_bin_true) > 0:
-                cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(256))
+                cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(32))
                 plt.imshow(cm, cmap="Blues", norm=matplotlib.colors.LogNorm())
                 tensorboard_writer.add_figure("energy_cm_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
@@ -400,7 +392,7 @@ def train_and_valid(
                 ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             # save the events of the first validation batch for quick checks
-            if itrain == 0:
+            if rank == 0 and itrain == 0:
                 validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -572,10 +564,6 @@ def train_mlpf(
         "Classification",
         "Classification_binary",
         "Regression",
-        "Bins_pt",
-        "Bins_eta",
-        "Bins_sin_phi",
-        "Bins_cos_phi",
         "Bins_energy",
     ]
 
@@ -957,7 +945,6 @@ def run(rank, world_size, config, args, outdir, logfile):
 
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
-            testdir_name = "_bestweights"
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name)

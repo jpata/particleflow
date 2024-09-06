@@ -366,17 +366,8 @@ class MLPF(nn.Module):
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
-        self.bins_pt = torch.nn.Parameter(torch.linspace(-8,8,256), requires_grad=False)
-        self.bins_eta = torch.nn.Parameter(torch.linspace(-8,8,256), requires_grad=False)
-        self.bins_sin_phi = torch.nn.Parameter(torch.linspace(-1,1,256), requires_grad=False)
-        self.bins_cos_phi = torch.nn.Parameter(torch.linspace(-1,1,256), requires_grad=False)
-        self.bins_energy = torch.nn.Parameter(torch.linspace(-8,8,256), requires_grad=False)
-
-        self.nn_pt_bins = ffn(decoding_dim, 256, width, self.act, dropout_ff)
-        self.nn_eta_bins = ffn(decoding_dim, 256, width, self.act, dropout_ff)
-        self.nn_sin_phi_bins = ffn(decoding_dim, 256, width, self.act, dropout_ff)
-        self.nn_cos_phi_bins = ffn(decoding_dim, 256, width, self.act, dropout_ff)
-        self.nn_energy_bins = ffn(decoding_dim, 256, width, self.act, dropout_ff)
+        self.bins_energy = torch.nn.Parameter(torch.linspace(-8,8,32), requires_grad=False)
+        self.nn_energy_bins = ffn(decoding_dim, 32, width, self.act, dropout_ff)
 
 
     # @torch.compile
@@ -429,24 +420,17 @@ class MLPF(nn.Module):
         if self.use_pre_layernorm:
             final_embedding_reg = self.final_norm_reg(final_embedding_reg)
 
-        preds_pt_bins = self.nn_pt_bins(final_embedding_reg)
-        preds_eta_bins = self.nn_eta_bins(final_embedding_reg)
-        preds_sin_phi_bins = self.nn_sin_phi_bins(final_embedding_reg)
-        preds_cos_phi_bins = self.nn_cos_phi_bins(final_embedding_reg)
         preds_energy_bins = self.nn_energy_bins(final_embedding_reg)
-
-        pt_base = self.bins_pt[torch.argmax(preds_pt_bins, axis=-1)]*mask
-        eta_base = self.bins_eta[torch.argmax(preds_eta_bins, axis=-1)]*mask
-        sin_phi_base = self.bins_sin_phi[torch.argmax(preds_sin_phi_bins, axis=-1)]*mask
-        cos_phi_base = self.bins_cos_phi[torch.argmax(preds_cos_phi_bins, axis=-1)]*mask
-        energy_base = self.bins_energy[torch.argmax(preds_energy_bins, axis=-1)]*mask
+        energy_base = torch.unsqueeze(self.bins_energy[torch.argmax(preds_energy_bins, axis=-1)]*mask, axis=-1)
+        eta = X_features[..., 2:3]
+        pt_base = torch.sqrt(energy_base**2 - (torch.tanh(eta) * energy_base) ** 2)
         
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
-        preds_pt = torch.unsqueeze(pt_base, axis=-1) + self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
-        preds_eta = torch.unsqueeze(eta_base, axis=-1) + self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
-        preds_sin_phi = torch.unsqueeze(sin_phi_base, axis=-1) + self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
-        preds_cos_phi = torch.unsqueeze(cos_phi_base, axis=-1) + self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
-        preds_energy = torch.unsqueeze(energy_base, axis=-1) + self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
+        preds_pt = pt_base + self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
+        preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
+        preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
+        preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
+        preds_energy = energy_base + self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        return preds_binary_particle, preds_pid, preds_momentum, (preds_pt_bins, preds_eta_bins, preds_sin_phi_bins, preds_cos_phi_bins, preds_energy_bins)
+        return preds_binary_particle, preds_pid, preds_momentum, preds_energy_bins

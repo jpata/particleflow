@@ -30,11 +30,11 @@ model:
 
   learned_representation_mode: last #last, concat
   input_encoding: joint #split, joint
-  pt_mode: direct-elemtype
-  eta_mode: linear-elemtype
-  sin_phi_mode: linear-elemtype
-  cos_phi_mode: linear-elemtype
-  energy_mode: direct-elemtype
+  pt_mode: direct
+  eta_mode: linear
+  sin_phi_mode: linear
+  cos_phi_mode: linear
+  energy_mode: direct
 
   gnn_lsh:
     conv_type: gnn_lsh

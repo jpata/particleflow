@@ -57,7 +57,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     batch.ygen[..., 6][batch.ygen[..., 0] == 0] = 0
 
     # convert all outputs to float32 in case running in float16 or bfloat16
-    ypred = tuple([ypred[0].to(torch.float), ypred[1].to(torch.float), ypred[2].to(torch.float), tuple([y.to(torch.float) for y in ypred[3]])])
+    ypred = tuple([y for y in ypred[3]])
 
     ygen = unpack_target(batch.ygen.to(torch.float32), model)
     ycand = unpack_target(batch.ycand.to(torch.float32), model)
