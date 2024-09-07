@@ -97,11 +97,11 @@ def mlpf_loss(y, ypred, batch):
     loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
 
     # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = 100*loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    loss_pid_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = 1e-5*torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression = 1e-3 * torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_regression[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
@@ -122,18 +122,25 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression"] = reg_losses.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
-    msk_pred_particle = torch.unsqueeze(torch.argmax(ypred["cls_binary"].detach(), axis=1) != 0, axis=-1)
-    pred_pt = torch.exp(ypred["pt"].detach())*batch.X[..., 1]
-    px = torch.unsqueeze(pred_pt * ypred["cos_phi"].detach(), axis=-1)
-    py = torch.unsqueeze(pred_pt * ypred["sin_phi"].detach(), axis=-1)
+    pred_pt = torch.exp(ypred["pt"].detach()) * batch.X[..., 1]
+
+    # print("pred pt", ypred["pt"])
+    # print("true pt", y["pt"])
+
+    px = torch.unsqueeze(pred_pt * ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
+    py = torch.unsqueeze(pred_pt * ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
 
     # sum across events
-    pred_met = torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2
+    pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
 
+    # print("pred met", pred_met.squeeze(dim=-1))
+    # print("true met", batch.genmet)
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
-    # compute the classification loss between bin indices
-    loss_bins = 10 * loss_obj_id(ypred["energy_bins"].transpose(1, 2), y["energy_bins"])
+    # compute the classification loss between bin indices, for the cases where there was a true particle
+    loss_bins = 10 * loss_obj_id(ypred["energy_bins"].transpose(1, 2), y["energy_bins"]).reshape(y["cls_id"].shape)
+    loss_bins[y["cls_id"] == 0] *= 0
+    # print("pred bins", torch.argmax(ypred["energy_bins"], axis=-1))
     loss["Bins_energy"] = loss_bins.mean()
 
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
@@ -146,11 +153,7 @@ def mlpf_loss(y, ypred, batch):
     std = was_input_true[batch.mask].std(axis=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    loss["Total"] = (
-        loss["Classification_binary"]
-        + loss["Classification"]
-        + loss["Bins_energy"]
-    )
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"]
 
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
@@ -264,6 +267,7 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
     ).numpy()
 
     if tensorboard_writer:
+        sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
         for xcls in np.unique(X[:, 0]):
             fig = plt.figure()
             msk = X[:, 0] == xcls
@@ -284,6 +288,13 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
                 cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(32))
                 plt.imshow(cm, cmap="Blues", norm=matplotlib.colors.LogNorm())
                 tensorboard_writer.add_figure("energy_cm_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure()
+            b = np.linspace(0, 1, 100)
+            plt.hist(sig_prob[msk & (ygen_flat[:, 0] == 0)], bins=b, histtype="step")
+            plt.hist(sig_prob[msk & (ygen_flat[:, 0] != 0)], bins=b, histtype="step")
+            plt.xlabel("particle proba")
+            tensorboard_writer.add_figure("sig_proba_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
         tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ygen[batch.mask][:, 2], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
