@@ -437,12 +437,8 @@ def train_and_valid(
                     tensorboard_writer.flush()
                     loss_accum = 0.0
 
-                    # extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-                    # torch.save(
-                    #     {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
-                    #     f"{outdir}/step_weights.pth",
-                    # )
-                    # save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
+                    extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
+                    save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
 
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
