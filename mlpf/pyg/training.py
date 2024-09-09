@@ -94,14 +94,15 @@ def mlpf_loss(y, ypred, batch):
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
 
     # binary loss for particle / no-particle classification
-    loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
+    # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
+    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
 
     # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = 100 * loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
+    loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = 1e-3 * torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
+    loss_regression = torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
     loss_regression[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
@@ -114,31 +115,26 @@ def mlpf_loss(y, ypred, batch):
     loss["Classification"] = loss_pid_classification.sum() / nelem
 
     # normalize loss with stddev to stabilize across batches with very different pt, E distributions
-    # mom_normalizer = y["momentum"][y["cls_id"] != 0].std(axis=0)
     reg_losses = loss_regression[y["cls_id"] != 0]
 
     # average over all true particles
-    # loss["Regression"] = (reg_losses / mom_normalizer).sum() / npart
     loss["Regression"] = reg_losses.sum() / npart
 
     # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
+    # compute predicted pt from model output
     pred_pt = torch.exp(ypred["pt"].detach()) * batch.X[..., 1]
 
-    # print("pred pt", ypred["pt"])
-    # print("true pt", y["pt"])
-
+    # compute MET
     px = torch.unsqueeze(pred_pt * ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
     py = torch.unsqueeze(pred_pt * ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
-
-    # sum across events
+    # sum across particle axis in event
     pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
-
-    # print("pred met", pred_met.squeeze(dim=-1))
-    # print("true met", batch.genmet)
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
     # compute the classification loss between bin indices, for the cases where there was a true particle
-    loss_bins = 10 * loss_obj_id(ypred["energy_bins"].transpose(1, 2), y["energy_bins"]).reshape(y["cls_id"].shape)
+    loss_bins = 10 * torch.nn.functional.cross_entropy(ypred["energy_bins"].transpose(1, 2), y["energy_bins"], reduction="none").reshape(
+        y["cls_id"].shape
+    )
     loss_bins[y["cls_id"] == 0] *= 0
     # print("pred bins", torch.argmax(ypred["energy_bins"], axis=-1))
     loss["Bins_energy"] = loss_bins.mean()
@@ -150,15 +146,19 @@ def mlpf_loss(y, ypred, batch):
         axis=-1
     )
 
+    # standardize Wasserstein loss
     std = was_input_true[batch.mask].std(axis=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"]
+    # this is the final loss to be optimized
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"] + loss["Regression"]
 
+    # store these separately but detached
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
     loss["Regression"] = loss["Regression"].detach()
     loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
+
     return loss
 
 
@@ -265,6 +265,8 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         [X, ygen_flat, ypred_binary, ypred_cls, ypred_p4],
         axis=-1,
     ).numpy()
+    df = pandas.DataFrame(arr)
+    df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
 
     if tensorboard_writer:
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
@@ -320,9 +322,6 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
         ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ygen[batch.mask][:, 6])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
-
-    df = pandas.DataFrame(arr)
-    df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
 
 
 def train_and_valid(
@@ -438,12 +437,12 @@ def train_and_valid(
                     tensorboard_writer.flush()
                     loss_accum = 0.0
 
-                    extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-                    torch.save(
-                        {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
-                        f"{outdir}/step_weights.pth",
-                    )
-                    save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
+                    # extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
+                    # torch.save(
+                    #     {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
+                    #     f"{outdir}/step_weights.pth",
+                    # )
+                    # save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
 
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size

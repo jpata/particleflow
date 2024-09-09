@@ -144,7 +144,6 @@ X_FEATURES = {
 Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 
-
 def unpack_target(y, model):
     ret = {}
     ret["cls_id"] = y[..., 0].long()
@@ -167,7 +166,7 @@ def unpack_target(y, model):
 
     ret["ispu"] = y[..., -1]
 
-    ret["energy_bins"] = torch.clamp(torch.searchsorted(model.bins_energy, ret["energy"].contiguous()), 0, len(model.bins_energy)-1)
+    ret["energy_bins"] = torch.clamp(torch.searchsorted(model.bins_energy, ret["energy"].contiguous()), 0, len(model.bins_energy) - 1)
 
     return ret
 
@@ -175,7 +174,7 @@ def unpack_target(y, model):
 def unpack_predictions(preds):
     ret = {}
     ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], preds_energy_bins = preds
-    
+
     # ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
@@ -306,7 +305,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=1e-5)
+        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule

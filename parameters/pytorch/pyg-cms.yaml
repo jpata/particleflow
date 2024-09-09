@@ -29,7 +29,7 @@ model:
     # - nn_pt
 
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
+  input_encoding: split #split, joint
   pt_mode: direct
   eta_mode: linear
   sin_phi_mode: linear
@@ -60,8 +60,8 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
-    head_dim: 16
+    activation: "gelu"
+    head_dim: 64
     num_heads: 32
     attention_type: flash
     use_pre_layernorm: True
