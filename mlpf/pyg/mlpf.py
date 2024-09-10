@@ -7,77 +7,6 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from pyg.logger import _logger
 import math
 
-
-def get_activation(activation):
-    if activation == "elu":
-        act = nn.ELU
-    elif activation == "relu":
-        act = nn.ReLU
-    elif activation == "relu6":
-        act = nn.ReLU6
-    elif activation == "leakyrelu":
-        act = nn.LeakyReLU
-    elif activation == "gelu":
-        act = nn.GELU
-    return act
-
-
-class SelfAttentionLayer(nn.Module):
-    def __init__(
-        self,
-        activation="elu",
-        embedding_dim=128,
-        num_heads=2,
-        width=128,
-        dropout_mha=0.1,
-        dropout_ff=0.1,
-        attention_type="efficient",
-    ):
-        super(SelfAttentionLayer, self).__init__()
-
-        # to enable manual override for ONNX export
-        self.enable_ctx_manager = True
-
-        self.attention_type = attention_type
-        self.act = get_activation(activation)
-        if self.attention_type == "flash_external":
-            from flash_attn.modules.mha import MHA
-
-            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
-        else:
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
-        self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
-        self.dropout = torch.nn.Dropout(dropout_ff)
-        _logger.info("using attention_type={}".format(attention_type))
-        # params for torch sdp_kernel
-        self.attn_params = {
-            "math": [SDPBackend.MATH],
-            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-            "flash": [SDPBackend.FLASH_ATTENTION],
-        }
-
-    def forward(self, x, mask):
-        # explicitly call the desired attention mechanism
-        if self.attention_type == "flash_external":
-            mha_out = self.mha(x)
-        else:
-            if self.enable_ctx_manager:
-                with sdpa_kernel(self.attn_params[self.attention_type]):
-                    mha_out = self.mha(x, x, x, need_weights=False)[0]
-            else:
-                mha_out = self.mha(x, x, x, need_weights=False)[0]
-
-        x = x + mha_out
-        x = self.norm0(x)
-        x = x + self.seq(x)
-        x = self.norm1(x)
-        x = self.dropout(x)
-        x = x * mask.unsqueeze(-1)
-        return x
-
-
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
     #        18ec173f95aa220af753358bf860b16b6691edb2/timm/layers/weight_init.py#L8
@@ -124,6 +53,20 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         # Clamp to ensure it's in the proper range
         tensor.clamp_(min=a, max=b)
         return tensor
+
+
+def get_activation(activation):
+    if activation == "elu":
+        act = nn.ELU
+    elif activation == "relu":
+        act = nn.ReLU
+    elif activation == "relu6":
+        act = nn.ReLU6
+    elif activation == "leakyrelu":
+        act = nn.LeakyReLU
+    elif activation == "gelu":
+        act = nn.GELU
+    return act
 
 
 class PreLnSelfAttentionLayer(nn.Module):
@@ -187,30 +130,6 @@ class PreLnSelfAttentionLayer(nn.Module):
         x = mha_out + self.seq(x)
         x = self.dropout(x)
         x = x * mask_
-        return x
-
-
-class MambaLayer(nn.Module):
-    def __init__(self, activation="elu", embedding_dim=128, width=128, d_state=16, d_conv=4, expand=2, dropout=0.1):
-        super(MambaLayer, self).__init__()
-        self.act = get_activation(activation)
-        from mamba_ssm import Mamba
-
-        self.mamba = Mamba(
-            d_model=embedding_dim,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-        self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
-        self.dropout = torch.nn.Dropout(dropout)
-
-    def forward(self, x, mask):
-        x = self.mamba(x)
-        x = self.norm0(x + self.seq(x))
-        x = self.dropout(x)
-        x = x * (~mask.unsqueeze(-1))
         return x
 
 
@@ -288,6 +207,7 @@ class MLPF(nn.Module):
         sin_phi_mode="linear",
         cos_phi_mode="linear",
         energy_mode="linear",
+        log_eratio_max=8,
         # element types which actually exist in the dataset
         elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
         # should the conv layer outputs be concatted (concat) or take the last (last)
@@ -308,10 +228,6 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
-        # mamba specific parameters
-        d_state=16,
-        d_conv=4,
-        expand=2,
     ):
         super(MLPF, self).__init__()
 
@@ -352,12 +268,10 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
 
-                attention_layer = PreLnSelfAttentionLayer if self.use_pre_layernorm else SelfAttentionLayer
-
                 for i in range(num_convs):
                     lastlayer = i == num_convs - 1
                     self.conv_id.append(
-                        attention_layer(
+                        PreLnSelfAttentionLayer(
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
@@ -369,7 +283,7 @@ class MLPF(nn.Module):
                         )
                     )
                     self.conv_reg.append(
-                        attention_layer(
+                        PreLnSelfAttentionLayer(
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
@@ -380,12 +294,6 @@ class MLPF(nn.Module):
                             learnable_queries=lastlayer,
                         )
                     )
-            elif self.conv_type == "mamba":
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                for i in range(num_convs):
-                    self.conv_id.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
-                    self.conv_reg.append(MambaLayer(activation, embedding_dim, width, d_state, d_conv, expand, dropout_ff))
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -425,7 +333,7 @@ class MLPF(nn.Module):
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
-        self.bins_energy = torch.nn.Parameter(torch.linspace(-8, 8, 32), requires_grad=False)
+        self.bins_energy = torch.nn.Parameter(torch.linspace(-log_eratio_max, log_eratio_max, 32), requires_grad=False)
         self.nn_energy_bins = ffn(decoding_dim, 32, width, self.act, dropout_ff)
 
     # @torch.compile

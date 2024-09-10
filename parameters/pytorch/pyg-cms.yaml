@@ -35,6 +35,7 @@ model:
   sin_phi_mode: linear
   cos_phi_mode: linear
   energy_mode: direct
+  log_eratio_max: 8
 
   gnn_lsh:
     conv_type: gnn_lsh
