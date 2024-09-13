@@ -12,6 +12,9 @@ from pathlib import Path
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import yaml
 from pyg.training import device_agnostic_run, override_config, run_hpo, run_ray_training
 from utils import create_experiment_dir
@@ -107,7 +110,8 @@ def get_outdir(resume_training, load):
 
 def main():
     import matplotlib
-    matplotlib.use('agg')
+
+    matplotlib.use("agg")
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()

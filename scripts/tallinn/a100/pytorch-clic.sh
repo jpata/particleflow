@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:mig:1
+#SBATCH --gres gpu:a100:1
 #SBATCH --mem-per-gpu 50G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
@@ -13,4 +13,4 @@ singularity exec -B /scratch/persistent --nv \
     --env KERAS_BACKEND=torch \
     $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 1 \
     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
-    --train --conv-type attention --num-epochs 50 --gpu-batch-multiplier 10 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --comet --ntrain $1 --nvalid 10000
+    --train --conv-type attention --num-epochs 10 --gpu-batch-multiplier 128 --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --comet --attention-type math

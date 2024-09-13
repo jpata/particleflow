@@ -166,6 +166,8 @@ def unpack_target(y, model):
 
     ret["ispu"] = y[..., -1]
 
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model = model.module
     ret["energy_bins"] = torch.clamp(torch.searchsorted(model.bins_energy, ret["energy"].contiguous()), 0, len(model.bins_energy) - 1)
 
     return ret

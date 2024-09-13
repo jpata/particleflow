@@ -48,7 +48,7 @@ from pyg.utils import (
 
 import fastjet
 from pyg.inference import make_plots, run_predictions
-from pyg.mlpf import MLPF
+from pyg.mlpf import set_save_attention, MLPF
 from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
 
@@ -328,10 +328,10 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             attn_name = os.path.basename(attn).split(".")[0]
             attn_matrix = np.load(attn)["att"]
             batch_size = min(attn_matrix.shape[0], 8)
-            fig, axes = plt.subplots(1,batch_size, figsize=((batch_size*3, 1*3)))
+            fig, axes = plt.subplots(1, batch_size, figsize=((batch_size * 3, 1 * 3)))
             for ibatch in range(batch_size):
                 plt.sca(axes[ibatch])
-                #plot the attention matrix of the first event in the batch
+                # plot the attention matrix of the first event in the batch
                 plt.imshow(attn_matrix[ibatch].T, cmap="Blues", norm=matplotlib.colors.LogNorm(vmin=1e-5, vmax=1))
                 plt.xticks([])
                 plt.yticks([])
@@ -392,7 +392,8 @@ def train_and_valid(
         cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
-        model.set_save_attention(outdir, False)
+        if rank == 0:
+            set_save_attention(model, outdir, False)
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen, model)
@@ -406,7 +407,7 @@ def train_and_valid(
             else:
                 with torch.no_grad():
                     if rank == 0 and itrain == 0:
-                        model.set_save_attention(outdir, True)
+                        set_save_attention(model, outdir, True)
                     ypred_raw = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred_raw)

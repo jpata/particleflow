@@ -8,6 +8,7 @@ from pyg.logger import _logger
 import math
 import numpy as np
 
+
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
     #        18ec173f95aa220af753358bf860b16b6691edb2/timm/layers/weight_init.py#L8
@@ -129,7 +130,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if self.attention_type == "math":
             key_padding_mask = ~mask
 
-        #default path, for FlashAttn/Math backend
+        # default path, for FlashAttn/Math backend
         if self.enable_ctx_manager:
             with sdpa_kernel(self.attn_params[self.attention_type]):
                 mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
@@ -137,10 +138,14 @@ class PreLnSelfAttentionLayer(nn.Module):
                 if self.save_attention:
                     att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=key_padding_mask)[1]
                     att_mat = att_mat.detach().cpu().numpy()
-                    np.savez(open("{}/attn_{}.npz".format(self.outdir, self.name), "wb"), att=att_mat, in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy())
+                    np.savez(
+                        open("{}/attn_{}.npz".format(self.outdir, self.name), "wb"),
+                        att=att_mat,
+                        in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
+                    )
 
         else:
-            #path for ONNX export
+            # path for ONNX export
             mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
         mha_out = mha_out * mask_
@@ -289,7 +294,7 @@ class MLPF(nn.Module):
                 self.conv_reg = nn.ModuleList()
 
                 for i in range(self.num_convs):
-                    lastlayer = (i == self.num_convs - 1)
+                    lastlayer = i == self.num_convs - 1
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
                             name="conv_id_{}".format(i),
@@ -426,10 +431,13 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_energy_bins
 
-    def set_save_attention(self, outdir, save_attention):
-        if self.conv_type == "attention":
-            for iconv in range(self.num_convs):
-                self.conv_id[iconv].outdir = outdir
-                self.conv_reg[iconv].outdir = outdir
-                self.conv_id[iconv].save_attention = save_attention
-                self.conv_reg[iconv].save_attention = save_attention
+
+def set_save_attention(model, outdir, save_attention):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model = model.module
+    if model.conv_type == "attention":
+        for iconv in range(model.num_convs):
+            model.conv_id[iconv].outdir = outdir
+            model.conv_reg[iconv].outdir = outdir
+            model.conv_id[iconv].save_attention = save_attention
+            model.conv_reg[iconv].save_attention = save_attention
