@@ -18,6 +18,7 @@ import numpy as np
 import pandas
 import matplotlib
 import matplotlib.pyplot as plt
+import glob
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -323,6 +324,22 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ygen[batch.mask][:, 6])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
+        for attn in sorted(list(glob.glob(f"{outdir}/attn_conv_*.npz"))):
+            attn_name = os.path.basename(attn).split(".")[0]
+            attn_matrix = np.load(attn)["att"]
+            batch_size = min(attn_matrix.shape[0], 8)
+            fig, axes = plt.subplots(1,batch_size, figsize=((batch_size*3, 1*3)))
+            for ibatch in range(batch_size):
+                plt.sca(axes[ibatch])
+                #plot the attention matrix of the first event in the batch
+                plt.imshow(attn_matrix[ibatch].T, cmap="Blues", norm=matplotlib.colors.LogNorm(vmin=1e-5, vmax=1))
+                plt.xticks([])
+                plt.yticks([])
+                plt.colorbar(fraction=0.04, pad=0.0)
+                plt.title("event {}".format(ibatch))
+            plt.suptitle(attn_name)
+            tensorboard_writer.add_figure(attn_name, fig, global_step=epoch)
+
 
 def train_and_valid(
     rank,
@@ -375,6 +392,7 @@ def train_and_valid(
         cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
+        model.set_save_attention(outdir, False)
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen, model)
@@ -387,6 +405,8 @@ def train_and_valid(
                 ypred_raw = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
+                    if rank == 0 and itrain == 0:
+                        model.set_save_attention(outdir, True)
                     ypred_raw = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred_raw)

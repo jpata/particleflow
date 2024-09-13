@@ -114,6 +114,9 @@ class PreLnSelfAttentionLayer(nn.Module):
             self.queries = nn.Parameter(torch.zeros(1, 1, embedding_dim), requires_grad=True)
             trunc_normal_(self.queries, std=0.02)
 
+        self.save_attention = False
+        self.outdir = ""
+
     def forward(self, x, mask):
         mask_ = mask.unsqueeze(-1)
         x = self.norm0(x * mask_)
@@ -122,15 +125,23 @@ class PreLnSelfAttentionLayer(nn.Module):
         if self.learnable_queries:
             q = self.queries.expand(*x.shape) * mask_
 
+        key_padding_mask = None
+        if self.attention_type == "math":
+            key_padding_mask = ~mask
+
+        #default path, for FlashAttn/Math backend
         if self.enable_ctx_manager:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=~mask)[0]
-                # att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=~mask)[1].detach()
-                # att_mat = att_mat.detach().cpu().numpy()
-                # import pdb;pdb.set_trace()
-                # np.savez(open("attn_{}.npz".format(self.name), "wb"), att=att_mat, )
+                mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
+
+                if self.save_attention:
+                    att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=key_padding_mask)[1]
+                    att_mat = att_mat.detach().cpu().numpy()
+                    np.savez(open("{}/attn_{}.npz".format(self.outdir, self.name), "wb"), att=att_mat, in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy())
+
         else:
-            mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=~mask)[0]
+            #path for ONNX export
+            mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
         mha_out = mha_out * mask_
 
@@ -261,7 +272,7 @@ class MLPF(nn.Module):
             width = num_heads * head_dim
 
         # embedding of the inputs
-        if num_convs != 0:
+        if self.num_convs != 0:
             if self.input_encoding == "joint":
                 self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
                 self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
@@ -277,8 +288,8 @@ class MLPF(nn.Module):
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
 
-                for i in range(num_convs):
-                    lastlayer = i == num_convs - 1
+                for i in range(self.num_convs):
+                    lastlayer = (i == self.num_convs - 1)
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
                             name="conv_id_{}".format(i),
@@ -308,7 +319,7 @@ class MLPF(nn.Module):
             elif self.conv_type == "gnn_lsh":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
-                for i in range(num_convs):
+                for i in range(self.num_convs):
                     gnn_conf = {
                         "inout_dim": embedding_dim,
                         "bin_size": self.bin_size,
@@ -324,7 +335,7 @@ class MLPF(nn.Module):
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         if self.learned_representation_mode == "concat":
-            decoding_dim = self.input_dim + num_convs * embedding_dim
+            decoding_dim = self.input_dim + self.num_convs * embedding_dim
         elif self.learned_representation_mode == "last":
             decoding_dim = self.input_dim + embedding_dim
 
@@ -414,3 +425,11 @@ class MLPF(nn.Module):
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_energy_bins
+
+    def set_save_attention(self, outdir, save_attention):
+        if self.conv_type == "attention":
+            for iconv in range(self.num_convs):
+                self.conv_id[iconv].outdir = outdir
+                self.conv_reg[iconv].outdir = outdir
+                self.conv_id[iconv].save_attention = save_attention
+                self.conv_reg[iconv].save_attention = save_attention
