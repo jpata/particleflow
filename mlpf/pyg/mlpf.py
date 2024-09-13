@@ -6,6 +6,7 @@ from .gnn_lsh import CombinedGraphLayer
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from pyg.logger import _logger
 import math
+import numpy as np
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
@@ -72,6 +73,7 @@ def get_activation(activation):
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
+        name="",
         activation="elu",
         embedding_dim=128,
         num_heads=2,
@@ -82,6 +84,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         learnable_queries=False,
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
+        self.name = name
 
         # to enable manual override for ONNX export
         self.enable_ctx_manager = True
@@ -121,9 +124,15 @@ class PreLnSelfAttentionLayer(nn.Module):
 
         if self.enable_ctx_manager:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                mha_out = self.mha(q, x, x, need_weights=False)[0] * mask_
+                mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=~mask)[0]
+                # att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=~mask)[1].detach()
+                # att_mat = att_mat.detach().cpu().numpy()
+                # import pdb;pdb.set_trace()
+                # np.savez(open("attn_{}.npz".format(self.name), "wb"), att=att_mat, )
         else:
-            mha_out = self.mha(q, x, x, need_weights=False)[0] * mask_
+            mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=~mask)[0]
+
+        mha_out = mha_out * mask_
 
         mha_out = x + mha_out
         x = self.norm1(mha_out)
@@ -272,6 +281,7 @@ class MLPF(nn.Module):
                     lastlayer = i == num_convs - 1
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
+                            name="conv_id_{}".format(i),
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
@@ -284,6 +294,7 @@ class MLPF(nn.Module):
                     )
                     self.conv_reg.append(
                         PreLnSelfAttentionLayer(
+                            name="conv_reg_{}".format(i),
                             activation=activation,
                             embedding_dim=embedding_dim,
                             num_heads=num_heads,
