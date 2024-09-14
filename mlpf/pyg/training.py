@@ -48,7 +48,9 @@ from pyg.utils import (
 
 import fastjet
 from pyg.inference import make_plots, run_predictions
-from pyg.mlpf import set_save_attention, MLPF
+
+# from pyg.mlpf import set_save_attention
+from pyg.mlpf import MLPF
 from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
 
@@ -121,15 +123,25 @@ def mlpf_loss(y, ypred, batch):
     # average over all true particles
     loss["Regression"] = reg_losses.sum() / npart
 
-    # in case we are using the 3D-padded mode, we can compute a few additional event-level monitoring losses
     # compute predicted pt from model output
-    pred_pt = torch.exp(ypred["pt"].detach()) * batch.X[..., 1]
+    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
+    pred_e = torch.unsqueeze(torch.exp(ypred["energy"]) * batch.X[..., 5], axis=-1) * msk_pred_particle
+    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"], axis=-1) * msk_pred_particle
+    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"], axis=-1) * msk_pred_particle
+    pred_pz = pred_pt * torch.sinh(torch.unsqueeze(ypred["eta"], axis=-1)) * msk_pred_particle
+    pred_mass2 = pred_e**2 - (pred_pt**2 + pred_pz**2)
+
+    gen_pt = torch.unsqueeze(torch.exp(y["pt"]) * batch.X[..., 1], axis=-1) * msk_true_particle
+    gen_e = torch.unsqueeze(torch.exp(y["energy"]) * batch.X[..., 5], axis=-1) * msk_true_particle
+    # gen_px = gen_pt * torch.unsqueeze(y["cos_phi"], axis=-1) * msk_true_particle
+    # gen_py = gen_pt * torch.unsqueeze(y["sin_phi"], axis=-1) * msk_true_particle
+    gen_pz = gen_pt * torch.sinh(torch.unsqueeze(y["eta"], axis=-1)) * msk_true_particle
+    gen_mass2 = gen_e**2 - (gen_pt**2 + gen_pz**2)
+    loss["Mass"] = 0.01 * torch.nn.functional.huber_loss(pred_mass2, gen_mass2)
 
     # compute MET
-    px = torch.unsqueeze(pred_pt * ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
-    py = torch.unsqueeze(pred_pt * ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
     # sum across particle axis in event
-    pred_met = torch.sqrt(torch.sum(px, axis=-2) ** 2 + torch.sum(py, axis=-2) ** 2)
+    pred_met = torch.sqrt(torch.sum(pred_px.detach(), axis=-2) ** 2 + torch.sum(pred_py.detach(), axis=-2) ** 2)
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
     # compute the classification loss between bin indices, for the cases where there was a true particle
@@ -152,7 +164,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"] + loss["Regression"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"] + loss["Regression"] + loss["Mass"]
 
     # store these separately but detached
     loss["Classification_binary"] = loss["Classification_binary"].detach()
@@ -394,8 +406,8 @@ def train_and_valid(
         cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
-        if rank == 0:
-            set_save_attention(model, outdir, False)
+        # if rank == 0:
+        #     set_save_attention(model, outdir, False)
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen, model)
@@ -408,8 +420,8 @@ def train_and_valid(
                 ypred_raw = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    if rank == 0 and itrain == 0:
-                        set_save_attention(model, outdir, True)
+                    # if rank == 0 and itrain == 0:
+                    #     set_save_attention(model, outdir, True)
                     ypred_raw = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred_raw)
@@ -543,6 +555,8 @@ def train_and_valid(
 
     if world_size > 1:
         dist.barrier()
+    if device_type == "cuda":
+        torch.cuda.empty_cache()
 
     return epoch_loss
 
@@ -594,6 +608,7 @@ def train_mlpf(
         "Classification_binary",
         "Regression",
         "Bins_energy",
+        "Mass",
     ]
 
     losses = {}
