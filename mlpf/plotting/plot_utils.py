@@ -590,6 +590,67 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
     )
 
 
+
+    plt.figure()
+    b = np.linspace(-5, 5, 100)
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_target_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_cand_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="PF",
+    )
+
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_pred_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="MLPF",
+    )
+
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_gen_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Truth",
+    )
+
+    plt.xlabel("jet $\eta$")
+    plt.ylabel("Jets / bin")
+    plt.yscale("log")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    ax = plt.gca()
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], 10 * ylim[1])
+
+    if dataset:
+        EXPERIMENT_LABELS[dataset](ax)
+    if sample:
+        sample_label(ax, sample)
+
+    save_img(
+        "jet_eta.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
 def plot_jet_ratio(
     yvals,
     epoch=None,
