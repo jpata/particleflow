@@ -329,6 +329,8 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             attn_matrix = np.load(attn)["att"]
             batch_size = min(attn_matrix.shape[0], 8)
             fig, axes = plt.subplots(1, batch_size, figsize=((batch_size * 3, 1 * 3)))
+            if isinstance(axes, matplotlib.axes._axes.Axes):
+                axes = [axes]
             for ibatch in range(batch_size):
                 plt.sca(axes[ibatch])
                 # plot the attention matrix of the first event in the batch
