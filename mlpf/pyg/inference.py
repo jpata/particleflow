@@ -92,8 +92,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     jets_coll = {}
     for typ, ydata in zip(["cand", "target"], [ycand, ygen]):
         clsid = awkward.unflatten(ydata["cls_id"], counts)
-        msk = clsid != 0
         p4 = awkward.unflatten(ydata["p4"], counts)
+        msk = (clsid != 0) & (p4[..., 0] > 1)  # temporary pt cut on particles to form jets
         vec = vector.awk(
             awkward.zip(
                 {
