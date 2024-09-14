@@ -137,10 +137,11 @@ def mlpf_loss(y, ypred, batch):
     # gen_py = gen_pt * torch.unsqueeze(y["sin_phi"], axis=-1) * msk_true_particle
     gen_pz = gen_pt * torch.sinh(torch.unsqueeze(y["eta"].detach(), axis=-1)) * msk_true_particle
     gen_mass2 = gen_e**2 - (gen_pt**2 + gen_pz**2)
-    loss["Mass"] = 1e-3*torch.log(1e-3 + torch.nn.functional.huber_loss(pred_mass2, gen_mass2).detach())
 
-    # compute MET
-    # sum across particle axis in event
+    #loss term to make particle on shell
+    loss["Mass"] = 1e-2*torch.log(1e-3 + torch.nn.functional.huber_loss(pred_mass2, gen_mass2).detach())
+
+    # compute MET, sum across particle axis in event
     pred_met = torch.sqrt(torch.sum(pred_px.detach(), axis=-2) ** 2 + torch.sum(pred_py.detach(), axis=-2) ** 2)
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
