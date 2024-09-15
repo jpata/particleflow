@@ -935,8 +935,10 @@ def run(rank, world_size, config, args, outdir, logfile):
 
             if args.dataset == "clic":
                 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+                jet_ptcut = 15
             else:
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+                jet_ptcut = 3
 
             device_type = "cuda" if isinstance(rank, int) else "cpu"
             with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -948,7 +950,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                     sample,
                     outdir,
                     jetdef,
-                    jet_ptcut=15.0,
+                    jet_ptcut=jet_ptcut,
                     jet_match_dr=0.1,
                     dir_name=testdir_name,
                 )
