@@ -162,7 +162,7 @@ def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
         nn.Linear(input_dim, width),
         act(),
-        torch.nn.LayerNorm(width),
+        # torch.nn.LayerNorm(width),
         nn.Dropout(dropout),
         nn.Linear(width, output_dim),
     )
@@ -187,7 +187,6 @@ class RegressionOutput(nn.Module):
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
     def forward(self, elems, x, orig_value):
-
         if self.mode == "direct":
             nn_out = self.nn(x)
             return nn_out
