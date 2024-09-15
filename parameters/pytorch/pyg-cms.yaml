@@ -35,17 +35,16 @@ model:
   sin_phi_mode: linear
   cos_phi_mode: linear
   energy_mode: direct
-  log_eratio_max: 8
 
   gnn_lsh:
     conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
-    num_convs: 3
+    num_convs: 8
     dropout_ff: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 640
+    bin_size: 320
     max_num_bins: 200
     distance_dim: 128
     layernorm: True

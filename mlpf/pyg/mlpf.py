@@ -232,7 +232,6 @@ class MLPF(nn.Module):
         sin_phi_mode="linear",
         cos_phi_mode="linear",
         energy_mode="linear",
-        log_eratio_max=8,
         # element types which actually exist in the dataset
         elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
         # should the conv layer outputs be concatted (concat) or take the last (last)
@@ -360,9 +359,6 @@ class MLPF(nn.Module):
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
-        self.bins_energy = torch.nn.Parameter(torch.linspace(-log_eratio_max, log_eratio_max, 32), requires_grad=False)
-        self.nn_energy_bins = ffn(decoding_dim, 32, width, self.act, dropout_ff)
-
     # @torch.compile
     def forward(self, X_features, mask):
         Xfeat_normed = X_features
@@ -413,23 +409,21 @@ class MLPF(nn.Module):
         if self.use_pre_layernorm:
             final_embedding_reg = self.final_norm_reg(final_embedding_reg)
 
-        preds_energy_bins = self.nn_energy_bins(final_embedding_reg)
-
-        # take the highest-proba bin
-        # energy_base = torch.unsqueeze(self.bins_energy[torch.argmax(preds_energy_bins, axis=-1)]*mask, axis=-1)
-
-        # sum over the bins with the probabilities
-        energy_base = torch.unsqueeze(torch.sum(torch.softmax(preds_energy_bins, axis=-1) * self.bins_energy, axis=-1), axis=-1)
-
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
-        preds_pt = energy_base + self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
+        preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
         preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
         preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
         preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
-        preds_energy = energy_base + self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
-        preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        return preds_binary_particle, preds_pid, preds_momentum, preds_energy_bins
+        pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
+        pz_real = pt_real * torch.sinh(preds_eta.detach())
+        e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
+        e_real[~mask] = 0
+        e_real[torch.isinf(e_real)] = 0
+        e_real[torch.isnan(e_real)] = 0
+        preds_energy = e_real + torch.clamp(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]), 1e-5, 10)
+        preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
+        return preds_binary_particle, preds_pid, preds_momentum
 
 
 def set_save_attention(model, outdir, save_attention):

@@ -168,14 +168,13 @@ def unpack_target(y, model):
 
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model = model.module
-    ret["energy_bins"] = torch.clamp(torch.searchsorted(model.bins_energy, ret["energy"].contiguous()), 0, len(model.bins_energy) - 1)
 
     return ret
 
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], preds_energy_bins = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
 
     # ret["cls_id_onehot"], ret["momentum"] = preds
 
@@ -207,7 +206,6 @@ def unpack_predictions(preds):
         ],
         axis=-1,
     )
-    ret["energy_bins"] = preds_energy_bins
 
     return ret
 

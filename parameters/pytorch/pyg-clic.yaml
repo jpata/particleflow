@@ -32,7 +32,6 @@ model:
   sin_phi_mode: linear
   cos_phi_mode: linear
   energy_mode: direct
-  log_eratio_max: 1
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -51,7 +50,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 8
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0

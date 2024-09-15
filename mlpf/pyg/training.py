@@ -113,45 +113,21 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[batch.mask == 0] *= 0
     loss_regression[batch.mask == 0] *= 0
 
+    # average over all target particles
+    loss["Regression"] = loss_regression.sum() / npart
+
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
 
-    # normalize loss with stddev to stabilize across batches with very different pt, E distributions
-    reg_losses = loss_regression[y["cls_id"] != 0]
-
-    # average over all true particles
-    loss["Regression"] = reg_losses.sum() / npart
-
     # compute predicted pt from model output
-    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
-    pred_e = torch.unsqueeze(torch.exp(ypred["energy"]) * batch.X[..., 5], axis=-1) * msk_pred_particle
-    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"], axis=-1) * msk_pred_particle
-    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"], axis=-1) * msk_pred_particle
-    pred_pz = pred_pt * torch.sinh(torch.unsqueeze(ypred["eta"], axis=-1)) * msk_pred_particle
-    pred_mass2 = pred_e**2 - (pred_pt**2 + pred_pz**2)
-
-    gen_pt = torch.unsqueeze(torch.exp(y["pt"]) * batch.X[..., 1], axis=-1) * msk_true_particle
-    gen_e = torch.unsqueeze(torch.exp(y["energy"]) * batch.X[..., 5], axis=-1) * msk_true_particle
-    # gen_px = gen_pt * torch.unsqueeze(y["cos_phi"], axis=-1) * msk_true_particle
-    # gen_py = gen_pt * torch.unsqueeze(y["sin_phi"], axis=-1) * msk_true_particle
-    gen_pz = gen_pt * torch.sinh(torch.unsqueeze(y["eta"].detach(), axis=-1)) * msk_true_particle
-    gen_mass2 = gen_e**2 - (gen_pt**2 + gen_pz**2)
-
-    #loss term to make particle on shell
-    loss["Mass"] = 1e-2*torch.log(1e-3 + torch.nn.functional.huber_loss(pred_mass2, gen_mass2).detach())
+    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"].detach()) * batch.X[..., 1], axis=-1) * msk_pred_particle
+    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
+    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
 
     # compute MET, sum across particle axis in event
-    pred_met = torch.sqrt(torch.sum(pred_px.detach(), axis=-2) ** 2 + torch.sum(pred_py.detach(), axis=-2) ** 2)
+    pred_met = torch.sqrt(torch.sum(pred_px, axis=-2) ** 2 + torch.sum(pred_py, axis=-2) ** 2)
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-
-    # compute the classification loss between bin indices, for the cases where there was a true particle
-    loss_bins = 10 * torch.nn.functional.cross_entropy(ypred["energy_bins"].transpose(1, 2), y["energy_bins"], reduction="none").reshape(
-        y["cls_id"].shape
-    )
-    loss_bins[y["cls_id"] == 0] *= 0
-    # print("pred bins", torch.argmax(ypred["energy_bins"], axis=-1))
-    loss["Bins_energy"] = loss_bins.mean()
 
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
         axis=-1
@@ -165,7 +141,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Bins_energy"] + loss["Regression"] + loss["Mass"]
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
 
     # store these separately but detached
     loss["Classification_binary"] = loss["Classification_binary"].detach()
@@ -294,16 +270,6 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [E/E_elem]")
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
-
-            fig = plt.figure()
-            e_bin_pred = torch.argmax(ypred["energy_bins"][batch.mask].detach().cpu(), axis=-1)[
-                msk & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            ]
-            e_bin_true = ygen["energy_bins"][batch.mask].cpu()[msk & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)]
-            if len(e_bin_pred) > 0 and len(e_bin_true) > 0:
-                cm = sklearn.metrics.confusion_matrix(e_bin_true, e_bin_pred, labels=range(32))
-                plt.imshow(cm, cmap="Blues", norm=matplotlib.colors.LogNorm())
-                tensorboard_writer.add_figure("energy_cm_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure()
             b = np.linspace(0, 1, 100)
@@ -608,8 +574,7 @@ def train_mlpf(
         "Classification",
         "Classification_binary",
         "Regression",
-        "Bins_energy",
-        "Mass",
+        # "Mass",
     ]
 
     losses = {}
