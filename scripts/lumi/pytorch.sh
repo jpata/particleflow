@@ -40,4 +40,4 @@ singularity exec \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 1 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 200 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001
+     --train --gpu-batch-multiplier 256 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.001
