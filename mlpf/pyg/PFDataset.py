@@ -34,6 +34,59 @@ class TFDSDataSource:
             ret["ycand"] = ret["ycand"][sortidx]
             ret["ygen"] = ret["ygen"][sortidx]
 
+        if self.ds.dataset_info.name.startswith("cms_"):
+            # track, target label neutral hadron -> reconstruct as charged hadron
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 2)] = 1
+
+            # track, target label photon -> reconstruct as charged hadron
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 5)] = 1
+
+            # ECAL cluster, target label charged hadron -> reconstruct as photon
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 1)] = 5
+
+            # HCAL cluster, target label charged hadron -> reconstruct as neutral hadron
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 1)] = 2
+
+            # ECAL cluster, target label electron -> reconstruct as photon
+            # ret["ygen"][:, 0][(ret["X"][:, 0]==4) & (ret["ygen"][:, 0] == 6)] = 5
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 7)] = 5
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 7)] = 2
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 1)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 1)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 2)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 2)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 6)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 6)] = 3
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 7)] = 4
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 7)] = 3
+
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 1)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 1)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 6)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 7)] = 2
+            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 7)] = 2
+
+            # set pt for HO which would otherwise be 0
+            msk_ho = ret["X"][:, 0] == 10
+            eta = ret["X"][:, 2][msk_ho]
+            e = ret["X"][:, 5][msk_ho]
+            ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
+
+        # transform pt -> log(pt / elem pt), same for energy
+        ret["ygen"][:, 6] = np.log(ret["ygen"][:, 6] / ret["X"][:, 5])
+        ret["ygen"][:, 6][np.isnan(ret["ygen"][:, 6])] = 0.0
+        ret["ygen"][:, 6][np.isinf(ret["ygen"][:, 6])] = 0.0
+        ret["ygen"][:, 6][ret["ygen"][:, 0] == 0] = 0
+
+        ret["ygen"][:, 2] = np.log(ret["ygen"][:, 2] / ret["X"][:, 1])
+        ret["ygen"][:, 2][np.isnan(ret["ygen"][:, 2])] = 0.0
+        ret["ygen"][:, 2][np.isinf(ret["ygen"][:, 2])] = 0.0
+        ret["ygen"][:, 2][ret["ygen"][:, 0] == 0] = 0
+
         return ret
 
     def __len__(self):
@@ -178,10 +231,14 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
+            shuffle = split == "train"
             if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:
-                sampler = torch.utils.data.RandomSampler(dataset)
+                if shuffle:
+                    sampler = torch.utils.data.RandomSampler(dataset)
+                else:
+                    sampler = torch.utils.data.SequentialSampler(dataset)
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]

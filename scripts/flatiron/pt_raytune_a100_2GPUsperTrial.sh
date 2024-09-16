@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #SBATCH -t 168:00:00
-#SBATCH -N 3
+#SBATCH -N 2
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
-#SBATCH --constraint=ib-h100p
-#SBATCH --gpus-per-task=8
+#SBATCH --constraint=a100-80gb&sxm4
+#SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=64
 
 # Job name
@@ -31,7 +31,7 @@ which python3
 python3 --version
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-num_gpus=8
+num_gpus=4
 
 
 ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
@@ -45,8 +45,8 @@ nodes_array=( $nodes )
 node_1=${nodes_array[0]}
 ip=$(srun --nodes=1 --ntasks=1 -w $node_1 hostname --ip-address) # making redis-address
 port=6379
-ip_head=$ip:$port
-export ip_head
+export ip_head=$node_1:$port
+export head_node_ip=$node_1
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $node_1"
@@ -75,7 +75,7 @@ python3 -u mlpf/pyg_pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK/2)) \
-    --gpus 4 \
+    --gpus 2 \
     --gpu-batch-multiplier 4 \
     --num-workers 1 \
     --prefetch-factor 2

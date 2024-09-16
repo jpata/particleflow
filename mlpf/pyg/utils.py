@@ -144,7 +144,7 @@ X_FEATURES = {
 Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 
 
-def unpack_target(y):
+def unpack_target(y, model):
     ret = {}
     ret["cls_id"] = y[..., 0].long()
     ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
@@ -171,9 +171,7 @@ def unpack_target(y):
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_id_onehot"], ret["momentum"] = preds
-
-    # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
@@ -182,8 +180,14 @@ def unpack_predictions(preds):
     ret["cos_phi"] = ret["momentum"][..., 3]
     ret["energy"] = ret["momentum"][..., 4]
 
-    # get PID with the maximum proba
-    ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+    # first get the cases where a particle was predicted
+    ret["cls_id"] = torch.argmax(ret["cls_binary"], axis=-1)
+    # when a particle was predicted, get the particle ID
+    ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], axis=-1)[ret["cls_id"] == 1]
+
+    # get the predicted particle ID
+    # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+
     # particle properties
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     ret["p4"] = torch.cat(
@@ -294,7 +298,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=1e-5)
+        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule

@@ -1,5 +1,6 @@
 backend: pytorch
 
+save_attention: yes
 dataset: cms
 sort_data: yes
 data_dir:
@@ -29,22 +30,22 @@ model:
     # - nn_pt
 
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: linear
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
-    num_convs: 3
+    num_convs: 8
     dropout_ff: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 640
+    bin_size: 320
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -60,10 +61,11 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
-    head_dim: 16
+    activation: "gelu"
+    head_dim: 32
     num_heads: 32
     attention_type: flash
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
@@ -103,60 +105,25 @@ raytune:
 
 train_dataset:
   cms:
-#    physical_nopu:
-#      batch_size: 30
-#      samples:
-#        cms_pf_ttbar_nopu:
-#          version: 2.0.0
-#        cms_pf_vbf_nopu:
-#          version: 2.0.0
-#        cms_pf_qcd_nopu:
-#          version: 2.0.0
-#    multiparticlegun:
-#      batch_size: 4
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
+          version: 2.3.0
+        cms_pf_qcd:
+          version: 2.3.0
 
 valid_dataset:
   cms:
-#    physical_nopu:
-#      batch_size: 30
-#      samples:
-#        cms_pf_ttbar_nopu:
-#          version: 2.0.0
-#        cms_pf_vbf_nopu:
-#          version: 2.0.0
-#        cms_pf_qcd_nopu:
-#          version: 2.0.0
-#    multiparticlegun:
-#      batch_size: 5
-#      samples:
-#        cms_pf_multi_particle_gun:
-#          version: 2.0.0
     physical_pu:
       batch_size: 1
       samples:
-        cms_pf_qcd:
-          version: 2.0.0
         cms_pf_ttbar:
-          version: 2.0.0
-
+          version: 2.3.0
+        cms_pf_qcd:
+          version: 2.3.0
 test_dataset:
   cms_pf_ttbar:
-    version: 2.0.0
+    version: 2.3.0
   cms_pf_qcd:
-    version: 2.0.0
-#  cms_pf_ttbar_nopu:
-#    version: 2.0.0
-#  cms_pf_vbf_nopu:
-#    version: 2.0.0
-#  cms_pf_qcd_nopu:
-#    version: 2.0.0
+    version: 2.3.0

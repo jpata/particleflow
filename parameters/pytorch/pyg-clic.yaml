@@ -1,5 +1,6 @@
 backend: pytorch
 
+save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
@@ -10,7 +11,7 @@ num_epochs: 100
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -26,12 +27,12 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: linear
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -50,16 +51,17 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 6
+    num_convs: 4
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
-    head_dim: 16
+    activation: "gelu"
+    head_dim: 32
     num_heads: 32
-    attention_type: flash
+    attention_type: math
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
@@ -80,8 +82,8 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: # Note: please specify an absolute path
-  sched: asha # asha, hyperband
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
@@ -105,9 +107,9 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 2.1.0
 
 valid_dataset:
   clic:
@@ -115,12 +117,12 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.0.0
+          version: 2.1.0
 
 test_dataset:
   clic_edm_ttbar_pf:
-    version: 2.0.0
+    version: 2.1.0
   clic_edm_qq_pf:
-    version: 2.0.0
+    version: 2.1.0

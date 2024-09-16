@@ -115,6 +115,7 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
     "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
+    "cms_pf_vbf": r"VBF+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
     "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
     "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
@@ -529,6 +530,16 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
 
     plt.figure()
     b = np.linspace(0, 1000, 100)
+
+    pt = awkward.to_numpy(awkward.flatten(yvals["jets_target_pt"]))
+    plt.hist(
+        pt,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
     plt.hist(
         pt,
@@ -578,6 +589,67 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None,
         comet_experiment=comet_experiment,
     )
 
+
+
+    plt.figure()
+    b = np.linspace(-5, 5, 100)
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_target_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_cand_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="PF",
+    )
+
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_pred_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="MLPF",
+    )
+
+    eta = awkward.to_numpy(awkward.flatten(yvals["jets_gen_eta"]))
+    plt.hist(
+        eta,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Truth",
+    )
+
+    plt.xlabel("jet $\eta$")
+    plt.ylabel("Jets / bin")
+    plt.yscale("log")
+    plt.legend(loc="best")
+    if title:
+        plt.title(title)
+    ax = plt.gca()
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], 10 * ylim[1])
+
+    if dataset:
+        EXPERIMENT_LABELS[dataset](ax)
+    if sample:
+        sample_label(ax, sample)
+
+    save_img(
+        "jet_eta.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
 
 def plot_jet_ratio(
     yvals,
@@ -1074,6 +1146,68 @@ def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, c
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
         )
+
+
+def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
+    msk_cand = yvals["cand_cls_id"] != 0
+    msk_pred = yvals["pred_cls_id"] != 0
+    msk_gen = yvals["gen_cls_id"] != 0
+
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_gen & msk_cand]))
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_gen & msk_pred]))
+    gen_cand_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_gen & msk_cand]))
+    gen_pred_pt = awkward.to_numpy(awkward.flatten(yvals["gen_pt"][msk_gen & msk_pred]))
+    ratio_cand_pt = cand_pt / gen_cand_pt
+    ratio_pred_pt = pred_pt / gen_pred_pt
+
+    cand_e = awkward.to_numpy(awkward.flatten(yvals["cand_energy"][msk_gen & msk_cand]))
+    pred_e = awkward.to_numpy(awkward.flatten(yvals["pred_energy"][msk_gen & msk_pred]))
+    gen_cand_e = awkward.to_numpy(awkward.flatten(yvals["gen_energy"][msk_gen & msk_cand]))
+    gen_pred_e = awkward.to_numpy(awkward.flatten(yvals["gen_energy"][msk_gen & msk_pred]))
+    ratio_cand_e = cand_e / gen_cand_e
+    ratio_pred_e = pred_e / gen_pred_e
+
+    gen_cls_id = awkward.flatten(yvals["gen_cls_id"][msk_gen])
+    gen_cls_id1 = awkward.flatten(yvals["gen_cls_id"][msk_gen & msk_cand])
+    gen_cls_id2 = awkward.flatten(yvals["gen_cls_id"][msk_gen & msk_pred])
+    cls_ids = np.unique(awkward.values_astype(gen_cls_id, np.int64))
+    print("cls_ids", cls_ids)
+    for cls_id in cls_ids:
+        if cls_id == 0:
+            continue
+        clname = class_names[cls_id]
+
+        plt.figure()
+        b = np.linspace(0, 5, 100)
+        plt.hist(ratio_cand_pt[gen_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
+        plt.hist(ratio_pred_pt[gen_cls_id2 == cls_id], bins=b, label="MLPF", histtype="step")
+        plt.legend(loc="best")
+        if title:
+            plt.title(title + ", " + clname)
+        save_img(
+            "particle_pt_ratio_{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
+        plt.xlabel("Reconstructed / target $p_T$")
+        plt.clf()
+
+        plt.figure()
+        b = np.linspace(0, 5, 100)
+        plt.hist(ratio_cand_e[gen_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
+        plt.hist(ratio_pred_e[gen_cls_id2 == cls_id], bins=b, label="MLPF", histtype="step")
+        plt.legend(loc="best")
+        if title:
+            plt.title(title + ", " + clname)
+        save_img(
+            "particle_e_ratio_{}.png".format(cls_id),
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )
+        plt.xlabel("Reconstructed / target $E$")
+        plt.clf()
 
 
 def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):

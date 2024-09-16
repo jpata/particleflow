@@ -10,7 +10,7 @@ Y_FEATURES = cms_utils.Y_FEATURES
 _DESCRIPTION = """
 Dataset generated with CMSSW and full detector sim.
 
-TTbar events without PU in a Run3 setup.
+VBF events with PU 55-75 in a Run3 setup.
 """
 
 # TODO(cms_pf): BibTeX citation
@@ -18,23 +18,23 @@ _CITATION = """
 """
 
 
-class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
+class CmsPfVbf(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for cms_pf_vbf dataset."""
 
-    VERSION = tfds.core.Version("2.2.0")
+    VERSION = tfds.core.Version("2.1.0")
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
         "2.0.0": "New truth def based primarily on CaloParticles",
-        "2.2.0": "Split CaloParticles along tracks",
+        "2.1.0": "Additional statistics",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_vbf ~/tensorflow_datasets/
     """
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CmsPfTtbarNopu, self).__init__(*args, **kwargs)
+        super(CmsPfVbf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -59,7 +59,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
+        sample_dir = "VBF_TuneCP5_14TeV_pythia8_cfi"
         return cms_utils.split_sample(path / sample_dir / "raw")
 
     def _generate_examples(self, files):

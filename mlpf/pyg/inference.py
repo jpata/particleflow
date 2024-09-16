@@ -11,6 +11,7 @@ import tqdm
 import vector
 from jet_utils import build_dummy_array, match_two_jet_collections
 from plotting.plot_utils import (
+    get_class_names,
     compute_met_and_ratio,
     load_eval_data,
     plot_jets,
@@ -22,6 +23,7 @@ from plotting.plot_utils import (
     plot_met_response_binned,
     plot_num_elements,
     plot_particles,
+    plot_particle_ratio,
     plot_sum_energy,
 )
 
@@ -40,13 +42,26 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     batch = batch.to(rank)
     ypred = model(batch.X, batch.mask)
 
+    # transform log (pt/elempt) -> pt
+    pred_cls = torch.argmax(ypred[0], axis=-1)
+    ypred[2][..., 0] = torch.exp(ypred[2][..., 0]) * batch.X[..., 1]
+    batch.ygen[..., 2] = torch.exp(batch.ygen[..., 2]) * batch.X[..., 1]
+
+    # transform log (E/elemE) -> E
+    ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
+    batch.ygen[..., 6] = torch.exp(batch.ygen[..., 6]) * batch.X[..., 5]
+
+    ypred[2][..., 0][pred_cls == 0] = 0
+    ypred[2][..., 4][pred_cls == 0] = 0
+    batch.ygen[..., 2][batch.ygen[..., 0] == 0] = 0
+    batch.ygen[..., 6][batch.ygen[..., 0] == 0] = 0
+
     # convert all outputs to float32 in case running in float16 or bfloat16
     ypred = tuple([y.to(torch.float32) for y in ypred])
 
-    ygen = unpack_target(batch.ygen.to(torch.float32))
-    ycand = unpack_target(batch.ycand.to(torch.float32))
+    ygen = unpack_target(batch.ygen.to(torch.float32), model)
+    ycand = unpack_target(batch.ycand.to(torch.float32), model)
     ypred = unpack_predictions(ypred)
-
     genjets_msk = batch.genjets[:, :, 0].cpu() != 0
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
     genjets = vector.awk(
@@ -77,15 +92,18 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     jets_coll = {}
     for typ, ydata in zip(["cand", "target"], [ycand, ygen]):
         clsid = awkward.unflatten(ydata["cls_id"], counts)
+        pt = awkward.unflatten(ydata["pt"], counts)
+        eta = awkward.unflatten(ydata["eta"], counts)
+        phi = awkward.unflatten(ydata["phi"], counts)
+        e = awkward.unflatten(ydata["energy"], counts)
         msk = clsid != 0
-        p4 = awkward.unflatten(ydata["p4"], counts)
         vec = vector.awk(
             awkward.zip(
                 {
-                    "pt": p4[msk][:, :, 0],
-                    "eta": p4[msk][:, :, 1],
-                    "phi": p4[msk][:, :, 2],
-                    "e": p4[msk][:, :, 3],
+                    "pt": pt[msk],
+                    "eta": eta[msk],
+                    "phi": phi[msk],
+                    "e": e[msk],
                 }
             )
         )
@@ -178,7 +196,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
     mplhep.style.use(mplhep.styles.CMS)
-
+    class_names = get_class_names(sample)
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
@@ -241,3 +259,4 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
 
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
