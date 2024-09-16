@@ -64,10 +64,7 @@ model:
     head_dim: 16
     num_heads: 32
     attention_type: flash
-<<<<<<< HEAD
-=======
     use_pre_layernorm: True
->>>>>>> origin/fixes_sep6
 
   mamba:
     conv_type: mamba

@@ -87,8 +87,8 @@ class PreLnSelfAttentionLayer(nn.Module):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
 
-        # to enable manual override for ONNX export
-        self.enable_ctx_manager = False
+        # set to False to enable manual override for ONNX export
+        self.enable_ctx_manager = True
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
