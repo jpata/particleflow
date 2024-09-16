@@ -3,7 +3,6 @@ import torch.nn as nn
 
 from .gnn_lsh import CombinedGraphLayer
 
-from torch.nn.attention import SDPBackend, sdpa_kernel
 from pyg.logger import _logger
 import math
 import numpy as np
@@ -88,28 +87,25 @@ class PreLnSelfAttentionLayer(nn.Module):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
 
-        # to enable manual override for ONNX export
+        # set to False to enable manual override for ONNX export
         self.enable_ctx_manager = True
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
-        if self.attention_type == "flash_external":
-            from flash_attn.modules.mha import MHA
-
-            self.mha = MHA(embedding_dim, num_heads, dropout=dropout_mha)
-        else:
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
-        self.attn_params = {
-            "math": [SDPBackend.MATH],
-            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-            "flash": [SDPBackend.FLASH_ATTENTION],
-        }
+        if self.enable_ctx_manager:
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+            self.attn_params = {
+                "math": [SDPBackend.MATH],
+                "efficient": [SDPBackend.EFFICIENT_ATTENTION],
+                "flash": [SDPBackend.FLASH_ATTENTION],
+            }
 
         self.learnable_queries = learnable_queries
         self.elems_as_queries = elems_as_queries

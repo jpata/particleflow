@@ -1,24 +1,24 @@
 import numpy as np
 
-import numba
+# import numba
 import awkward
 import vector
 
 
-@numba.njit
+# @numba.njit
 def deltaphi(phi1, phi2):
     diff = phi1 - phi2
     return np.arctan2(np.sin(diff), np.cos(diff))
 
 
-@numba.njit
+# @numba.njit
 def deltar(eta1, phi1, eta2, phi2):
     deta = eta1 - eta2
     dphi = deltaphi(phi1, phi2)
     return np.sqrt(deta**2 + dphi**2)
 
 
-@numba.njit
+# @numba.njit
 def match_jets(jets1, jets2, deltaR_cut):
     iev = len(jets1)
     jet_inds_1_ev = []
