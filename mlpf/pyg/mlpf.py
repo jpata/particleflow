@@ -83,6 +83,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         dropout_ff=0.1,
         attention_type="efficient",
         learnable_queries=False,
+        elems_as_queries=False,
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
@@ -111,6 +112,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         }
 
         self.learnable_queries = learnable_queries
+        self.elems_as_queries = elems_as_queries
         if self.learnable_queries:
             self.queries = nn.Parameter(torch.zeros(1, 1, embedding_dim), requires_grad=True)
             trunc_normal_(self.queries, std=0.02)
@@ -118,13 +120,15 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.save_attention = False
         self.outdir = ""
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, initial_embedding):
         mask_ = mask.unsqueeze(-1)
         x = self.norm0(x * mask_)
 
         q = x
         if self.learnable_queries:
             q = self.queries.expand(*x.shape) * mask_
+        elif self.elems_as_queries:
+            q = initial_embedding * mask_
 
         key_padding_mask = None
         if self.attention_type == "math":
@@ -144,8 +148,8 @@ class PreLnSelfAttentionLayer(nn.Module):
                         in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
                     )
 
+        # path for ONNX export
         else:
-            # path for ONNX export
             mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
         mha_out = mha_out * mask_
@@ -162,7 +166,7 @@ def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
         nn.Linear(input_dim, width),
         act(),
-        # torch.nn.LayerNorm(width),
+        torch.nn.LayerNorm(width),
         nn.Dropout(dropout),
         nn.Linear(width, output_dim),
     )
@@ -179,6 +183,10 @@ class RegressionOutput(nn.Module):
             self.nn = ffn(embed_dim, 1, width, act, dropout)
         elif self.mode == "direct-elemtype":
             self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
+        elif self.mode == "direct-elemtype-split":
+            self.nn = nn.ModuleList()
+            for elem in range(len(self.elemtypes)):
+                self.nn.append(ffn(embed_dim, 1, width, act, dropout))
         # two outputs
         elif self.mode == "linear":
             self.nn = ffn(embed_dim, 2, width, act, dropout)
@@ -195,6 +203,13 @@ class RegressionOutput(nn.Module):
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
             nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return nn_out
+        elif self.mode == "direct-elemtype-split":
+            elem_outs = []
+            for elem in range(len(self.elemtypes)):
+                elem_outs.append(self.nn[elem](x))
+            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            elem_outs = torch.cat(elem_outs, axis=-1)
+            return torch.sum(elem_outs * elemtype_mask, axis=-1, keepdims=True)
         elif self.mode == "additive":
             nn_out = self.nn(x)
             return orig_value + nn_out
@@ -303,7 +318,8 @@ class MLPF(nn.Module):
                             dropout_mha=dropout_conv_id_mha,
                             dropout_ff=dropout_conv_id_ff,
                             attention_type=attention_type,
-                            learnable_queries=lastlayer,
+                            elems_as_queries=lastlayer,
+                            # learnable_queries=lastlayer,
                         )
                     )
                     self.conv_reg.append(
@@ -316,7 +332,8 @@ class MLPF(nn.Module):
                             dropout_mha=dropout_conv_reg_mha,
                             dropout_ff=dropout_conv_reg_ff,
                             attention_type=attention_type,
-                            learnable_queries=lastlayer,
+                            elems_as_queries=lastlayer,
+                            # learnable_queries=lastlayer,
                         )
                     )
             elif self.conv_type == "gnn_lsh":
@@ -338,9 +355,9 @@ class MLPF(nn.Module):
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
 
         if self.learned_representation_mode == "concat":
-            decoding_dim = self.input_dim + self.num_convs * embedding_dim
+            decoding_dim = self.num_convs * embedding_dim
         elif self.learned_representation_mode == "last":
-            decoding_dim = self.input_dim + embedding_dim
+            decoding_dim = embedding_dim
 
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
@@ -378,18 +395,18 @@ class MLPF(nn.Module):
 
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                out_padded = conv(conv_input, mask)
+                out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                out_padded = conv(conv_input, mask)
+                out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
 
         # id input
         if self.learned_representation_mode == "concat":
-            final_embedding_id = torch.cat([Xfeat_normed] + embeddings_id, axis=-1)
+            final_embedding_id = torch.cat(embeddings_id, axis=-1)
         elif self.learned_representation_mode == "last":
-            final_embedding_id = torch.cat([Xfeat_normed] + [embeddings_id[-1]], axis=-1)
+            final_embedding_id = torch.cat([embeddings_id[-1]], axis=-1)
 
         if self.use_pre_layernorm:
             final_embedding_id = self.final_norm_id(final_embedding_id)
@@ -401,9 +418,9 @@ class MLPF(nn.Module):
 
         # regression input
         if self.learned_representation_mode == "concat":
-            final_embedding_reg = torch.cat([Xfeat_normed] + embeddings_reg, axis=-1)
+            final_embedding_reg = torch.cat(embeddings_reg, axis=-1)
         elif self.learned_representation_mode == "last":
-            final_embedding_reg = torch.cat([Xfeat_normed] + [embeddings_reg[-1]], axis=-1)
+            final_embedding_reg = torch.cat([embeddings_reg[-1]], axis=-1)
 
         if self.use_pre_layernorm:
             final_embedding_reg = self.final_norm_reg(final_embedding_reg)
@@ -414,13 +431,14 @@ class MLPF(nn.Module):
         preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
         preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
 
+        # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
         pz_real = pt_real * torch.sinh(preds_eta.detach())
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
-        preds_energy = e_real + torch.clamp(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]), 1e-5, 10)
+        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum
 

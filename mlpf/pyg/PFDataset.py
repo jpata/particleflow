@@ -231,10 +231,14 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
+            shuffle = split == "train"
             if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+                sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:
-                sampler = torch.utils.data.SequentialSampler(dataset)
+                if shuffle:
+                    sampler = torch.utils.data.RandomSampler(dataset)
+                else:
+                    sampler = torch.utils.data.SequentialSampler(dataset)
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]

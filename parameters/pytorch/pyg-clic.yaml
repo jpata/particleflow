@@ -1,5 +1,6 @@
 backend: pytorch
 
+save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
@@ -8,7 +9,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.001
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
@@ -26,12 +27,12 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: direct
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: direct
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -50,7 +51,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 8
+    num_convs: 4
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0

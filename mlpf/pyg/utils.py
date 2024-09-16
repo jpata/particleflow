@@ -166,19 +166,12 @@ def unpack_target(y, model):
 
     ret["ispu"] = y[..., -1]
 
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model = model.module
-
     return ret
 
 
 def unpack_predictions(preds):
     ret = {}
     ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
-
-    # ret["cls_id_onehot"], ret["momentum"] = preds
-
-    # ret["charge"] = torch.argmax(ret["charge"], axis=1, keepdim=True) - 1
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]

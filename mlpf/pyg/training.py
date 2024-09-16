@@ -49,7 +49,7 @@ from pyg.utils import (
 import fastjet
 from pyg.inference import make_plots, run_predictions
 
-# from pyg.mlpf import set_save_attention
+from pyg.mlpf import set_save_attention
 from pyg.mlpf import MLPF
 from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
@@ -105,16 +105,33 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
-    loss_regression = torch.nn.functional.mse_loss(ypred["momentum"], y["momentum"], reduction="none")
-    loss_regression[y["cls_id"] == 0] *= 0
+    loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
+    loss_regression_eta = 1e-2 * torch.nn.functional.mse_loss(ypred["eta"], y["eta"], reduction="none")
+    loss_regression_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["sin_phi"], y["sin_phi"], reduction="none")
+    loss_regression_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["cos_phi"], y["cos_phi"], reduction="none")
+    loss_regression_energy = torch.nn.functional.mse_loss(ypred["energy"], y["energy"], reduction="none")
+
+    loss_regression_pt[y["cls_id"] == 0] *= 0
+    loss_regression_eta[y["cls_id"] == 0] *= 0
+    loss_regression_sin_phi[y["cls_id"] == 0] *= 0
+    loss_regression_cos_phi[y["cls_id"] == 0] *= 0
+    loss_regression_energy[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
     loss_binary_classification[batch.mask == 0] *= 0
     loss_pid_classification[batch.mask == 0] *= 0
-    loss_regression[batch.mask == 0] *= 0
+    loss_regression_pt[batch.mask == 0] *= 0
+    loss_regression_eta[batch.mask == 0] *= 0
+    loss_regression_sin_phi[batch.mask == 0] *= 0
+    loss_regression_cos_phi[batch.mask == 0] *= 0
+    loss_regression_energy[batch.mask == 0] *= 0
 
     # average over all target particles
-    loss["Regression"] = loss_regression.sum() / npart
+    loss["Regression_pt"] = loss_regression_pt.sum() / npart
+    loss["Regression_eta"] = loss_regression_eta.sum() / npart
+    loss["Regression_sin_phi"] = loss_regression_sin_phi.sum() / npart
+    loss["Regression_cos_phi"] = loss_regression_cos_phi.sum() / npart
+    loss["Regression_energy"] = loss_regression_energy.sum() / npart
 
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
@@ -141,12 +158,24 @@ def mlpf_loss(y, ypred, batch):
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
-    loss["Total"] = loss["Classification_binary"] + loss["Classification"] + loss["Regression"]
+    loss["Total"] = (
+        loss["Classification_binary"]
+        + loss["Classification"]
+        + loss["Regression_pt"]
+        + loss["Regression_eta"]
+        + loss["Regression_sin_phi"]
+        + loss["Regression_cos_phi"]
+        + loss["Regression_energy"]
+    )
 
     # store these separately but detached
     loss["Classification_binary"] = loss["Classification_binary"].detach()
     loss["Classification"] = loss["Classification"].detach()
-    loss["Regression"] = loss["Regression"].detach()
+    loss["Regression_pt"] = loss["Regression_pt"].detach()
+    loss["Regression_eta"] = loss["Regression_eta"].detach()
+    loss["Regression_sin_phi"] = loss["Regression_sin_phi"].detach()
+    loss["Regression_cos_phi"] = loss["Regression_cos_phi"].detach()
+    loss["Regression_energy"] = loss["Regression_energy"].detach()
     loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
 
     return loss
@@ -265,13 +294,79 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
             msk = X[:, 0] == xcls
             egen = ygen_flat[msk & (ygen_flat[:, 0] != 0), 6]
             epred = ypred_p4[msk & (ypred_binary_cls != 0), 4]
-            b = np.linspace(-8, 8, 100)
+            b = np.linspace(-4, 4, 100)
             plt.hist(egen, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [E/E_elem]")
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure()
+            msk = X[:, 0] == xcls
+            pt_gen = ygen_flat[msk & (ygen_flat[:, 0] != 0), 2]
+            pt_pred = ypred_p4[msk & (ypred_binary_cls != 0), 0]
+            b = np.linspace(-4, 4, 100)
+            plt.hist(egen, bins=b, histtype="step")
+            plt.hist(epred, bins=b, histtype="step")
+            plt.xlabel("log [pt/pt_elem]")
+            tensorboard_writer.add_figure("pt_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure(figsize=(5, 5))
+            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            egen = ygen_flat[msk, 6]
+            epred = ypred_p4[msk, 4]
+            b = np.linspace(-4, 4, 100)
+            plt.hist2d(egen, epred, bins=b, cmap="Blues")
+            plt.plot([-4, 4], [-4, 4], color="black", ls="--")
+            plt.xlabel("log [E_gen/E_elem]")
+            plt.ylabel("log [E_pred/E_elem]")
+            tensorboard_writer.add_figure("energy_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure(figsize=(5, 5))
+            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            pt_gen = ygen_flat[msk, 2]
+            pt_pred = ypred_p4[msk, 0]
+            b = np.linspace(-4, 4, 100)
+            plt.hist2d(pt_gen, pt_pred, bins=b, cmap="Blues")
+            plt.plot([-4, 4], [-4, 4], color="black", ls="--")
+            plt.xlabel("log [pt_gen/pt_elem]")
+            plt.ylabel("log [pt_pred/pt_elem]")
+            tensorboard_writer.add_figure("pt_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure(figsize=(5, 5))
+            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            eta_gen = ygen_flat[msk, 3]
+            eta_pred = ypred_p4[msk, 1]
+            b = np.linspace(-6, 6, 100)
+            plt.hist2d(eta_gen, eta_pred, bins=b, cmap="Blues")
+            plt.plot([-6, 6], [-6, 6], color="black", ls="--")
+            plt.xlabel("eta_gen")
+            plt.ylabel("eta_pred")
+            tensorboard_writer.add_figure("eta_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure(figsize=(5, 5))
+            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            sphi_gen = ygen_flat[msk, 4]
+            sphi_pred = ypred_p4[msk, 2]
+            b = np.linspace(-2, 2, 100)
+            plt.hist2d(sphi_gen, sphi_pred, bins=b, cmap="Blues")
+            plt.plot([-2, 2], [-2, 2], color="black", ls="--")
+            plt.xlabel("sin_phi_gen")
+            plt.ylabel("sin_phi_pred")
+            tensorboard_writer.add_figure("sphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure(figsize=(5, 5))
+            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            cphi_gen = ygen_flat[msk, 5]
+            cphi_pred = ypred_p4[msk, 3]
+            b = np.linspace(-2, 2, 100)
+            plt.hist2d(cphi_gen, cphi_pred, bins=b, cmap="Blues")
+            plt.plot([-2, 2], [-2, 2], color="black", ls="--")
+            plt.xlabel("cos_phi_gen")
+            plt.ylabel("cos_phi_pred")
+            tensorboard_writer.add_figure("cphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+
+            fig = plt.figure()
+            msk = X[:, 0] == xcls
             b = np.linspace(0, 1, 100)
             plt.hist(sig_prob[msk & (ygen_flat[:, 0] == 0)], bins=b, histtype="step")
             plt.hist(sig_prob[msk & (ygen_flat[:, 0] != 0)], bins=b, histtype="step")
@@ -312,12 +407,13 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
                 axes = [axes]
             for ibatch in range(batch_size):
                 plt.sca(axes[ibatch])
+                print(attn_matrix[ibatch])
                 # plot the attention matrix of the first event in the batch
-                plt.imshow(attn_matrix[ibatch].T, cmap="Blues", norm=matplotlib.colors.LogNorm(vmin=1e-5, vmax=1))
+                plt.imshow(attn_matrix[ibatch].T, cmap="Blues", norm=matplotlib.colors.LogNorm())
                 plt.xticks([])
                 plt.yticks([])
-                plt.colorbar(fraction=0.04, pad=0.0)
-                plt.title("event {}".format(ibatch))
+                plt.colorbar()
+                plt.title("event {}, m={:.2E}".format(ibatch, np.mean(attn_matrix[ibatch][attn_matrix[ibatch] > 0])))
             plt.suptitle(attn_name)
             tensorboard_writer.add_figure(attn_name, fig, global_step=epoch)
 
@@ -339,6 +435,7 @@ def train_and_valid(
     val_freq=None,
     dtype=torch.float32,
     tensorboard_writer=None,
+    save_attention=False,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -373,8 +470,7 @@ def train_and_valid(
         cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
-        # if rank == 0:
-        #     set_save_attention(model, outdir, False)
+        set_save_attention(model, outdir, False)
         batch = batch.to(rank, non_blocking=True)
 
         ygen = unpack_target(batch.ygen, model)
@@ -387,8 +483,9 @@ def train_and_valid(
                 ypred_raw = model(batch.X, batch.mask)
             else:
                 with torch.no_grad():
-                    # if rank == 0 and itrain == 0:
-                    #     set_save_attention(model, outdir, True)
+                    # save some attention matrices
+                    if save_attention and (rank == 0 or rank == "cpu") and itrain == 0:
+                        set_save_attention(model, outdir, True)
                     ypred_raw = model(batch.X, batch.mask)
 
         ypred = unpack_predictions(ypred_raw)
@@ -404,7 +501,7 @@ def train_and_valid(
                 ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             # save the events of the first validation batch for quick checks
-            if rank == 0 and itrain == 0:
+            if (rank == 0 or rank == "cpu") and itrain == 0:
                 validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -476,11 +573,19 @@ def train_and_valid(
                 )
                 intermediate_metrics = dict(
                     loss=intermediate_losses_t["Total"],
-                    reg_loss=intermediate_losses_t["Regression"],
+                    reg_pt_loss=intermediate_losses_t["Regression_pt"],
+                    reg_eta_loss=intermediate_losses_t["Regression_eta"],
+                    reg_sin_phi_loss=intermediate_losses_t["Regression_sin_phi"],
+                    reg_cos_phi_loss=intermediate_losses_t["Regression_cos_phi"],
+                    reg_energy_loss=intermediate_losses_t["Regression_energy"],
                     cls_loss=intermediate_losses_t["Classification"],
                     cls_binary_loss=intermediate_losses_t["Classification_binary"],
                     val_loss=intermediate_losses_v["Total"],
-                    val_reg_loss=intermediate_losses_v["Regression"],
+                    val_reg_pt_loss=intermediate_losses_v["Regression_pt"],
+                    val_reg_eta_loss=intermediate_losses_v["Regression_eta"],
+                    val_reg_sin_phi_loss=intermediate_losses_v["Regression_sin_phi"],
+                    val_reg_cos_phi_loss=intermediate_losses_v["Regression_cos_phi"],
+                    val_reg_energy_loss=intermediate_losses_v["Regression_energy"],
                     val_cls_loss=intermediate_losses_v["Classification"],
                     val_cls_binary_loss=intermediate_losses_v["Classification_binary"],
                     inside_epoch=epoch,
@@ -547,6 +652,7 @@ def train_mlpf(
     comet_experiment=None,
     comet_step_freq=None,
     val_freq=None,
+    save_attention=False,
 ):
     """
     Will run a full training by calling train().
@@ -573,7 +679,11 @@ def train_mlpf(
         "Total",
         "Classification",
         "Classification_binary",
-        "Regression",
+        "Regression_pt",
+        "Regression_eta",
+        "Regression_sin_phi",
+        "Regression_cos_phi",
+        "Regression_energy",
         # "Mass",
     ]
 
@@ -643,6 +753,7 @@ def train_mlpf(
             epoch=epoch,
             dtype=dtype,
             tensorboard_writer=tensorboard_writer_valid,
+            save_attention=save_attention,
         )
         t_valid = time.time()
 
@@ -680,11 +791,19 @@ def train_mlpf(
             # Ray automatically syncs the checkpoint to persistent storage
             metrics = dict(
                 loss=losses_t["Total"],
-                reg_loss=losses_t["Regression"],
+                reg_pt_loss=losses_t["Regression_pt"],
+                reg_eta_loss=losses_t["Regression_eta"],
+                reg_sin_phi_loss=losses_t["Regression_sin_phi"],
+                reg_cos_phi_loss=losses_t["Regression_cos_phi"],
+                reg_energy_loss=losses_t["Regression_energy"],
                 cls_loss=losses_t["Classification"],
                 cls_binary_loss=losses_t["Classification_binary"],
                 val_loss=losses_v["Total"],
-                val_reg_loss=losses_v["Regression"],
+                val_reg_pt_loss=losses_v["Regression_pt"],
+                val_reg_eta_loss=losses_v["Regression_eta"],
+                val_reg_sin_phi_loss=losses_v["Regression_sin_phi"],
+                val_reg_cos_phi_loss=losses_v["Regression_cos_phi"],
+                val_reg_energy_loss=losses_v["Regression_energy"],
                 val_cls_loss=losses_v["Classification"],
                 val_cls_binary_loss=losses_v["Classification_binary"],
                 epoch=epoch,
@@ -890,6 +1009,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment=comet_experiment,
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
+            save_attention=config["save_attention"],
         )
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
