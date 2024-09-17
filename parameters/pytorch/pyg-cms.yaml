@@ -1,6 +1,6 @@
 backend: pytorch
 
-save_attention: yes
+save_attention: no
 dataset: cms
 sort_data: yes
 data_dir:

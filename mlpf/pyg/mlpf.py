@@ -6,7 +6,7 @@ from .gnn_lsh import CombinedGraphLayer
 from pyg.logger import _logger
 import math
 import numpy as np
-
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
@@ -100,7 +100,6 @@ class PreLnSelfAttentionLayer(nn.Module):
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
         if self.enable_ctx_manager:
-            from torch.nn.attention import SDPBackend, sdpa_kernel
             self.attn_params = {
                 "math": [SDPBackend.MATH],
                 "efficient": [SDPBackend.EFFICIENT_ATTENTION],
