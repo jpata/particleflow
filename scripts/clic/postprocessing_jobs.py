@@ -19,7 +19,7 @@ def write_script(infiles, outpath):
 
     for inf in infiles:
         s += [
-            "singularity exec -B /local /home/software/singularity/pytorch.simg:2024-08-02 python3 "
+            "singularity exec -B /local /home/software/singularity/pytorch.simg:2024-08-18 python3 "
             + f"scripts/clic/postprocessing.py --input {inf} --outpath {outpath}"
         ]
     ret = "\n".join(s)
@@ -31,6 +31,9 @@ def write_script(infiles, outpath):
 samples = [
     ("/local/joosep/clic_edm4hep/2024_07/p8_ee_qq_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_qq_ecm380/"),
     ("/local/joosep/clic_edm4hep/2024_07/p8_ee_tt_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_tt_ecm380/"),
+    ("/local/joosep/clic_edm4hep/2024_07/p8_ee_WW_fullhad_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_WW_fullhad_ecm380/"),
+    ("/local/joosep/clic_edm4hep/2024_07/p8_ee_ZH_Htautau_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_ZH_Htautau_ecm380/"),
+    ("/local/joosep/clic_edm4hep/2024_07/p8_ee_Z_Ztautau_ecm380/root/", "/local/joosep/mlpf/clic_edm4hep/p8_ee_Z_Ztautau_ecm380/"),
 ]
 
 ichunk = 1
