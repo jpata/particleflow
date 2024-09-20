@@ -417,7 +417,7 @@ class MLPF(nn.Module):
         Xfeat_normed = X_features
 
         if self.standardize_inputs:
-            Xfeat_normed = standardize_inputs(X_features)
+            Xfeat_normed = standardize_inputs(X_features, self.elemtypes_nonzero)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
