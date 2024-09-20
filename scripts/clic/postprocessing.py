@@ -1,3 +1,4 @@
+import glob
 import os
 
 # noqa: to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
@@ -1056,7 +1057,7 @@ def parse_args():
 def process(args):
 
     if os.path.isdir(args.input) is True:
-        import glob
+        print("Will process all files in " + args.input)
 
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
