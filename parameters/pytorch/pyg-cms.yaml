@@ -9,7 +9,7 @@ gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.0001
+lr: 0.00001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -36,6 +36,7 @@ model:
   sin_phi_mode: linear
   cos_phi_mode: linear
   energy_mode: direct-elemtype-split
+
 
   gnn_lsh:
     conv_type: gnn_lsh
