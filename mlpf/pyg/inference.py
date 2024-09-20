@@ -24,12 +24,11 @@ from plotting.plot_utils import (
     plot_num_elements,
     plot_particles,
     plot_particle_ratio,
-    plot_sum_energy,
-    plot_elements
+    plot_elements,
 )
 
 from .logger import _logger
-from .utils import CLASS_NAMES, unpack_predictions, unpack_target
+from .utils import unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
@@ -216,15 +215,9 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
     plot_num_elements(X, cp_dir=plots_path)
-    # plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path)
 
-    plot_elements(
-        X, yvals,
-        cp_dir=plots_path,
-        dataset=dataset,
-        sample=sample
-    )
-    
+    plot_elements(X, yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+
     plot_jets(
         yvals,
         cp_dir=plots_path,

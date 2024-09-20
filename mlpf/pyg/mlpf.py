@@ -8,6 +8,7 @@ import math
 import numpy as np
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
+
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
     #        18ec173f95aa220af753358bf860b16b6691edb2/timm/layers/weight_init.py#L8

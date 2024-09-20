@@ -262,6 +262,7 @@ def sample_label(ax, sample, additional_text="", x=0.03, y=0.97):
     text = EVALUATION_DATASET_NAMES[sample]
     plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes)
 
+
 def particle_label(ax, pid):
     plt.text(
         0.03,
@@ -539,7 +540,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
     ax = plt.gca()
     ylim = ax.get_ylim()
     ax.set_ylim(ylim[0], 10 * ylim[1])
-    
+
     EXPERIMENT_LABELS[dataset](ax)
     sample_label(ax, sample)
     save_img(
@@ -560,7 +561,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         lw=2,
         label="Target",
     )
-    
+
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
     plt.hist(
         pt,
@@ -605,7 +606,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         comet_experiment=comet_experiment,
     )
 
-
     plt.figure()
     b = np.linspace(-5, 5, 100)
     eta = awkward.to_numpy(awkward.flatten(yvals["jets_target_eta"]))
@@ -616,7 +616,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         lw=2,
         label="Target",
     )
-    
+
     eta = awkward.to_numpy(awkward.flatten(yvals["jets_cand_eta"]))
     plt.hist(
         eta,
@@ -660,6 +660,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
     )
+
 
 def plot_jet_ratio(
     yvals,
@@ -757,6 +758,7 @@ def plot_jet_ratio(
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
     )
+
 
 def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     maxval = max(
@@ -1211,8 +1213,6 @@ def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_exper
     for cls_id in cls_ids:
         if cls_id == 0:
             continue
-        clname = class_names[cls_id]
-
         plt.figure()
         ax = plt.axes()
         b = np.linspace(0, 3, 100)
@@ -1248,13 +1248,14 @@ def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_exper
         )
         plt.clf()
 
+
 def plot_elements(X, yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     uniq_elems = np.unique(awkward.flatten(X[:, :, 0]))
     for elem in uniq_elems:
         elem = int(elem)
-        msk_elem = (X[:, :, 0] == elem) & (yvals["gen_cls_id"]!=0) & (yvals["pred_cls_id"]!=0)
-        ratio_gen = np.log(awkward.to_numpy(awkward.flatten((yvals["gen_pt"]/X[:, :, 1])[msk_elem])))
-        ratio_pred = np.log(awkward.to_numpy(awkward.flatten((yvals["pred_pt"]/X[:, :, 1])[msk_elem])))
+        msk_elem = (X[:, :, 0] == elem) & (yvals["gen_cls_id"] != 0) & (yvals["pred_cls_id"] != 0)
+        ratio_gen = np.log(awkward.to_numpy(awkward.flatten((yvals["gen_pt"] / X[:, :, 1])[msk_elem])))
+        ratio_pred = np.log(awkward.to_numpy(awkward.flatten((yvals["pred_pt"] / X[:, :, 1])[msk_elem])))
         ratio_gen[np.isnan(ratio_gen)] = 0
         ratio_pred[np.isnan(ratio_pred)] = 0
         ratio_gen[np.isinf(ratio_gen)] = 0
@@ -1269,7 +1270,9 @@ def plot_elements(X, yvals, epoch=None, cp_dir=None, comet_experiment=None, titl
         plt.hist2d(ratio_gen, ratio_pred, bins=bins, cmap="hot_r")
         plt.xlabel("log [target pT / elem pT]")
         plt.ylabel("log [reco pT / elem pT]")
-        plt.plot([mean_ratio - 2*std_ratio, mean_ratio + 2*std_ratio], [mean_ratio - 2*std_ratio, mean_ratio + 2*std_ratio], color="black", ls="--")
+        plt.plot(
+            [mean_ratio - 2 * std_ratio, mean_ratio + 2 * std_ratio], [mean_ratio - 2 * std_ratio, mean_ratio + 2 * std_ratio], color="black", ls="--"
+        )
         EXPERIMENT_LABELS[dataset](ax)
         sample_label(ax, sample)
         save_img(
@@ -1295,6 +1298,7 @@ def plot_elements(X, yvals, epoch=None, cp_dir=None, comet_experiment=None, titl
             comet_experiment=comet_experiment,
         )
         plt.clf()
+
 
 def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     msk_cand = yvals["cand_cls_id"] != 0
