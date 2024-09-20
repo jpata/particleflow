@@ -7,10 +7,10 @@
 IMG=/home/software/singularity/pytorch.simg:2024-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-clic_20240830_114129_279460/checkpoints/checkpoint-11-8.095037.pth
+WEIGHTS=experiments/pyg-clic_20240917_104006_818049/checkpoints/checkpoint-30-1.847780.pth
 singularity exec -B /scratch/persistent --nv \
      --env PYTHONPATH=hep_tfds \
      --env KERAS_BACKEND=torch \
      $IMG  python3 mlpf/pyg_pipeline.py --dataset clic --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
-     --test --make-plots --gpu-batch-multiplier 100 --load $WEIGHTS --dtype bfloat16 --ntest 10000
+     --test --make-plots --gpu-batch-multiplier 100 --load $WEIGHTS --dtype bfloat16 --ntest 100000

@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.1.0")
+    VERSION = tfds.core.Version("2.3.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
@@ -33,6 +33,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
         "1.7.1": "Increase stats to 400k events",
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.1.0": "Additional stats",
+        "2.3.0": "Split CaloParticles along tracks",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/

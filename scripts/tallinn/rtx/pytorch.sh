@@ -6,10 +6,11 @@
 
 IMG=/home/software/singularity/pytorch.simg:2024-08-18
 
-ulimit -n 10000
+ulimit -n 100000
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=hep_tfds \
     --env KERAS_BACKEND=torch \
     $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 4 \
     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
-    --train --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --num-workers 2 --prefetch-factor 100 --attention-type math --dtype float32
+    --train --test --make-plots --conv-type attention --gpu-batch-multiplier 10 --num-workers 4 \
+    --prefetch-factor 100 --attention-type math --dtype float32 --num-epochs 100 --checkpoint-freq 1 --lr 0.001

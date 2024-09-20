@@ -1,52 +1,46 @@
 backend: pytorch
 
-save_attention: no
-dataset: cms
-sort_data: yes
+dataset: cld
+sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
 num_epochs: 100
 patience: 20
-lr: 0.00001
+lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: attention
+conv_type: gnn_lsh
 ntrain:
 ntest:
 nvalid:
 num_workers: 0
 prefetch_factor:
-checkpoint_freq: 1
+checkpoint_freq:
 comet_name: particleflow-pt
 comet_offline: False
-comet_step_freq: 10
-dtype: bfloat16
+comet_step_freq: 100
+dtype: float32
 val_freq:  # run an extra validation run every val_freq training steps
 
 model:
   trainable: all
-    # - nn_energy
-    # - nn_pt
-
   learned_representation_mode: last #last, concat
-  input_encoding: split #split, joint
-  pt_mode: direct-elemtype-split
+  input_encoding: joint #split, joint
+  pt_mode: linear
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: direct-elemtype-split
-
+  energy_mode: linear
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 512
+    embedding_dim: 256
     width: 512
     num_convs: 8
-    dropout_ff: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 320
+    bin_size: 32
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -56,27 +50,28 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 6
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "gelu"
-    head_dim: 32
+    activation: "relu"
+    head_dim: 16
     num_heads: 32
     attention_type: flash
-    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
-    embedding_dim: 1024
-    width: 1024
-    num_convs: 4
-    dropout_ff: 0.0
+    embedding_dim: 128
+    width: 128
+    num_convs: 2
+    dropout: 0.0
     activation: "elu"
+    # transformer specific paramters
+    num_heads: 2
     # mamba specific paramters
-    d_state: 32
+    d_state: 16
     d_conv: 4
     expand: 2
 
@@ -87,7 +82,7 @@ lr_schedule_config:
 raytune:
   local_dir: # Note: please specify an absolute path
   sched: asha # asha, hyperband
-  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
   # Tune schedule specific parameters
@@ -105,26 +100,21 @@ raytune:
     n_random_steps: 10
 
 train_dataset:
-  cms:
-    physical_pu:
+  cld:
+    physical:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.3.0
-        cms_pf_qcd:
-          version: 2.3.0
+        cld_edm_ttbar_pf:
+          version: 2.0.0
 
 valid_dataset:
-  cms:
-    physical_pu:
+  cld:
+    physical:
       batch_size: 1
       samples:
-        cms_pf_ttbar:
-          version: 2.3.0
-        cms_pf_qcd:
-          version: 2.3.0
+        cld_edm_ttbar_pf:
+          version: 2.0.0
+
 test_dataset:
-  cms_pf_ttbar:
-    version: 2.3.0
-  cms_pf_qcd:
-    version: 2.3.0
+  cld_edm_ttbar_pf:
+    version: 2.0.0

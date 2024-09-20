@@ -1,5 +1,6 @@
 backend: pytorch
 
+save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
@@ -26,12 +27,12 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: linear
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -50,13 +51,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 12
-    dropout_ff: 0.1
+    num_convs: 4
+    dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
+    activation: "gelu"
     head_dim: 32
     num_heads: 32
     attention_type: math
