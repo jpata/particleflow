@@ -1060,6 +1060,7 @@ def process(args):
         import glob
 
         flist = glob.glob(args.input)
+        print("flist", flist)
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
             process_one_file(infile, outfile)
