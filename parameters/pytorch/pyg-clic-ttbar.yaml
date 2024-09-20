@@ -60,8 +60,6 @@ model:
     head_dim: 64
     num_heads: 12
     attention_type: math
-    use_improved_ffn: True
-    use_improved_attblock: False
 
   mamba:
     conv_type: mamba
