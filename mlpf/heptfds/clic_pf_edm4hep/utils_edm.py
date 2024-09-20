@@ -1,6 +1,7 @@
+import random
+
 import awkward as ak
 import numpy as np
-import random
 
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
@@ -39,6 +40,16 @@ X_FEATURES_CL = [
     "sigma_x",
     "sigma_y",
     "sigma_z",
+    # added by farouk
+    "energyError",
+    "sigma_energy",
+    "sigma_x_weighted",
+    "sigma_y_weighted",
+    "sigma_z_weighted",
+    "energy_weighted_width",
+    "pos_shower_max",
+    "width_shower_max",
+    "energy_shower_max",
 ]
 
 Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
