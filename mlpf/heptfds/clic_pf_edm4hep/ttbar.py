@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import tensorflow as tf
+import tensorflow_datasets as tfds
 from utils_edm import (
     X_FEATURES_CL,
     X_FEATURES_TRK,
@@ -8,8 +9,6 @@ from utils_edm import (
     generate_examples,
     split_sample,
 )
-
-import tensorflow_datasets as tfds
 
 _DESCRIPTION = """
 CLIC EDM4HEP dataset with ee -> ttbar at 380GeV.
@@ -36,6 +35,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.0.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
         "2.1.0": "Bump dataset size",
+        "2.2.0": "Additional cluster input features",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
