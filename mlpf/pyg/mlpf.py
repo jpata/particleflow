@@ -60,19 +60,18 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 def standardize_inputs(X, elemtypes_nonzero):
     import json
 
-    import numpy as np
-
     with open("/pfvolcentral/clic_standardization.json", "rb") as f:
         standard_dict = json.load(f)["2.1.0"]
 
     for i, ielem in enumerate(elemtypes_nonzero):
 
+        Xfeat_normed_msked = X.clone()
+
         # get mean/std of features of that elem
-        mean = np.array(standard_dict[f"PFelement{ielem}"]["mean"])
-        std = np.array(standard_dict[f"PFelement{ielem}"]["std"])
+        mean = torch.tensor(standard_dict[f"PFelement{ielem}"]["mean"]).to(Xfeat_normed_msked.device)
+        std = torch.tensor(standard_dict[f"PFelement{ielem}"]["std"]).to(Xfeat_normed_msked.device)
 
         # standardize
-        Xfeat_normed_msked = X.clone()
         Xfeat_normed_msked[..., 1:] = (Xfeat_normed_msked[..., 1:] - mean[..., 1:]) / std[..., 1:]
 
         # msk other elements
