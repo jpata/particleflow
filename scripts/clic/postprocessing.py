@@ -1035,7 +1035,8 @@ def process_one_file(fn, ofn):
             }
         )
         ret.append(this_ev)
-
+        if iev == 3:
+            break
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
