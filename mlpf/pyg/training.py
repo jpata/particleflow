@@ -1306,12 +1306,12 @@ def run_ray_training(config, args, outdir):
 
     _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")
     _logger.info("Final cls_loss: {}".format(result.metrics["cls_loss"]), color="bold")
-    _logger.info("Final reg_loss: {}".format(result.metrics["reg_loss"]), color="bold")
+    _logger.info("Final reg_pt_loss: {}".format(result.metrics["reg_pt_loss"]), color="bold")
     # _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
 
     _logger.info("Final val_loss: {}".format(result.metrics["val_loss"]), color="bold")
     _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
-    _logger.info("Final val_reg_loss: {}".format(result.metrics["val_reg_loss"]), color="bold")
+    _logger.info("Final val_reg_pt_loss: {}".format(result.metrics["val_reg_pt_loss"]), color="bold")
     # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
 
 
