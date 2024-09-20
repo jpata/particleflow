@@ -1056,6 +1056,7 @@ def parse_args():
 def process(args):
 
     if os.path.isdir(args.input) is True:
+        print("yes")
         import glob
 
         flist = glob.glob(args.input)
