@@ -25,7 +25,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.1.0")
+    VERSION = tfds.core.Version("2.2.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
