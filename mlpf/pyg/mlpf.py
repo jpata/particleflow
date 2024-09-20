@@ -62,7 +62,7 @@ def standardize_inputs(X, elemtypes_nonzero):
 
     import numpy as np
 
-    with open("clic_standardization.json", "rb") as f:
+    with open("/pfvolcentral/clic_standardization.json", "rb") as f:
         standard_dict = json.load(f)["2.1.0"]
 
     for i, ielem in enumerate(elemtypes_nonzero):
