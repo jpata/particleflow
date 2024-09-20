@@ -26,7 +26,7 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
+  input_encoding: split #split, joint
   pt_mode: linear
   eta_mode: linear
   sin_phi_mode: linear
