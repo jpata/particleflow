@@ -1044,16 +1044,27 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
+    parser.add_argument(
+        "--input", type=str, help="Input ROOT file - else if dir then will process all files inside", required=True
+    )
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
     args = parser.parse_args()
     return args
 
 
 def process(args):
-    infile = args.input
-    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-    process_one_file(infile, outfile)
+
+    if os.path.isdir(args.input) is True:
+        import glob
+
+        flist = glob.glob(args.input)
+        for infile in flist:
+            outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+            process_one_file(infile, outfile)
+    else:
+        infile = args.input
+        outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+        process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
