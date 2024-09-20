@@ -62,7 +62,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ygen = unpack_target(batch.ygen.to(torch.float32), model)
     ycand = unpack_target(batch.ycand.to(torch.float32), model)
     ypred = unpack_predictions(ypred)
-    genjets_msk = batch.genjets[:, :, 0].cpu() != 0
+    genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
     genjets = vector.awk(
         awkward.zip(
@@ -149,8 +149,18 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     gen_to_pred = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
     gen_to_cand = match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr)
     gen_to_target = match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr)
+    target_to_cand = match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr)
+    target_to_pred = match_two_jet_collections(jets_coll, "target", "pred", jet_match_dr)
 
-    matched_jets = awkward.Array({"gen_to_pred": gen_to_pred, "gen_to_cand": gen_to_cand, "gen_to_target": gen_to_target})
+    matched_jets = awkward.Array(
+        {
+            "gen_to_pred": gen_to_pred,
+            "gen_to_cand": gen_to_cand,
+            "gen_to_target": gen_to_target,
+            "target_to_cand": target_to_cand,
+            "target_to_pred": target_to_pred,
+        }
+    )
 
     awkvals = {}
     for flat_arr, typ in [(ygen, "gen"), (ycand, "cand"), (ypred, "pred")]:

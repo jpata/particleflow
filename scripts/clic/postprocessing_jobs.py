@@ -11,7 +11,7 @@ def chunks(lst, n):
 def write_script(infiles, outpath):
     s = []
     s += ["#!/bin/bash"]
-    s += ["#SBATCH --partition short"]
+    s += ["#SBATCH --partition main"]
     s += ["#SBATCH --cpus-per-task 1"]
     s += ["#SBATCH --mem-per-cpu 4G"]
     s += ["#SBATCH -o logs/slurm-%x-%j-%N.out"]

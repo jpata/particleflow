@@ -1055,7 +1055,7 @@ def run(rank, world_size, config, args, outdir, logfile):
 
             if args.dataset == "clic":
                 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
-                jet_ptcut = 15
+                jet_ptcut = 5
             else:
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
                 jet_ptcut = 3

@@ -13,7 +13,7 @@ samples = [
 #    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          700000, 705010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
 
-#    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           702000, 705000, "genjob_nopu.sh", outdir + "/nopu"),
+    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           702000, 720000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("MultiParticlePFGun50_cfi",                               800000, 805000, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                         900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
 #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                      1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
