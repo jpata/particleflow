@@ -25,6 +25,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_particle_ratio,
     plot_sum_energy,
+    plot_elements
 )
 
 from .logger import _logger
@@ -215,8 +216,15 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
     plot_num_elements(X, cp_dir=plots_path)
-    plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path)
+    # plot_sum_energy(yvals, CLASS_NAMES[dataset], cp_dir=plots_path)
 
+    plot_elements(
+        X, yvals,
+        cp_dir=plots_path,
+        dataset=dataset,
+        sample=sample
+    )
+    
     plot_jets(
         yvals,
         cp_dir=plots_path,
