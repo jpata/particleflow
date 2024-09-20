@@ -60,6 +60,7 @@ model:
     head_dim: 64
     num_heads: 12
     attention_type: math
+    standardize_inputs: True
 
   mamba:
     conv_type: mamba

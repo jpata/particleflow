@@ -1,12 +1,12 @@
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
+from pyg.logger import _logger
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from .gnn_lsh import CombinedGraphLayer
-
-from pyg.logger import _logger
-import math
-import numpy as np
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -57,6 +57,37 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         return tensor
 
 
+def standardize_inputs(X, elemtypes_nonzero):
+    import json
+
+    import numpy as np
+
+    with open("clic_standardization.json", "rb") as f:
+        standard_dict = json.load(f)["2.1.0"]
+
+    for i, ielem in enumerate(elemtypes_nonzero):
+
+        # get mean/std of features of that elem
+        mean = np.array(standard_dict[f"PFelement{ielem}"]["mean"])
+        std = np.array(standard_dict[f"PFelement{ielem}"]["std"])
+
+        # standardize
+        Xfeat_normed_msked = X.clone()
+        Xfeat_normed_msked[..., 1:] = (Xfeat_normed_msked[..., 1:] - mean[..., 1:]) / std[..., 1:]
+
+        # msk other elements
+        msk = Xfeat_normed_msked[..., 0:1] == ielem
+        Xfeat_normed_msked = Xfeat_normed_msked * msk
+        Xfeat_normed_msked = torch.nan_to_num(Xfeat_normed_msked, nan=0.0)
+
+        if i == 0:
+            Xfeat_normed = Xfeat_normed_msked
+        else:
+            Xfeat_normed += Xfeat_normed_msked
+
+    return Xfeat_normed
+
+
 def get_activation(activation):
     if activation == "elu":
         act = nn.ELU
@@ -96,7 +127,9 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.seq = torch.nn.Sequential(
+            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
+        )
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
@@ -262,6 +295,12 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
+        # mamba specific parameters
+        d_state=16,
+        d_conv=4,
+        expand=2,
+        # standardize_inputs
+        standardize_inputs=False,
     ):
         super(MLPF, self).__init__()
 
@@ -280,6 +319,8 @@ class MLPF(nn.Module):
         self.elemtypes_nonzero = elemtypes_nonzero
 
         self.use_pre_layernorm = use_pre_layernorm
+
+        self.standardize_inputs = standardize_inputs
 
         if self.conv_type == "attention":
             embedding_dim = num_heads * head_dim
@@ -375,6 +416,9 @@ class MLPF(nn.Module):
     def forward(self, X_features, mask):
         Xfeat_normed = X_features
 
+        if self.standardize_inputs:
+            Xfeat_normed = standardize_inputs(X_features)
+
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
             if self.input_encoding == "joint":
@@ -434,7 +478,9 @@ class MLPF(nn.Module):
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
-        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
+        preds_energy = e_real + torch.nn.functional.relu(
+            self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
+        )
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum
 
