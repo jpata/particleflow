@@ -24,7 +24,7 @@ from plotting.plot_utils import (
     plot_num_elements,
     plot_particles,
     plot_particle_ratio,
-    plot_elements,
+    # plot_elements,
 )
 
 from .logger import _logger
@@ -216,7 +216,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
 
     plot_num_elements(X, cp_dir=plots_path)
 
-    plot_elements(X, yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # plot_elements(X, yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
 
     plot_jets(
         yvals,

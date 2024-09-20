@@ -14,4 +14,4 @@ singularity exec -B /scratch/persistent --nv \
      --env KERAS_BACKEND=torch \
      $IMG python mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-     --test --make-plots --gpu-batch-multiplier 2 --load $WEIGHTS --ntest 5000 --dtype bfloat16 --test-datasets cms_pf_ttbar
+     --test --make-plots --gpu-batch-multiplier 2 --load $WEIGHTS --ntest 50000 --dtype bfloat16
