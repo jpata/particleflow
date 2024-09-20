@@ -1056,11 +1056,9 @@ def parse_args():
 def process(args):
 
     if os.path.isdir(args.input) is True:
-        print("yes")
         import glob
 
-        flist = glob.glob(args.input)
-        print("flist", flist)
+        flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
             process_one_file(infile, outfile)
