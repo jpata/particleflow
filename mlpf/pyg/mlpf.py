@@ -294,10 +294,6 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
-        # mamba specific parameters
-        d_state=16,
-        d_conv=4,
-        expand=2,
         # standardize_inputs
         standardize_inputs=False,
     ):
