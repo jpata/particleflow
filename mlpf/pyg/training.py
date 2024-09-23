@@ -34,6 +34,7 @@ from pyg.utils import (
     ELEM_TYPES_NONZERO,
     X_FEATURES,
     count_parameters,
+    get_input_standardization,
     get_lr_schedule,
     get_model_state_dict,
     load_checkpoint,
@@ -1077,39 +1078,8 @@ def run(rank, world_size, config, args, outdir, logfile):
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
-        def get_standardization_dict(dataset, train_loader, nsubset=10_000):
-
-            standardization_dict = {}
-
-            for ielem in ELEM_TYPES_NONZERO[dataset]:
-                standardization_dict["PFelement" + str(ielem)] = {}
-
-                tot_events = 0
-                for i, batch in enumerate(train_loader):
-
-                    tot_events += batch.X.shape[0]
-
-                    # remove the first dimension because we will stack all PFelements anyway to compute the mean/std
-                    batch.X = batch.X.view(-1, batch.X.shape[-1])
-
-                    msk = (batch.X[:, 0] == ielem) & (batch.X[:, 0] != 0)  # skip 0 padded elements
-
-                    if i == 0:
-                        # initialize
-                        concatenated_pfelements = batch.X[msk]
-                    else:
-                        concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
-
-                standardization_dict["PFelement" + str(ielem)]["mean"] = torch.mean(concatenated_pfelements, axis=0).tolist()
-                standardization_dict["PFelement" + str(ielem)]["std"] = torch.std(concatenated_pfelements, axis=0).tolist()
-
-                if tot_events > nsubset:
-                    break
-
-            return standardization_dict
-
         if config["standardize_inputs"] is True:
-            standardization_dict = get_standardization_dict(config["dataset"], loaders["train"])
+            standardization_dict = get_input_standardization(config["dataset"], loaders["train"])
         else:
             standardization_dict = None
 

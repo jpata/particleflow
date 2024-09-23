@@ -1,11 +1,11 @@
 import json
+import logging
 import pickle as pkl
 
 import pandas as pd
 import torch
 import torch.utils.data
-from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
-import logging
+from torch.optim.lr_scheduler import ConstantLR, CosineAnnealingLR, OneCycleLR
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -162,7 +162,9 @@ def unpack_target(y, model):
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
-    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
+    ret["p4"] = torch.cat(
+        [ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1
+    )
 
     ret["ispu"] = y[..., -1]
 
@@ -280,7 +282,11 @@ def load_lr_schedule(lr_schedule, checkpoint):
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
         return lr_schedule
     else:
-        raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
+        raise KeyError(
+            "Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(
+                checkpoint["extra_state"].keys()
+            )
+        )
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
@@ -298,7 +304,9 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
+        lr_schedule = CosineAnnealingLR(
+            opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1
+        )
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule
@@ -328,3 +336,35 @@ def count_parameters(model):
             )
             trainable_params += params
     return trainable_params, nontrainable_params, table
+
+
+def get_input_standardization(dataset, train_loader, nsubset=10_000):
+
+    standardization_dict = {}
+
+    for ielem in ELEM_TYPES_NONZERO[dataset]:
+        standardization_dict["PFelement" + str(ielem)] = {}
+
+        tot_events = 0
+        for i, batch in enumerate(train_loader):
+
+            tot_events += batch.X.shape[0]
+
+            # remove the first dimension because we will stack all PFelements anyway to compute the mean/std
+            batch.X = batch.X.view(-1, batch.X.shape[-1])
+
+            msk = (batch.X[:, 0] == ielem) & (batch.X[:, 0] != 0)  # skip 0 padded elements
+
+            if i == 0:
+                # initialize
+                concatenated_pfelements = batch.X[msk]
+            else:
+                concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
+
+        standardization_dict["PFelement" + str(ielem)]["mean"] = torch.mean(concatenated_pfelements, axis=0).tolist()
+        standardization_dict["PFelement" + str(ielem)]["std"] = torch.std(concatenated_pfelements, axis=0).tolist()
+
+        if tot_events > nsubset:
+            break
+
+    return standardization_dict
