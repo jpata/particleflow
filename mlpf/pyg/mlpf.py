@@ -122,9 +122,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(
-            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
-        )
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
@@ -465,9 +463,7 @@ class MLPF(nn.Module):
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
-        preds_energy = e_real + torch.nn.functional.relu(
-            self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
-        )
+        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum
 
