@@ -58,10 +58,16 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 
 
 def standardize_inputs(X, elemtypes_nonzero):
+
+    if X.shape[-1] == 26:
+        vs = "2.2.0"
+    else:
+        vs = "2.1.0"
+
     import json
 
     with open("/pfvolcentral/clic_standardization.json", "rb") as f:
-        standard_dict = json.load(f)["2.1.0"]
+        standard_dict = json.load(f)[vs]
 
     for i, ielem in enumerate(elemtypes_nonzero):
 
