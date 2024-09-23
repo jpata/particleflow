@@ -1,5 +1,6 @@
 backend: pytorch
 
+save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
@@ -27,11 +28,11 @@ model:
   trainable: all
   learned_representation_mode: last #last, concat
   input_encoding: split #split, joint
-  pt_mode: linear
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
@@ -60,7 +61,8 @@ model:
     head_dim: 64
     num_heads: 12
     attention_type: math
-    standardize_inputs: True
+    standardize_inputs: False
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
