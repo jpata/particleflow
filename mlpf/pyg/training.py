@@ -17,8 +17,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas
-import sklearn
-import sklearn.metrics
+
+# import sklearn
+# import sklearn.metrics
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -479,10 +480,10 @@ def train_and_valid(
     loss_accum = 0.0
     val_freq_time_0 = time.time()
 
-    if not is_train:
-        cm_X_gen = np.zeros((13, 13))
-        cm_X_pred = np.zeros((13, 13))
-        cm_id = np.zeros((13, 13))
+    # if not is_train:
+    #     cm_X_gen = np.zeros((13, 13))
+    #     cm_X_pred = np.zeros((13, 13))
+    #     cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
         set_save_attention(model, outdir, False)
@@ -505,25 +506,25 @@ def train_and_valid(
 
         ypred = unpack_predictions(ypred_raw)
 
-        if not is_train:
-            cm_X_gen += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-                ygen["cls_id"][batch.mask].detach().cpu().numpy(),
-                labels=range(13),
-            )
-            cm_X_pred += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-                ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-                labels=range(13),
-            )
-            cm_id += sklearn.metrics.confusion_matrix(
-                ygen["cls_id"][batch.mask].detach().cpu().numpy(),
-                ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-                labels=range(13),
-            )
-            # save the events of the first validation batch for quick checks
-            if (rank == 0 or rank == "cpu") and itrain == 0:
-                validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
+        # if not is_train:
+        #     cm_X_gen += sklearn.metrics.confusion_matrix(
+        #         batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+        #         ygen["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     cm_X_pred += sklearn.metrics.confusion_matrix(
+        #         batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+        #         ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     cm_id += sklearn.metrics.confusion_matrix(
+        #         ygen["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     # save the events of the first validation batch for quick checks
+        #     if (rank == 0 or rank == "cpu") and itrain == 0:
+        #         validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ygen, ypred, batch)
@@ -623,26 +624,26 @@ def train_and_valid(
                     comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
                 val_freq_time_0 = time.time()  # reset intermediate validation spacing timer
 
-    if not is_train and comet_experiment:
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_gen,
-            title="Element to target",
-            row_label="X",
-            column_label="target",
-            epoch=epoch,
-            file_name="cm_X_gen.json",
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred,
-            title="Element to pred",
-            row_label="X",
-            column_label="pred",
-            epoch=epoch,
-            file_name="cm_X_pred.json",
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
-        )
+    # if not is_train and comet_experiment:
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_gen,
+    #         title="Element to target",
+    #         row_label="X",
+    #         column_label="target",
+    #         epoch=epoch,
+    #         file_name="cm_X_gen.json",
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_pred,
+    #         title="Element to pred",
+    #         row_label="X",
+    #         column_label="pred",
+    #         epoch=epoch,
+    #         file_name="cm_X_pred.json",
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
+    #     )
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
