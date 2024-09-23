@@ -111,11 +111,11 @@ train_dataset:
           version: 2.1.0
         clic_edm_qq_pf:
           version: 2.1.0
-        clic_edm_ww_fullhad_pf/:
+        clic_edm_ww_fullhad_pf:
           version: 2.1.0
-        clic_edm_zh_tautau_pf/:
+        clic_edm_zh_tautau_pf:
           version: 2.1.0
-        clic_edm_z_tautau_pf/:
+        clic_edm_z_tautau_pf:
           version: 2.1.0
 
 valid_dataset:
@@ -127,11 +127,11 @@ valid_dataset:
           version: 2.1.0
         clic_edm_qq_pf:
           version: 2.1.0
-        clic_edm_ww_fullhad_pf/:
+        clic_edm_ww_fullhad_pf:
           version: 2.1.0
-        clic_edm_zh_tautau_pf/:
+        clic_edm_zh_tautau_pf:
           version: 2.1.0
-        clic_edm_z_tautau_pf/:
+        clic_edm_z_tautau_pf:
           version: 2.1.0          
 
 test_dataset:
