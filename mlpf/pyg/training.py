@@ -1001,10 +1001,14 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
     else:  # instantiate a new model in the outdir created
-
-        input_dim = (
-            len(X_FEATURES[config["dataset"]]) if config["test_dataset"]["clic_edm_ttbar_pf"]["version"] != "2.2.0" else 26
-        )
+        
+        input_dim = len(X_FEATURES[config["dataset"]])
+        if config["dataset"] == "clic":
+            # extract the version of the dataset
+            for sample in config["test_dataset"]:
+                if config["test_dataset"][sample]["version"] == "2.2.0":
+                    input_dim = 26
+                break
 
         model_kwargs = {
             "input_dim": input_dim,
@@ -1249,9 +1253,13 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
-    input_dim = (
-        len(X_FEATURES[config["dataset"]]) if config["test_dataset"]["clic_edm_ttbar_pf"]["version"] != "2.2.0" else 26
-    )
+    input_dim = len(X_FEATURES[config["dataset"]])
+    if config["dataset"] == "clic":
+        # extract the version of the dataset
+        for sample in config["test_dataset"]:
+            if config["test_dataset"][sample]["version"] == "2.2.0":
+                input_dim = 26
+            break
 
     model_kwargs = {
         "input_dim": input_dim,
